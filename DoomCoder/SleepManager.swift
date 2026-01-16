@@ -182,9 +182,15 @@ final class SleepManager {
     }
 
     private func checkIdleState() {
-        let mouseIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved)
-        let keyIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
-        let minIdle = min(mouseIdle, keyIdle)
+        // Check all meaningful input event types to avoid false-positive idle
+        let idleTimes: [CFTimeInterval] = [
+            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved),
+            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown),
+            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown),
+            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .rightMouseDown),
+            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .scrollWheel),
+        ]
+        let minIdle = idleTimes.min() ?? 0
         let threshold = Double(idleTimeoutMinutes * 60)
 
         if minIdle >= threshold && !isDimmed {
@@ -237,6 +243,7 @@ final class SleepManager {
     }
 
     private func setBrightness(_ value: Float) {
+        // Only target the first (built-in) display, consistent with getCurrentBrightness
         var iterator: io_iterator_t = 0
         let result = IOServiceGetMatchingServices(
             kIOMainPortDefault,
@@ -248,8 +255,9 @@ final class SleepManager {
 
         var service = IOIteratorNext(iterator)
         while service != 0 {
-            IODisplaySetFloatParameter(service, 0, kIODisplayBrightnessKey as CFString, value)
+            let r = IODisplaySetFloatParameter(service, 0, kIODisplayBrightnessKey as CFString, value)
             IOObjectRelease(service)
+            if r == kIOReturnSuccess { break }
             service = IOIteratorNext(iterator)
         }
     }

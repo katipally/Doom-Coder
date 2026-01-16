@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2026-04-04
+
+### Fixed
+- **Idle detection missed mouse clicks and scrolling** — Auto-Dim now tracks `leftMouseDown`, `rightMouseDown`, and `scrollWheel` events in addition to mouse movement and key presses. Previously, clicking in an editor without moving the mouse would incorrectly trigger screen dimming.
+- **Brightness control affected all displays** — `setBrightness` now only targets the primary (built-in) display, consistent with how brightness is read. Prevents erratic brightness on multi-monitor setups.
+- **Mode picker was confusing** — Replaced bullet-style radio buttons with a clear `Mode` submenu showing descriptions: "⚡ Full Mode — screen stays at full brightness" and "🌙 Auto-Dim — dims screen when idle, restores on activity".
+- **Dim status indicator improved** — Now says "💡 Screen dimmed — move mouse to restore" instead of just "💡 Screen dimmed".
+- **About window could clip text** — Removed fixed height, now sizes dynamically to fit content.
+
 ## [0.2.0] - 2026-04-04
 
 ### Added
@@ -49,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
+[0.2.1]: https://github.com/katipally/Doom-Coder/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/katipally/Doom-Coder/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
