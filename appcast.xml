@@ -1,10 +1,17 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Doom Coder Changelog</title>
         <link>https://github.com/katipally/Doom-Coder</link>
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
+        <item>
+            <title>Version 0.1.1</title>
+            <pubDate>Sat, 04 Apr 2026 04:02:01 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v0.1.1</sparkle:releaseNotesLink>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v0.1.1/DoomCoder-0.1.1.zip" sparkle:version="011" sparkle:shortVersionString="0.1.1" sparkle:edSignature="sAv9i6/oLfL4uxVH0xOwtvqwbvZ6jZ5gd9IPodVMYsudn8zrC1lTC9SeUg4NRLzRpliSzP7ML+0DmUNqG4JzAA==" length="987018" type="application/octet-stream" />
+        </item>
         <item>
             <title>Version 0.1.0</title>
             <pubDate>Sat, 04 Apr 2026 03:32:45 +0000</pubDate>
