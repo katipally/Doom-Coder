@@ -50,30 +50,40 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 
 ## ⚠️ Important: Gatekeeper Warning on First Launch
 
-Doom Coder is **ad-hoc signed** but **not notarized** (notarization requires a $99/year Apple Developer account). macOS will block it on first launch. This is normal for free, open-source apps without a paid certificate.
+Doom Coder is **ad-hoc signed** but **not notarized** (notarization requires a $99/year Apple Developer account). macOS will show a security warning on first launch. This is **normal and expected** for all free, open-source Mac apps distributed outside the App Store without a paid certificate.
 
-### If you see "app is damaged" or "cannot verify developer"
+### macOS 15 (Sequoia) / macOS 26 and later
 
-Both warnings are fixed the same way. Pick one method:
+On macOS Sequoia and later, Apple removed the right-click bypass. Follow these steps:
 
-**Method 1 — Terminal (works on ALL macOS versions, 100% reliable):**
+1. Double-click `DoomCoder.app` — you'll see _"Apple could not verify..."_. Click **Done**.
+2. Open **System Settings → Privacy & Security**
+3. Scroll down to the **Security** section — you'll see a message that DoomCoder was blocked
+4. Click **Open Anyway**
+5. Enter your admin password and click **Open**
+
+You only need to do this **once**. After that, it opens normally forever.
+
+**Alternative — Terminal method (may also be needed on Sequoia+):**
 
 ```bash
 xattr -cr /Applications/DoomCoder.app
 open /Applications/DoomCoder.app
 ```
 
-This removes the quarantine flag macOS adds to downloaded files. Run it once and the app opens normally forever after.
+If the Terminal method alone still shows the warning, follow the System Settings steps above too.
 
-**Method 2 — Right-click (works on macOS 12–14):**
+### macOS 14 (Sonoma) and earlier
 
-1. Drag `DoomCoder.app` to `/Applications`
-2. Right-click (or Control-click) the app icon
-3. Select **Open** from the context menu
-4. Click **Open** again at the security warning
+1. Right-click (or Control-click) `DoomCoder.app`
+2. Select **Open** from the context menu
+3. Click **Open** again at the security warning
 
-> **Why does this happen?**
-> Apple's Gatekeeper blocks apps that aren't notarized through their paid developer program. The Terminal method removes the "downloaded from internet" quarantine flag so macOS treats it like an app you built yourself. The full source is in this repo — build it yourself if you prefer.
+### Why does this happen?
+
+Apple's Gatekeeper blocks apps that aren't notarized through their paid Developer Program ($99/year). This is the same for _every_ open-source Mac app distributed outside the App Store — apps like [Raycast](https://raycast.com), [Rectangle](https://rectangleapp.com), and [IINA](https://iina.io) all require notarization or face the same warnings.
+
+The source code is fully open in this repo. If you prefer, you can **build it yourself** — see [Building from Source](#building-from-source) below.
 
 ---
 
@@ -89,11 +99,11 @@ This removes the quarantine flag macOS adds to downloaded files. Run it once and
 
 ### Option 2: Build from Source
 
-Requirements: Xcode 15+ (or Xcode 26 for macOS 26 SDK)
+Requirements: Xcode 16+ and macOS 14.0+
 
 ```bash
 git clone https://github.com/katipally/Doom-Coder.git
-cd DoomCoder
+cd Doom-Coder
 open DoomCoder.xcodeproj
 ```
 
@@ -156,11 +166,12 @@ Doom Coder uses [Sparkle 2](https://sparkle-project.org/) for automatic updates.
 ### Setting up GitHub Actions
 
 Releases are fully automated. Every time you push a version tag, GitHub Actions:
-1. Builds the app (unsigned)
-2. Creates a `.zip` archive
-3. Signs it with Sparkle EdDSA
-4. Updates `appcast.xml` in the main branch
-5. Creates a GitHub Release with download instructions
+1. Builds the app
+2. Ad-hoc signs every component (bottom-up: XPC services → Sparkle framework → main app)
+3. Creates a `.zip` archive
+4. Signs the ZIP with Sparkle EdDSA for secure updates
+5. Updates `appcast.xml` in the main branch
+6. Creates a GitHub Release with download instructions
 
 **One-time setup:**
 

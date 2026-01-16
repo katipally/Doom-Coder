@@ -61,21 +61,58 @@ jobs:
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
 
-      - name: Ad-hoc sign app (fixes "damaged" error on macOS 14+)
+      - name: Ad-hoc sign app (proper bottom-up component signing)
         run: |
           cp -R "build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app" .
 
           # Remove any quarantine / build-artifact extended attributes
           xattr -cr DoomCoder.app
 
-          # Ad-hoc sign everything: main app + Sparkle.framework +
-          # all nested XPC services, Autoupdate helper, and Updater.app
-          codesign --force --deep --sign - DoomCoder.app
+          APP="DoomCoder.app"
+          SPARKLE_FW="$APP/Contents/Frameworks/Sparkle.framework"
+          SPARKLE_VER="$SPARKLE_FW/Versions/B"
 
-          # Verify the signature is valid before packaging
-          codesign --verify --deep --strict DoomCoder.app
-          echo "=== Signature info ==="
-          codesign -dv DoomCoder.app 2>&1
+          # --- Bottom-up signing (innermost first, outermost last) ---
+          # codesign --deep is DEPRECATED (macOS 13+) and produces unreliable
+          # signatures on nested components. Sign each item individually.
+
+          # 1. Sign Sparkle XPC Services (deepest nested bundles)
+          for xpc in "$SPARKLE_VER/XPCServices/Installer.xpc" \
+                     "$SPARKLE_VER/XPCServices/Downloader.xpc"; do
+            if [ -d "$xpc" ]; then
+              echo "Signing: $xpc"
+              codesign --force --options runtime --sign - "$xpc"
+            fi
+          done
+
+          # 2. Sign Sparkle helper apps and tools
+          if [ -d "$SPARKLE_VER/Updater.app" ]; then
+            echo "Signing: Updater.app"
+            codesign --force --options runtime --sign - "$SPARKLE_VER/Updater.app"
+          fi
+          if [ -f "$SPARKLE_VER/Autoupdate" ]; then
+            echo "Signing: Autoupdate"
+            codesign --force --options runtime --sign - "$SPARKLE_VER/Autoupdate"
+          fi
+
+          # 3. Sign the Sparkle framework itself (after all its children)
+          echo "Signing: Sparkle.framework"
+          codesign --force --options runtime --sign - "$SPARKLE_FW"
+
+          # 4. Sign the main app bundle last (seals everything)
+          echo "Signing: DoomCoder.app"
+          codesign --force --options runtime --sign - "$APP"
+
+          # --- Verify every component ---
+          echo ""
+          echo "=== Verifying signatures ==="
+          codesign --verify --strict --verbose=2 "$APP" 2>&1
+          echo ""
+          echo "=== Main app signature ==="
+          codesign -dvv "$APP" 2>&1
+          echo ""
+          echo "=== Sparkle framework signature ==="
+          codesign -dvv "$SPARKLE_FW" 2>&1
 
       - name: Create ZIP
         run: |
@@ -134,20 +171,28 @@ jobs:
             1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
             2. Unzip and drag **`DoomCoder.app`** to your `/Applications` folder
 
-            ### Opening for the first time (macOS Gatekeeper)
+            ### ⚠️ Opening for the first time (macOS Gatekeeper)
 
-            Because this app is **ad-hoc signed but not notarized** (requires a $99/yr Apple Developer account), macOS will block it on first launch. Use **one** of these methods:
+            This app is **ad-hoc signed but not notarized** (notarization requires a $99/yr Apple Developer account). macOS will block it on first launch.
 
-            **Method 1 — Terminal (most reliable, works on all macOS versions):**
+            **macOS 15 (Sequoia) / macOS 26 and later:**
+
+            1. Double-click `DoomCoder.app` — you'll see a warning. Click **Done**.
+            2. Open **System Settings → Privacy & Security**
+            3. Scroll down to the **Security** section — you'll see _"DoomCoder" was blocked_
+            4. Click **Open Anyway** → enter your password → click **Open**
+
+            You only need to do this **once**. After that, it opens normally forever.
+
+            **Alternative — Terminal method:**
             ```bash
             xattr -cr /Applications/DoomCoder.app
             open /Applications/DoomCoder.app
             ```
+            If the terminal method alone doesn't work, also follow the System Settings steps above.
 
-            **Method 2 — Right-click (works on macOS 12–14):**
+            **macOS 14 (Sonoma) and earlier:**
             Right-click `DoomCoder.app` → **Open** → click **Open** at the warning dialog.
-
-            You only need to do this **once**. After that, it opens normally forever.
 
             ## ✅ Verify it's working
 
