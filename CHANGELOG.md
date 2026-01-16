@@ -20,4 +20,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
-[0.1.0]: https://github.com/katipally/DoomCoder/releases/tag/v0.1.0
+[0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0

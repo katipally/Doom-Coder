@@ -8,7 +8,7 @@ Usage:
         --build 2 \
         --signature <sparkle-edsignature> \
         --size <bytes> \
-        --download-url https://github.com/katipally/DoomCoder/releases/download/v0.2.0/DoomCoder-0.2.0.zip
+        --download-url https://github.com/katipally/Doom-Coder/releases/download/v0.2.0/DoomCoder-0.2.0.zip
 """
 import argparse
 import xml.etree.ElementTree as ET
@@ -42,7 +42,7 @@ def update_appcast(version: str, build: str, signature: str, size: int, download
     pub_date.text = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
 
     release_notes = ET.SubElement(item, s("releaseNotesLink"))
-    release_notes.text = f"https://github.com/katipally/DoomCoder/releases/tag/v{version}"
+    release_notes.text = f"https://github.com/katipally/Doom-Coder/releases/tag/v{version}"
 
     min_sys = ET.SubElement(item, s("minimumSystemVersion"))
     min_sys.text = "14.0"
