@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-04-06
+
+### Added
+- **Dynamic AI app discovery** — no hardcoded app list. Scans all `$PATH` directories, Homebrew, Cargo, npm global, bun, volta, nvm, Python user bins, `~/.local/bin`, `~/.claude/bin`, `/Applications`, `~/Applications`, and user-defined custom paths. Matches found executables and bundles against AI tool name patterns.
+- **FSEvents file watching** — attaches a zero-overhead `FSEventStream` to IDE workspace storage directories for Cursor, VS Code, Windsurf, and Zed. Detects real-time AI generation activity (rapid SQLite writes) with a 1.5 s coalescing window.
+- **Network bytes monitoring** — uses `proc_pidinfo(PROC_PIDLISTFDS)` + `proc_pidfdinfo(PROC_PIDFDSOCKETINFO)` to read per-socket receive buffer sizes for tracked CLI agent PIDs every 2 s. A spike in `sbi_cc` delta (> 500 bytes) marks the agent as "working". No root/sudo required.
+- **Aggregated "isWorking" signal** — `isWorking = childProcessCount > 0 || FSEvents burst within 3 s || network bytes delta`. This combines all three independent signals so no working session is missed.
+- **Idle completion notifications** — fires a macOS notification when a tracked app transitions from working → idle (minimum 15 s working session required to debounce false positives). Title: "Task Complete", body names the app.
+- **Settings → Tools tab** — new tab in the Settings window to add/remove custom CLI binary names and custom GUI bundle identifiers. Changes persist via `UserDefaults` and immediately trigger an app re-scan.
+- **Signal column in Active Apps window** — shows which signals detected the working state: `procs` (child processes), `net` (network bytes), `fs` (FSEvents).
+
+### Changed
+- Active Apps window expanded to 460 × 340 to accommodate the Signal column.
+- Settings window converted to a `TabView` (General + Tools tabs), height 480 px.
+- `DoomCoderApp` passes `appDetector` to `SettingsView` so the Tools tab can trigger rescans.
+- `Info.plist` adds `NSUserNotificationsUsageDescription` for notification permission.
+
+---
+
 ## [0.5.0] - 2026-04-05
+
 
 ### Added
 - **GitHub Copilot CLI agent detection** — `copilot` binary is now tracked and displayed as "GitHub Copilot CLI" in the Active Apps window. Detects the agent started via `copilot` in any terminal.
