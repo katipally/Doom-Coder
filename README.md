@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo.png" alt="Doom Coder" width="400" />
+
 # ⚡ Doom Coder
 
 **Keep your Mac alive while AI agents do the work.**
@@ -15,7 +17,7 @@
 
 ## What is Doom Coder?
 
-**Doom Coder** is a tiny macOS menu bar utility that prevents your Mac from sleeping — no settings changes, no fuss.
+**Doom Coder** is a tiny macOS menu bar utility that prevents your Mac from sleeping — and protects your hardware while doing it.
 
 The name is a mashup of two modern developer habits:
 - **Doom scrolling** — mindlessly scrolling your phone while waiting for something
@@ -38,12 +40,21 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 
 ## Features
 
+### Core
 - **Menu bar only** — no Dock icon, no clutter (uses `LSUIElement = YES`)
 - **One-click toggle** — `⚡` when active, `⚡/` when inactive
 - **Elapsed time** — shows "Active for 2h 34m" so you know how long it's been running
-- **Auto-updates** — powered by [Sparkle](https://sparkle-project.org/), updates delivered silently in the background
 - **Launch at login** — start automatically on system boot (requires app in `/Applications`)
-- **About window** — version info, description
+
+### Hardware Protection (v0.2.0)
+- **Two modes** — **Full Mode** keeps the screen on at full brightness; **Auto-Dim Mode** dims the screen after configurable idle time and restores instantly on activity
+- **Auto-Dim settings** — idle timeout (2, 5, or 10 minutes) and dim level (5%, 10%, or 20%)
+- **Thermal monitoring** — real-time system thermal state in the menu: 🟢 Normal / 🟡 Fair / 🟠 Serious / 🔴 Critical
+- **Session timer** — optional auto-disable after 1, 2, 4, or 8 hours with countdown display
+
+### Other
+- **Auto-updates** — powered by [Sparkle](https://sparkle-project.org/), updates delivered silently in the background
+- **Settings persist** — mode, idle timeout, dim level, and session timer are saved across app restarts
 - **Open source** — MIT license, build it yourself
 
 ---
@@ -118,9 +129,12 @@ In Xcode:
 
 | Menu item | Description |
 |---|---|
-| **Enable Doom Coder** | Activates sleep prevention. Icon changes to `⚡` |
-| **Disable Doom Coder** | Releases the assertion. Normal sleep resumes |
-| **Active for Xh Xm** | How long Doom Coder has been running (shown when active) |
+| **Enable / Disable Doom Coder** | Toggle sleep prevention. Icon changes to `⚡` when active |
+| **Active for Xh Xm** | How long Doom Coder has been running |
+| **Mode: Full / Auto-Dim** | Full keeps screen at full brightness; Auto-Dim dims after idle |
+| **Auto-Dim Settings** | Idle timeout (2/5/10 min) and dim level (5%/10%/20%) — shown in Auto-Dim mode |
+| **Session Timer** | Auto-disable after 1/2/4/8 hours (optional) with countdown |
+| **System: 🟢 Normal** | Real-time thermal state of your Mac |
 | **Check for Updates...** | Manually trigger a Sparkle update check |
 | **About Doom Coder...** | Version info and description |
 | **Quit Doom Coder** | Disables assertion and exits cleanly |
@@ -196,11 +210,11 @@ Releases are fully automated. Every time you push a version tag, GitHub Actions:
 
 ```
 DoomCoder/
-├── DoomCoderApp.swift          # @main App entry, MenuBarExtra + About Window
-├── SleepManager.swift          # IOPMAssertion management, elapsed time tracking
-├── MenuBarView.swift           # Menu UI: toggle, status, updates, about, quit
+├── DoomCoderApp.swift              # @main App entry, MenuBarExtra + About Window
+├── SleepManager.swift              # IOPMAssertion, modes, auto-dim, thermal, session timer
+├── MenuBarView.swift               # Menu UI: toggle, modes, settings, thermal, timer
 ├── CheckForUpdatesViewModel.swift  # Sparkle updater wrapper
-└── AboutView.swift             # Small about window
+└── AboutView.swift                 # About window with app icon
 ```
 
 ---

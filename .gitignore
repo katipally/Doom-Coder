@@ -44,6 +44,9 @@ Carthage/Build/
 # Personal guides (local only, not for public repo)
 guide/
 
+# Original wide logo (cropped version logo.png is tracked)
+logo-doomcoder.png
+
 # Editor
 .vscode/
 *.swp
