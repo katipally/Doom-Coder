@@ -91,20 +91,14 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          SIG_OUTPUT=$(sparkle-tools/bin/sign_update "DoomCoder-${{ env.VERSION }}.zip")
-          echo "sign_update output: $SIG_OUTPUT"
+          # Pipe key via stdin — correct Sparkle 2.x API (env var not supported)
+          # -p flag outputs ONLY the base64 signature, no parsing needed
+          SPARKLE_SIG=$(echo "${SPARKLE_PRIVATE_KEY}" | \
+            sparkle-tools/bin/sign_update --ed-key-file - -p "DoomCoder-${{ env.VERSION }}.zip")
+          ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
 
-          # Extract base64 signature — handles both quoted and unquoted output formats
-          SPARKLE_SIG=$(echo "$SIG_OUTPUT" | sed -E 's/.*edSignature="?([A-Za-z0-9+/=]+)"?.*/\1/')
-
-          # Get file size from sign_update output (fallback to stat)
-          ZIP_SIZE=$(echo "$SIG_OUTPUT" | grep -oE 'length=[0-9]+' | cut -d'=' -f2)
-          if [ -z "$ZIP_SIZE" ]; then
-            ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
-          fi
-
-          echo "Extracted signature: $SPARKLE_SIG"
-          echo "Zip size: $ZIP_SIZE"
+          echo "Signature: $SPARKLE_SIG"
+          echo "Zip size:  $ZIP_SIZE"
           echo "SPARKLE_SIG=${SPARKLE_SIG}" >> $GITHUB_ENV
           echo "ZIP_SIZE=${ZIP_SIZE}" >> $GITHUB_ENV
 
