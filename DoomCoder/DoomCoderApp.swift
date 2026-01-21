@@ -8,6 +8,7 @@ struct DoomCoderApp: App {
     @State private var agentStatus = AgentStatusManager()
     @State private var socketServer = SocketServer()
     @State private var iPhoneRelay = IPhoneRelay()
+    @State private var focusManager = FocusFilterManager()
 
     init() {
         // One-shot cleanup of v0.x UserDefaults keys that no longer exist.
@@ -37,6 +38,16 @@ struct DoomCoderApp: App {
                 }
             }
         }
+
+        Window("Agent Tracking", id: "agent-tracking") {
+            AgentTrackingView(
+                agentStatus: agentStatus,
+                iPhoneRelay: iPhoneRelay,
+                focusManager: focusManager,
+                socketServer: socketServer
+            )
+        }
+        .defaultSize(width: 960, height: 640)
 
         Window("Settings", id: "settings") {
             SettingsView(
@@ -69,6 +80,23 @@ struct DoomCoderApp: App {
         agentStatus.onSessionUpdated = { session, event in
             NotificationManager.shared.fire(event: event, session: session)
             iPhoneRelay.fire(event: event, session: session)
+        }
+
+        agentStatus.onActivityChanged = { active in
+            focusManager.reflect(active: active)
+        }
+
+        // Wire the synthetic "verify setup" action fired by AgentSetupSheet
+        // into the real pipeline so the user sees end-to-end delivery.
+        NotificationCenter.default.addObserver(
+            forName: .dcVerifySetup,
+            object: nil,
+            queue: .main
+        ) { note in
+            let agentId = (note.userInfo?["agent"] as? String) ?? "claude-code"
+            Task { @MainActor in
+                agentStatus.injectTest(agent: agentId, status: .wait, message: "DoomCoder setup verification")
+            }
         }
 
         _ = socketServer.start()
