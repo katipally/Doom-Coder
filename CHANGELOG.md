@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-04-17
+
+### Fixed
+- **Crash on `com.doomcoder.socketserver.accept` (serial queue).**
+  The accept-loop event handler captured the `@MainActor`-isolated
+  `SocketServer` and passed it across the actor boundary to a static
+  helper, which traps under Swift 6 strict concurrency — causing
+  reproducible crashes during the round-trip hook test, during MCP
+  handshake from Cursor, and any time a hook or MCP client connected
+  for the first time. Rewrote the socket layer: all I/O now lives in
+  a nonisolated `SocketCore` helper that only captures `Sendable`
+  state (fd + a `@Sendable` forwarder closure). The forwarder hops to
+  `MainActor` exclusively for final delivery to `onEvent`. No behaviour
+  changes, same socket path, same event framing.
+
+---
+
 ## [1.4.0] - 2026-04-17
 
 Hook/MCP reliability + menubar **Watch this agent** flow. Fixes an install-
