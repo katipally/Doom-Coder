@@ -100,5 +100,11 @@ struct DoomCoderApp: App {
         }
 
         _ = socketServer.start()
+
+        // Opportunistic cleanup of old DoomCoder reminders on each launch.
+        // Best-effort: silent on permission denial.
+        Task.detached { [iPhoneRelay] in
+            await iPhoneRelay.reminder.cleanupDeliveredReminders()
+        }
     }
 }

@@ -52,3 +52,8 @@ logo-doomcoder.png
 .vscode/
 *.swp
 *~
+
+# Build artifacts (never commit)
+DoomCoder.app/
+DoomCoder-*.zip
+build/
