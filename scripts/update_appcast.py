@@ -45,7 +45,7 @@ def update_appcast(version: str, build: str, signature: str, size: int, download
     release_notes.text = f"https://github.com/katipally/Doom-Coder/releases/tag/v{version}"
 
     min_sys = ET.SubElement(item, s("minimumSystemVersion"))
-    min_sys.text = "14.0"
+    min_sys.text = "26.0"
 
     enclosure = ET.SubElement(item, "enclosure")
     enclosure.set("url", download_url)
