@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-04-17
+
+Calendar channel removed; ntfy is now the sole built-in delivery method.
+Delivery is now **single-channel with an explicit active-method picker** so
+adding more channels in the future is a drop-in.
+
+### Removed
+- **Calendar/iCloud alarm channel.** The approach was structurally unreliable:
+  even with the 1.1.1 fixes, iCloud CalDAV propagation to the phone's alarm
+  evaluator never had a guaranteed upper bound, and `macOS 26` was silently
+  rejecting `URL`-bearing alarms on non-entitled processes
+  (`Attempted to set URL on an alarm in a process that is not allowed.
+  Ignoring.`). Rather than ship more heuristics on top of a leaky primitive,
+  the channel is gone. EventKit is no longer linked; `NSCalendars…UsageDescription`
+  keys removed from `Info.plist`.
+- **Per-channel enabled toggles.** Replaced by one active-method selection —
+  a channel becomes "enabled" implicitly by being selected.
+
+### Added
+- **Active-method dropdown** at the top of **Agent Tracking → System → Delivery
+  Log**. Shows every configured-and-ready channel plus a **"None — silence
+  iPhone alerts"** option for paused sessions. Each channel's detail pane
+  also has a **Set as Active** button and a callout when it's currently the
+  active method. Future channels (SMS, Pushover, …) register once in the
+  `IPhoneRelay.allChannels` array and appear automatically.
+- **Sidebar "Active" badge** on the iPhone channel currently selected for
+  delivery so the status is visible at a glance.
+
+### Changed
+- `IPhoneRelay.fire()` now dispatches to exactly one channel (the active
+  selection) instead of fanning out. `sendTest(channel:)` replaced with
+  `sendTest(channelID:)`.
+- `LegacyDefaults.migrateV12()` clears `dc.iphone.calendar.enabled` and
+  `dc.iphone.ntfy.enabled`, and if either was true with an ntfy topic set
+  it pre-selects `ntfy` so existing setups keep working with zero clicks.
+
+---
+
 ## [1.1.1] - 2026-04-17
 
 Patch for the Calendar + ntfy onboarding shipped in 1.1.0.

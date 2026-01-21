@@ -8,7 +8,9 @@ struct DoomCoderApp: App {
     @State private var agentStatus = AgentStatusManager()
     @State private var socketServer = SocketServer()
     @State private var iPhoneRelay = IPhoneRelay()
-    @Environment(\.scenePhase) private var scenePhase
+    // scenePhase no longer observed — v1.1.1 removed the calendar cleanup hook
+    // that used it. Kept here as a reminder in case a future scene lifecycle
+    // callback is needed.
 
     init() {
         // One-shot cleanup of v0.x + v1.0.x UserDefaults keys that no longer exist.
@@ -45,13 +47,6 @@ struct DoomCoderApp: App {
                 iPhoneRelay: iPhoneRelay,
                 socketServer: socketServer
             )
-            .onChange(of: scenePhase) { _, new in
-                if new == .active {
-                    Task.detached { [iPhoneRelay] in
-                        await iPhoneRelay.calendar.cleanupOldEvents()
-                    }
-                }
-            }
         }
         .defaultSize(width: 960, height: 640)
 
@@ -97,10 +92,5 @@ struct DoomCoderApp: App {
         }
 
         _ = socketServer.start()
-
-        // Opportunistic cleanup of stale DoomCoder calendar events on launch.
-        Task.detached { [iPhoneRelay] in
-            await iPhoneRelay.calendar.cleanupOldEvents()
-        }
     }
 }

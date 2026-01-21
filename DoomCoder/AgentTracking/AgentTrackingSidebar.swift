@@ -150,14 +150,33 @@ private struct ChannelRow: View {
             badge
             Image(systemName: kind.icon).foregroundStyle(.secondary)
             Text(kind.displayName)
+            Spacer()
+            if isActive {
+                Text("Active")
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background {
+                        RoundedRectangle(cornerRadius: 4).fill(Color.blue.opacity(0.12))
+                    }
+            }
         }
         .padding(.vertical, 1)
     }
 
+    private var channelID: String {
+        switch kind {
+        case .ntfy: return "ntfy"
+        }
+    }
+
+    private var isActive: Bool {
+        relay.activeChannel?.info.id == channelID
+    }
+
     private var badge: StatusBadge {
         switch kind {
-        case .calendar: return relay.calendar.isEnabled && relay.calendar.isReady ? StatusBadge(.ready) : StatusBadge(.off)
-        case .ntfy:     return relay.ntfy.isEnabled && relay.ntfy.isReady ? StatusBadge(.ready) : StatusBadge(.off)
+        case .ntfy: return relay.ntfy.isReady ? StatusBadge(.ready) : StatusBadge(.off)
         }
     }
 }
@@ -177,7 +196,6 @@ private struct SystemRow: View {
 
     private var badge: StatusBadge {
         switch kind {
-        case .icloud:      return iPhoneRelay.calendar.isReady ? StatusBadge(.ready) : StatusBadge(.off)
         case .deliveryLog: return iPhoneRelay.deliveryLog.isEmpty ? StatusBadge(.off) : StatusBadge(.ready, "\(iPhoneRelay.deliveryLog.count)")
         }
     }
