@@ -31,6 +31,22 @@ struct AgentTrackingSidebar: View {
                         AgentRow(info: info)
                     }
                 }
+                NavigationLink(value: AgentTrackingSelection.installAnywhere) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.square.on.square")
+                            .foregroundStyle(.secondary)
+                        Text("Install Anywhere")
+                        Spacer()
+                        Text("Any MCP")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background {
+                                RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.1))
+                            }
+                    }
+                    .padding(.vertical, 1)
+                }
             }
 
             // iPHONE CHANNELS --------------------------------------------
