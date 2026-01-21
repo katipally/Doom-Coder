@@ -257,6 +257,18 @@ struct AgentSetupSheet: View {
                     let result = try HookInstaller.install(hook)
                     append(result)
                 } else if info.tier == .mcp, let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
+                    // Preflight first so warnings (e.g. Cursor project shadows)
+                    // are visible to the user. Blockers will raise below from
+                    // MCPInstaller.install itself — we surface them here too so
+                    // the log reads nicely rather than just a raw error string.
+                    let issues = MCPInstaller.preflight(mcp)
+                    for issue in issues {
+                        let marker = issue.severity == .blocker ? "✗" : "⚠︎"
+                        append("\(marker) \(issue.summary)")
+                        for line in issue.detail.split(separator: "\n") {
+                            append("    \(line)")
+                        }
+                    }
                     append("• Writing \(mcp.configPath.path)")
                     _ = try MCPInstaller.install(mcp)
                     append("• Installed MCP server for \(mcp.displayName)")
