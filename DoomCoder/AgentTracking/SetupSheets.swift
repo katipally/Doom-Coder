@@ -1,6 +1,6 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
-import Contacts
+@preconcurrency import Contacts
 
 // MARK: - SetupStep
 
