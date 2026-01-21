@@ -14,7 +14,7 @@ import Foundation
 @MainActor
 enum HookRuntime {
 
-    static let scriptVersion = "3"
+    static let scriptVersion = "4"
 
     // MARK: - Paths
 
@@ -101,40 +101,69 @@ dc_field() {
 
 DC_SID=$(dc_field "session_id" "$DC_PAYLOAD")
 [ -z "$DC_SID" ] && DC_SID=$(dc_field "sessionId" "$DC_PAYLOAD")
-# Copilot CLI and some shims do not surface a session id. Fall back to
-# COPILOT_CLI_SESSION_ID if present, else $PPID so each terminal tab keys
-# to a distinct session (instead of collapsing into agent:default).
+# Copilot CLI and some shims do not surface a session id. We fall back in
+# preference order: COPILOT_CLI_SESSION_ID → walk the process tree to find
+# the actual `copilot` process pid → empty (the app then keys on (agent, tty, cwd)).
+#
+# Why walk? In a login shell `$PPID` is the shell, so two Copilot CLI tabs
+# sharing a zsh ancestor collapse into the same key. Walking up until the
+# parent `comm` matches `copilot` (or `copilot-cli`) finds the actual agent
+# process, which is distinct per tab.
 if [ -z "$DC_SID" ]; then
     if [ -n "$COPILOT_CLI_SESSION_ID" ]; then
         DC_SID="$COPILOT_CLI_SESSION_ID"
-    elif [ -n "$PPID" ]; then
-        DC_SID="ppid-$PPID"
+    else
+        # Walk up to 20 ancestors looking for a copilot-named process.
+        dc_walk_pid="$$"
+        dc_depth=0
+        while [ "$dc_depth" -lt 20 ] && [ -n "$dc_walk_pid" ] && [ "$dc_walk_pid" != "0" ] && [ "$dc_walk_pid" != "1" ]; do
+            dc_walk_comm=$(ps -o comm= -p "$dc_walk_pid" 2>/dev/null | awk '{n=split($0,a,"/"); print a[n]}')
+            case "$dc_walk_comm" in
+                copilot|copilot-cli|node)
+                    # `node` can be Copilot CLI (it's a node process); accept
+                    # as the real agent pid if comm isn't a shell.
+                    DC_PID="$dc_walk_pid"
+                    break
+                    ;;
+            esac
+            dc_walk_pid=$(ps -o ppid= -p "$dc_walk_pid" 2>/dev/null | tr -d ' ')
+            dc_depth=$((dc_depth + 1))
+        done
     fi
 fi
 DC_CWD=$(dc_field "cwd" "$DC_PAYLOAD")
 [ -z "$DC_CWD" ] && DC_CWD="$PWD"
 DC_TOOL=$(dc_field "tool_name" "$DC_PAYLOAD")
 [ -z "$DC_TOOL" ] && DC_TOOL=$(dc_field "tool" "$DC_PAYLOAD")
+# Controlling terminal — distinct per terminal tab. Lets the app separate
+# two Copilot CLI tabs in the same shell tree.
+DC_TTY=$(tty 2>/dev/null)
+[ "$DC_TTY" = "not a tty" ] && DC_TTY=""
+# Round-trip test nonce (set by HookRoundTripTest). Passthrough only.
+DC_NONCE="${DC_TEST_NONCE:-}"
 # Forward the Notification "message" (Claude Code) / "reason" field when
 # present — turns a generic "needs input" push into "Bash: rm -rf node_modules".
 DC_MSG=$(dc_field "message" "$DC_PAYLOAD")
 [ -z "$DC_MSG" ] && DC_MSG=$(dc_field "reason" "$DC_PAYLOAD")
 
-# Map hook event → single-char status code. v3 mapping (DC_HOOK_VERSION=3):
-#   SessionStart                           → s  (started)
-#   UserPromptSubmit, Pre/PostToolUse      → i  (progress, not attention)
-#   Notification, PermissionRequest, Stop, SubagentStop → w  (needs input)
-#   SessionEnd                             → d  (done)
-#   Error                                  → e
-# The previous v2 mapping sent UserPromptSubmit as "w" (wrong — that's
-# progress) and Stop/SubagentStop as "d" (wrong — Claude's agent loop fires
-# Stop between turns while still running). v3 matches real semantics.
+# Map hook event → single-char status code. v4 mapping (DC_HOOK_VERSION=4):
+#   Claude Code events:
+#     SessionStart                                        → s
+#     SessionEnd                                          → d
+#     Notification, PermissionRequest, Stop, SubagentStop → w
+#     UserPromptSubmit, Pre/PostToolUse                   → i
+#     Error                                               → e
+#   Copilot CLI April 2026 events (camelCase past-tense):
+#     sessionStart                                        → s
+#     sessionEnd                                          → d
+#     preToolUse, postToolUse, userPromptSubmitted        → i
+#     errorOccurred                                       → e
 case "$DC_EVENT" in
     SessionStart|sessionStart|session_start)                               DC_STATUS="s" ;;
     SessionEnd|sessionEnd|session_end)                                     DC_STATUS="d" ;;
     Notification|notification|PermissionRequest|Stop|SubagentStop)         DC_STATUS="w" ;;
-    UserPromptSubmit|userPromptSubmit|PreToolUse|PostToolUse)              DC_STATUS="i" ;;
-    Error|error)                                                           DC_STATUS="e" ;;
+    UserPromptSubmit|userPromptSubmit|userPromptSubmitted|PreToolUse|preToolUse|PostToolUse|postToolUse) DC_STATUS="i" ;;
+    Error|error|errorOccurred)                                             DC_STATUS="e" ;;
     *)                                                                     DC_STATUS="i" ;;
 esac
 
@@ -151,8 +180,17 @@ DC_CWD_J=$(dc_escape "$DC_CWD")
 DC_TOOL_J=$(dc_escape "$DC_TOOL")
 DC_EVENT_J=$(dc_escape "$DC_EVENT")
 DC_MSG_J=$(dc_escape "$DC_MSG")
+DC_TTY_J=$(dc_escape "$DC_TTY")
+DC_NONCE_J=$(dc_escape "$DC_NONCE")
 
-DC_LINE='{"src":"hook","agent":"'"$DC_AGENT"'","s":"'"$DC_STATUS"'","sid":"'"$DC_SID_J"'","cwd":"'"$DC_CWD_J"'","tool":"'"$DC_TOOL_J"'","event":"'"$DC_EVENT_J"'","m":"'"$DC_MSG_J"'","t":'"$DC_TS"'}'
+# pid is optional; only set if we walked to a real agent process.
+if [ -n "$DC_PID" ]; then
+    DC_PID_FIELD=',"pid":'"$DC_PID"
+else
+    DC_PID_FIELD=""
+fi
+
+DC_LINE='{"src":"hook","agent":"'"$DC_AGENT"'","s":"'"$DC_STATUS"'","sid":"'"$DC_SID_J"'","cwd":"'"$DC_CWD_J"'","tool":"'"$DC_TOOL_J"'","tty":"'"$DC_TTY_J"'","event":"'"$DC_EVENT_J"'","m":"'"$DC_MSG_J"'","nonce":"'"$DC_NONCE_J"'"'"$DC_PID_FIELD"',"t":'"$DC_TS"'}'
 
 # Try nc (BSD netcat ships with macOS).
 if command -v nc >/dev/null 2>&1; then

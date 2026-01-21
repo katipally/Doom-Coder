@@ -55,6 +55,12 @@ final class AgentStatusManager {
     @ObservationIgnored private var mcpHelloAt: [String: Date] = [:]
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
+    // Round-trip test continuations keyed by nonce. A nonce is set by
+    // HookRoundTripTest via the DC_TEST_NONCE env var; when hook.sh echoes it
+    // back in an event, we resume the continuation and consume the event
+    // without creating a session row.
+    @ObservationIgnored private var roundTripWaiters: [String: CheckedContinuation<AgentEvent, Never>] = [:]
+
     // MARK: - Init / Deinit
 
     init() {
@@ -69,6 +75,14 @@ final class AgentStatusManager {
 
     func ingest(_ event: AgentEvent) {
         lastEventAt = Date.now
+
+        // Round-trip test observers: if any test is waiting on a nonce, fire it.
+        if let n = event.nonce, !n.isEmpty, let cont = roundTripWaiters.removeValue(forKey: n) {
+            cont.resume(returning: event)
+            // Round-trip test events are synthetic — do not materialize as a
+            // session. Otherwise the sidebar flashes a phantom "Test" row.
+            return
+        }
 
         // MCP-hello is a side-channel handshake, not a real session event.
         // We intercept it before session tracking so a phantom "mcp-hello"
@@ -227,6 +241,28 @@ final class AgentStatusManager {
     }
 
     // MARK: - Test/Manual helpers
+
+    // Registers a waiter for a round-trip nonce. The returned async function
+    // suspends until either the nonce arrives on the socket or the timeout
+    // elapses. Consumer: HookRoundTripTest.
+    func awaitRoundTrip(nonce: String, timeout: TimeInterval) async -> AgentEvent? {
+        // Schedule a timeout that will resume the continuation with a
+        // sentinel event if no real event arrives first.
+        let event: AgentEvent = await withCheckedContinuation { (cont: CheckedContinuation<AgentEvent, Never>) in
+            roundTripWaiters[nonce] = cont
+            let nonceCopy = nonce
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                if let pending = self?.roundTripWaiters.removeValue(forKey: nonceCopy) {
+                    pending.resume(returning: AgentEvent(
+                        src: .manual, agent: "__dc-timeout__", status: .info
+                    ))
+                }
+            }
+        }
+        if event.agent == "__dc-timeout__" { return nil }
+        return event
+    }
 
     // Injects a fake event as if it came from a hook. Used by Settings "Send Test".
     // In v1.3 this fires a 3-stage sequence (start → wait → done) so the test

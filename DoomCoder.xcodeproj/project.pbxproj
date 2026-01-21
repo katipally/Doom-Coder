@@ -22,6 +22,7 @@
 		DC0000000000002000000020 /* AgentStatusManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000020 /* AgentStatusManager.swift */; };
 		DC0000000000002000000021 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* HookInstaller.swift */; };
 		DC0000000000002000000022 /* HookRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* HookRuntime.swift */; };
+DC0000000000002000000099 /* HookRoundTripTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000099 /* HookRoundTripTest.swift */; };
 		DC0000000000002000000024 /* MCPRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* MCPRuntime.swift */; };
 		DC0000000000002000000025 /* MCPInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* MCPInstaller.swift */; };
 		DC0000000000002000000026 /* IPhoneRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000026 /* IPhoneRelay.swift */; };
@@ -51,6 +52,7 @@
 		DC0000000000001000000020 /* AgentStatusManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000021 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
 		DC0000000000001000000022 /* HookRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRuntime.swift; sourceTree = "<group>"; };
+DC0000000000001000000099 /* HookRoundTripTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRoundTripTest.swift; sourceTree = "<group>"; };
 		DC0000000000001000000024 /* MCPRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRuntime.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* MCPInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPInstaller.swift; sourceTree = "<group>"; };
 		DC0000000000001000000026 /* IPhoneRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneRelay.swift; sourceTree = "<group>"; };
@@ -98,6 +100,7 @@
 				DC0000000000001000000020 /* AgentStatusManager.swift */,
 				DC0000000000001000000021 /* HookInstaller.swift */,
 				DC0000000000001000000022 /* HookRuntime.swift */,
+DC0000000000001000000099 /* HookRoundTripTest.swift */,
 				DC0000000000001000000024 /* MCPRuntime.swift */,
 				DC0000000000001000000025 /* MCPInstaller.swift */,
 				DC0000000000001000000026 /* IPhoneRelay.swift */,
@@ -234,6 +237,7 @@
 				DC0000000000002000000020 /* AgentStatusManager.swift in Sources */,
 				DC0000000000002000000021 /* HookInstaller.swift in Sources */,
 				DC0000000000002000000022 /* HookRuntime.swift in Sources */,
+DC0000000000002000000099 /* HookRoundTripTest.swift in Sources */,
 				DC0000000000002000000024 /* MCPRuntime.swift in Sources */,
 				DC0000000000002000000025 /* MCPInstaller.swift in Sources */,
 				DC0000000000002000000026 /* IPhoneRelay.swift in Sources */,

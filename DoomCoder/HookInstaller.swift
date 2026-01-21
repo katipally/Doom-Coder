@@ -38,7 +38,7 @@ final class HookInstaller {
             case .claudeCode:
                 return "We add hooks to your Claude settings so it pings DoomCoder when it starts, finishes, or needs you. Claude never sees this — zero tokens, zero effect on your sessions."
             case .copilotCLI:
-                return "We install a tiny extension script that runs on every Copilot CLI session. Your Copilot usage and tokens are unaffected."
+                return "We register native Copilot CLI hooks (April 2026 format) under ~/.copilot/hooks/hooks.json so it pings DoomCoder when it starts, waits on you, or finishes. Zero tokens, zero effect on your sessions."
             }
         }
     }
@@ -116,7 +116,7 @@ final class HookInstaller {
     static func configPath(for agent: Agent) -> String {
         switch agent {
         case .claudeCode: return claudeSettingsURL.path
-        case .copilotCLI: return copilotExtensionFile.path
+        case .copilotCLI: return copilotHooksJSONURL.path
         }
     }
 
@@ -165,6 +165,15 @@ final class HookInstaller {
 
     private static var copilotExtensionFile: URL {
         copilotExtensionDir.appendingPathComponent("hook.sh")
+    }
+
+    // April 2026 Copilot CLI native hook configuration. Events are declared
+    // in ~/.copilot/hooks/hooks.json and invoke bash commands for:
+    //   sessionStart, sessionEnd, preToolUse, postToolUse,
+    //   userPromptSubmitted, errorOccurred
+    private static var copilotHooksJSONURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".copilot/hooks/hooks.json")
     }
 
     // MARK: - Claude Code
@@ -305,54 +314,132 @@ final class HookInstaller {
 
     // MARK: - Copilot CLI
     //
-    // Copilot CLI supports extensions under `~/.copilot/extensions/<name>/hook.sh`.
-    // The file is invoked for session lifecycle events with event name as $1.
-    // Our file is a thin shim that forwards to ~/.doomcoder/hook.sh.
+    // April 2026 Copilot CLI configuration lives in `~/.copilot/hooks/hooks.json`.
+    // Each event key maps to an array of command entries:
+    //   { "sessionStart": [{ "type": "command", "bash": "~/.doomcoder/hook.sh copilot-cli sessionStart" }], … }
+    //
+    // We install six events. On `.partial` we offer to re-run Setup.
+    //
+    // Config is reloaded automatically by Copilot CLI on session start, so there's
+    // no restart step for the user — unlike Cursor's MCP, which needs a Cmd+Q.
+    //
+    // Legacy (pre-April-2026) Copilot CLI used
+    // `~/.copilot/extensions/doomcoder/hook.sh`. If we find it, we quietly remove
+    // it on next install so users upgrading from v1.3 end up with exactly one
+    // mechanism. The file is backed up first.
 
-    private static let copilotHookBody = """
-    #!/bin/sh
-    # \(marker) — managed by DoomCoder.app. Safe to delete; DoomCoder will re-install.
-    exec sh "$HOME/.doomcoder/hook.sh" copilot-cli "${1:-session}"
-    """
+    private static let copilotEvents = [
+        "sessionStart", "sessionEnd",
+        "preToolUse", "postToolUse",
+        "userPromptSubmitted", "errorOccurred"
+    ]
+
+    private static func copilotCommand(event: String) -> String {
+        "sh \(HookRuntime.hookScriptURL.path) copilot-cli \(event) # \(marker)"
+    }
 
     private static func copilotCLIStatus() -> Status {
-        let path = copilotExtensionFile.path
-        guard FileManager.default.fileExists(atPath: path) else { return .notInstalled }
-        guard let contents = try? String(contentsOf: copilotExtensionFile, encoding: .utf8) else {
-            return .partial(configPath: path, reason: "Extension file exists but couldn't be read")
+        let url = copilotHooksJSONURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // If only the legacy shim exists, report partial so Setup lights up.
+            if FileManager.default.fileExists(atPath: copilotExtensionFile.path) {
+                return .partial(configPath: copilotExtensionFile.path,
+                                reason: "Legacy extension shim present — Setup will upgrade you to the April 2026 hooks.json format")
+            }
+            return .notInstalled
         }
-        return contents.contains(marker)
-            ? .installed(configPath: path)
-            : .partial(configPath: path, reason: "Extension file exists but wasn't created by DoomCoder — re-run Setup to take ownership")
+        guard let data = try? Data(contentsOf: url),
+              let obj  = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return .partial(configPath: url.path, reason: "hooks.json exists but isn't valid JSON")
+        }
+        var installed = 0
+        for event in copilotEvents {
+            if let arr = obj[event] as? [[String: Any]],
+               arr.contains(where: { (($0["bash"] as? String) ?? "").contains(marker) }) {
+                installed += 1
+            }
+        }
+        if installed == 0                    { return .notInstalled }
+        if installed == copilotEvents.count  { return .installed(configPath: url.path) }
+        return .partial(configPath: url.path,
+                        reason: "\(installed) of \(copilotEvents.count) hooks present — re-run Setup to fix")
     }
 
     @discardableResult
     private static func installCopilotCLI() throws -> String {
-        let url = copilotExtensionFile
+        // 1. Clean up legacy extension shim if it exists. We back it up first.
+        let legacy = copilotExtensionFile
+        if FileManager.default.fileExists(atPath: legacy.path) {
+            // Only remove shims that we ourselves installed (marker match).
+            if let old = try? String(contentsOf: legacy, encoding: .utf8),
+               old.contains(marker) {
+                try? backup(fileAt: legacy)
+                try? FileManager.default.removeItem(at: legacy)
+            }
+        }
+
+        // 2. Merge into hooks.json (or create).
+        let url = copilotHooksJSONURL
         try ensureParentDirectory(for: url)
+        var root: [String: Any] = [:]
         if FileManager.default.fileExists(atPath: url.path) {
             try backup(fileAt: url)
+            let data: Data
+            do { data = try Data(contentsOf: url) } catch {
+                throw InstallError.readFailed(url.path, error)
+            }
+            if data.isEmpty {
+                root = [:]
+            } else if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                root = parsed
+            } else {
+                throw InstallError.parseError(url.path)
+            }
         }
-        do {
-            try copilotHookBody.write(to: url, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        } catch {
-            throw InstallError.writeFailed(url.path, error)
+
+        for event in copilotEvents {
+            var entries = (root[event] as? [[String: Any]]) ?? []
+            entries.removeAll { (($0["bash"] as? String) ?? "").contains(marker) }
+            entries.append([
+                "type": "command",
+                "bash": copilotCommand(event: event),
+                marker: true
+            ])
+            root[event] = entries
         }
+
+        try writeJSONPretty(root, to: url)
         return url.path
     }
 
     @discardableResult
     private static func uninstallCopilotCLI() throws -> String {
-        let url = copilotExtensionFile
+        let url = copilotHooksJSONURL
+        // Also clean up any remaining legacy shim.
+        let legacy = copilotExtensionFile
+        if FileManager.default.fileExists(atPath: legacy.path),
+           let old = try? String(contentsOf: legacy, encoding: .utf8),
+           old.contains(marker) {
+            try? backup(fileAt: legacy)
+            try? FileManager.default.removeItem(at: legacy)
+        }
+
         guard FileManager.default.fileExists(atPath: url.path) else { return url.path }
-        guard let contents = try? String(contentsOf: url, encoding: .utf8), contents.contains(marker) else {
-            throw InstallError.unsupported("\(url.path) wasn't installed by DoomCoder — leaving it alone.")
-        }
         try backup(fileAt: url)
-        do { try FileManager.default.removeItem(at: url) } catch {
-            throw InstallError.writeFailed(url.path, error)
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch {
+            throw InstallError.readFailed(url.path, error)
         }
+        guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw InstallError.parseError(url.path)
+        }
+        for event in copilotEvents {
+            guard var entries = root[event] as? [[String: Any]] else { continue }
+            entries.removeAll { (($0["bash"] as? String) ?? "").contains(marker) }
+            if entries.isEmpty { root.removeValue(forKey: event) }
+            else               { root[event] = entries }
+        }
+        try writeJSONPretty(root, to: url)
         return url.path
     }
 
