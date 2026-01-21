@@ -14,12 +14,8 @@
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
-		DC0000000000002000000011 /* AppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000011 /* AppDetector.swift */; };
 		DC0000000000002000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000012 /* NotificationManager.swift */; };
-		DC0000000000002000000013 /* ActiveAppsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000013 /* ActiveAppsView.swift */; };
 		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
-		DC0000000000002000000015 /* DynamicAppDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000015 /* DynamicAppDiscovery.swift */; };
-		DC0000000000002000000016 /* WorkingStateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000016 /* WorkingStateDetector.swift */; };
 		DC0000000000002000000017 /* AgentEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000017 /* AgentEvent.swift */; };
 		DC0000000000002000000018 /* AgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000018 /* AgentSession.swift */; };
 		DC0000000000002000000019 /* SocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000019 /* SocketServer.swift */; };
@@ -31,6 +27,7 @@
 		DC0000000000002000000025 /* MCPInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* MCPInstaller.swift */; };
 		DC0000000000002000000026 /* IPhoneRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000026 /* IPhoneRelay.swift */; };
 		DC0000000000002000000027 /* IPhoneSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* IPhoneSetupView.swift */; };
+		DC0000000000002000000028 /* LegacyDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* LegacyDefaults.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,12 +40,8 @@
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
-		DC0000000000001000000011 /* AppDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
-		DC0000000000001000000013 /* ActiveAppsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveAppsView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		DC0000000000001000000015 /* DynamicAppDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicAppDiscovery.swift; sourceTree = "<group>"; };
-		DC0000000000001000000016 /* WorkingStateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingStateDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000017 /* AgentEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEvent.swift; sourceTree = "<group>"; };
 		DC0000000000001000000018 /* AgentSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSession.swift; sourceTree = "<group>"; };
 		DC0000000000001000000019 /* SocketServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketServer.swift; sourceTree = "<group>"; };
@@ -60,6 +53,7 @@
 		DC0000000000001000000025 /* MCPInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPInstaller.swift; sourceTree = "<group>"; };
 		DC0000000000001000000026 /* IPhoneRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneRelay.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* IPhoneSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneSetupView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000028 /* LegacyDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyDefaults.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,12 +84,8 @@
 				DC0000000000001000000004 /* MenuBarView.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
-				DC0000000000001000000011 /* AppDetector.swift */,
 				DC0000000000001000000012 /* NotificationManager.swift */,
-				DC0000000000001000000013 /* ActiveAppsView.swift */,
 				DC0000000000001000000014 /* SettingsView.swift */,
-				DC0000000000001000000015 /* DynamicAppDiscovery.swift */,
-				DC0000000000001000000016 /* WorkingStateDetector.swift */,
 				DC0000000000001000000017 /* AgentEvent.swift */,
 				DC0000000000001000000018 /* AgentSession.swift */,
 				DC0000000000001000000019 /* SocketServer.swift */,
@@ -107,11 +97,20 @@
 				DC0000000000001000000025 /* MCPInstaller.swift */,
 				DC0000000000001000000026 /* IPhoneRelay.swift */,
 				DC0000000000001000000027 /* IPhoneSetupView.swift */,
+				DC0000000000003000000004 /* Migration */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
 			);
 			path = DoomCoder;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000004 /* Migration */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000028 /* LegacyDefaults.swift */,
+			);
+			path = Migration;
 			sourceTree = "<group>";
 		};
 		DC0000000000003000000003 /* Products */ = {
@@ -202,12 +201,8 @@
 				DC0000000000002000000004 /* MenuBarView.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
-				DC0000000000002000000011 /* AppDetector.swift in Sources */,
 				DC0000000000002000000012 /* NotificationManager.swift in Sources */,
-				DC0000000000002000000013 /* ActiveAppsView.swift in Sources */,
 				DC0000000000002000000014 /* SettingsView.swift in Sources */,
-				DC0000000000002000000015 /* DynamicAppDiscovery.swift in Sources */,
-				DC0000000000002000000016 /* WorkingStateDetector.swift in Sources */,
 				DC0000000000002000000017 /* AgentEvent.swift in Sources */,
 				DC0000000000002000000018 /* AgentSession.swift in Sources */,
 				DC0000000000002000000019 /* SocketServer.swift in Sources */,
@@ -219,6 +214,7 @@
 				DC0000000000002000000025 /* MCPInstaller.swift in Sources */,
 				DC0000000000002000000026 /* IPhoneRelay.swift in Sources */,
 				DC0000000000002000000027 /* IPhoneSetupView.swift in Sources */,
+				DC0000000000002000000028 /* LegacyDefaults.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,7 +274,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -335,7 +331,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
