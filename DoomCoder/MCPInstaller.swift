@@ -87,11 +87,56 @@ enum MCPInstaller {
         static let serverKey = "doomcoder"
     }
 
-    enum Status: String { case installed, notInstalled, modified, missingConfig }
+    /// Three-state badge shown in the UI + two special error states.
+    ///
+    /// - `notInstalled`: config file missing, or present but no doomcoder entry.
+    /// - `configWritten`: our entry is on disk (sentinel present) but we
+    ///   haven't seen the agent load it yet. Most likely the agent needs a
+    ///   restart.
+    /// - `live`: our entry is on disk **and** the MCP server fired an
+    ///   `mcp-hello` on its `initialize` RPC within the last 10 minutes —
+    ///   proof that the agent picked up the config.
+    /// - `modified`: an entry named "doomcoder" exists but the `doomcoder-managed`
+    ///   sentinel is absent — user-authored, we won't touch it.
+    /// - `missingConfig`: config file present but unreadable / malformed.
+    enum Status: String { case notInstalled, configWritten, live, modified, missingConfig }
+
+    /// Windows of "live" validity. If no hello seen within this many seconds
+    /// the status falls back to `.configWritten`.
+    private static let liveWindow: TimeInterval = 10 * 60
 
     enum InstallError: Error {
         case writeFailed(URL, underlying: Error)
         case malformedConfig(URL)
+    }
+
+    // MARK: - Install id
+
+    /// Stable-per-install UUID stamped into the MCP command line. The script
+    /// echoes it back on its `mcp-hello` so we can correlate "the install we
+    /// just wrote" with "the process that came alive."
+    static func installId(for agent: Agent) -> String? {
+        UserDefaults.standard.string(forKey: "dc.mcp.installId.\(agent.rawValue)")
+    }
+
+    private static func setInstallId(_ id: String?, for agent: Agent) {
+        let key = "dc.mcp.installId.\(agent.rawValue)"
+        if let id { UserDefaults.standard.set(id, forKey: key) }
+        else      { UserDefaults.standard.removeObject(forKey: key) }
+    }
+
+    /// Called by `AgentStatusManager.ingestHello` — persists the hello
+    /// timestamp so the 3-state badge stays correct across relaunches.
+    static func recordHello(agent catalogId: String, installId: String) {
+        guard let agent = Agent.allCases.first(where: { $0.catalogId == catalogId }) else { return }
+        UserDefaults.standard.set(Date.now.timeIntervalSince1970,
+                                  forKey: "dc.mcp.hello.\(agent.rawValue).\(installId)")
+    }
+
+    private static func latestHello(for agent: Agent) -> Date? {
+        guard let id = installId(for: agent) else { return nil }
+        let ts = UserDefaults.standard.double(forKey: "dc.mcp.hello.\(agent.rawValue).\(id)")
+        return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
     }
 
     // MARK: - Status
@@ -104,21 +149,30 @@ enum MCPInstaller {
         guard let data = try? Data(contentsOf: agent.configPath) else {
             return .missingConfig
         }
+        let onDisk: Status
         if agent.isTOML {
             guard let text = String(data: data, encoding: .utf8) else { return .missingConfig }
-            return text.contains(tomlSectionHeader) ? .installed : .notInstalled
+            onDisk = text.contains(tomlSectionHeader) ? .configWritten : .notInstalled
+        } else {
+            guard
+                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let servers = obj["mcpServers"] as? [String: Any],
+                let entry = servers[Agent.serverKey] as? [String: Any]
+            else {
+                return .notInstalled
+            }
+            // We only own entries tagged with the sentinel. Anything else is
+            // user-authored; we report `.modified` and refuse to clobber.
+            onDisk = (entry["doomcoder-managed"] as? Bool == true) ? .configWritten : .modified
         }
-        guard
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let servers = obj["mcpServers"] as? [String: Any],
-            let entry = servers[Agent.serverKey] as? [String: Any]
-        else {
-            return .notInstalled
+
+        // Promote to .live if the MCP server fired a hello recently.
+        if onDisk == .configWritten,
+           let hello = latestHello(for: agent),
+           Date.now.timeIntervalSince(hello) < liveWindow {
+            return .live
         }
-        // We only report "installed" if our sentinel is present — otherwise a
-        // user- or tool-authored "doomcoder" entry could make us think we're
-        // already set up when we aren't.
-        return (entry["doomcoder-managed"] as? Bool == true) ? .installed : .modified
+        return onDisk
     }
 
     // MARK: - Install
@@ -131,11 +185,19 @@ enum MCPInstaller {
 
         let backupURL = try backup(agent)
 
+        // Fresh install-id per install so the hello handshake can distinguish
+        // "alive from this install" from "alive from a stale prior install."
+        let installId = UUID().uuidString
+        setInstallId(installId, for: agent)
+
         if agent.isTOML {
-            try writeTOML(for: agent)
+            try writeTOML(for: agent, installId: installId)
         } else {
-            try writeJSON(for: agent)
+            try writeJSON(for: agent, installId: installId)
         }
+        // Poke the mtime so editors with config-watchers (VS Code) re-read
+        // without a manual restart when possible.
+        try? fm.setAttributes([.modificationDate: Date.now], ofItemAtPath: agent.configPath.path)
         return backupURL
     }
 
@@ -153,6 +215,7 @@ enum MCPInstaller {
         } else {
             try stripJSONEntry(at: agent.configPath)
         }
+        setInstallId(nil, for: agent)
         return backupURL
     }
 
@@ -197,7 +260,7 @@ enum MCPInstaller {
 
     // MARK: - JSON merge
 
-    private static func writeJSON(for agent: Agent) throws {
+    private static func writeJSON(for agent: Agent, installId: String) throws {
         let fm = FileManager.default
         var root: [String: Any] = [:]
 
@@ -211,7 +274,7 @@ enum MCPInstaller {
         }
 
         var servers = (root["mcpServers"] as? [String: Any]) ?? [:]
-        let invocation = MCPRuntime.invocation
+        let invocation = MCPRuntime.invocation(agent: agent.catalogId, installId: installId)
         servers[Agent.serverKey] = [
             "command": invocation.command,
             "args":    invocation.args,
@@ -258,7 +321,7 @@ enum MCPInstaller {
     private static let tomlSectionHeader = "[mcp_servers.doomcoder]"
     private static let tomlManagedMarker = "# doomcoder-managed"
 
-    private static func writeTOML(for agent: Agent) throws {
+    private static func writeTOML(for agent: Agent, installId: String) throws {
         let fm = FileManager.default
         var existing: String = ""
         if fm.fileExists(atPath: agent.configPath.path),
@@ -268,16 +331,23 @@ enum MCPInstaller {
 
         let stripped = removeDoomcoderSection(from: existing)
 
-        let invocation = MCPRuntime.invocation
+        let invocation = MCPRuntime.invocation(agent: agent.catalogId, installId: installId)
+        // Escape both backslash and double-quote per TOML basic-string rules;
+        // prior versions only escaped the quote, which would corrupt any path
+        // containing a literal backslash (rare on macOS but defensive).
+        func tomlEscape(_ s: String) -> String {
+            s.replacingOccurrences(of: "\\", with: "\\\\")
+             .replacingOccurrences(of: "\"", with: "\\\"")
+        }
         let argsLiteral = invocation.args
-            .map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\""))\"" }
+            .map { "\"\(tomlEscape($0))\"" }
             .joined(separator: ", ")
 
         let block = """
 
         \(tomlManagedMarker)
         \(tomlSectionHeader)
-        command = "\(invocation.command)"
+        command = "\(tomlEscape(invocation.command))"
         args = [\(argsLiteral)]
         """
 
