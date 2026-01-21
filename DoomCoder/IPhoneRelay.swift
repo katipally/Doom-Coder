@@ -5,20 +5,18 @@ import Observation
 
 // MARK: - IPhoneRelay
 //
-// Fans out attention-grabbing agent events (wait / error / done) to one or more
-// iPhone-visible channels in parallel. Every channel is independent — a
-// failure in one doesn't stop the others, and every delivery attempt is
-// recorded in `deliveryLog` so the user can confirm what actually reached
-// their phone.
+// Fans out attention-grabbing agent events (wait / error / done) to iPhone
+// delivery channels. v1.1.0 removes Reminders + iMessage (both proved unreliable
+// on real devices: Reminders were silently routed to Recently-Deleted, and
+// iMessage-to-self is blocked by the iMessage service itself) and replaces
+// them with a **Calendar event + short-offset alarm** on a dedicated iCloud
+// "DoomCoder" calendar. Calendar alarms fire a genuine push notification on
+// every Apple device signed into the same iCloud account — that's the only
+// channel Apple guarantees for "wake up the user on their phone from a Mac".
 //
-// Design goals:
-//   1. Triple-redundant: if iCloud is slow, iMessage still works; if Messages
-//      permission is denied, ntfy still works.
-//   2. Zero network metadata leaked: default config uses Apple's own sync
-//      paths. ntfy is opt-in.
-//   3. Stateless channels: each channel re-reads UserDefaults on every
-//      `deliver`, so the Settings window can flip a switch and the next event
-//      reflects it without any observer plumbing.
+// Surviving channels for v1.1.0:
+//   • CalendarChannel — EKEvent on dedicated iCloud calendar with 0s alarm.
+//   • NtfyChannel     — HTTPS POST to ntfy.sh topic; works cross-platform.
 
 @MainActor
 @Observable
@@ -26,11 +24,15 @@ final class IPhoneRelay {
 
     // MARK: Keys
     enum Keys {
-        static let reminderEnabled = "dc.iphone.reminder.enabled"
-        static let imessageEnabled = "dc.iphone.imessage.enabled"
-        static let imessageHandle  = "dc.iphone.imessage.handle"
+        static let calendarEnabled = "dc.iphone.calendar.enabled"
         static let ntfyEnabled     = "dc.iphone.ntfy.enabled"
         static let ntfyTopic       = "dc.iphone.ntfy.topic"
+
+        // Legacy keys (kept only for LegacyDefaults.migrate to read/clear).
+        static let legacyReminderEnabled = "dc.iphone.reminder.enabled"
+        static let legacyIMessageEnabled = "dc.iphone.imessage.enabled"
+        static let legacyIMessageHandle  = "dc.iphone.imessage.handle"
+        static let legacyFocusEnabled    = "dc.focus.filter.enabled"
     }
 
     // MARK: State
@@ -51,12 +53,11 @@ final class IPhoneRelay {
 
     // MARK: Channels
 
-    let reminder = ReminderChannel()
-    let imessage = IMessageChannel()
+    let calendar = CalendarChannel()
     let ntfy     = NtfyChannel()
 
     var enabledChannelCount: Int {
-        [reminder.isEnabled, imessage.isEnabled, ntfy.isEnabled].filter { $0 }.count
+        [calendar.isEnabled, ntfy.isEnabled].filter { $0 }.count
     }
 
     var anyChannelEnabled: Bool { enabledChannelCount > 0 }
@@ -75,13 +76,12 @@ final class IPhoneRelay {
     }
 
     private func runAllChannels(title: String, body: String) async {
-        // Best-effort housekeeping before we drop a new reminder on the user's
-        // phone: auto-complete any DoomCoder-tagged reminders older than an
-        // hour so the list doesn't grow unbounded.
-        await reminder.cleanupDeliveredReminders()
+        // Best-effort housekeeping before new delivery: remove old DoomCoder
+        // calendar events so the user's calendar doesn't accumulate cruft.
+        await calendar.cleanupOldEvents()
+
         let snapshots: [(String, any IPhoneChannel)] = [
-            ("Reminder", reminder),
-            ("iMessage", imessage),
+            ("Calendar", calendar),
             ("ntfy",     ntfy)
         ]
         await withTaskGroup(of: (String, DeliveryResult).self) { group in
@@ -126,8 +126,7 @@ final class IPhoneRelay {
         Task.detached { [weak self] in
             guard let self else { return }
             let chs: [(String, any IPhoneChannel)] = [
-                ("Reminder", self.reminder),
-                ("iMessage", self.imessage),
+                ("Calendar", self.calendar),
                 ("ntfy",     self.ntfy)
             ]
             for (name, ch) in chs where (only == nil || only == name) {
@@ -160,344 +159,210 @@ protocol IPhoneChannel: Sendable {
     func deliver(title: String, body: String) async -> DeliveryResult
 }
 
-// MARK: - Reminder channel (EventKit)
+// MARK: - Calendar channel (EventKit)
 //
-// Writes an **uncompleted** reminder with an immediate alarm into the user's
-// default Reminders list. Because Reminders sync via iCloud, the item shows
-// up — and *notifies* — on any iPhone signed into the same Apple ID within
-// seconds.
+// Creates a short event on a dedicated "DoomCoder" calendar on the user's
+// iCloud account (falls back to local). The event starts a few seconds from
+// now and has an `EKAlarm` at zero offset so an alert fires immediately on
+// every Apple device signed into the same iCloud account. This is the most
+// reliable cross-device push path available to a Mac-only app in April 2026.
 //
-// IMPORTANT: Earlier iterations used `isCompleted = true`, which *did* sync
-// but was silently filed under "Completed" on iPhone with no notification.
-// That's why v1.0.0 users reported "the iPhone side is broken" — it wasn't
-// broken, just silent. Real deliveries now use an alarm at `Date.now` so the
-// iPhone fires a banner / lock-screen notification immediately. We tag every
-// DoomCoder reminder with a sentinel note prefix so a background cleanup
-// pass can auto-complete stale ones and keep the user's list tidy.
+// We keep the alarm offset very short (default 3 s) so the user gets woken
+// up promptly — but non-zero so iCloud has time to sync the event to the
+// phone before the alarm triggers there (zero-offset on a just-created event
+// sometimes loses the phone race entirely).
 
 @Observable
-final class ReminderChannel: IPhoneChannel, @unchecked Sendable {
+final class CalendarChannel: IPhoneChannel, @unchecked Sendable {
     private let store = EKEventStore()
 
-    // Sentinel prefix embedded in the reminder notes so cleanup can recognize
-    // reminders we wrote without affecting the user's own entries.
-    static let sentinel = "[dc-reminder/v1]"
+    /// Title of the dedicated calendar we create. Keep stable — we look it up
+    /// by name on each launch.
+    static let dedicatedCalendarName = "DoomCoder"
+
+    /// Tag we stamp into event notes so we can recognize + clean up our own
+    /// events without touching anything the user created.
+    static let sentinel = "[dc-alarm/v1]"
+
+    /// How far in the future to schedule the alarm. Short enough to feel
+    /// instant, long enough for the event to propagate through iCloud to the
+    /// iPhone before its alarm fires locally.
+    var alarmOffsetSeconds: TimeInterval = 3
 
     var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: IPhoneRelay.Keys.reminderEnabled) }
-        set { UserDefaults.standard.set(newValue, forKey: IPhoneRelay.Keys.reminderEnabled) }
+        get { UserDefaults.standard.bool(forKey: IPhoneRelay.Keys.calendarEnabled) }
+        set { UserDefaults.standard.set(newValue, forKey: IPhoneRelay.Keys.calendarEnabled) }
     }
 
     var isReady: Bool {
-        EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
     }
 
     func requestAccess() async -> Bool {
-        do { return try await store.requestFullAccessToReminders() }
+        do { return try await store.requestFullAccessToEvents() }
         catch { return false }
     }
+
+    // MARK: Calendar resolution
+
+    /// Returns (or creates) the dedicated DoomCoder calendar. Prefers an
+    /// iCloud-backed calDAV source so events sync to iPhone; falls back to
+    /// local if iCloud isn't available (rare but possible).
+    private func resolveCalendar() -> EKCalendar? {
+        let name = Self.dedicatedCalendarName
+        if let existing = store.calendars(for: .event).first(where: { $0.title == name }) {
+            return existing
+        }
+
+        // Pick a source: iCloud (calDAV) first, then local.
+        let sources = store.sources
+        let source = sources.first(where: { $0.sourceType == .calDAV && $0.title.localizedCaseInsensitiveContains("icloud") })
+            ?? sources.first(where: { $0.sourceType == .calDAV })
+            ?? sources.first(where: { $0.sourceType == .local })
+
+        guard let source else { return nil }
+
+        let cal = EKCalendar(for: .event, eventStore: store)
+        cal.title = name
+        cal.source = source
+        cal.cgColor = NSColor.systemOrange.cgColor
+
+        do {
+            try store.saveCalendar(cal, commit: true)
+            return cal
+        } catch {
+            // Couldn't write to iCloud source (some corporate / restricted
+            // setups). Retry against local.
+            if source.sourceType != .local,
+               let local = sources.first(where: { $0.sourceType == .local }) {
+                cal.source = local
+                if (try? store.saveCalendar(cal, commit: true)) != nil {
+                    return cal
+                }
+            }
+            return nil
+        }
+    }
+
+    // MARK: Deliver
 
     func deliver(title: String, body: String) async -> DeliveryResult {
         guard self.isEnabled else { return .failure(reason: "Disabled") }
         guard self.isReady else {
-            return .failure(reason: "Reminders access not granted. Open Agent Tracking → Reminders → Request Permission.")
+            return .failure(reason: "Calendar access not granted. Open Agent Tracking → Calendar → Request Permission.")
         }
-        guard let list = self.store.defaultCalendarForNewReminders() else {
-            return .failure(reason: "No default Reminders list — open Reminders.app once to create one.")
+        guard let cal = resolveCalendar() else {
+            return .failure(reason: "Couldn't create DoomCoder calendar. Check Settings → Apple ID → iCloud → Calendars.")
         }
 
-        let reminder = EKReminder(eventStore: self.store)
-        reminder.title = title
-        // Tag notes with a sentinel on its own line so cleanup can match it
-        // precisely without affecting lines the user might edit.
-        reminder.notes = "\(body)\n\n\(Self.sentinel)"
-        reminder.calendar = list
-        reminder.isCompleted = false
-        reminder.priority = 1  // High priority — iPhone surfaces it faster.
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.notes = "\(body)\n\n\(Self.sentinel)"
+        event.calendar = cal
 
-        // An uncompleted reminder only fires a notification on iPhone when it
-        // has both a `dueDateComponents` (so Reminders.app treats it as a
-        // scheduled task) and an `EKAlarm` (the actual trigger). We set both
-        // to "now" so the phone lights up within a few seconds of iCloud
-        // propagation.
-        let due = Date.now
-        reminder.dueDateComponents = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second, .timeZone],
-            from: due
-        )
-        reminder.addAlarm(EKAlarm(absoluteDate: due))
+        let start = Date.now.addingTimeInterval(alarmOffsetSeconds)
+        let end   = start.addingTimeInterval(60)
+        event.startDate = start
+        event.endDate   = end
+
+        // Relative offset 0 = fire at startDate. The startDate itself is
+        // already in the near future, so the alarm lands shortly after sync.
+        event.addAlarm(EKAlarm(relativeOffset: 0))
 
         do {
-            try self.store.save(reminder, commit: true)
-            return .success(detail: "Notified via \(list.title)")
+            try store.save(event, span: .thisEvent, commit: true)
+            return .success(detail: "Alarm set on \(cal.title) in \(Int(alarmOffsetSeconds))s")
         } catch {
             return .failure(reason: error.localizedDescription)
         }
     }
 
-    // MARK: - Cleanup
+    // MARK: Cleanup
     //
-    // Uncompleted reminders we wrote will stick around on the user's Mac +
-    // iPhone forever otherwise. Called opportunistically (app launch, before
-    // each new delivery) to mark DoomCoder reminders older than `age` as
-    // completed, which moves them into the Completed section on iPhone and
-    // stops them from re-firing. Best-effort: any failure is ignored.
+    // Sweeps DoomCoder-tagged events whose end-date is in the past and removes
+    // them so the user's calendar doesn't accumulate a huge stripe of orange
+    // ticks. Best-effort: silent on failure.
 
-    func cleanupDeliveredReminders(olderThan age: TimeInterval = 60 * 60) async {
-        guard self.isReady else { return }
-        guard let list = self.store.defaultCalendarForNewReminders() else { return }
+    func cleanupOldEvents(olderThan age: TimeInterval = 60 * 30) async {
+        guard self.isReady, let cal = resolveCalendar() else { return }
         let cutoff = Date.now.addingTimeInterval(-age)
-        let store = self.store
-        let pred = store.predicateForReminders(in: [list])
-
-        // Pull titles/ids out on EventKit's thread so no non-Sendable EKReminder
-        // crosses a concurrency boundary.
-        let matchIds: [String] = await withCheckedContinuation { (cont: CheckedContinuation<[String], Never>) in
-            store.fetchReminders(matching: pred) { items in
-                let ids = (items ?? [])
-                    .filter {
-                        ($0.notes ?? "").contains(Self.sentinel) &&
-                        !$0.isCompleted &&
-                        ($0.creationDate ?? .distantFuture) < cutoff
-                    }
-                    .map { $0.calendarItemIdentifier }
-                cont.resume(returning: ids)
-            }
-        }
-
-        for id in matchIds {
-            if let reminder = store.calendarItems(withExternalIdentifier: id).first as? EKReminder
-                ?? (store.calendarItem(withIdentifier: id) as? EKReminder)
-            {
-                reminder.isCompleted = true
-                reminder.completionDate = .now
-                try? store.save(reminder, commit: false)
-            }
+        // Fetch a generous window: last 30 days up to cutoff.
+        let windowStart = Date.now.addingTimeInterval(-60 * 60 * 24 * 30)
+        let pred = store.predicateForEvents(withStart: windowStart, end: cutoff, calendars: [cal])
+        let events = store.events(matching: pred)
+        for e in events where (e.notes ?? "").contains(Self.sentinel) {
+            try? store.remove(e, span: .thisEvent, commit: false)
         }
         try? store.commit()
     }
 
-    // MARK: - iCloud round-trip test
+    // MARK: iCloud round-trip test
     //
-    // Writes a unique marker reminder, then polls a *fresh* EKEventStore (so
-    // we read through iCloud, not the local cache) until the marker shows up
-    // or `timeout` elapses. On success we delete the marker and return the
-    // observed round-trip latency. This proves the full write → iCloud →
-    // iPhone propagation loop is wired up.
+    // Writes a probe event, polls a fresh EKEventStore until it sees the
+    // event, then deletes it. Proves Mac → iCloud propagation is wired up
+    // (from which iPhone propagation follows).
+
     enum RoundTripError: Error, LocalizedError {
         case notAuthorized
-        case noDefaultList
+        case noCalendar
         case writeFailed(String)
         case timeout(TimeInterval)
 
         var errorDescription: String? {
             switch self {
-            case .notAuthorized:       return "Reminders access not granted. Allow it in Channel Setup → Reminders first."
-            case .noDefaultList:       return "No default Reminders list. Open Reminders.app once to create one."
-            case .writeFailed(let m):  return "Couldn't save test reminder: \(m)"
-            case .timeout(let s):      return "Reminder didn't propagate through iCloud within \(Int(s))s. Check Settings → Apple ID → iCloud → Reminders is on."
+            case .notAuthorized:      return "Calendar access not granted. Allow it in Channel Setup → Calendar first."
+            case .noCalendar:         return "Couldn't create DoomCoder calendar. Check Settings → Apple ID → iCloud → Calendars."
+            case .writeFailed(let m): return "Couldn't save test event: \(m)"
+            case .timeout(let s):     return "Event didn't propagate through iCloud within \(Int(s))s. Check Settings → Apple ID → iCloud → Calendars is on."
             }
         }
     }
 
     func runICloudRoundTripTest(timeout: TimeInterval = 15) async -> Result<TimeInterval, RoundTripError> {
         guard self.isReady else { return .failure(.notAuthorized) }
-        guard let list = self.store.defaultCalendarForNewReminders() else {
-            return .failure(.noDefaultList)
-        }
+        guard let cal = resolveCalendar() else { return .failure(.noCalendar) }
 
         let marker = UUID().uuidString
         let title  = "DC-ROUNDTRIP-\(marker)"
+        let start  = Date.now.addingTimeInterval(60 * 60)  // 1h out, no alarm
+        let end    = start.addingTimeInterval(60)
         let writeStart = Date.now
 
-        let reminder = EKReminder(eventStore: self.store)
-        reminder.title = title
-        // Intentionally omits the sentinel — this is a sync probe, not a
-        // user-visible delivery, so cleanup should ignore it. We mark it
-        // completed immediately so iPhone Reminders won't notify.
-        reminder.notes = "DoomCoder iCloud round-trip probe. Safe to delete."
-        reminder.calendar = list
-        reminder.isCompleted = true
-        reminder.completionDate = .now
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.notes = "DoomCoder iCloud round-trip probe. Safe to delete."
+        event.calendar = cal
+        event.startDate = start
+        event.endDate = end
+        // No alarm — this is a sync probe, not a real delivery.
 
         do {
-            try self.store.save(reminder, commit: true)
+            try store.save(event, span: .thisEvent, commit: true)
         } catch {
             return .failure(.writeFailed(error.localizedDescription))
         }
 
-        // Poll with a fresh store. EventKit caches aggressively on the
-        // handle that wrote the item, so reading back with the SAME store
-        // is a lie — it'd succeed instantly regardless of iCloud. A new
-        // store reloads from the local CoreData mirror which is kept in
-        // sync with iCloud, so this is a true propagation probe on the
-        // device the user is sitting at.
         let probe = EKEventStore()
         let deadline = Date.now.addingTimeInterval(timeout)
         var matched = false
 
         while Date.now < deadline && !matched {
             try? await Task.sleep(for: .milliseconds(500))
-            let pred = probe.predicateForReminders(in: [list])
-            // Compare titles inside the EventKit callback so the only value
-            // that crosses the concurrency boundary is a Bool (Sendable).
-            // EKReminder itself isn't Sendable under Swift 6 strict checking.
-            matched = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-                probe.fetchReminders(matching: pred) { items in
-                    let hit = (items ?? []).contains { $0.title == title }
-                    cont.resume(returning: hit)
-                }
-            }
+            let pred = probe.predicateForEvents(
+                withStart: start.addingTimeInterval(-60),
+                end: start.addingTimeInterval(120),
+                calendars: nil
+            )
+            let hits = probe.events(matching: pred)
+            matched = hits.contains { $0.title == title }
         }
+
+        try? store.remove(event, span: .thisEvent, commit: true)
 
         if matched {
-            let latency = Date.now.timeIntervalSince(writeStart)
-            try? self.store.remove(reminder, commit: true)
-            return .success(latency)
+            return .success(Date.now.timeIntervalSince(writeStart))
         }
-
-        // Clean up the marker we wrote so we don't pollute the user's list.
-        try? self.store.remove(reminder, commit: true)
         return .failure(.timeout(timeout))
-    }
-}
-
-// MARK: - iMessage channel (AppleScript → Messages.app)
-//
-// Sends an iMessage to a handle the user configures (their own phone number
-// or iCloud email). This is the fastest end-to-end path to an iPhone — push
-// typically lands within seconds — but requires Automation permission for
-// Messages.app.
-
-@Observable
-final class IMessageChannel: IPhoneChannel, @unchecked Sendable {
-
-    var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: IPhoneRelay.Keys.imessageEnabled) }
-        set { UserDefaults.standard.set(newValue, forKey: IPhoneRelay.Keys.imessageEnabled) }
-    }
-
-    var handle: String {
-        get { UserDefaults.standard.string(forKey: IPhoneRelay.Keys.imessageHandle) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: IPhoneRelay.Keys.imessageHandle) }
-    }
-
-    /// Ready once a non-empty handle is saved. Automation permission is
-    /// requested lazily on first delivery; macOS shows the permission prompt
-    /// automatically the first time we dispatch an Apple Event.
-    var isReady: Bool {
-        !Self.normalizeHandle(handle).isEmpty
-    }
-
-    /// Normalizes a user-entered handle for AppleScript lookup:
-    ///   • strips whitespace, dashes, parentheses, spaces, dots
-    ///   • if the result is all-digits (optionally with a leading +), ensures
-    ///     a leading + (Messages requires E.164 form for phone numbers)
-    ///   • leaves email addresses untouched aside from trimming
-    static func normalizeHandle(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.contains("@") { return trimmed }
-        let digits = trimmed.unicodeScalars
-            .filter { CharacterSet(charactersIn: "0123456789+").contains($0) }
-            .map { Character($0) }
-        let compact = String(digits)
-        if compact.isEmpty { return "" }
-        if compact.hasPrefix("+") { return compact }
-        return "+\(compact)"
-    }
-
-    /// Triggers a harmless Apple Event so macOS surfaces its Automation
-    /// permission prompt for Messages.app. Called from the Channel Setup
-    /// Sheet before the real test so the user sees the system prompt in a
-    /// context where they expect it. Returns whether permission was granted.
-    nonisolated func primeAutomationPermission() async -> DeliveryResult {
-        let script = """
-        tell application "Messages"
-            return (count of services)
-        end tell
-        """
-        return await Task.detached { () -> DeliveryResult in
-            var error: NSDictionary?
-            _ = NSAppleScript(source: script)?.executeAndReturnError(&error)
-            if let error { return Self.decodeAppleScriptError(error) }
-            return .success(detail: "Automation permission granted")
-        }.value
-    }
-
-    nonisolated func deliver(title: String, body: String) async -> DeliveryResult {
-        let isEnabled = self.isEnabled
-        let handle    = Self.normalizeHandle(self.handle)
-        guard isEnabled else { return .failure(reason: "Disabled") }
-        guard !handle.isEmpty else { return .failure(reason: "No handle configured") }
-
-        let message = Self.escapeForAppleScript("\(title)\n\(body)")
-        let escapedHandle = Self.escapeForAppleScript(handle)
-
-        // Primary form: `buddy X of targetService`. This is the canonical
-        // AppleScript dialect for Messages.app and resolves for any handle
-        // iMessage has seen — including yourself, as long as you're signed
-        // into iMessage on this Mac. If that fails we fall back to the
-        // `participant` form in case buddy resolution is flaky on a given
-        // macOS build.
-        let primary = """
-        tell application "Messages"
-            set targetService to 1st service whose service type = iMessage
-            set targetBuddy to buddy "\(escapedHandle)" of targetService
-            send "\(message)" to targetBuddy
-        end tell
-        """
-
-        let fallback = """
-        tell application "Messages"
-            set targetService to 1st service whose service type = iMessage
-            send "\(message)" to participant "\(escapedHandle)" of targetService
-        end tell
-        """
-
-        return await Task.detached { () -> DeliveryResult in
-            var error: NSDictionary?
-            _ = NSAppleScript(source: primary)?.executeAndReturnError(&error)
-            if error == nil {
-                return .success(detail: "Sent to \(handle)")
-            }
-            // Retry with the `participant` form.
-            var fallbackError: NSDictionary?
-            _ = NSAppleScript(source: fallback)?.executeAndReturnError(&fallbackError)
-            if fallbackError == nil {
-                return .success(detail: "Sent to \(handle)")
-            }
-            // Both forms failed: surface the most specific error we got.
-            return Self.decodeAppleScriptError(fallbackError ?? error ?? [:])
-        }.value
-    }
-
-    /// Turn a raw AppleScript error dictionary into a user-actionable
-    /// DeliveryResult. macOS returns a small zoo of error numbers for
-    /// Messages automation; the common ones:
-    ///   -1743  errAEEventNotPermitted — Automation denied in System Settings
-    ///   -1728  errAENoSuchObject      — buddy / participant not resolvable
-    ///   -600   procNotFound           — Messages.app isn't running
-    ///    -25   errOSASystemError      — generic
-    static func decodeAppleScriptError(_ dict: NSDictionary) -> DeliveryResult {
-        let code = (dict[NSAppleScript.errorNumber] as? Int) ?? 0
-        let msg  = (dict[NSAppleScript.errorMessage] as? String) ?? "Unknown AppleScript error"
-        switch code {
-        case -1743:
-            return .failure(reason: "Automation permission denied. Open System Settings → Privacy & Security → Automation → DoomCoder and enable Messages.")
-        case -1728:
-            return .failure(reason: "Messages couldn't find that handle. Make sure you've signed into iMessage with that number/email on this Mac (Messages → Settings → iMessage).")
-        case -600:
-            return .failure(reason: "Messages.app isn't running. Launch it once, sign in, then try again.")
-        default:
-            return .failure(reason: "\(msg) (code \(code))")
-        }
-    }
-
-    /// Escape backslashes and double-quotes so a Swift string can be embedded
-    /// safely into an AppleScript string literal.
-    static func escapeForAppleScript(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
-         .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 
@@ -534,6 +399,16 @@ final class NtfyChannel: IPhoneChannel, @unchecked Sendable {
         }
     }
 
+    /// URL the ntfy iOS app cares about for subscription. Clicking this URL
+    /// from any app on iPhone opens the ntfy app directly (if installed) via
+    /// its registered `ntfy://` scheme.
+    var deepLinkURL: URL? {
+        guard isReady else { return nil }
+        return URL(string: "ntfy://subscribe?topic=\(topic)&server=ntfy.sh")
+    }
+
+    /// HTTPS URL — what you'd open in a browser to see the topic feed. Useful
+    /// as a QR-code fallback for anyone who can't / won't install the app.
     var subscriptionURL: URL? {
         guard isReady else { return nil }
         return URL(string: "https://ntfy.sh/\(topic)")

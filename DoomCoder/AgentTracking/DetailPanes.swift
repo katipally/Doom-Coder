@@ -398,16 +398,14 @@ struct ChannelDetailPane: View {
 
     private var showsPermissionButton: Bool {
         switch kind {
-        case .reminder: return !iPhoneRelay.reminder.isReady
-        case .imessage: return iPhoneRelay.imessage.isReady  // has handle; still may need automation
+        case .calendar: return !iPhoneRelay.calendar.isReady
         case .ntfy:     return false
         }
     }
 
     private var permissionButtonLabel: String {
         switch kind {
-        case .reminder: return "Request Permission"
-        case .imessage: return "Prime Automation"
+        case .calendar: return "Request Permission"
         case .ntfy:     return ""
         }
     }
@@ -416,19 +414,11 @@ struct ChannelDetailPane: View {
         requestingPermission = true
         defer { requestingPermission = false }
         switch kind {
-        case .reminder:
-            let granted = await iPhoneRelay.reminder.requestAccess()
+        case .calendar:
+            let granted = await iPhoneRelay.calendar.requestAccess()
             permissionMessage = granted
-                ? "Reminders access granted."
-                : "Reminders access denied. Enable it in System Settings → Privacy & Security → Reminders → DoomCoder."
-        case .imessage:
-            let result = await iPhoneRelay.imessage.primeAutomationPermission()
-            switch result {
-            case .success:
-                permissionMessage = "Automation permission granted for Messages.app. You can now Send Test."
-            case .failure(let reason):
-                permissionMessage = reason
-            }
+                ? "Calendar access granted."
+                : "Calendar access denied. Enable it in System Settings → Privacy & Security → Calendars → DoomCoder."
         case .ntfy:
             break
         }
@@ -447,32 +437,28 @@ struct ChannelDetailPane: View {
 
     private var description: String {
         switch kind {
-        case .reminder: return "Writes a completed reminder to your iCloud list — shows up on iPhone in seconds."
-        case .imessage: return "Sends an iMessage to the handle you configure. Fastest delivery, requires Messages automation permission."
+        case .calendar: return "Creates a short event with a 3-second alarm on a dedicated DoomCoder iCloud calendar — alarm fires on every Apple device signed in."
         case .ntfy:     return "HTTPS push via ntfy.sh — works even when you're off the Apple ecosystem."
         }
     }
 
     private var isEnabled: Bool {
         switch kind {
-        case .reminder: return iPhoneRelay.reminder.isEnabled
-        case .imessage: return iPhoneRelay.imessage.isEnabled
+        case .calendar: return iPhoneRelay.calendar.isEnabled
         case .ntfy:     return iPhoneRelay.ntfy.isEnabled
         }
     }
 
     private var isReady: Bool {
         switch kind {
-        case .reminder: return iPhoneRelay.reminder.isReady
-        case .imessage: return iPhoneRelay.imessage.isReady
+        case .calendar: return iPhoneRelay.calendar.isReady
         case .ntfy:     return iPhoneRelay.ntfy.isReady
         }
     }
 
     private var channelTestKey: String {
         switch kind {
-        case .reminder: return "Reminder"
-        case .imessage: return "iMessage"
+        case .calendar: return "Calendar"
         case .ntfy:     return "ntfy"
         }
     }
@@ -488,14 +474,12 @@ struct ChannelDetailPane: View {
             Divider()
             gridRow("Ready", isReady ? "Yes" : "No")
             switch kind {
-            case .imessage:
-                Divider()
-                gridRow("Handle", iPhoneRelay.imessage.handle.isEmpty ? "—" : iPhoneRelay.imessage.handle, monospaced: true)
             case .ntfy:
                 Divider()
                 gridRow("Topic", iPhoneRelay.ntfy.topic.isEmpty ? "—" : iPhoneRelay.ntfy.topic, monospaced: true)
-            case .reminder:
-                EmptyView()
+            case .calendar:
+                Divider()
+                gridRow("Calendar", CalendarChannel.dedicatedCalendarName)
             }
         }
         .background {
@@ -520,10 +504,8 @@ struct ChannelDetailPane: View {
 struct SystemDetailPane: View {
     let kind: AgentTrackingSelection.SystemKind
     @Bindable var iPhoneRelay: IPhoneRelay
-    @Bindable var focusManager: FocusFilterManager
     let socketServer: SocketServer
 
-    @State private var focusOutput = ""
     @State private var icloudOutput = ""
     @State private var icloudBusy = false
 
@@ -531,7 +513,6 @@ struct SystemDetailPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 switch kind {
-                case .focus:       focusSection
                 case .icloud:      icloudSection
                 case .deliveryLog: deliverySection
                 }
@@ -540,93 +521,27 @@ struct SystemDetailPane: View {
         }
     }
 
-    // MARK: Focus
-
-    private var focusSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 14) {
-                StatusBadge(focusManager.isEnabled ? .ready : .off)
-                VStack(alignment: .leading) {
-                    Text("Focus Filter").font(.title2).bold()
-                    Text("Toggle any macOS or iOS Focus mode when an agent is working.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            Toggle("Donate Focus filter events", isOn: Binding(
-                get: { focusManager.isEnabled },
-                set: { focusManager.isEnabled = $0 }
-            ))
-
-            Text("""
-            How to use it:
-            1. Open System Settings → Focus → (pick a mode, e.g. Do Not Disturb).
-            2. Scroll to **Focus Filters** → Add Filter → **DoomCoder — Agent Working**.
-            3. Set it to turn ON when the filter is Active.
-            With this toggle on, DoomCoder donates the filter state every time an \
-            AI agent starts or stops — so the Focus mode follows your agent \
-            automatically, on this Mac and on any iPhone sharing the same Focus.
-            """)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Run Focus Test") {
-                    focusOutput = "Running test…"
-                    Task {
-                        focusOutput = await focusManager.runTest()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-
-                if let last = focusManager.lastDonationAt {
-                    let activeStr = focusManager.lastDonationActive ? "true" : "false"
-                    Text("Last donation: \(last.formatted(date: .omitted, time: .standard)) (active=\(activeStr))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-
-            if let err = focusManager.lastError {
-                Label(err, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .font(.callout)
-            }
-
-            if !focusOutput.isEmpty {
-                Text(focusOutput)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04))
-                    }
-            }
-        }
-    }
-
     // MARK: iCloud
 
     private var icloudSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
-                StatusBadge(iPhoneRelay.reminder.isReady ? .ready : .off)
+                StatusBadge(iPhoneRelay.calendar.isReady ? .ready : .off)
                 VStack(alignment: .leading) {
                     Text("iCloud Round-Trip").font(.title2).bold()
-                    Text("Prove Reminders propagate through iCloud end to end.")
+                    Text("Prove Calendar events propagate through iCloud end to end.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
             }
 
             Text("""
-            The test writes a hidden marker reminder to your default list, \
-            then polls iCloud (via a fresh EKEventStore) until the marker comes \
-            back. On success the reminder is removed and the latency is shown. \
-            If it times out, you'll know your iPhone isn't receiving from this \
-            Mac — usually because Reminders → iCloud sync is off.
+            Writes an un-alarmed probe event to the DoomCoder calendar, polls a \
+            fresh EKEventStore until the event comes back, then deletes it. On \
+            success the propagation latency is shown. If it times out, your \
+            iPhone isn't receiving from this Mac — usually because Calendars \
+            → iCloud sync is off, or the DoomCoder calendar ended up on Local \
+            instead of iCloud.
             """)
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -636,10 +551,10 @@ struct SystemDetailPane: View {
                     icloudBusy = true
                     icloudOutput = "Running — may take up to 15s…"
                     Task {
-                        let result = await iPhoneRelay.reminder.runICloudRoundTripTest()
+                        let result = await iPhoneRelay.calendar.runICloudRoundTripTest()
                         switch result {
                         case .success(let latency):
-                            icloudOutput = String(format: "✓ Propagated in %.2fs. Your iPhone will receive agent events.", latency)
+                            icloudOutput = String(format: "✓ Propagated in %.2fs. Your iPhone will receive agent alarms.", latency)
                         case .failure(let err):
                             icloudOutput = "✗ \(err.localizedDescription)"
                         }
@@ -649,7 +564,7 @@ struct SystemDetailPane: View {
                     Label("Run Round-Trip Test", systemImage: "arrow.triangle.2.circlepath.icloud")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(icloudBusy || !iPhoneRelay.reminder.isReady)
+                .disabled(icloudBusy || !iPhoneRelay.calendar.isReady)
 
                 Spacer()
             }
