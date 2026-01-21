@@ -64,6 +64,15 @@ struct DoomCoderApp: App {
             AboutView()
         }
         .windowResizability(.contentSize)
+
+        Window("DoomCoder Doctor", id: "doomcoder-doctor") {
+            DoomCoderDoctor(
+                agentStatus: agentStatus,
+                iPhoneRelay: iPhoneRelay,
+                socketServer: socketServer
+            )
+        }
+        .defaultSize(width: 820, height: 640)
     }
 
     private func wireAgentBridge() {
