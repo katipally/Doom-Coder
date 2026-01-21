@@ -272,24 +272,62 @@ struct AgentSetupSheet: View {
                     append("• Writing \(mcp.configPath.path)")
                     _ = try MCPInstaller.install(mcp)
                     append("• Installed MCP server for \(mcp.displayName)")
-                    append("• Restart \(mcp.displayName) so it picks up the new config.")
-                    append("  Waiting up to 10s for a handshake…")
-                    // Poll MCPInstaller.status for up to 10 s — if the agent
-                    // was already running and re-reads its config (VS Code),
-                    // we'll see a `.live` immediately. Otherwise the user
-                    // needs to restart, and we just note it.
-                    var gotLive = false
-                    for _ in 0..<20 {
-                        try? await Task.sleep(for: .milliseconds(500))
-                        if MCPInstaller.status(for: mcp) == .live {
-                            gotLive = true
-                            break
+
+                    // Three-part install contract: config + rules snippet +
+                    // real verification. Without the rules snippet the agent
+                    // knows the tool exists but has no reason to call it.
+                    if let ri = RulesInstaller.Agent(rawValue: info.id) {
+                        for p in ri.rulesPaths {
+                            append("• Writing rules snippet to \(p.path)")
                         }
-                    }
-                    if gotLive {
-                        append("✓ \(mcp.displayName) is live (handshake received).")
+                        do {
+                            _ = try RulesInstaller.install(ri)
+                            let style = ri.strategy == .standalone ? "standalone" : "appended"
+                            let count = ri.rulesPaths.count
+                            append("✓ Rules snippet installed (\(style), \(count) path\(count == 1 ? "" : "s")).")
+                            if ri == .cursor {
+                                append("ℹ︎ Cursor note: the rule lives at ~/.cursor/rules/doomcoder.mdc which")
+                                append("  only auto-attaches for projects rooted at your home folder. For")
+                                append("  every-project coverage, also paste the snippet once into Cursor →")
+                                append("  Settings → Rules → User Rules (Cursor's user-rules aren't writable")
+                                append("  from outside the app as of April 2026).")
+                            }
+                        } catch {
+                            append("⚠︎ Rules install failed: \(error.localizedDescription)")
+                            append("  The MCP config is still in place; you can retry from the doctor pane.")
+                        }
                     } else {
-                        append("⚠︎ No handshake yet. Restart \(mcp.displayName); the badge will flip to 🟢 Live.")
+                        append("• No rules file for this agent — config alone is enough.")
+                    }
+
+                    append("• Restart \(mcp.displayName) so it picks up the new config + rules.")
+                    append("  Waiting up to 30s for a handshake…")
+                    // Gate 1: mcp-hello proves the agent loaded the config.
+                    // Gate 2: a real `dc` tool call proves the rules snippet
+                    // was read. Both are required for a true green.
+                    let since = Date.now
+                    var gotHello = false
+                    var gotToolCall = false
+                    if let sm = agentStatus {
+                        for _ in 0..<60 {
+                            try? await Task.sleep(for: .milliseconds(500))
+                            if !gotHello, let h = sm.lastHello(for: info.id), h >= since {
+                                gotHello = true
+                                append("✓ Handshake received — \(mcp.displayName) loaded the config.")
+                            }
+                            if gotHello, let t = sm.lastToolCall(for: info.id), t >= since {
+                                gotToolCall = true
+                                append("✓ Rules honored — \(mcp.displayName) called `dc`.")
+                                break
+                            }
+                        }
+                    } else if MCPInstaller.status(for: mcp) == .live {
+                        gotHello = true
+                    }
+                    if !gotHello {
+                        append("⚠︎ No handshake yet. Restart \(mcp.displayName); the next turn should flip the badge to 🟢 Configured.")
+                    } else if !gotToolCall {
+                        append("⚠︎ Config loaded but rules not honored yet. Start a new turn in \(mcp.displayName); it should call `dc` on its first move.")
                     }
                 } else {
                     throw NSError(domain: "DoomCoder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported agent"])
@@ -310,9 +348,7 @@ struct AgentSetupSheet: View {
 
     private func fireVerify() {
         guard let info else { return }
-        // If this is a hook agent and we have a status manager, run the real
-        // round-trip test (subprocess → socket → AgentStatusManager). It is
-        // the ground truth for whether hook.sh is actually wired up.
+        // Hook-tier: ground-truth round trip via subprocess.
         if info.tier == .hook,
            let hook = HookInstaller.Agent(rawValue: info.id),
            let sm = agentStatus {
@@ -323,6 +359,7 @@ struct AgentSetupSheet: View {
                 let res = await HookRoundTripTest.run(agent: hook, statusManager: sm)
                 switch res {
                 case .success(let s):
+                    sm.markConfigured(info.id)
                     verifyOutput = "✓ Round-trip \(s.millis) ms.\nhook.sh → dc.sock → DoomCoder is wired correctly. The real agent will reuse this exact path."
                 case .failure(let f):
                     verifyOutput = "✗ \(f.errorDescription ?? "round-trip failed")"
@@ -330,18 +367,53 @@ struct AgentSetupSheet: View {
             }
             return
         }
-        // Non-hook (MCP-only) agents: fall back to the synthetic inject.
-        NotificationCenter.default.post(
-            name: .dcVerifySetup,
-            object: nil,
-            userInfo: ["agent": info.id]
-        )
-        verifyOutput = "Sent a synthetic 'wait' event. Check the menu bar and your configured iPhone channels. Delivery log shows results under System → Delivery Log."
-    }
-}
 
-extension Notification.Name {
-    static let dcVerifySetup = Notification.Name("dc.verify.setup")
+        // MCP-tier: spawn mcp.py ourselves for the self-test (proves the
+        // script + socket pipeline is healthy), then poll for hello +
+        // first real `dc` tool call from the actual agent.
+        if info.tier == .mcp, let sm = agentStatus {
+            verifying = true
+            verifyOutput = "Self-testing mcp.py → dc.sock…"
+            Task {
+                defer { verifying = false }
+                let self_ = await MCPRoundTripTest.selfTest(statusManager: sm)
+                switch self_ {
+                case .failure(let f):
+                    verifyOutput = "✗ Self-test failed: \(f.errorDescription ?? "unknown").\nThis means DoomCoder can't speak to its own MCP script. Fix this before restarting the IDE."
+                    return
+                case .success(let s):
+                    verifyOutput = "✓ Self-test passed (\(s.millis) ms).\nNow waiting for \(info.displayName) to connect (≤30s)…"
+                }
+                let since = Date.now
+                let hello = await MCPRoundTripTest.awaitAgentHandshake(
+                    agentId: info.id, since: since, timeout: 30, statusManager: sm)
+                switch hello {
+                case .failure(let f):
+                    verifyOutput += "\n✗ \(f.errorDescription ?? "no handshake")"
+                    return
+                case .success:
+                    // Handshake alone is enough to flip the sticky
+                    // "configured" flag — the user has proven the host
+                    // agent loaded our MCP config. Waiting for a tool
+                    // call is still useful (confirms rules were read)
+                    // but not required for the Track UI to unlock.
+                    sm.markConfigured(info.id)
+                    verifyOutput += "\n✓ Handshake received — config loaded."
+                }
+                let tool = await MCPRoundTripTest.awaitFirstToolCall(
+                    agentId: info.id, since: since, timeout: 30, statusManager: sm)
+                switch tool {
+                case .success:
+                    verifyOutput += "\n✓ Rules honored — \(info.displayName) called `dc`. Setup complete."
+                case .failure(let f):
+                    verifyOutput += "\n⚠︎ \(f.errorDescription ?? "rules not honored yet")"
+                }
+            }
+            return
+        }
+
+        verifyOutput = "No verifier available for this agent type."
+    }
 }
 
 // MARK: - ChannelSetupSheet

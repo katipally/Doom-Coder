@@ -87,19 +87,6 @@ struct DoomCoderApp: App {
             iPhoneRelay.fire(event: event, session: session)
         }
 
-        // Wire the synthetic "verify setup" action fired by AgentSetupSheet
-        // into the real pipeline so the user sees end-to-end delivery.
-        NotificationCenter.default.addObserver(
-            forName: .dcVerifySetup,
-            object: nil,
-            queue: .main
-        ) { note in
-            let agentId = (note.userInfo?["agent"] as? String) ?? "claude-code"
-            Task { @MainActor in
-                agentStatus.injectTest(agent: agentId, status: .wait, message: "DoomCoder setup verification")
-            }
-        }
-
         _ = socketServer.start()
     }
 }

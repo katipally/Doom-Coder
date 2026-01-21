@@ -67,8 +67,8 @@ enum AgentCatalog {
     }
 
     static let all: [Info] = [
-        Info(id: "claude-code", displayName: "Claude Code",  tier: .hook),
-        Info(id: "copilot-cli", displayName: "Copilot CLI",  tier: .hook),
+        Info(id: "claude-code", displayName: "Claude Code",  tier: .mcp),
+        Info(id: "copilot-cli", displayName: "Copilot CLI",  tier: .mcp),
         Info(id: "cursor",      displayName: "Cursor",       tier: .mcp),
         Info(id: "windsurf",    displayName: "Windsurf",     tier: .mcp),
         Info(id: "gemini-cli",  displayName: "Gemini CLI",   tier: .mcp),

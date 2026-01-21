@@ -73,10 +73,20 @@ final class AgentStatusManager {
     // Persisted across launches under `dc.mcpHelloAt` so an MCP agent stays
     // "Configured" even after a restart (the user did the work once).
     @ObservationIgnored private(set) var mcpHelloAt: [String: Date] = [:]
+    // Per-agent timestamp of the first real `dc` tool call received over MCP
+    // (anything not a hello). Presence of this proves the agent both loaded
+    // the config AND read the rules snippet — the two-gate setup contract.
+    // Persisted under `dc.mcpLastToolCallAt`.
+    @ObservationIgnored private(set) var mcpLastToolCallAt: [String: Date] = [:]
     // Set to `true` per agent id when HookRoundTripTest reports success.
     // Persisted across launches under `dc.didRoundTrip` so a hook agent
     // stays "Configured" between restarts.
     @ObservationIgnored private(set) var didRoundTrip: [String: Bool] = [:]
+    // Sticky "this agent finished setup successfully at least once" flag.
+    // Persisted under `dc.configuredAgentIds`. Only cleared on explicit
+    // Uninstall. Decouples the Track UI from live handshake state so a
+    // previously-verified agent stays tickable across restarts / idle periods.
+    @ObservationIgnored private(set) var configuredAgentIds: Set<String> = []
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
     // Round-trip test continuations keyed by nonce. A nonce is set by
@@ -111,6 +121,12 @@ final class AgentStatusManager {
         if let raw = ud.dictionary(forKey: "dc.mcpHelloAt") as? [String: Double] {
             self.mcpHelloAt = raw.mapValues { Date(timeIntervalSince1970: $0) }
         }
+        if let raw = ud.dictionary(forKey: "dc.mcpLastToolCallAt") as? [String: Double] {
+            self.mcpLastToolCallAt = raw.mapValues { Date(timeIntervalSince1970: $0) }
+        }
+        if let arr = ud.array(forKey: "dc.configuredAgentIds") as? [String] {
+            self.configuredAgentIds = Set(arr)
+        }
 
         startReaperTimer()
     }
@@ -119,29 +135,76 @@ final class AgentStatusManager {
         _reaperTimer?.invalidate()
     }
 
+    // MARK: - Recent events (live feed for Agent detail pane)
+    //
+    // Ring buffer of the last N `dc` calls, regardless of whether they passed
+    // the watch gate or triggered a notification. The UI filters by agent id
+    // to render a per-agent live feed so the user can see — in real time —
+    // whether their agent is actually honoring the rules snippet.
+    //
+    // Each entry carries the gate decision (accepted / dropped-not-watched /
+    // dropped-dedup / etc.) so the user can tell at a glance whether a silent
+    // phone means "agent didn't call" vs "we dropped it" vs "ntfy failed".
+
+    struct RecentEvent: Identifiable, Sendable {
+        enum GateDecision: Sendable {
+            case accepted
+            case droppedNotWatched
+            case droppedDedup
+            case droppedHello        // intercepted before session pipeline
+            case droppedTestNonce    // consumed by round-trip test
+        }
+        let id: UUID = UUID()
+        let timestamp: Date
+        let agent: String
+        let status: AgentEvent.Status
+        let source: AgentEvent.Source
+        let message: String?
+        let gate: GateDecision
+    }
+
+    private(set) var recentEvents: [RecentEvent] = []
+    private let recentEventsMax = 50
+
+    func clearRecentEvents() { recentEvents.removeAll() }
+
+    func recentEvents(for agentId: String, limit: Int = 50) -> [RecentEvent] {
+        recentEvents.filter { $0.agent == agentId }.prefix(limit).map { $0 }
+    }
+
+    private func recordRecent(_ event: AgentEvent, gate: RecentEvent.GateDecision) {
+        let entry = RecentEvent(
+            timestamp: Date.now,
+            agent: event.agent,
+            status: event.status,
+            source: event.src,
+            message: event.message,
+            gate: gate
+        )
+        recentEvents.insert(entry, at: 0)
+        if recentEvents.count > recentEventsMax {
+            recentEvents = Array(recentEvents.prefix(recentEventsMax))
+        }
+    }
+
     // MARK: - Ingest
 
     func ingest(_ event: AgentEvent) {
         lastEventAt = Date.now
 
+        Log.ingest.info("agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) src=\(event.src.rawValue, privacy: .public)")
+
         // Round-trip test observers: if any test is waiting on a nonce, fire it.
         if let n = event.nonce, !n.isEmpty, let cont = roundTripWaiters.removeValue(forKey: n) {
             cont.resume(returning: event)
-            // Round-trip test events are synthetic — do not materialize as a
-            // session. Otherwise the sidebar flashes a phantom "Test" row.
+            recordRecent(event, gate: .droppedTestNonce)
             return
         }
 
         // MCP-hello is a side-channel handshake, not a real session event.
-        // We intercept it before session tracking so a phantom "mcp-hello"
-        // row never appears in the sidebar. The `tool` field carries the
-        // install-id the MCP server was invoked with.
         if event.src == .mcp, (event.message ?? "").hasPrefix("mcp-hello") {
             ingestHello(agent: event.agent, installId: event.tool)
             MCPInstaller.recordHello(agent: event.agent, installId: event.tool ?? "")
-            // mcp.py v4 embeds the client's self-reported name in either the
-            // message suffix ("mcp-hello:Cursor") or the cwd field. Persist it
-            // so Install Anywhere verify can show which IDE loaded the config.
             let msg = event.message ?? ""
             var clientName = ""
             if let colon = msg.firstIndex(of: ":") {
@@ -151,7 +214,16 @@ final class AgentStatusManager {
             if !clientName.isEmpty {
                 MCPInstaller.recordClientName(agent: event.agent, clientName: clientName)
             }
+            recordRecent(event, gate: .droppedHello)
             return
+        }
+
+        // Any non-hello MCP event proves the agent read our rules snippet
+        // and called `dc`. This is the second setup gate (rules-honored).
+        if event.src == .mcp {
+            mcpLastToolCallAt[event.agent] = Date.now
+            let snap: [String: Double] = mcpLastToolCallAt.mapValues { $0.timeIntervalSince1970 }
+            UserDefaults.standard.set(snap, forKey: "dc.mcpLastToolCallAt")
         }
 
         let key = event.sessionKey
@@ -214,20 +286,47 @@ final class AgentStatusManager {
     // MARK: - Configured-agent helpers
 
     // An agent counts as "configured" once the user has proven their wiring
-    // end-to-end: a hook agent needs a successful round-trip, an MCP agent
-    // needs a hello handshake. Both facts are persisted.
+    // end-to-end during Setup — for MCP that means the mcp.py handshake was
+    // received (config loaded); for Hook that means the round-trip test
+    // succeeded. Both facts are persisted under `dc.configuredAgentIds` and
+    // only cleared on explicit Uninstall. This decouples Track-UI enablement
+    // from live handshake timing so a previously-verified agent stays
+    // tickable across restarts and idle periods.
     func isAgentConfigured(_ id: String) -> Bool {
-        if let hook = HookInstaller.Agent(rawValue: id) {
-            // Hook-tier: require an installed hook AND a verified round-trip.
-            return HookInstaller.status(for: hook).isInstalled
-                && (didRoundTrip[id] ?? false)
-        }
+        if configuredAgentIds.contains(id) { return true }
+        // Backwards-compat: an older build may have verified the agent
+        // without writing the sticky flag. If its live dicts show both
+        // gates, treat as configured and upgrade the flag lazily.
         if let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == id }) {
             let status = MCPInstaller.status(for: mcp)
             let hasConfig = (status == .live || status == .configWritten || status == .modified)
-            return hasConfig && (mcpHelloAt[id] != nil)
+            if hasConfig && mcpHelloAt[id] != nil {
+                return true
+            }
+        }
+        if let hook = HookInstaller.Agent(rawValue: id) {
+            if HookInstaller.status(for: hook).isInstalled && (didRoundTrip[id] ?? false) {
+                return true
+            }
         }
         return false
+    }
+
+    /// Called by Setup verify on success (MCP handshake received, or Hook
+    /// round-trip completed). Flips the sticky flag so the Track UI enables
+    /// immediately and stays enabled across launches.
+    func markConfigured(_ agentId: String) {
+        guard !configuredAgentIds.contains(agentId) else { return }
+        configuredAgentIds.insert(agentId)
+        UserDefaults.standard.set(Array(configuredAgentIds), forKey: "dc.configuredAgentIds")
+    }
+
+    /// Called by Uninstall to clear the sticky flag so the agent drops out
+    /// of the Track list until the user re-runs Setup.
+    func unmarkConfigured(_ agentId: String) {
+        guard configuredAgentIds.contains(agentId) else { return }
+        configuredAgentIds.remove(agentId)
+        UserDefaults.standard.set(Array(configuredAgentIds), forKey: "dc.configuredAgentIds")
     }
 
     // The full ordered list of agents the user has configured. The menubar
@@ -276,7 +375,11 @@ final class AgentStatusManager {
         // selection from the menubar. The session row still updates (so
         // the sidebar is honest about what's happening), but no banner,
         // iPhone push, or sleep-extend fires for unwatched sessions.
-        guard isWatched(session) else { return }
+        guard isWatched(session) else {
+            Log.gate.info("drop reason=not-watched agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) target=\(String(describing: self.watchTarget), privacy: .public)")
+            recordRecent(event, gate: .droppedNotWatched)
+            return
+        }
 
         // Dedup window guard for attention events. Non-attention events always pass.
         if event.status.isAttention {
@@ -286,10 +389,15 @@ final class AgentStatusManager {
                last.status == event.status,
                last.tool == tool,
                now.timeIntervalSince(last.at) < dedupWindow {
+                Log.gate.info("drop reason=dedup agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public)")
+                recordRecent(event, gate: .droppedDedup)
                 return
             }
             lastDelivered[key] = (now, event.status, tool)
         }
+        Log.gate.info("accept agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) session=\(session.id, privacy: .public)")
+        Log.deliver.info("fire agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) attention=\(event.status.isAttention)")
+        recordRecent(event, gate: .accepted)
         onSessionUpdated?(session, event)
     }
 
@@ -375,6 +483,13 @@ final class AgentStatusManager {
         mcpHelloAt[agent]
     }
 
+    /// Returns the timestamp of the most recent real `dc` tool call from
+    /// an MCP agent (anything other than the initialize-time hello).
+    /// Presence proves the agent read the rules snippet we installed.
+    func lastToolCall(for agent: String) -> Date? {
+        mcpLastToolCallAt[agent]
+    }
+
     // MARK: - Test/Manual helpers
 
     // Registers a waiter for a round-trip nonce. The returned async function
@@ -397,38 +512,6 @@ final class AgentStatusManager {
         }
         if event.agent == "__dc-timeout__" { return nil }
         return event
-    }
-
-    // Injects a fake event as if it came from a hook. Used by Settings "Send Test".
-    // In v1.3 this fires a 3-stage sequence (start → wait → done) so the test
-    // session doesn't zombie in the sidebar.
-    func injectTest(agent: String, status: AgentEvent.Status, message: String? = nil) {
-        let sid = "test-\(UUID().uuidString.prefix(8))"
-        let label = message ?? "Test from DoomCoder"
-
-        // Stage 1: start immediately.
-        ingest(AgentEvent(
-            src: .manual, agent: agent, status: .start,
-            sessionId: String(sid),
-            message: label
-        ))
-
-        // Stage 2: transition to the requested status after 1.5s (usually .wait).
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(1500))
-            self?.ingest(AgentEvent(
-                src: .manual, agent: agent, status: status,
-                sessionId: String(sid),
-                message: label
-            ))
-            // Stage 3: close it out 3s later so the row doesn't linger forever.
-            try? await Task.sleep(for: .milliseconds(3000))
-            self?.ingest(AgentEvent(
-                src: .manual, agent: agent, status: .done,
-                sessionId: String(sid),
-                message: "Test complete"
-            ))
-        }
     }
 
     // Wipes all state (for tests and for the "Reset" button).
