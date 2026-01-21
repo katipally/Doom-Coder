@@ -6,9 +6,6 @@ struct MenuBarView: View {
     @Bindable var agentStatus: AgentStatusManager
     @Environment(\.openWindow) private var openWindow
 
-    // Rescanned every time the menu appears (cheap — ~50–80 ms).
-    @State private var scanner = RunningAgentScanner()
-
     var body: some View {
         // ── Toggle ──────────────────────────────────────────────────────────
         Button {
@@ -64,44 +61,46 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        // ── Agent Tracking header ────────────────────────────────────────────
+        // ── Agents & Channels / Track ────────────────────────────────────────
         Divider()
         Button {
             NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "agent-tracking")
+            openWindow(id: "configure")
         } label: {
             Label(agentStatusHeader, systemImage: agentStatusIcon)
         }
 
-        // "Watch this agent" submenu — the primary v1.4 UX. Lists detected
-        // running agents (both confirmed sessions and scanner candidates)
-        // with a checkmark on the one the user is currently watching.
-        Menu("Watch this agent") {
-            let entries = watchMenuEntries()
-            if entries.isEmpty {
-                Text("No agents detected")
+        // Track submenu — v1.5. Lists only agents the user has already
+        // *configured* (hook round-trip passed OR MCP hello seen). Empty
+        // list shows a hint that nudges them into the Configure window.
+        Menu("Track") {
+            let configured = agentStatus.configuredAgents()
+            if configured.isEmpty {
+                Text("No configured agents yet")
                     .foregroundStyle(.secondary)
+                Button("Open Agents & Channels…") {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    openWindow(id: "configure")
+                }
             } else {
-                ForEach(entries, id: \.key) { entry in
-                    Button(checkLabel(agentStatus.watchedSessionKey == entry.key, entry.label)) {
-                        agentStatus.watchedSessionKey = entry.key
+                Button(checkLabel(agentStatus.watchTarget == .all,
+                                  "Track all configured")) {
+                    agentStatus.watchTarget = .all
+                }
+                Divider()
+                ForEach(configured, id: \.id) { info in
+                    Button(checkLabel(agentStatus.watchTarget == .agentType(info.id),
+                                      info.displayName)) {
+                        agentStatus.watchTarget = .agentType(info.id)
                     }
                 }
             }
             Divider()
-            if !agentStatus.watchedSessionKey.isEmpty {
-                Button("Stop watching (receive all)") {
-                    agentStatus.watchedSessionKey = ""
-                }
-            } else {
-                Text("Watching all agents")
-                    .foregroundStyle(.secondary)
-            }
-            Button("Rescan") {
-                scanner.scan()
+            Button(checkLabel(agentStatus.watchTarget == .none,
+                              "Track none (silent)")) {
+                agentStatus.watchTarget = .none
             }
         }
-        .onAppear { scanner.scan() }
 
         if !agentStatus.sessions.isEmpty {
             ForEach(agentStatus.sessions.prefix(3)) { s in
@@ -186,9 +185,9 @@ struct MenuBarView: View {
 
     private var agentStatusHeader: String {
         if agentStatus.isAnyAgentActive {
-            return "Open Agent Tracking… (\(agentStatus.sessions.count) live)"
+            return "Agents & Channels… (\(agentStatus.sessions.count) live)"
         }
-        return "Open Agent Tracking…"
+        return "Agents & Channels…"
     }
 
     private var agentStatusIcon: String {
@@ -198,44 +197,5 @@ struct MenuBarView: View {
     private func openGuide(_ filename: String) {
         let url = URL(string: "https://github.com/katipally/Doom-Coder/blob/main/guide/\(filename)")!
         NSWorkspace.shared.open(url)
-    }
-
-    // MARK: - Watch menu
-
-    // Row shown in the "Watch this agent" submenu. `key` is what we persist
-    // into AgentStatusManager.watchedSessionKey — either a live session id,
-    // or a synthetic scanner id (e.g. "copilot-cli:pid:4711"). Both flow
-    // through the same gate in deliver(), so unknown scanner keys behave as
-    // "watch nothing yet" until a matching hook arrives.
-    private struct WatchEntry {
-        let key: String
-        let label: String
-    }
-
-    private func watchMenuEntries() -> [WatchEntry] {
-        var out: [WatchEntry] = []
-        var seen: Set<String> = []
-
-        // 1) Confirmed live sessions first — these have actually emitted
-        //    events, so we trust their ids directly.
-        for s in agentStatus.sessions {
-            let folder = s.repoName ?? "—"
-            let label = "● \(s.displayName) · \(folder) · \(agentStateText(s.state))"
-            if seen.insert(s.id).inserted {
-                out.append(WatchEntry(key: s.id, label: label))
-            }
-        }
-
-        // 2) Scanner candidates the user can pre-select before any hook
-        //    fires. We key these by a stable synthetic id so that once a
-        //    real event arrives its sessionKey matches this one too.
-        for inst in scanner.instances {
-            if seen.contains(inst.id) { continue }
-            let sub = inst.subtitle.isEmpty ? "—" : inst.subtitle
-            let label = "○ \(inst.displayName) · \(sub)"
-            out.append(WatchEntry(key: inst.id, label: label))
-            seen.insert(inst.id)
-        }
-        return Array(out.prefix(8))
     }
 }

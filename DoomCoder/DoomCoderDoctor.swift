@@ -200,8 +200,8 @@ struct DoomCoderDoctor: View {
             label: "Accessibility permission",
             severity: trusted ? .ok : .info,
             detail: trusted
-                ? "Granted — RunningAgentScanner can read GUI window titles."
-                : "Not granted. Running-agent discovery still works via ps; GUI window titles won't be shown."
+                ? "Granted — DoomCoder can read GUI window titles for diagnostics."
+                : "Not granted. DoomCoder still works; GUI window titles won't be shown in the Doctor."
         ))
 
         let notifSettings = await UNUserNotificationCenter.current().notificationSettings()
