@@ -40,6 +40,22 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 
 ## Features
 
+### Agent Bridge — deterministic AI tracking (v0.8)
+- **Three-tier architecture** — Tier 1 shell hooks for Claude Code + Copilot CLI, Tier 2 MCP server for Cursor / Windsurf / VS Code / Gemini CLI / Codex, Tier 3 heuristic fallback for everything else
+- **Unix-socket transport** at `~/.doomcoder/dc.sock` — zero polling, zero CPU, per-event delivery
+- **One-click setup per agent** — DoomCoder merges managed entries into the agent's settings and keeps a timestamped backup; Uninstall and Restore-Backup are one click each
+- **Live session dashboard** in Settings → Agent Bridge — real-time agent / repo / tool / elapsed per session
+- **Ultra-low token cost on MCP** — single `dc` tool with a one-character `s` param keeps per-event overhead to ≈ 140 tokens
+- **Tier-3 demotion** — when a bridge session is live, the heuristic notifier stays silent so you never get duplicate banners
+- See [guide/agent-setup.md](guide/agent-setup.md) and [guide/hooks-reference.md](guide/hooks-reference.md)
+
+### iPhone notifications — triple-redundant (v0.8)
+- **iCloud Reminders** — completed reminder syncs via Apple's own pipeline; zero network calls from DoomCoder
+- **iMessage to yourself** — AppleScript → Messages.app → your configured handle; typically sub-second
+- **ntfy.sh** — POST to an auto-generated unguessable topic; install the ntfy iOS app to receive
+- Each channel independent — one failing never blocks the others; in-app delivery log proves what reached your phone
+- See [guide/iphone-notifications.md](guide/iphone-notifications.md)
+
 ### Core
 - **Menu bar only** — no Dock icon, no clutter (uses `LSUIElement = YES`)
 - **One-click toggle** — bolt icon when active, slashed bolt when inactive
@@ -59,6 +75,8 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 
 ### Settings Window
 - **General tab** — Launch at Login toggle; Accessibility permission status + one-click "Grant Access" button
+- **Agent Bridge tab (v0.8)** — live bridge status, per-agent Setup / Uninstall / Restore-Backup / Send-Test controls, and a real-time session dashboard
+- **iPhone tab (v0.8)** — three parallel delivery channels with per-channel Grant-Access, Send-Test, and a 50-item delivery log
 - **Tools tab (v0.6.0)** — add/remove custom CLI binary names and app bundle IDs; changes persist and trigger immediate re-scan
 
 ### Hardware Protection

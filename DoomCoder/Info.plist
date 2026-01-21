@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.0</string>
+	<string>0.8.0</string>
 	<key>CFBundleVersion</key>
-	<string>070</string>
+	<string>080</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
@@ -28,6 +28,10 @@
 	<string>NSApplication</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Doom Coder sends a notification when a tracked AI coding tool goes idle, indicating your task may be complete.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Doom Coder can drop a completed reminder into your default Reminders list so iCloud pushes a notification to your iPhone when your AI agent needs attention. Nothing is stored beyond this single reminder.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Doom Coder uses Messages to send an iMessage to yourself when your AI agent needs attention. This only runs if you enable the iMessage channel in Settings.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>

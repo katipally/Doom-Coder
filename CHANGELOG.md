@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.7.0] - 2026-04-06
+## [0.8.0] - 2026-04-16
+
+**The Agent Bridge release.** Replaces the v0.6 heuristic-only tracking with a deterministic three-tier architecture (shell hooks + MCP server + silent heuristic fallback), adds triple-redundant iPhone notifications, per-agent Settings cards, a live-session dashboard, and an in-app Help menu.
+
+### Added — Status dashboard + Help menu + Tier-3 demotion (Phase D/E)
+- **Live session dashboard** in Settings → Agent Bridge — real-time list of every active agent session with state dot, repo, current tool, tool call count and elapsed time. Sourced directly from `AgentStatusManager.sessions` via `@Observable`.
+- **Menu bar live-session indicator** — when any agent session is active, the menu-bar bolt icon gains a monospaced session count next to it, and a dedicated "Agents: N live" submenu lists each session with a one-click jump into Settings.
+- **Help submenu** — menu-bar → Help → Agent Setup Guide / iPhone Notifications Guide / Hooks Reference / Troubleshooting — each opens the corresponding page on GitHub. Plus a one-click "Report an Issue" link.
+- **Tier-3 heuristic demotion** — `NotificationManager.shouldSuppressHeuristic` closure is now wired to `AgentStatusManager.isAnyAgentActive`. Whenever the bridge has a live session, the legacy CPU/FSEvents/network heuristic path stays silent. Eliminates double-firing for agents connected via hooks or MCP while preserving the heuristic as a true fallback for unsupported tools.
+- **`guide/` pages** — `agent-setup.md`, `iphone-notifications.md`, `hooks-reference.md`, `troubleshooting.md`. Comprehensive setup walkthroughs, full hook/MCP protocol reference, and a diagnostic cookbook for every failure mode.
+- **README rewrite** — Agent Bridge and iPhone Notifications sections added at the top of the Features list, with direct links to every guide page.
+- **`appcast.xml`** — 0.7.0 entry placeholder added; release asset + ed signature filled in by `scripts/release.sh`.
+
+### Added — iPhone Relay (Phase C)
+- **Triple-redundant iPhone notifications** — every attention-grabbing event (wait for input / error / done) now fans out in parallel to three independent channels, so a slow iCloud sync or denied permission never costs you the alert:
+  - **iCloud Reminders** — drops a completed reminder into your default Reminders list; Apple's own sync pushes it to your iPhone in seconds. Zero network calls from DoomCoder itself.
+  - **iMessage to yourself** — sends an iMessage via Messages.app to a handle you configure. Fastest of the three. Uses AppleScript; no API keys, no accounts.
+  - **ntfy.sh** — opt-in push via ntfy's free public server. DoomCoder generates an unguessable topic (`doom-<22 hex>`); install the ntfy iOS app, subscribe to the URL, done.
+- **Settings → iPhone tab** — per-channel cards with toggles, Grant Access buttons, live Ready/Off/Needs-permission status dots, and a Send Test button per channel.
+- **Delivery log** — every attempt (success or failure, with latency detail) is recorded in-app so you can confirm the path works end-to-end.
+- **`NSRemindersUsageDescription`** and **`NSAppleEventsUsageDescription`** added to Info.plist for the first-run permission prompts.
+
+### Added — Agent Bridge MCP (Phase B)
+- **`~/.doomcoder/mcp.py` runner** — self-deployed Python 3 MCP server bundled into DoomCoder (stamped with `DC_MCP_VERSION` so updates auto-refresh). Exposes a single `dc` tool with a one-character `s` param (`s/w/i/e/d` for start/wait/info/error/done), keeping per-session token cost to roughly 140 tokens.
+- **Five-agent installer** — Cursor, Windsurf, VS Code, Gemini CLI, Codex. JSON-merge for the first four (writes `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`, `~/Library/Application Support/Code/User/mcp.json`, `~/.gemini/settings.json`); TOML-section editor for Codex (`~/.codex/config.toml`). All entries tagged with a `doomcoder-managed` sentinel so Uninstall cleanly removes only our section.
+- **Agent Bridge tab** now shows the MCP-based agents alongside hook-based ones with matching Setup / Uninstall / Restore / Send Test controls.
+
+### Added — Agent Bridge (Phase A)
+- **Unix-socket transport** at `~/.doomcoder/dc.sock` — deterministic, per-event, zero-polling bridge for AI agent status. Replaces heuristic detection for any agent that speaks to us directly. Mode `0600`, owner-only.
+- **`AgentStatusManager`** — central state machine that dedups events in a 10-second window per session, auto-finalises stale sessions after 10 minutes, and exposes a live `sessions` list to the UI.
+- **Claude Code hook installer** — one-click **Agent Bridge → Set Up** writes eight managed hook commands (`SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Notification`, `UserPromptSubmit`, `Stop`, `SubagentStop`) into `~/.claude/settings.json`, preserving every existing user entry via merge + timestamped backup. Idempotent re-install, clean Uninstall, Restore-Backup buttons.
+- **Copilot CLI extension installer** — installs a tiny `~/.copilot/extensions/doomcoder/hook.sh` shim that forwards lifecycle events to the DoomCoder bridge. No impact on Copilot tokens or behavior.
+- **`hook.sh` runner** — POSIX shell script auto-deployed to `~/.doomcoder/hook.sh` on every launch; reads hook JSON from stdin, emits one line of compact JSON to the socket via `nc -U` (Python 3 fallback), never blocks the agent (exits 0 on any failure).
+- **Settings → Agent Bridge tab** — per-agent cards with live status badges (Connected / Partial / Not set up), plain-English setup copy, "What we changed" disclosure with Reveal-in-Finder and Restore-Backup, and a "Send Test Notification" button that injects a synthetic event through the full pipeline.
+- **Rich agent notifications** — notifications driven by hook events now carry the agent name (Claude Code / Copilot CLI), repo name, and elapsed time; attention-only (wait / error / done) so no spam during normal tool use.
 
 ### Fixed
 - **CLI agents stuck in "working" state** — Two independent false-positive sources eliminated:
@@ -15,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - *Child process false positive:* `TrackedApp.isWorking` for CLI tools now requires **≥ 2 direct child processes** instead of > 0. Most CLI agents (Copilot CLI, Claude Code) keep exactly 1 persistent helper subprocess alive at the idle prompt; requiring 2+ avoids this false trigger while still detecting real task execution.
 - **Network activity window** tightened from 4 s → 3 s (matching 1.5 poll cycles) to clear stale "working" state faster.
 
-### Added
+### Added (earlier in 0.7.0)
 - **"Task started" notification** — When a tracked AI tool transitions from idle → working (after being idle for at least 6 s), a notification fires: **"[App] is working…"**. Pairs with the existing "finished" notification to bracket each task session.
 - **Per-agent notifications** — each agent sends its own start/done notification independently. No batching or summary messages.
 
