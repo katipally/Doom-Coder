@@ -102,7 +102,7 @@ struct AgentSetupSheet: View {
                 .foregroundStyle(.tint)
             VStack(alignment: .leading) {
                 Text("Set up \(info?.displayName ?? agentId)").font(.title2).bold()
-                Text(info?.tier == .hook ? "Hook integration" : "MCP server integration")
+                Text("MCP server integration")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -135,6 +135,9 @@ struct AgentSetupSheet: View {
 
     private var installView: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if info?.id == "cursor" {
+                cursorUserRulesCallout
+            }
             Text("Click **Install** to apply the changes above.")
             ScrollView {
                 Text(installLog.isEmpty ? "Ready." : installLog)
@@ -154,9 +157,47 @@ struct AgentSetupSheet: View {
         }
     }
 
+    private var cursorUserRulesCallout: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Cursor requires one extra paste for global coverage", systemImage: "lightbulb.fill")
+                .font(.callout.bold())
+                .foregroundStyle(.orange)
+            Text("Cursor's project rules file only auto-attaches inside your home folder. To make DoomCoder work in every project, also paste the snippet into Cursor → Settings → Rules → User Rules.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(RulesInstaller.snippet, forType: .string)
+                } label: {
+                    Label("Copy snippet", systemImage: "doc.on.doc")
+                }
+                Button {
+                    if let url = URL(string: "cursor://settings") {
+                        NSWorkspace.shared.open(url)
+                    } else {
+                        NSWorkspace.shared.launchApplication("Cursor")
+                    }
+                } label: {
+                    Label("Open Cursor", systemImage: "arrow.up.right.square")
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.08))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+        }
+    }
+
     private var verifyView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Fire a real round-trip event: DoomCoder will run hook.sh as a subprocess and wait for the event to arrive on the Unix socket. Typical round-trip is 10–40 ms.")
+            Text("Fire a real round-trip event: DoomCoder will run the MCP server script and wait for the event to arrive on the Unix socket. Typical round-trip is 10–40 ms.")
             Button {
                 fireVerify()
             } label: {
@@ -186,23 +227,12 @@ struct AgentSetupSheet: View {
 
     private var explainBody: String {
         guard let info else { return "Unknown agent." }
-        if info.tier == .hook {
-            return "\(info.displayName) supports hooks — small shell commands it runs at key moments. DoomCoder adds a single entry to its config that pipes one JSON line per event to a local socket. Nothing leaves your machine. No tokens consumed."
-        } else {
-            return "\(info.displayName) supports MCP — an open protocol for tool integrations. DoomCoder adds a read-only MCP server entry to the agent's config. The agent calls it to announce lifecycle events. Runs locally, zero tokens."
-        }
+        return "\(info.displayName) supports MCP — an open protocol for tool integrations. DoomCoder adds a read-only MCP server entry to the agent's config. The agent calls it to announce lifecycle events. Runs locally, zero tokens."
     }
 
     private var diskTargets: [String] {
         guard let info else { return [] }
-        if info.tier == .hook, let hook = HookInstaller.Agent(rawValue: info.id) {
-            return [
-                HookInstaller.configPath(for: hook),
-                "~/.doomcoder/hook.sh (runtime)",
-                "~/.doomcoder/dc.sock (local socket)"
-            ]
-        }
-        if info.tier == .mcp, let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
+        if let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             return [
                 mcp.configPath.path,
                 "~/.doomcoder/mcp.py (runtime)"
@@ -252,11 +282,7 @@ struct AgentSetupSheet: View {
         append("• Starting install for \(info.displayName)…")
         Task {
             do {
-                if info.tier == .hook, let hook = HookInstaller.Agent(rawValue: info.id) {
-                    append("• Writing \(HookInstaller.configPath(for: hook))")
-                    let result = try HookInstaller.install(hook)
-                    append(result)
-                } else if info.tier == .mcp, let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
+                if let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
                     // Preflight first so warnings (e.g. Cursor project shadows)
                     // are visible to the user. Blockers will raise below from
                     // MCPInstaller.install itself — we surface them here too so
@@ -348,30 +374,10 @@ struct AgentSetupSheet: View {
 
     private func fireVerify() {
         guard let info else { return }
-        // Hook-tier: ground-truth round trip via subprocess.
-        if info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id),
-           let sm = agentStatus {
-            verifying = true
-            verifyOutput = "Running round-trip test… (spawning hook.sh and waiting for the echo on dc.sock)"
-            Task {
-                defer { verifying = false }
-                let res = await HookRoundTripTest.run(agent: hook, statusManager: sm)
-                switch res {
-                case .success(let s):
-                    sm.markConfigured(info.id)
-                    verifyOutput = "✓ Round-trip \(s.millis) ms.\nhook.sh → dc.sock → DoomCoder is wired correctly. The real agent will reuse this exact path."
-                case .failure(let f):
-                    verifyOutput = "✗ \(f.errorDescription ?? "round-trip failed")"
-                }
-            }
-            return
-        }
-
-        // MCP-tier: spawn mcp.py ourselves for the self-test (proves the
-        // script + socket pipeline is healthy), then poll for hello +
-        // first real `dc` tool call from the actual agent.
-        if info.tier == .mcp, let sm = agentStatus {
+        // Every agent is MCP: spawn mcp.py ourselves for the self-test
+        // (proves the script + socket pipeline is healthy), then poll for
+        // hello + first real `dc` tool call from the actual agent.
+        if let sm = agentStatus {
             verifying = true
             verifyOutput = "Self-testing mcp.py → dc.sock…"
             Task {

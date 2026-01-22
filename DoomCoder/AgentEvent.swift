@@ -114,7 +114,7 @@ struct AgentEvent: Codable, Sendable {
     // we still guard every field so malformed or partial events never crash.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.src       = (try? c.decode(Source.self, forKey: .src))    ?? .hook
+        self.src       = (try? c.decode(Source.self, forKey: .src))    ?? .mcp
         self.agent     = (try? c.decode(String.self, forKey: .agent))  ?? "unknown"
         self.status    = (try? c.decode(Status.self, forKey: .status)) ?? .info
         self.sessionId = try? c.decode(String.self, forKey: .sessionId)
