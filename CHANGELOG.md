@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.8.8] - 2026-04-19 — Hooks rework & UI animation polish
+## [1.8.9] - 2026-04-19 — Hooks rework & UI animation polish
 
 **Complete hooks architecture overhaul and smooth UI transitions.** This release
 reworks how DoomCoder installs, normalizes, and notifies on AI agent hook
