@@ -85,9 +85,22 @@ final class NotificationDispatcher {
         let title = titleFor(ev)
         let body = bodyFor(ev)
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
+        let ts = Date().timeIntervalSince1970
 
-        if channels.macNotification { postLocal(title: title, body: body) }
-        if channels.ntfy { postNtfy(title: title, body: body) }
+        if channels.macNotification {
+            postLocal(title: title, body: body)
+            EventStore.shared.insertNotification(
+                sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
+                title: title, body: body, channel: "macOS", success: true, ts: ts
+            )
+        }
+        if channels.ntfy {
+            postNtfy(title: title, body: body)
+            EventStore.shared.insertNotification(
+                sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
+                title: title, body: body, channel: "ntfy", success: true, ts: ts
+            )
+        }
     }
 
     /// Sends a test notification on the chosen channel. Returns true if the
