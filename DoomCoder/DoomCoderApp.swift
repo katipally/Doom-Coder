@@ -21,6 +21,15 @@ struct DoomCoderApp: App {
         // any agent touches it. Silent on failure — Agent Tracking surfaces
         // problems via per-agent status badges.
         try? MCPRuntime.deploy()
+        // v1.8.3: eager NotificationManager.setup(). Previously `setup()` was
+        // lazy-called from `fire(event:)` — which meant if the user selected
+        // the In-Mac channel and the first delivery went through IPhoneRelay
+        // → InMacChannel → UN directly (bypassing NotificationManager.fire),
+        // the UN categories were never registered and auth was never
+        // requested, so the banner silently vanished. Calling setup() at
+        // launch guarantees categories + auth are in place before any path
+        // posts a notification.
+        NotificationManager.shared.setup()
     }
 
     var body: some Scene {

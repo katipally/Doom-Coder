@@ -114,15 +114,17 @@ private struct AgentRow: View {
         // whenever a hello arrives — otherwise the sidebar is stuck on
         // .warn until the window is redrawn for an unrelated reason.
         _ = agentStatus.mcpHelloAt[info.id]
+        // v1.8.3: checkmark when the agent has ever completed setup
+        // (configuredAgentIds). This is the "configured?" signal the user
+        // asked for — independent of Tracking (which has its own bell
+        // icon cue) and independent of live-handshake (green pulse).
+        if agentStatus.isAgentConfigured(info.id) {
+            return StatusBadge(.ready)
+        }
         if let mcp = Self.mcpAgent(for: info.id) {
             switch MCPInstaller.status(for: mcp) {
             case .live:                    return StatusBadge(.ready)
-            case .configWritten:
-                // Locally-known configured (sticky flag) — neutral instead
-                // of ⚠︎. Only show warn when config is written but the
-                // agent has never produced a hello anywhere.
-                if agentStatus.isAgentConfigured(info.id) { return StatusBadge(.off) }
-                return StatusBadge(.warn)
+            case .configWritten:           return StatusBadge(.warn)
             case .modified:                return StatusBadge(.warn)
             case .notInstalled:            return StatusBadge(.off)
             case .missingConfig:           return StatusBadge(.error)

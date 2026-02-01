@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.8.2] - 2026-04-17
+## [1.8.3] - 2026-04-17
+
+**Trust patch, part 2.** v1.8.2 softened the `dc` snippet from v4 to v5 but
+Cursor was still firing `d` 3×/reply and spraying `w` across every planning
+step. v1.8.3 adds real, server-side enforcement so the signal is reliable
+even when an agent ignores the tone of the rules file.
+
+### `dc` spam — two-layer defence
+- **Snippet v6** (auto-reinstalled on launch): shorter, kinder text that
+  makes "one `d` per reply" the *only* rule and marks `w` optional. Drops
+  all "REQUIRED / EXACTLY ONCE" language that agents were treating as a
+  formal protocol to trigger on every tool iteration.
+- **Agent-level debounce in DoomCoder**: second `dc(d)` within 30 s is
+  dropped; second `dc(w)` within 15 s is dropped; `dc(w)` is *also*
+  dropped when the user has touched keyboard/mouse in the last 30 s
+  (if you're at the Mac, the "needs input" ping is noise). Drops are
+  logged under the `gate` subsystem for debugging.
+- **MCP tool schema** pruned to `enum: ["w", "d"]` — `s` and `e` are
+  accepted silently for back-compat but no longer advertised.
+
+### Scope reduction
+- First-class agents are now just **Cursor, Claude Code, Copilot CLI**.
+  Windsurf / Gemini / Codex / VS Code MCP dropped from guided setup.
+  The **Install Anywhere** pane in Agent Tracking is the generic pane
+  for every other client (paste snippets for Windsurf, Zed, Claude
+  Desktop, VS Code 1.95+ MCP, or any custom config).
+
+### In-Mac alert channel (finally works)
+- Previously silently dropped because `UNUserNotificationCenter`
+  categories were registered lazily — if your first delivery went
+  through the In-Mac channel the categories didn't exist yet.
+  `NotificationManager.setup()` is now called eagerly at app launch.
+
+### Configure sidebar
+- Green ✓ checkmark on any agent that has ever completed Setup
+  (independent of whether Tracking is on or whether the agent is
+  currently live). Matches the "configured or not?" mental model
+  users kept asking for.
+
+### Under the hood
+- `MCPRuntime.version` 8 → 9 (script auto-redeploys).
+- `RulesInstaller.snippetVersion` 5 → 6.
+
+---
+
+
 
 **Trust + polish patch.** Fixes the three biggest sources of confusion after
 v1.8.1 real-world use: the stale ⚠ badge, the paralysing 120 s "waiting for
