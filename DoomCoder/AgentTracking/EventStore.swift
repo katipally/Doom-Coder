@@ -33,10 +33,18 @@ final class EventStore {
         AgentSupportDir.ensure()
         let path = AgentSupportDir.dbURL.path
         if db != nil { return }
-        if sqlite3_open(path, &db) != SQLITE_OK {
+        // Use SQLITE_OPEN_FULLMUTEX (serialized mode) so the single connection
+        // is safe to access from the MainActor (reads during SwiftUI body) and
+        // the background insertQueue concurrently. Prior default mode caused
+        // memory corruption crashes in sqlite3VdbeExec during view updates.
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        if sqlite3_open_v2(path, &db, flags, nil) != SQLITE_OK {
             db = nil
             return
         }
+        // Enable WAL for better concurrent read/write behavior.
+        exec("PRAGMA journal_mode=WAL;")
+        exec("PRAGMA synchronous=NORMAL;")
         exec("""
             CREATE TABLE IF NOT EXISTS events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
