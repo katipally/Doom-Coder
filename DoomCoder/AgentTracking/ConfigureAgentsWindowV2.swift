@@ -41,6 +41,8 @@ struct ConfigureAgentsViewV2: View {
             case .agents:
                 if let agent = selected {
                     agentDetail(agent)
+                        .id(agent)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                 } else {
                     ContentUnavailableView("Select an agent", systemImage: "sidebar.left")
                 }
@@ -82,8 +84,10 @@ struct ConfigureAgentsViewV2: View {
             Section("Agents") {
                 ForEach(TrackedAgent.allCases, id: \.self) { agent in
                     Button {
-                        tab = .agents
-                        selected = agent
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            tab = .agents
+                            selected = agent
+                        }
                     } label: {
                         agentRow(agent)
                     }
@@ -92,27 +96,34 @@ struct ConfigureAgentsViewV2: View {
                         (tab == .agents && selected == agent)
                         ? Color.accentColor.opacity(0.15) : Color.clear
                     )
+                    .animation(.easeInOut(duration: 0.2), value: tab == .agents && selected == agent)
                 }
             }
 
             Section {
                 Button {
-                    tab = .channels
-                    selected = nil
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        tab = .channels
+                        selected = nil
+                    }
                 } label: {
                     Label("Channels", systemImage: "bell.badge")
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(.easeInOut(duration: 0.2), value: tab == .channels)
 
                 Button {
-                    tab = .logs
-                    selected = nil
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        tab = .logs
+                        selected = nil
+                    }
                 } label: {
                     Label("Logs", systemImage: "list.bullet.rectangle")
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .logs ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(.easeInOut(duration: 0.2), value: tab == .logs)
             }
         }
         .listStyle(.sidebar)
@@ -215,9 +226,11 @@ struct ConfigureAgentsViewV2: View {
                                 Circle()
                                     .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
                                     .frame(width: 10, height: 10)
+                                    .animation(.easeInOut(duration: 0.4), value: eventCount > 0)
                                 Text(eventCount > 0 ? "Active" : "Quiet")
                                     .font(.callout.weight(.medium))
                                     .foregroundStyle(eventCount > 0 ? .primary : .secondary)
+                                    .contentTransition(.identity)
                             }
                             Text("\(todayCount) today")
                                 .font(.caption)
@@ -232,6 +245,7 @@ struct ConfigureAgentsViewV2: View {
                     } label: {
                         Label("Health", systemImage: "heart.text.square")
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 // Hook Validation Warning
@@ -385,6 +399,10 @@ struct ConfigureAgentsViewV2: View {
                         }
                         if let r = verifyResult {
                             Text(r).font(.callout).foregroundStyle(.secondary)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .top)),
+                                    removal: .opacity
+                                ))
                         }
                     }
                 } label: {
@@ -769,6 +787,10 @@ struct ConfigureAgentsViewV2: View {
                                 ForEach(events) { ev in
                                     LiveEventRow(event: ev)
                                         .id(ev.id)
+                                        .transition(.asymmetric(
+                                            insertion: .push(from: .bottom).combined(with: .opacity),
+                                            removal: .opacity
+                                        ))
                                 }
                             }
                         }
@@ -819,9 +841,11 @@ struct ConfigureAgentsViewV2: View {
         }.value
         var d: [TrackedAgent: AgentDetection] = [:]
         for det in results.0 { d[det.agent] = det }
-        detections = d
-        installedCache = results.1
-        cliFolders = CopilotCLIFolderManager.folders
+        withAnimation(.spring(duration: 0.3)) {
+            detections = d
+            installedCache = results.1
+            cliFolders = CopilotCLIFolderManager.folders
+        }
     }
 
     private func checkMigration() {
@@ -842,17 +866,23 @@ struct ConfigureAgentsViewV2: View {
         proc.arguments = ["--ping"]
         do {
             try proc.run(); proc.waitUntilExit()
-            verifyResult = proc.terminationStatus == 0
-                ? "✅ Ping passed — dc-hook can reach DoomCoder."
-                : "❌ Ping failed — helper exited \(proc.terminationStatus)."
+            withAnimation(.spring(duration: 0.3)) {
+                verifyResult = proc.terminationStatus == 0
+                    ? "✅ Ping passed — dc-hook can reach DoomCoder."
+                    : "❌ Ping failed — helper exited \(proc.terminationStatus)."
+            }
         } catch {
-            verifyResult = "❌ Ping failed — \(error.localizedDescription)"
+            withAnimation(.spring(duration: 0.3)) {
+                verifyResult = "❌ Ping failed — \(error.localizedDescription)"
+            }
         }
     }
 
     private func startDemoSession(agent: TrackedAgent) {
-        verifyWaiting = true
-        verifyResult = nil
+        withAnimation(.spring(duration: 0.3)) {
+            verifyWaiting = true
+            verifyResult = nil
+        }
         // Fire demo via dc-hook --replay-demo <agent>
         Task.detached {
             let proc = Process()
@@ -861,17 +891,21 @@ struct ConfigureAgentsViewV2: View {
             try? proc.run()
             proc.waitUntilExit()
             await MainActor.run {
-                verifyResult = proc.terminationStatus == 0
-                    ? "✅ Demo complete — check Track Agents and notifications."
-                    : "❌ Demo failed — exit \(proc.terminationStatus)."
-                verifyWaiting = false
+                withAnimation(.spring(duration: 0.3)) {
+                    verifyResult = proc.terminationStatus == 0
+                        ? "✅ Demo complete — check Track Agents and notifications."
+                        : "❌ Demo failed — exit \(proc.terminationStatus)."
+                    verifyWaiting = false
+                }
             }
         }
     }
 
     private func watchRealSession(agent: TrackedAgent) {
-        realWatching = true
-        verifyResult = "⏱ Open \(agent.displayName) and trigger one real prompt within 120s…"
+        withAnimation(.spring(duration: 0.3)) {
+            realWatching = true
+            verifyResult = "⏱ Open \(agent.displayName) and trigger one real prompt within 120s…"
+        }
         let baseline = Date().timeIntervalSince1970
         let agentKey = agent.rawValue
         Task.detached {
@@ -886,12 +920,14 @@ struct ConfigureAgentsViewV2: View {
                 }
             }
             await MainActor.run {
-                if let hit = matched {
-                    verifyResult = "✅ Real \(agent.displayName) event received: \(hit.event)"
-                } else {
-                    verifyResult = "❌ No real \(agent.displayName) event in 120s. Re-run Gate A/B if Ping/Demo also fail."
+                withAnimation(.spring(duration: 0.3)) {
+                    if let hit = matched {
+                        verifyResult = "✅ Real \(agent.displayName) event received: \(hit.event)"
+                    } else {
+                        verifyResult = "❌ No real \(agent.displayName) event in 120s. Re-run Gate A/B if Ping/Demo also fail."
+                    }
+                    realWatching = false
                 }
-                realWatching = false
             }
         }
     }
