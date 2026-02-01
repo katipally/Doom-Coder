@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var sleepManager: SleepManager
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -47,6 +48,32 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            }
+
+            Section("Agents") {
+                Toggle("Block sleep while agents are running", isOn: Binding(
+                    get: { UserDefaults.standard.object(forKey: "doomcoder.agents.autoFuse") as? Bool ?? true },
+                    set: { UserDefaults.standard.set($0, forKey: "doomcoder.agents.autoFuse") }
+                ))
+                Toggle("Redact prompt text in local history", isOn: Binding(
+                    get: { UserDefaults.standard.object(forKey: "doomcoder.agents.redact") as? Bool ?? true },
+                    set: { UserDefaults.standard.set($0, forKey: "doomcoder.agents.redact") }
+                ))
+                LabeledContent("ntfy topic") {
+                    Text(NtfyTopic.getOrCreate())
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                HStack {
+                    Button("Open Configure Agents…") {
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        openWindow(id: "configureAgents")
+                    }
+                    Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
+                    Button("Regenerate ntfy topic") { _ = NtfyTopic.regenerate() }
+                }
+                .buttonStyle(.bordered)
             }
         }
         .formStyle(.grouped)
