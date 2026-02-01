@@ -93,7 +93,7 @@ struct TrackAgentsView: View {
                 }
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(stateColor(live?.state))
+                        .fill(stateColor(live?.displayState))
                         .frame(width: 7, height: 7)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption)
@@ -135,7 +135,7 @@ struct TrackAgentsView: View {
     // MARK: - Helpers
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live { return live.state.humanReadable }
+        if let live { return live.status }
         if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
         return "idle"
     }
@@ -166,5 +166,133 @@ struct TrackAgentsView: View {
         installed = iMap
         cliFolderCount = CopilotCLIFolderManager.folderCount()
         pausedFlag = PauseFlag.isPaused
+    }
+}
+
+// MARK: - Inline accordion (used by MenuBarWindowView)
+//
+// Shows only agents that are currently INSTALLED (dc-hook present in their
+// config). Unconfigured agents are hidden. Each row is a compact Toggle
+// bound to TrackingStore.
+struct TrackAccordion: View {
+    @State private var manager = AgentTrackingManager.shared
+    @State private var enabled: [TrackedAgent: Bool] = [:]
+    @State private var installed: [TrackedAgent: Bool] = [:]
+    @State private var cliFolderCount: Int = 0
+    @State private var tick = 0
+    private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    var openConfigure: () -> Void = {}
+
+    var body: some View {
+        VStack(spacing: 6) {
+            let configured = TrackedAgent.allCases.filter { installed[$0] == true }
+            if configured.isEmpty {
+                HStack(spacing: 8) {
+                    Text("No agents configured.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Configure →", action: openConfigure)
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            } else {
+                ForEach(configured, id: \.self) { agent in
+                    compactRow(agent)
+                }
+            }
+        }
+        .onAppear { reload() }
+        .onReceive(refreshTimer) { _ in tick &+= 1; reload() }
+    }
+
+    @ViewBuilder
+    private func compactRow(_ agent: TrackedAgent) -> some View {
+        let live = manager.liveSessions.first { $0.agent == agent }
+        HStack(alignment: .center, spacing: 10) {
+            Image(nsImage: AgentIconProvider.icon(for: agent, size: 20))
+                .resizable()
+                .frame(width: 20, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(agent.displayName).font(.caption.weight(.medium))
+                HStack(spacing: 4) {
+                    Circle().fill(stateColor(live?.displayState)).frame(width: 6, height: 6)
+                    Text(subtitle(agent: agent, live: live))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { enabled[agent] ?? true },
+                set: { v in
+                    enabled[agent] = v
+                    TrackingStore.setEnabled(agent, v)
+                }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .controlSize(.mini)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            let v = !(enabled[agent] ?? true)
+            enabled[agent] = v
+            TrackingStore.setEnabled(agent, v)
+        }
+    }
+
+    private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
+        if let live { return live.status }
+        if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
+        return "idle"
+    }
+
+    private func stateColor(_ s: AgentSessionState?) -> Color {
+        guard let s else { return .secondary.opacity(0.5) }
+        switch s {
+        case .running:          return .green
+        case .waitingInput:     return .yellow
+        case .waitingApproval:  return .orange
+        case .completed:        return .gray
+        case .failed:           return .red
+        }
+    }
+
+    private func reload() {
+        var eMap: [TrackedAgent: Bool] = [:]
+        var iMap: [TrackedAgent: Bool] = [:]
+        for a in TrackedAgent.allCases {
+            eMap[a] = TrackingStore.isEnabled(a)
+            if a == .copilotCLI {
+                iMap[a] = !CopilotCLIFolderManager.installedFolders().isEmpty
+            } else {
+                iMap[a] = AgentInstallerV2.isInstalled(a)
+            }
+        }
+        enabled = eMap
+        installed = iMap
+        cliFolderCount = CopilotCLIFolderManager.folderCount()
+    }
+
+    // Count of installed+enabled agents (for header subtitle in parent view).
+    static func configuredCount() -> Int {
+        var n = 0
+        for a in TrackedAgent.allCases {
+            let ok: Bool
+            if a == .copilotCLI {
+                ok = !CopilotCLIFolderManager.installedFolders().isEmpty
+            } else {
+                ok = AgentInstallerV2.isInstalled(a)
+            }
+            if ok { n += 1 }
+        }
+        return n
     }
 }

@@ -1,21 +1,41 @@
 import Foundation
+import OSLog
 
-// Touch-file at ~/Library/Application Support/DoomCoder/paused that the helper
-// binary checks to short-circuit all hook events.
+// In-memory pause flag. v1.9.1 change: was file-backed at
+// ~/Library/Application Support/DoomCoder/paused — but a stray sentinel
+// from a single accidental toggle would silently wedge the ENTIRE hook
+// pipeline (both dc-hook AND AgentTrackingManager checked the file) and
+// nothing ever reset it. Now it's pure in-memory state owned by the app,
+// cleared on every launch. `dc-hook` no longer checks pause state at all.
 enum PauseFlag {
-    static var url: URL { AgentSupportDir.url.appendingPathComponent("paused") }
-    static var isPaused: Bool { FileManager.default.fileExists(atPath: url.path) }
+    private static let logger = Logger(subsystem: "com.doomcoder", category: "pause")
+    // Legacy path; only referenced by clearOnLaunch() to sweep old sentinels.
+    private static var legacyFileURL: URL { AgentSupportDir.url.appendingPathComponent("paused") }
+
+    nonisolated(unsafe) private static var _isPaused: Bool = false
+
+    static var isPaused: Bool { _isPaused }
 
     @discardableResult
     static func set(_ on: Bool) -> Bool {
-        AgentSupportDir.ensure()
-        if on {
-            return FileManager.default.createFile(atPath: url.path, contents: nil, attributes: nil)
-        } else {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try? FileManager.default.removeItem(at: url)
+        _isPaused = on
+        logger.info("pause flag set to \(on, privacy: .public)")
+        return true
+    }
+
+    /// Called once from `applicationDidFinishLaunching` to:
+    ///  - force the in-memory flag to false (no pause state persists across launches);
+    ///  - delete any stale file-backed sentinel left by older builds.
+    static func clearOnLaunch() {
+        _isPaused = false
+        let fm = FileManager.default
+        if fm.fileExists(atPath: legacyFileURL.path) {
+            do {
+                try fm.removeItem(at: legacyFileURL)
+                logger.notice("swept legacy paused sentinel at \(legacyFileURL.path, privacy: .public)")
+            } catch {
+                logger.error("failed to sweep legacy paused sentinel: \(error.localizedDescription, privacy: .public)")
             }
-            return true
         }
     }
 }
@@ -64,19 +84,6 @@ enum AgentLogDir {
         for f in files {
             if let mod = (try? f.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                mod < cutoff {
-                try? fm.removeItem(at: f)
-            }
-        }
-        let sorted = (try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey]))?.sorted {
-            let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            return a > b
-        } ?? []
-        var total: Int64 = 0
-        for f in sorted {
-            let size = (try? fm.attributesOfItem(atPath: f.path)[.size] as? Int64) ?? 0
-            total += size
-            if total > 10 * 1024 * 1024 {
                 try? fm.removeItem(at: f)
             }
         }

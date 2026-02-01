@@ -2,9 +2,9 @@ import Foundation
 import Observation
 import OSLog
 
-// Central state machine. Consumes HookEnvelope from the socket listener,
-// maintains per-session state, drives SleepManager auto-fuse, emits
-// notifications, and persists events to the EventStore.
+// Central event hub. Consumes HookEnvelope from the socket listener,
+// maintains per-session raw event timelines, drives SleepManager auto-fuse,
+// emits notifications for milestone events, and persists to EventStore.
 @Observable
 @MainActor
 final class AgentTrackingManager {
@@ -15,19 +15,50 @@ final class AgentTrackingManager {
     struct Session: Identifiable, Sendable {
         let id: String          // session key
         let agent: TrackedAgent
-        var state: AgentSessionState
+        var events: [TimelineEvent] = []
         var lastEvent: String
         var toolCounts: [String: Int] = [:]
         var lastTool: String?
         var cwd: String
         var startedAt: Date
         var updatedAt: Date
+
+        /// Whether the session is still active.
+        var isLive: Bool { !NotificationPolicy.isTerminal(event: lastEvent) }
+
+        /// Human-readable status derived from the latest event.
+        var status: String {
+            humanReadable(for: lastEvent)
+        }
+
+        /// Color-friendly category (for the UI's stateColor helper).
+        var displayState: AgentSessionState {
+            Self.stateFromEvent(lastEvent)
+        }
+
+        private func humanReadable(for event: String) -> String {
+            let e = event.lowercased()
+            if e.contains("sessionstart") { return "running" }
+            if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return "completed" }
+            if e.contains("error") || e.contains("failure") { return "failed" }
+            if e.contains("permission") { return "waiting for approval" }
+            if e.contains("notification") || e.contains("elicitation") { return "waiting for input" }
+            if e.contains("afteragentresponse") { return "waiting for input" }
+            return "running"
+        }
+
+        static func stateFromEvent(_ event: String) -> AgentSessionState {
+            let e = event.lowercased()
+            if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return .completed }
+            if e.contains("error") || e.contains("failure") { return .failed }
+            if e.contains("permission") { return .waitingApproval }
+            if e.contains("notification") || e.contains("elicitation") || e.contains("afteragentresponse") { return .waitingInput }
+            return .running
+        }
     }
 
     private(set) var sessions: [String: Session] = [:]
-    var liveSessions: [Session] { sessions.values.filter {
-        $0.state == .running || $0.state == .waitingInput || $0.state == .waitingApproval
-    }.sorted { $0.updatedAt > $1.updatedAt } }
+    var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
     private weak var sleepManager: SleepManager?
 
@@ -36,9 +67,14 @@ final class AgentTrackingManager {
     // MARK: - Entry point (called from socket listener)
 
     func ingest(_ env: HookEnvelope) {
-        guard !PauseFlag.isPaused else { return }
+        let pausedBefore = PauseFlag.isPaused
+        logger.info("socket recv agent=\(env.agent, privacy: .public) event=\(env.event, privacy: .public) synthetic=\(env.synthetic) paused=\(pausedBefore)")
+        guard !pausedBefore else {
+            logger.info("drop: pause flag set (agent=\(env.agent, privacy: .public))")
+            return
+        }
         guard let agent = TrackedAgent(rawValue: env.agent) else {
-            logger.debug("unknown agent \(env.agent, privacy: .public)")
+            logger.notice("drop: unknown agent \(env.agent, privacy: .public)")
             return
         }
         let payload = env.payloadDict ?? [:]
@@ -46,18 +82,25 @@ final class AgentTrackingManager {
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let path = payload["cwd"] as? String ?? env.cwd
 
-        let newState = Self.deriveState(agent: agent, event: env.event, payload: payload)
+        // Build timeline entry
+        let summary = Self.buildSummary(event: env.event, tool: tool, payload: payload)
+        let timelineEvent = TimelineEvent(
+            event: env.event,
+            tool: tool,
+            path: path,
+            timestamp: Date(timeIntervalSince1970: env.ts),
+            summary: summary
+        )
+
         var s = sessions[sessionKey] ?? Session(
             id: sessionKey,
             agent: agent,
-            state: .running,
             lastEvent: env.event,
             cwd: path,
             startedAt: Date(),
             updatedAt: Date()
         )
-        let previous = s.state
-        s.state = newState
+        s.events.append(timelineEvent)
         s.lastEvent = env.event
         s.updatedAt = Date()
         if let tool {
@@ -66,26 +109,29 @@ final class AgentTrackingManager {
         }
         sessions[sessionKey] = s
 
+        // Persist to SQLite
         EventStore.shared.insert(
             sessionKey: sessionKey, agent: agent.rawValue, event: env.event,
-            tool: tool, path: path, state: newState.rawValue, ts: env.ts
+            tool: tool, path: path, state: env.event, ts: env.ts
         )
 
         updateAutoFuse()
-        if shouldNotify(previous: previous, current: newState, event: env.event) {
+
+        // Notification dispatch — only for milestone events
+        let shouldNotify = NotificationPolicy.isNotifiable(agent: agent, event: env.event)
+        logger.info("ingest agent=\(agent.rawValue, privacy: .public) event=\(env.event, privacy: .public) notify=\(shouldNotify)")
+        if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
-                sessionKey: sessionKey, agent: agent, state: newState
+                sessionKey: sessionKey, agent: agent, event: env.event
             ))
         }
 
-        if newState == .completed || newState == .failed {
-            // Keep terminal sessions around briefly so the popover can show them,
-            // then evict after 10 minutes.
+        // Evict terminal sessions after 10 minutes
+        if NotificationPolicy.isTerminal(event: env.event) {
             Task { [sessionKey] in
                 try? await Task.sleep(for: .seconds(600))
                 await MainActor.run {
-                    if let cur = self.sessions[sessionKey],
-                       cur.state == .completed || cur.state == .failed {
+                    if let cur = self.sessions[sessionKey], !cur.isLive {
                         self.sessions.removeValue(forKey: sessionKey)
                         self.updateAutoFuse()
                     }
@@ -110,54 +156,49 @@ final class AgentTrackingManager {
         }
     }
 
-    // MARK: - Notification policy
-
-    private func shouldNotify(previous: AgentSessionState, current: AgentSessionState, event: String) -> Bool {
-        if previous == current { return false }
-        switch current {
-        case .running:           return previous == .waitingInput || previous == .waitingApproval || event.lowercased().contains("sessionstart")
-        case .waitingInput:      return true
-        case .waitingApproval:   return true
-        case .completed:         return true
-        case .failed:            return true
-        }
-    }
-
-    // MARK: - Event → state mapping
-
-    private static func deriveState(agent: TrackedAgent, event: String, payload: [String: Any]) -> AgentSessionState {
-        let e = event
-        switch agent {
-        case .claude:
-            if e == "SessionStart" { return .running }
-            if e == "Notification" {
-                let t = (payload["notification_type"] as? String) ?? (payload["type"] as? String) ?? ""
-                if t.contains("permission") { return .waitingApproval }
-                return .waitingInput
-            }
-            if e == "Stop" || e == "SubagentStop" { return .completed }
-        case .cursor:
-            if e == "sessionStart" { return .running }
-            if e == "afterAgentResponse" { return .waitingInput }
-            if e == "stop" { return .completed }
-        case .vscode:
-            if e == "sessionStart" { return .running }
-            if e == "notification" { return .waitingInput }
-            if e == "sessionEnd" || e == "stop" { return .completed }
-        case .copilotCLI:
-            if e == "sessionStart" { return .running }
-            if e == "userPromptSubmitted" { return .running }
-            if e == "errorOccurred" { return .failed }
-            if e == "sessionEnd" { return .completed }
-        }
-        return .running
-    }
+    // MARK: - Session key extraction
 
     private static func sessionKey(agent: TrackedAgent, env: HookEnvelope, payload: [String: Any]) -> String {
+        // Try all known session-id field names across agents.
         let sid = (payload["session_id"] as? String)
             ?? (payload["sessionId"] as? String)
             ?? (payload["session"] as? String)
-            ?? "pid-\(env.pid)"
+            ?? (payload["conversation_id"] as? String)    // Cursor
+            ?? (payload["generation_id"] as? String)
+            ?? "pid-\(env.pid)"                            // uses parent PID from dc-hook
         return "\(agent.rawValue)::\(sid)"
+    }
+
+    // MARK: - Summary builder
+
+    private static func buildSummary(event: String, tool: String?, payload: [String: Any]) -> String {
+        if let tool {
+            let filePath = (payload["file_path"] as? String) ?? (payload["input"] as? [String: Any])?["file_path"] as? String
+            if let filePath {
+                return "\(tool): \(URL(fileURLWithPath: filePath).lastPathComponent)"
+            }
+            return tool
+        }
+        // Fall back to a short description of the event
+        return event
+    }
+}
+
+// Kept for backward compatibility with UI code (stateColor helpers).
+enum AgentSessionState: String, Sendable {
+    case running
+    case waitingInput     = "waiting_input"
+    case waitingApproval  = "waiting_approval"
+    case completed
+    case failed
+
+    var humanReadable: String {
+        switch self {
+        case .running:          return "running"
+        case .waitingInput:     return "waiting for input"
+        case .waitingApproval:  return "waiting for approval"
+        case .completed:        return "completed"
+        case .failed:           return "failed"
+        }
     }
 }

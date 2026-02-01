@@ -5,15 +5,15 @@ import OSLog
 
 // Fan-out for DoomCoder agent notifications. Honors the TrackingStore
 // per-agent opt-out and the global ChannelStore (macOS local + ntfy).
-// Minimal content only — no prompt text, no file paths over ntfy. 30-second
-// dedupe window per (session, state).
+// Minimal content only — no prompt text, no file paths over ntfy. 5-second
+// dedupe window per (session, event).
 @MainActor
 final class NotificationDispatcher {
     static let shared = NotificationDispatcher()
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "notify")
     private var lastDispatchAt: [String: Date] = [:]
-    private let dedupeWindow: TimeInterval = 30
+    private let dedupeWindow: TimeInterval = 5
 
     // Cached permission status. Updated by `refreshPermissionStatus()` on
     // launch, on channel-toggle, and when the app becomes active.
@@ -69,14 +69,14 @@ final class NotificationDispatcher {
     struct Event: Sendable {
         let sessionKey: String
         let agent: TrackedAgent
-        let state: AgentSessionState
+        let event: String       // raw event name from the hook
     }
 
     func dispatch(_ ev: Event) {
         // Honor per-agent Tracking toggle (user opted this agent out).
         guard TrackingStore.isEnabled(ev.agent) else { return }
 
-        let key = "\(ev.sessionKey)::\(ev.state.rawValue)"
+        let key = "\(ev.sessionKey)::\(ev.event)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow {
             return
         }
@@ -113,16 +113,18 @@ final class NotificationDispatcher {
     // MARK: - Copy
 
     private func titleFor(_ ev: Event) -> String {
-        switch ev.state {
-        case .waitingInput, .waitingApproval: return "DoomCoder · needs you"
-        case .completed: return "DoomCoder · done"
-        case .failed:    return "DoomCoder · failed"
-        case .running:   return "DoomCoder"
+        let e = ev.event.lowercased()
+        if e.contains("error") || e.contains("failure") { return "DoomCoder · failed" }
+        if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return "DoomCoder · done" }
+        if e.contains("permission") || e.contains("notification") || e.contains("elicitation") || e.contains("afteragentresponse") {
+            return "DoomCoder · needs you"
         }
+        if e.contains("sessionstart") { return "DoomCoder · started" }
+        return "DoomCoder"
     }
 
     private func bodyFor(_ ev: Event) -> String {
-        "\(ev.agent.displayName) — \(ev.state.humanReadable)"
+        "\(ev.agent.displayName) — \(ev.event)"
     }
 
     // MARK: - macOS local
