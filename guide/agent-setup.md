@@ -1,8 +1,8 @@
 # Agent Setup
 
-DoomCoder tracks your AI coding agents through **deterministic lifecycle events** — no CPU polling, no heuristics. As of v0.8 every supported agent uses the **Model Context Protocol (MCP)**, except for Claude Code which keeps a shell-hook installer for backwards compatibility while its MCP path is adopted.
+DoomCoder tracks your AI coding agents through **deterministic lifecycle events** — no CPU polling, no heuristics. As of v1.8 every supported agent speaks the same **Model Context Protocol (MCP)** transport; the old shell-hook path has been removed.
 
-Open **DoomCoder → Agents** and pick an agent. Setup is a three-step sheet: Explain → Install → Verify.
+Open **DoomCoder → Configure Agents…** and pick an agent. Setup is a three-step sheet: Explain → Install → Verify.
 
 ---
 
@@ -22,15 +22,18 @@ All writes are sentinel-bracketed (`<!-- doomcoder-managed:rules v1 BEGIN ... --
 
 | Agent | MCP config | Rules file |
 |---|---|---|
-| Cursor | `~/.cursor/mcp.json` | `~/.cursor/rules/doomcoder.mdc` (standalone) |
+| Cursor | `~/.cursor/mcp.json` | **User Rules** (paste via in-app snippet — see below) |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | `~/.codeium/windsurf/memories/global_rules.md` |
 | VS Code (MCP) | `~/Library/Application Support/Code/User/mcp.json` | (user-global instructions) |
-| Claude Code | `~/.claude.json` (+ legacy hook install) | `~/.claude/CLAUDE.md` |
+| Claude Code | `~/.claude.json` | `~/.claude/CLAUDE.md` |
 | Copilot CLI | `~/.copilot/mcp-config.json` | `~/.copilot/AGENTS.md` |
 | Gemini CLI | `~/.gemini/settings.json` | `~/.gemini/GEMINI.md` |
 | Codex | `~/.codex/config.toml` | `~/.codex/AGENTS.md` |
 
 Anything not in this list: use the **Install Anywhere** tab for a generic MCP snippet.
+
+### Cursor note
+Cursor's User Rules file (`Cursor → Settings → Rules → User Rules`) is not writable from outside the app. DoomCoder's Setup step for Cursor shows a **Copy snippet** button plus an **Open Cursor** deep-link — paste the snippet into User Rules once and it applies across every workspace, not just those rooted at your home folder.
 
 ## Token cost
 
