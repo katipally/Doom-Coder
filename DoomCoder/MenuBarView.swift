@@ -3,12 +3,9 @@ import SwiftUI
 struct MenuBarView: View {
     @Bindable var sleepManager: SleepManager
     var updaterViewModel: CheckForUpdatesViewModel
-    @Bindable var agentStatus: AgentStatusManager
     @Environment(\.openWindow) private var openWindow
-    @State private var didCheckOnboarding = false
 
     var body: some View {
-        let _ = presentOnboardingIfNeeded()
         // ── Toggle ──────────────────────────────────────────────────────────
         Button {
             sleepManager.toggle()
@@ -44,8 +41,6 @@ struct MenuBarView: View {
             }
         }
 
-        Divider()
-
         // ── Session Timer ─────────────────────────────────────────────────────
         Menu("Session Timer") {
             Button(checkLabel(sleepManager.sessionTimerHours == 0, "Off")) {
@@ -63,51 +58,6 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        // ── Configure Agents / Track ─────────────────────────────────────────
-        Divider()
-        Button(agentStatusHeader) {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "configure")
-        }
-
-        // Track submenu — v1.8.2. Native SwiftUI Toggle rows (macOS 14+
-        // renders them correctly inside MenuBarExtra content). Lists only
-        // agents the user has already *configured*. Empty list shows a hint
-        // that nudges them into the Configure window.
-        Menu("Track Agents") {
-            let configured = agentStatus.configuredAgents()
-            if configured.isEmpty {
-                Text("No configured agents yet")
-                    .foregroundStyle(.secondary)
-                Button("Open Configure Agents…") {
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    openWindow(id: "configure")
-                }
-            } else {
-                ForEach(configured, id: \.id) { info in
-                    Toggle(info.displayName, isOn: Binding(
-                        get: { agentStatus.watchedAgentIds.contains(info.id) },
-                        set: { on in
-                            if on { agentStatus.watchedAgentIds.insert(info.id) }
-                            else  { agentStatus.watchedAgentIds.remove(info.id) }
-                        }
-                    ))
-                }
-                Divider()
-                Button("Turn all off") {
-                    agentStatus.watchedAgentIds.removeAll()
-                }
-                .disabled(agentStatus.watchedAgentIds.isEmpty)
-            }
-        }
-
-        if !agentStatus.sessions.isEmpty {
-            ForEach(agentStatus.sessions.prefix(3)) { s in
-                Text("  \(s.displayName) — \(agentStateText(s.state))\(s.repoName.map { " · \($0)" } ?? "")")
-                    .foregroundStyle(.secondary)
-            }
-        }
-
         Divider()
 
         // ── Settings / Updates / About ────────────────────────────────────────
@@ -121,34 +71,9 @@ struct MenuBarView: View {
         }
         .disabled(!updaterViewModel.canCheckForUpdates)
 
-        Button("Doctor…") {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "doomcoder-doctor")
-        }
-
         Button("About…") {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "about")
-        }
-
-        // ── Help / Guides ────────────────────────────────────────────────────
-        Menu("Help") {
-            Button("Agent Setup Guide") {
-                openGuide("agent-setup.md")
-            }
-            Button("iPhone Notifications Guide") {
-                openGuide("iphone-notifications.md")
-            }
-            Button("MCP Reference") {
-                openGuide("mcp-reference.md")
-            }
-            Button("Troubleshooting") {
-                openGuide("troubleshooting.md")
-            }
-            Divider()
-            Button("Report an Issue") {
-                NSWorkspace.shared.open(URL(string: "https://github.com/katipally/Doom-Coder/issues/new")!)
-            }
         }
 
         Divider()
@@ -170,38 +95,6 @@ struct MenuBarView: View {
         switch mode {
         case .screenOn:  return "\(prefix)Screen On — display stays on, Mac awake"
         case .screenOff: return "\(prefix)Screen Off — display sleeps, Mac awake"
-        }
-    }
-
-    private func agentStateText(_ state: AgentSession.State) -> String {
-        switch state {
-        case .active:  return "working"
-        case .waiting: return "waiting"
-        case .errored: return "error"
-        case .done:    return "done"
-        }
-    }
-
-    private var agentStatusHeader: String {
-        if agentStatus.isAnyAgentActive {
-            return "Configure Agents… (\(agentStatus.sessions.count) live)"
-        }
-        return "Configure Agents…"
-    }
-
-    private func openGuide(_ filename: String) {
-        let url = URL(string: "https://github.com/katipally/Doom-Coder/blob/main/guide/\(filename)")!
-        NSWorkspace.shared.open(url)
-    }
-
-    private func presentOnboardingIfNeeded() {
-        guard !didCheckOnboarding else { return }
-        didCheckOnboarding = true
-        let key = "dc.onboardingCompleted"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        DispatchQueue.main.async {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "onboarding")
         }
     }
 }
