@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import Sparkle
 
 /// Opts DoomCoder's MenuBarExtra into Sparkle's "gentle reminder" update
@@ -23,21 +24,26 @@ final class CheckForUpdatesViewModel {
     @ObservationIgnored
     private let driverDelegate = SparkleUserDriverDelegate()
 
+    @ObservationIgnored
+    private var cancellable: AnyCancellable?
+
     init() {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,
             userDriverDelegate: driverDelegate
         )
-        // Poll canCheckForUpdates on a short delay after startup
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            self.canCheckForUpdates = self.updaterController.updater.canCheckForUpdates
-        }
+        // Observe canCheckForUpdates via KVO so the button re-enables
+        // automatically after Sparkle finishes its check.
+        cancellable = updaterController.updater
+            .publisher(for: \.canCheckForUpdates)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] value in
+                self?.canCheckForUpdates = value
+            }
     }
 
     func checkForUpdates() {
         updaterController.updater.checkForUpdates()
-        canCheckForUpdates = updaterController.updater.canCheckForUpdates
     }
 }
