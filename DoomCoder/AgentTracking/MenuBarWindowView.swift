@@ -61,11 +61,14 @@ struct MenuBarWindowView: View {
             timerRow
             if let remaining = sleepManager.sessionTimerRemainingText {
                 timerStatusRow(remaining)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if let countdown = sleepManager.screenOffCountdown {
                 screenOffStatusRow("Display off in \(countdown)s…")
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             } else if sleepManager.isScreenOff {
                 screenOffStatusRow("Display off — move mouse to wake")
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             // ── Section Divider ─────────────────────────────────
@@ -127,6 +130,7 @@ struct MenuBarWindowView: View {
                     Text(sleepManager.isActive ? modeStatusText : "Prevent sleep while you work")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .contentTransition(.interpolate)
                 }
                 Spacer()
                 if sleepManager.isActive, !compactElapsed.isEmpty {
@@ -249,6 +253,7 @@ struct MenuBarWindowView: View {
                 .font(.caption2)
             Text(text)
                 .font(.caption2)
+                .contentTransition(.interpolate)
         }
         .foregroundStyle(.orange)
         .padding(.horizontal, 16)
@@ -290,6 +295,7 @@ struct MenuBarWindowView: View {
                         Circle()
                             .fill(stateColor(session.displayState))
                             .frame(width: 6, height: 6)
+                            .symbolEffect(.pulse, isActive: session.displayState == .running)
                         Image(nsImage: AgentIconProvider.icon(for: session.agent, size: 14))
                             .resizable()
                             .frame(width: 14, height: 14)
@@ -300,11 +306,17 @@ struct MenuBarWindowView: View {
                         Text(session.status)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .contentTransition(.interpolate)
                         Spacer()
                         Text(timeAgo(session.updatedAt))
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.tertiary)
+                            .contentTransition(.numericText())
                     }
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .bottom))
+                    ))
                 }
             }
             .padding(.horizontal, 16)

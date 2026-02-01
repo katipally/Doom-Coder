@@ -74,7 +74,20 @@ struct AgentInstallerV2 {
 
     @discardableResult
     static func install(_ agent: TrackedAgent, folder: URL? = nil) -> Result<Void, Error> {
+        // Pre-flight: ensure dc-hook binary is available
+        guard ensureStableHelper() || FileManager.default.fileExists(atPath: helperBinaryPath()) else {
+            return .failure(VerifyError.helperBinaryMissing)
+        }
+
         let path = configPath(for: agent, folder: folder)
+
+        // Pre-flight: check write permission
+        let parentDir = (path as NSString).deletingLastPathComponent
+        if FileManager.default.fileExists(atPath: parentDir) &&
+           !FileManager.default.isWritableFile(atPath: parentDir) {
+            return .failure(VerifyError.configPermissionDenied(path))
+        }
+
         let preHash = sha256(of: path) ?? "absent"
         let backupPath = backup(path)
 
@@ -219,10 +232,9 @@ struct AgentInstallerV2 {
         let path = claudeSettingsPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
-        backup(path)
 
-        // Strip any previous dc-hook entries
-        stripDcHookEntries(&root)
+        // Strip only Claude dc-hook entries (preserve VS Code entries in shared file)
+        stripDcHookEntries(&root, agentToken: "claude")
         pruneEmptyContainers(&root)
 
         // Build Claude hook block with nested matcher wrapper — ALL events
@@ -250,9 +262,9 @@ struct AgentInstallerV2 {
         let path = cursorHooksPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
-        backup(path)
 
-        stripDcHookEntries(&root)
+        // Strip only Cursor dc-hook entries
+        stripDcHookEntries(&root, agentToken: "cursor")
         pruneEmptyContainers(&root)
 
         // Cursor requires version: 1 and only "command" key (no "type") — ALL events
@@ -496,14 +508,48 @@ struct AgentInstallerV2 {
         case badHelperPath(String)
         case residualDcHook
         case unexpectedStructure
+        case configPermissionDenied(String)
+        case agentNotInstalled(TrackedAgent)
+        case helperBinaryMissing
+
         var errorDescription: String? {
             switch self {
-            case .fileMissing:               return "Expected hooks file missing after install."
-            case .parseError:                return "Hooks file did not parse as JSON after install."
-            case .missingEvent(let e):       return "Expected hook event missing after install: \(e)."
-            case .badHelperPath(let p):      return "dc-hook command resolves to a non-existent binary: \(p)."
-            case .residualDcHook:            return "Uninstall failed: dc-hook entries still present."
-            case .unexpectedStructure:       return "Hooks file has unexpected structure."
+            case .fileMissing:
+                return "Config file was not created — check that the parent directory exists and is writable."
+            case .parseError:
+                return "Config file contains invalid JSON — it may have been corrupted. Check the backup in ~/Library/Application Support/DoomCoder/backups/."
+            case .missingEvent(let e):
+                return "Hook event '\(e)' is missing from the config. Try uninstalling and reinstalling."
+            case .badHelperPath(let p):
+                return "dc-hook binary not found at '\(p)'. Try reinstalling DoomCoder from the DMG."
+            case .residualDcHook:
+                return "Some hook entries could not be removed. Open the config file manually to clean up."
+            case .unexpectedStructure:
+                return "Config file has an unexpected structure. It may have been edited by another tool."
+            case .configPermissionDenied(let p):
+                return "Cannot write to '\(p)' — check file permissions (chmod 644)."
+            case .agentNotInstalled(let a):
+                return "\(a.displayName) does not appear to be installed on this system."
+            case .helperBinaryMissing:
+                return "dc-hook binary not found in the app bundle. Try reinstalling DoomCoder."
+            }
+        }
+
+        /// Short user-facing suggestion for the configure window.
+        var recoverySuggestion: String? {
+            switch self {
+            case .fileMissing, .parseError, .unexpectedStructure:
+                return "Try using the Repair button to reset hooks."
+            case .missingEvent:
+                return "Reinstall hooks to restore missing events."
+            case .badHelperPath, .helperBinaryMissing:
+                return "Reinstall DoomCoder from the latest release."
+            case .residualDcHook:
+                return "Use 'Show Config' to manually inspect the file."
+            case .configPermissionDenied:
+                return "Fix file permissions in Terminal, then retry."
+            case .agentNotInstalled:
+                return nil
             }
         }
     }
