@@ -16,22 +16,43 @@ enum SetupStep: Int, CaseIterable {
     }
 }
 
+// MARK: - AgentSetupStep (collapsed 2-step flow)
+//
+// v1.8.1: The old three-step Explain → Install → Verify flow duplicated the
+// handshake wait (Install polled 30s inline, Verify fired a second test). The
+// agent sheet now collapses to two steps: the Install step IS the verify —
+// a single streaming log goes through preflight → write config → write rules
+// → self-test → handshake → first tool call.
+
+enum AgentSetupStep: Int, CaseIterable {
+    case explain = 0, installAndVerify
+
+    var title: String {
+        switch self {
+        case .explain:          return "What this does"
+        case .installAndVerify: return "Install & Verify"
+        }
+    }
+}
+
 // MARK: - StepDots
 
 private struct StepDots: View {
-    let current: SetupStep
+    let current: Int
+    let steps: [(rawValue: Int, title: String)]
     var body: some View {
         HStack(spacing: 10) {
-            ForEach(SetupStep.allCases, id: \.rawValue) { step in
+            ForEach(steps.indices, id: \.self) { idx in
+                let s = steps[idx]
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(step.rawValue <= current.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(s.rawValue <= current ? Color.accentColor : Color.secondary.opacity(0.3))
                         .frame(width: 10, height: 10)
-                    Text(step.title)
+                    Text(s.title)
                         .font(.caption)
-                        .foregroundStyle(step == current ? .primary : .secondary)
+                        .foregroundStyle(s.rawValue == current ? .primary : .secondary)
                 }
-                if step != SetupStep.allCases.last {
+                if idx < steps.count - 1 {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.2))
                         .frame(height: 1)
@@ -49,23 +70,24 @@ struct AgentSetupSheet: View {
     let onDone: () -> Void
     var agentStatus: AgentStatusManager? = nil
 
-    @State private var step: SetupStep = .explain
+    @State private var step: AgentSetupStep = .explain
     @State private var installLog: String = ""
     @State private var installing = false
     @State private var installError: String?
-    @State private var verifyOutput: String = ""
-    @State private var verifying = false
+    @State private var installComplete = false
+    @State private var showHowItWorks = false
+    @State private var copyToast: String?
+    @State private var waitingFor: String?   // e.g. "handshake from Cursor"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            StepDots(current: step)
+            StepDots(current: step.rawValue, steps: AgentSetupStep.allCases.map { ($0.rawValue, $0.title) })
             Divider()
             Group {
                 switch step {
-                case .explain: explainView
-                case .install: installView
-                case .verify:  verifyView
+                case .explain:          explainView
+                case .installAndVerify: installAndVerifyView
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -77,8 +99,9 @@ struct AgentSetupSheet: View {
                 Spacer()
                 if step != .explain {
                     Button("Back") {
-                        step = SetupStep(rawValue: step.rawValue - 1) ?? .explain
+                        step = .explain
                     }
+                    .disabled(installing)
                 }
                 Button(nextTitle) {
                     advance()
@@ -88,7 +111,19 @@ struct AgentSetupSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 560, height: 500)
+        .frame(width: 600, height: 560)
+        .overlay(alignment: .top) {
+            if let toast = copyToast {
+                Text(toast)
+                    .font(.callout)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(.ultraThinMaterial))
+                    .overlay(Capsule().strokeBorder(Color.green.opacity(0.4)))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: copyToast)
     }
 
     private var info: AgentCatalog.Info? { AgentCatalog.info(forId: agentId) }
@@ -102,7 +137,7 @@ struct AgentSetupSheet: View {
                 .foregroundStyle(.tint)
             VStack(alignment: .leading) {
                 Text("Set up \(info?.displayName ?? agentId)").font(.title2).bold()
-                Text("MCP server integration")
+                Text("MCP server + rules snippet, verified end-to-end.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -113,6 +148,9 @@ struct AgentSetupSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(explainBody).font(.body)
+                flowDiagram
+                    .padding(.vertical, 4)
+                howItWorksDisclosure
                 Text("What DoomCoder will change on disk:")
                     .font(.callout).bold()
                     .padding(.top, 6)
@@ -133,12 +171,81 @@ struct AgentSetupSheet: View {
         }
     }
 
-    private var installView: some View {
+    // Mac ↔ Socket ↔ Agent diagram so users see what DoomCoder is waiting for.
+    private var flowDiagram: some View {
+        HStack(spacing: 0) {
+            diagramNode(icon: "macbook", title: "Your Mac", subtitle: "DoomCoder")
+            diagramArrow(label: "mcp.py")
+            diagramNode(icon: "network", title: "Unix socket", subtitle: "dc.sock")
+            diagramArrow(label: "dc tool")
+            diagramNode(icon: "brain", title: info?.displayName ?? "Agent", subtitle: "calls dc")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.2)))
+    }
+
+    private func diagramNode(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.title2).foregroundStyle(.tint)
+            Text(title).font(.caption).bold()
+            Text(subtitle).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func diagramArrow(label: String) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: "arrow.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(label).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .frame(width: 60)
+    }
+
+    private var howItWorksDisclosure: some View {
+        DisclosureGroup(isExpanded: $showHowItWorks) {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("1. DoomCoder writes a tiny MCP server config into the agent's config file.",
+                      systemImage: "1.circle")
+                Label("2. A rules snippet tells the agent: 'before/after every turn, call the dc tool.'",
+                      systemImage: "2.circle")
+                Label("3. When the agent calls dc, DoomCoder sees it, keeps your Mac awake, and fires notifications.",
+                      systemImage: "3.circle")
+                Label("No tokens. No network (unless you enable iPhone push). All local.",
+                      systemImage: "lock.shield")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+            .font(.caption)
+            .padding(.top, 6)
+        } label: {
+            Label("What's happening? How DoomCoder talks to the agent.", systemImage: "questionmark.circle")
+                .font(.callout.bold())
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
+    }
+
+    private var installAndVerifyView: some View {
         VStack(alignment: .leading, spacing: 10) {
             if info?.id == "cursor" {
                 cursorUserRulesCallout
             }
-            Text("Click **Install** to apply the changes above.")
+            if let waiting = waitingFor {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for \(waiting). Restart the agent if you haven't already, then start any chat.")
+                        .font(.caption)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.10)))
+            } else if !installComplete && !installing {
+                Text("Click **Install** to apply the changes above and verify end-to-end.")
+            }
             ScrollView {
                 Text(installLog.isEmpty ? "Ready." : installLog)
                     .font(.system(.caption, design: .monospaced))
@@ -146,7 +253,7 @@ struct AgentSetupSheet: View {
                     .padding(10)
                     .textSelection(.enabled)
             }
-            .frame(minHeight: 180)
+            .frame(minHeight: 200)
             .background {
                 RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.04))
             }
@@ -171,6 +278,7 @@ struct AgentSetupSheet: View {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(RulesInstaller.snippet, forType: .string)
+                    showCopyToast("Snippet copied — paste into Cursor → Settings → Rules")
                 } label: {
                     Label("Copy snippet", systemImage: "doc.on.doc")
                 }
@@ -195,31 +303,11 @@ struct AgentSetupSheet: View {
         }
     }
 
-    private var verifyView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Fire a real round-trip event: DoomCoder will run the MCP server script and wait for the event to arrive on the Unix socket. Typical round-trip is 10–40 ms.")
-            Button {
-                fireVerify()
-            } label: {
-                if verifying {
-                    Label("Running…", systemImage: "hourglass")
-                } else {
-                    Label("Run Round-Trip Test", systemImage: "bolt.horizontal.circle.fill")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(verifying)
-            if !verifyOutput.isEmpty {
-                Text(verifyOutput)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04))
-                    }
-            }
-            Text("If a channel isn't set up yet, configure it from iPhone Channels in the sidebar — then come back here.")
-                .font(.caption).foregroundStyle(.secondary)
+    private func showCopyToast(_ msg: String) {
+        copyToast = msg
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            await MainActor.run { copyToast = nil }
         }
     }
 
@@ -245,30 +333,31 @@ struct AgentSetupSheet: View {
 
     private var nextTitle: String {
         switch step {
-        case .explain: return "Continue"
-        case .install: return installing ? "Installing…" : "Install"
-        case .verify:  return "Finish"
+        case .explain:
+            return "Continue"
+        case .installAndVerify:
+            if installing { return "Working…" }
+            return installComplete ? "Finish" : "Install & Verify"
         }
     }
 
     private var nextDisabled: Bool {
         switch step {
-        case .install: return installing
-        default:       return false
+        case .installAndVerify: return installing
+        default:                return false
         }
     }
 
     private func advance() {
         switch step {
-        case .explain: step = .install
-        case .install:
-            if installLog.contains("Done.") {
-                step = .verify
+        case .explain:
+            step = .installAndVerify
+        case .installAndVerify:
+            if installComplete {
+                onDone()
             } else {
                 runInstall()
             }
-        case .verify:
-            onDone()
         }
     }
 
@@ -326,43 +415,76 @@ struct AgentSetupSheet: View {
                         append("• No rules file for this agent — config alone is enough.")
                     }
 
-                    append("• Restart \(mcp.displayName) so it picks up the new config + rules.")
-                    append("  Waiting up to 30s for a handshake…")
-                    // Gate 1: mcp-hello proves the agent loaded the config.
-                    // Gate 2: a real `dc` tool call proves the rules snippet
-                    // was read. Both are required for a true green.
-                    let since = Date.now
-                    var gotHello = false
-                    var gotToolCall = false
+                    // --- Verify phase 1: self-test (30s) --------------------
+                    append("")
+                    append("── Verifying end-to-end ──")
+                    waitingFor = "DoomCoder self-test"
+                    append("• Self-test: can DoomCoder talk to its own MCP script?")
                     if let sm = agentStatus {
-                        for _ in 0..<60 {
-                            try? await Task.sleep(for: .milliseconds(500))
-                            if !gotHello, let h = sm.lastHello(for: info.id), h >= since {
-                                gotHello = true
-                                append("✓ Handshake received — \(mcp.displayName) loaded the config.")
-                            }
-                            if gotHello, let t = sm.lastToolCall(for: info.id), t >= since {
-                                gotToolCall = true
-                                append("✓ Rules honored — \(mcp.displayName) called `dc`.")
-                                break
+                        let selfResult = await MCPRoundTripTest.selfTest(statusManager: sm)
+                        switch selfResult {
+                        case .failure(let f):
+                            waitingFor = nil
+                            append("✗ Self-test failed: \(f.errorDescription ?? "unknown")")
+                            append("  Fix this before restarting \(mcp.displayName) — the socket pipeline is broken.")
+                            installError = "Self-test failed"
+                            installing = false
+                            return
+                        case .success(let s):
+                            append("✓ Self-test passed (\(s.millis) ms).")
+                        }
+
+                        // --- Verify phase 2: handshake from real agent (60s) ---
+                        append("• Please restart \(mcp.displayName) now so it loads the new config.")
+                        append("  Waiting up to 60s for a handshake from \(mcp.displayName)…")
+                        waitingFor = "handshake from \(mcp.displayName)"
+                        let since = Date.now
+                        let hello = await MCPRoundTripTest.awaitAgentHandshake(
+                            agentId: info.id, since: since, timeout: 60, statusManager: sm)
+                        switch hello {
+                        case .failure(let f):
+                            waitingFor = nil
+                            append("⚠︎ \(f.errorDescription ?? "no handshake yet")")
+                            append("  Restart \(mcp.displayName); the next turn should flip the badge to 🟢 Configured.")
+                            installComplete = true
+                            append("Done.")
+                            installing = false
+                            return
+                        case .success:
+                            sm.markConfigured(info.id)
+                            append("✓ Handshake received — \(mcp.displayName) loaded the config.")
+                        }
+
+                        // --- Verify phase 3: first `dc` tool call (60s) ----
+                        append("• Start any chat in \(mcp.displayName) so it calls the `dc` tool.")
+                        append("  Waiting up to 60s for first tool call…")
+                        waitingFor = "first `dc` tool call from \(mcp.displayName)"
+                        let tool = await MCPRoundTripTest.awaitFirstToolCall(
+                            agentId: info.id, since: since, timeout: 60, statusManager: sm)
+                        switch tool {
+                        case .success:
+                            append("✓ Rules honored — \(mcp.displayName) called `dc`. Setup complete.")
+                        case .failure(let f):
+                            append("⚠︎ \(f.errorDescription ?? "rules not honored yet")")
+                            append("  Config is loaded, but the rules snippet hasn't fired a `dc` call yet.")
+                            if info.id == "cursor" {
+                                append("  Cursor tip: also paste the snippet into Settings → Rules → User Rules.")
                             }
                         }
+                        waitingFor = nil
                     } else if MCPInstaller.status(for: mcp) == .live {
-                        gotHello = true
-                    }
-                    if !gotHello {
-                        append("⚠︎ No handshake yet. Restart \(mcp.displayName); the next turn should flip the badge to 🟢 Configured.")
-                    } else if !gotToolCall {
-                        append("⚠︎ Config loaded but rules not honored yet. Start a new turn in \(mcp.displayName); it should call `dc` on its first move.")
+                        append("✓ MCP script installed. (No status manager attached — skipping live verify.)")
                     }
                 } else {
                     throw NSError(domain: "DoomCoder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported agent"])
                 }
+                installComplete = true
                 append("Done.")
             } catch {
                 installError = error.localizedDescription
                 append("✗ \(error.localizedDescription)")
             }
+            waitingFor = nil
             installing = false
         }
     }
@@ -370,55 +492,6 @@ struct AgentSetupSheet: View {
     @MainActor
     private func append(_ line: String) {
         installLog += (installLog.isEmpty ? "" : "\n") + line
-    }
-
-    private func fireVerify() {
-        guard let info else { return }
-        // Every agent is MCP: spawn mcp.py ourselves for the self-test
-        // (proves the script + socket pipeline is healthy), then poll for
-        // hello + first real `dc` tool call from the actual agent.
-        if let sm = agentStatus {
-            verifying = true
-            verifyOutput = "Self-testing mcp.py → dc.sock…"
-            Task {
-                defer { verifying = false }
-                let self_ = await MCPRoundTripTest.selfTest(statusManager: sm)
-                switch self_ {
-                case .failure(let f):
-                    verifyOutput = "✗ Self-test failed: \(f.errorDescription ?? "unknown").\nThis means DoomCoder can't speak to its own MCP script. Fix this before restarting the IDE."
-                    return
-                case .success(let s):
-                    verifyOutput = "✓ Self-test passed (\(s.millis) ms).\nNow waiting for \(info.displayName) to connect (≤30s)…"
-                }
-                let since = Date.now
-                let hello = await MCPRoundTripTest.awaitAgentHandshake(
-                    agentId: info.id, since: since, timeout: 30, statusManager: sm)
-                switch hello {
-                case .failure(let f):
-                    verifyOutput += "\n✗ \(f.errorDescription ?? "no handshake")"
-                    return
-                case .success:
-                    // Handshake alone is enough to flip the sticky
-                    // "configured" flag — the user has proven the host
-                    // agent loaded our MCP config. Waiting for a tool
-                    // call is still useful (confirms rules were read)
-                    // but not required for the Track UI to unlock.
-                    sm.markConfigured(info.id)
-                    verifyOutput += "\n✓ Handshake received — config loaded."
-                }
-                let tool = await MCPRoundTripTest.awaitFirstToolCall(
-                    agentId: info.id, since: since, timeout: 30, statusManager: sm)
-                switch tool {
-                case .success:
-                    verifyOutput += "\n✓ Rules honored — \(info.displayName) called `dc`. Setup complete."
-                case .failure(let f):
-                    verifyOutput += "\n⚠︎ \(f.errorDescription ?? "rules not honored yet")"
-                }
-            }
-            return
-        }
-
-        verifyOutput = "No verifier available for this agent type."
     }
 }
 
@@ -437,7 +510,7 @@ struct ChannelSetupSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            StepDots(current: step)
+            StepDots(current: step.rawValue, steps: SetupStep.allCases.map { ($0.rawValue, $0.title) })
             Divider()
             Group {
                 switch step {
