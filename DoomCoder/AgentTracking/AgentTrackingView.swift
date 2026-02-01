@@ -12,17 +12,20 @@ enum AgentTrackingSelection: Hashable {
     case system(SystemKind)
 
     enum ChannelKind: String, Hashable, CaseIterable {
+        case inMac
         case ntfy
 
         var displayName: String {
             switch self {
-            case .ntfy: return "ntfy.sh"
+            case .inMac: return "In-Mac Alert"
+            case .ntfy:  return "ntfy.sh"
             }
         }
 
         var icon: String {
             switch self {
-            case .ntfy: return "bell.badge.fill"
+            case .inMac: return "bell.and.waves.left.and.right.fill"
+            case .ntfy:  return "bell.badge.fill"
             }
         }
     }
@@ -109,23 +112,19 @@ struct AgentTrackingView: View {
         .navigationTitle("Configure Agents")
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    Image(systemName: agentStatus.isAnyAgentActive
-                          ? "bolt.circle.fill"
-                          : "moon.zzz.fill")
-                        .foregroundStyle(agentStatus.isAnyAgentActive ? .green : .secondary)
-                        .symbolEffect(.pulse, options: .repeating, isActive: agentStatus.isAnyAgentActive)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(agentStatus.isAnyAgentActive ? Color.green : Color.secondary.opacity(0.5))
+                        .frame(width: 6, height: 6)
                     Text(agentStatus.isAnyAgentActive
                          ? "\(agentStatus.sessions.count) live session\(agentStatus.sessions.count == 1 ? "" : "s")"
-                         : "Idle — waiting for agent activity")
+                         : "Idle")
                         .font(.subheadline)
                         .foregroundStyle(agentStatus.isAnyAgentActive ? .primary : .secondary)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(
-                    Capsule().fill(.regularMaterial)
-                )
+                .background(Capsule().fill(.regularMaterial))
             }
         }
         .sheet(item: Binding(

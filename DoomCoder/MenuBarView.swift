@@ -65,17 +65,16 @@ struct MenuBarView: View {
 
         // ── Configure Agents / Track ─────────────────────────────────────────
         Divider()
-        Button {
+        Button(agentStatusHeader) {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "configure")
-        } label: {
-            Label(agentStatusHeader, systemImage: agentStatusIcon)
         }
 
-        // Track submenu — v1.8. Per-agent toggles (no single-select, no "All").
-        // Lists only agents the user has already *configured*. Empty list
-        // shows a hint that nudges them into the Configure window.
-        Menu("Track") {
+        // Track submenu — v1.8.2. Native SwiftUI Toggle rows (macOS 14+
+        // renders them correctly inside MenuBarExtra content). Lists only
+        // agents the user has already *configured*. Empty list shows a hint
+        // that nudges them into the Configure window.
+        Menu("Track Agents") {
             let configured = agentStatus.configuredAgents()
             if configured.isEmpty {
                 Text("No configured agents yet")
@@ -86,14 +85,13 @@ struct MenuBarView: View {
                 }
             } else {
                 ForEach(configured, id: \.id) { info in
-                    Button(checkLabel(agentStatus.watchedAgentIds.contains(info.id),
-                                      info.displayName)) {
-                        if agentStatus.watchedAgentIds.contains(info.id) {
-                            agentStatus.watchedAgentIds.remove(info.id)
-                        } else {
-                            agentStatus.watchedAgentIds.insert(info.id)
+                    Toggle(info.displayName, isOn: Binding(
+                        get: { agentStatus.watchedAgentIds.contains(info.id) },
+                        set: { on in
+                            if on { agentStatus.watchedAgentIds.insert(info.id) }
+                            else  { agentStatus.watchedAgentIds.remove(info.id) }
                         }
-                    }
+                    ))
                 }
                 Divider()
                 Button("Turn all off") {
@@ -128,7 +126,7 @@ struct MenuBarView: View {
             openWindow(id: "doomcoder-doctor")
         }
 
-        Button("About Doom Coder…") {
+        Button("About…") {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "about")
         }
@@ -189,10 +187,6 @@ struct MenuBarView: View {
             return "Configure Agents… (\(agentStatus.sessions.count) live)"
         }
         return "Configure Agents…"
-    }
-
-    private var agentStatusIcon: String {
-        agentStatus.isAnyAgentActive ? "circle.fill" : "circle"
     }
 
     private func openGuide(_ filename: String) {

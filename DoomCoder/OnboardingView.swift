@@ -68,7 +68,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 10) {
                 bullet(icon: "1.circle.fill",
                        title: "Your AI agent calls `dc`",
-                       body: "A tiny built-in tool we install into each supported agent. It reports start, waiting, error, and done.")
+                       body: "A tiny built-in tool we install into each supported agent. It reports once per reply when the agent is done — or waiting on you.")
                 bullet(icon: "2.circle.fill",
                        title: "DoomCoder keeps your Mac alive",
                        body: "Sleep + App Nap stay disabled while any session is live, in Screen On or Screen Off mode.")
@@ -166,7 +166,7 @@ struct OnboardingView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 42)).foregroundStyle(.tint)
             Text("Configure an AI agent").font(.largeTitle.bold())
-            Text("Pick at least one AI agent — Cursor, Claude Code, Copilot CLI, Windsurf, VS Code MCP, Gemini, or Codex — and run its guided Setup. DoomCoder wires a local MCP server so the agent can announce start, wait, error, and done events to you.")
+            Text("Pick at least one AI agent — Cursor, Claude Code, Copilot CLI, Windsurf, VS Code MCP, Gemini, or Codex — and run its guided Setup. DoomCoder wires a local MCP server so the agent can announce when it's done (or waiting on you).")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
