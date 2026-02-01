@@ -2,16 +2,14 @@ import SwiftUI
 
 // Menu-bar window (MenuBarExtra(.window)) content.
 //
-// Layout per v1.9.0 UX spec:
-//   1. Master enable/disable toggle (full-row clickable)
-//   2. Mode selector (Screen On / Screen Off) — button pair styled as segmented
-//   3. Configure Agents  ›   (opens wizard: agents + channels)
-//   4. Track Agents · N on › (opens per-agent tracking toggles)
-//   5. Compact footer: Settings · About · Updates · Quit
+// Two-section layout:
+//   Section 1 — Keep Awake: sleep toggle, mode selector, session timer
+//   Section 2 — Agent Tracking: live sessions, configure/track shortcuts
+//   Footer: Settings · About · Updates · Quit
 //
-// We deliberately avoid DisclosureGroup / segmented Picker in this scope
-// because both have triggered NSHostingView constraint loops inside
-// menuBarExtra(.window) on macOS 26. The layout is fully static — safe.
+// Critical: Do NOT use .animation() modifiers in this view — they cause
+// infinite NSHostingView constraint-update loops in menuBarExtra(.window).
+// All animations use withAnimation {} in action closures.
 struct MenuBarWindowView: View {
     @Bindable var sleepManager: SleepManager
     var updaterViewModel: CheckForUpdatesViewModel
@@ -23,6 +21,8 @@ struct MenuBarWindowView: View {
     @State private var detectedCount: Int = 0
     @AppStorage("menubar.trackExpanded") private var trackExpanded: Bool = false
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    private let timerOptions = [0, 1, 2, 4, 8]
 
     private var accordionHeight: CGFloat {
         guard trackExpanded else { return 0 }
@@ -36,28 +36,54 @@ struct MenuBarWindowView: View {
         return CGFloat(count) * 22 + 12
     }
 
+    private var totalHeight: CGFloat {
+        var h: CGFloat = 330
+        if sleepManager.sessionTimerRemainingText != nil { h += 22 }
+        if sleepManager.screenOffCountdown != nil || sleepManager.isScreenOff { h += 22 }
+        h += liveStripHeight
+        h += accordionHeight
+        return h
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            Divider().padding(.horizontal, 12)
+            // ── Keep Awake ──────────────────────────────────────
+            keepAwakeHeader
             enableRow
-            Divider().padding(.horizontal, 12)
             modeRow
-            Divider().padding(.horizontal, 12)
-            configureRow
-            Divider().padding(.horizontal, 12)
-            trackRow
+            timerRow
+            if let remaining = sleepManager.sessionTimerRemainingText {
+                timerStatusRow(remaining)
+            }
+            if let countdown = sleepManager.screenOffCountdown {
+                screenOffStatusRow("Display off in \(countdown)s…")
+            } else if sleepManager.isScreenOff {
+                screenOffStatusRow("Display off — move mouse to wake")
+            }
+
+            // ── Section Divider ─────────────────────────────────
+            HStack(spacing: 8) {
+                VStack { Divider() }
+                Circle().fill(.quaternary).frame(width: 3, height: 3)
+                VStack { Divider() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+
+            // ── Agent Tracking ──────────────────────────────────
+            agentTrackingHeader
             liveActivityStrip
+            agentActionsRow
             if trackExpanded {
                 TrackAccordion(openConfigure: openConfigureWindow)
                     .frame(height: accordionHeight)
-                Divider().padding(.horizontal, 12)
-            } else {
-                Divider().padding(.horizontal, 12)
             }
+
+            Spacer(minLength: 0)
+            Divider().padding(.horizontal, 12)
             footer
         }
-        .frame(width: 320, height: 320 + accordionHeight + liveStripHeight)
+        .frame(width: 320, height: totalHeight)
         .onAppear { refreshTrackedCount() }
         .onReceive(refreshTimer) { _ in refreshTrackedCount() }
     }
@@ -67,150 +93,188 @@ struct MenuBarWindowView: View {
         openWindow(id: "configureAgents")
     }
 
-    // MARK: - Sections
+    // MARK: - Keep Awake
 
-    private var header: some View {
+    private var keepAwakeHeader: some View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
+                .font(.body.weight(.semibold))
                 .foregroundStyle(sleepManager.isActive ? Color.accentColor : .secondary)
-            Text("DoomCoder").font(.headline)
+            Text("Keep Awake")
+                .font(.headline)
             Spacer()
             if sleepManager.isActive, !sleepManager.elapsedTimeString.isEmpty {
                 Text(sleepManager.elapsedTimeString)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.bottom, 6)
     }
 
     private var enableRow: some View {
         Button {
-            if sleepManager.isActive { sleepManager.disable() } else { sleepManager.enable() }
+            withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+                sleepManager.toggle()
+            }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(sleepManager.isActive ? "DoomCoder is on" : "Enable DoomCoder")
+                    Text(sleepManager.isActive ? "Mac stays awake" : "Keep Mac Awake")
                         .font(.body)
-                    Text(sleepManager.isActive
-                         ? "Mac stays awake"
-                         : "Keep Mac awake while you work")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if sleepManager.isActive {
+                        Text(modeStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Prevent sleep while you work")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Toggle("", isOn: Binding(
                     get: { sleepManager.isActive },
-                    set: { on in if on { sleepManager.enable() } else { sleepManager.disable() } }
+                    set: { on in
+                        withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+                            if on { sleepManager.enable() } else { sleepManager.disable() }
+                        }
+                    }
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .allowsHitTesting(false) // whole row handles the tap
+                .allowsHitTesting(false)
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+    }
+
+    private var modeStatusText: String {
+        switch sleepManager.mode {
+        case .screenOn:  return "Screen on · display stays lit"
+        case .screenOff: return "Screen off · display sleeps"
+        }
     }
 
     private var modeRow: some View {
-        HStack(spacing: 10) {
-            Text("Mode").font(.body)
-            Spacer()
-            modeButton(.screenOn, label: "Screen On", icon: "sun.max.fill")
-            modeButton(.screenOff, label: "Screen Off", icon: "moon.fill")
+        HStack(spacing: 8) {
+            modeChip(.screenOn, label: "Screen On", icon: "sun.max.fill")
+            modeChip(.screenOff, label: "Screen Off", icon: "moon.fill")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder
-    private func modeButton(_ target: DoomCoderMode, label: String, icon: String) -> some View {
+    private func modeChip(_ target: DoomCoderMode, label: String, icon: String) -> some View {
         let selected = sleepManager.mode == target
         Button {
-            sleepManager.mode = target
+            withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+                sleepManager.mode = target
+            }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: icon).font(.caption)
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.caption2)
                 Text(label).font(.caption)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(selected ? Color.accentColor.opacity(0.25) : Color.clear)
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(selected ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.06))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.3),
-                                  lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(selected ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 0.5)
             )
-            .foregroundStyle(selected ? Color.accentColor : .primary)
+            .foregroundStyle(selected ? Color.accentColor : .secondary)
         }
         .buttonStyle(.plain)
     }
 
-    private var configureRow: some View {
-        Button {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "configureAgents")
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "gearshape.2.fill")
-                    .font(.body)
-                    .frame(width: 20)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Configure Agents").font(.body)
-                    Text("Install hooks, set channels")
-                        .font(.caption).foregroundStyle(.secondary)
+    private var timerRow: some View {
+        HStack(spacing: 0) {
+            Image(systemName: "timer")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 8)
+            ForEach(timerOptions, id: \.self) { hours in
+                let selected = sleepManager.sessionTimerHours == hours
+                Button {
+                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                        sleepManager.sessionTimerHours = hours
+                    }
+                } label: {
+                    Text(hours == 0 ? "Off" : "\(hours)h")
+                        .font(.caption2.weight(selected ? .semibold : .regular))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(selected ? Color.accentColor.opacity(0.2) : Color.clear)
+                        )
+                        .foregroundStyle(selected ? Color.accentColor : .secondary)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                .buttonStyle(.plain)
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
     }
 
-    private var trackRow: some View {
-        Button {
-            trackExpanded.toggle()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.path.ecg")
-                    .font(.body)
-                    .frame(width: 20)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Track Agents").font(.body)
-                    Text(trackSubtitle)
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if tracking.liveSessions.count > 0 {
-                    Text("\(tracking.liveSessions.count)")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Color.green.opacity(0.25), in: Capsule())
-                        .foregroundStyle(.green)
-                }
-                Image(systemName: trackExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+    private func timerStatusRow(_ text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.caption2)
+            Text(text)
+                .font(.caption2)
+                .contentTransition(.numericText())
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 2)
+    }
+
+    private func screenOffStatusRow(_ text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "display")
+                .font(.caption2)
+            Text(text)
+                .font(.caption2)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Agent Tracking
+
+    private var agentTrackingHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(!tracking.liveSessions.isEmpty ? .green : .secondary)
+            Text("Agent Tracking")
+                .font(.headline)
+            Spacer()
+            if tracking.liveSessions.count > 0 {
+                Text("\(tracking.liveSessions.count) live")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.green)
+                    .contentTransition(.numericText())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder
@@ -221,7 +285,7 @@ struct MenuBarWindowView: View {
                 ForEach(live) { session in
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(liveStateColor(session.displayState))
+                            .fill(stateColor(session.displayState))
                             .frame(width: 6, height: 6)
                         Image(nsImage: AgentIconProvider.icon(for: session.agent, size: 14))
                             .resizable()
@@ -229,55 +293,67 @@ struct MenuBarWindowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                         Text(session.agent.displayName)
                             .font(.caption2.weight(.medium))
-                        Text("·")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Text("·").font(.caption2).foregroundStyle(.tertiary)
                         Text(session.status)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Text(liveTimeAgo(session.updatedAt))
+                        Text(timeAgo(session.updatedAt))
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.tertiary)
                     }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
         }
     }
 
-    private func liveStateColor(_ s: AgentSessionState) -> Color {
-        switch s {
-        case .running:          return .green
-        case .waitingInput:     return .yellow
-        case .waitingApproval:  return .orange
-        case .completed:        return .gray
-        case .failed:           return .red
+    private var agentActionsRow: some View {
+        HStack(spacing: 8) {
+            Button { openConfigureWindow() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "gearshape.2.fill").font(.caption2)
+                    Text("Configure").font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.06)))
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                    trackExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill").font(.caption2)
+                    Text("Track").font(.caption)
+                    if configuredCount > 0 {
+                        Text("\(trackedOn)/\(configuredCount)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Image(systemName: trackExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(trackExpanded ? Color.accentColor.opacity(0.1) : Color.secondary.opacity(0.06))
+                )
+                .foregroundStyle(trackExpanded ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.plain)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
     }
 
-    private func liveTimeAgo(_ date: Date) -> String {
-        let secs = Int(Date().timeIntervalSince(date))
-        if secs < 60 { return "\(secs)s ago" }
-        let mins = secs / 60
-        if mins < 60 { return "\(mins)m ago" }
-        return "\(mins / 60)h ago"
-    }
-
-    private var trackSubtitle: String {
-        let live = tracking.liveSessions.count
-        if live > 0 {
-            if configuredCount == 0 { return "\(live) live" }
-            return "\(live) live · \(trackedOn) tracked"
-        }
-        if configuredCount == 0 {
-            if detectedCount > 0 { return "\(detectedCount) found, none configured" }
-            return "no agents configured"
-        }
-        if trackedOn == configuredCount { return "all \(configuredCount) tracked" }
-        return "\(trackedOn) of \(configuredCount) tracked"
-    }
+    // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: 0) {
@@ -315,6 +391,26 @@ struct MenuBarWindowView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+    }
+
+    // MARK: - Helpers
+
+    private func stateColor(_ s: AgentSessionState) -> Color {
+        switch s {
+        case .running:          return .green
+        case .waitingInput:     return .yellow
+        case .waitingApproval:  return .orange
+        case .completed:        return .gray
+        case .failed:           return .red
+        }
+    }
+
+    private func timeAgo(_ date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 60 { return "\(secs)s" }
+        let mins = secs / 60
+        if mins < 60 { return "\(mins)m" }
+        return "\(mins / 60)h"
     }
 
     private func refreshTrackedCount() {
