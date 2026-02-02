@@ -55,6 +55,9 @@ enum MigrationManager {
                     AgentInstallerV2.backup(hooksFile)
                     stripLegacy(at: hooksFile)
                 }
+            case .windsurf:
+                // New agent — no v1 legacy format exists, nothing to strip
+                break
             }
 
             // Re-install with correct v2 schema

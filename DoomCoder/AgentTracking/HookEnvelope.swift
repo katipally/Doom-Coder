@@ -94,6 +94,7 @@ enum TrackedAgent: String, CaseIterable, Sendable {
     case cursor
     case vscode
     case copilotCLI = "copilot_cli"
+    case windsurf
 
     var displayName: String {
         switch self {
@@ -101,6 +102,7 @@ enum TrackedAgent: String, CaseIterable, Sendable {
         case .cursor:     return "Cursor"
         case .vscode:     return "VS Code Copilot"
         case .copilotCLI: return "Copilot CLI"
+        case .windsurf:   return "Windsurf"
         }
     }
 }

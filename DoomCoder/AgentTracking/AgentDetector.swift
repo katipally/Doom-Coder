@@ -19,6 +19,7 @@ enum AgentDetector {
         case .cursor:      return detectCursor()
         case .vscode:      return detectVSCode()
         case .copilotCLI:  return detectCopilotCLI()
+        case .windsurf:    return detectWindsurf()
         }
     }
 
@@ -97,6 +98,20 @@ enum AgentDetector {
         if let ghCopilot { return AgentDetection(agent: .copilotCLI, installed: true, version: ghCopilot, details: "gh copilot") }
 
         return AgentDetection(agent: .copilotCLI, installed: false, version: nil, details: nil)
+    }
+
+    private static func detectWindsurf() -> AgentDetection {
+        let paths = ["/Applications/Windsurf.app", NSHomeDirectory() + "/Applications/Windsurf.app"]
+        let path = paths.first { FileManager.default.fileExists(atPath: $0) }
+        var version: String?
+        if let p = path,
+           let plist = NSDictionary(contentsOfFile: "\(p)/Contents/Info.plist"),
+           let v = plist["CFBundleShortVersionString"] as? String { version = v }
+        // Also detect via ~/.codeium/windsurf/ directory (JetBrains plugin or no app)
+        let codeiumDir = NSHomeDirectory() + "/.codeium/windsurf"
+        let dirExists = FileManager.default.fileExists(atPath: codeiumDir)
+        return AgentDetection(agent: .windsurf, installed: path != nil || dirExists,
+                              version: version, details: path ?? (dirExists ? codeiumDir : nil))
     }
 
     // MARK: - Shell helpers

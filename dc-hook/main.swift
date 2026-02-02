@@ -96,25 +96,43 @@ func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: A
     return sendFrame(data)
 }
 
-// MARK: - Claude / VS Code deduplication
+// MARK: - Cross-agent deduplication
 //
-// Both agents share ~/.claude/settings.json, so ALL hooks fire for BOTH.
-// When we're invoked as `dc-hook claude <event>` but the actual caller is
-// VS Code (or vice-versa), we silently exit to avoid duplicate sessions.
+// Claude and VS Code Copilot share ~/.claude/settings.json — all hooks fire
+// for both agents on every event. Cursor is VSCode-based, so it also runs
+// VS Code Copilot extensions, meaning dc-hook cursor AND dc-hook vscode both
+// fire when working in Cursor. This function returns true when the declared
+// agent should be skipped because a different agent is actually the caller.
+
+func isCursorEnvironment(_ env: [String: String]) -> Bool {
+    // CURSOR_TRACE_ID is set exclusively by Cursor.
+    if env["CURSOR_TRACE_ID"] != nil { return true }
+    // TERM_PROGRAM=cursor is set in Cursor's integrated terminal (post-0.44).
+    if env["TERM_PROGRAM"] == "cursor" { return true }
+    // IPC hook socket path contains "cursor" in Cursor, "vscode" in VS Code.
+    if let ipc = env["VSCODE_IPC_HOOK_CLI"], ipc.lowercased().contains("cursor") { return true }
+    if let ipc = env["VSCODE_IPC_HOOK"],     ipc.lowercased().contains("cursor") { return true }
+    return false
+}
 
 func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
     let env = ProcessInfo.processInfo.environment
     switch declaredAgent {
     case "claude":
-        // If VS Code env vars are present, the caller is VS Code — skip Claude hooks.
-        if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
-            return true
-        }
+        // CLAUDE_CODE_ENTRY_POINT is always set by Claude Code CLI — accept unconditionally.
+        // Without this guard, running Claude inside Cursor/VSCode terminal would false-skip.
+        if env["CLAUDE_CODE_ENTRY_POINT"] != nil { return false }
+        // Otherwise a VSCode/Cursor terminal is present: caller is VS Code Copilot, not Claude.
+        if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" { return true }
+
     case "vscode":
-        // If Claude session vars are present, the caller is Claude Code — skip VS Code hooks.
-        if env["CLAUDE_CODE_SESSION"] != nil || env["CLAUDE_SESSION_ID"] != nil || env["CLAUDE_CODE_ENTRY_POINT"] != nil {
-            return true
-        }
+        // Skip if Claude Code is the actual caller (shares ~/.claude/settings.json).
+        if env["CLAUDE_CODE_SESSION"] != nil || env["CLAUDE_SESSION_ID"] != nil
+            || env["CLAUDE_CODE_ENTRY_POINT"] != nil { return true }
+        // Skip if Cursor is the IDE — Cursor triggers VS Code extension hooks too,
+        // but dc-hook cursor already handles that session. Avoid the duplicate.
+        if isCursorEnvironment(env) { return true }
+
     default:
         break
     }
@@ -172,6 +190,17 @@ func replayDemo(agent: String) -> Int32 {
             ("errorOccurred", 18),
             ("sessionEnd", 25)
         ]
+    case "windsurf":
+        demoEvents = [
+            ("pre_user_prompt", 0),
+            ("pre_write_code", 4),
+            ("post_write_code", 6),
+            ("pre_run_command", 10),
+            ("post_run_command", 12),
+            ("pre_mcp_tool_use", 16),
+            ("post_mcp_tool_use", 18),
+            ("post_cascade_response", 25)
+        ]
     default:
         demoEvents = [("sessionStart", 0), ("sessionEnd", 10)]
     }
@@ -184,8 +213,10 @@ func replayDemo(agent: String) -> Int32 {
         if wait > 0 { sleep(UInt32(wait)) }
         lastTime = delay
 
+        // Windsurf uses trajectory_id; all other agents use session_id.
+        let sessionKey = agent == "windsurf" ? "trajectory_id" : "session_id"
         let payload: [String: Any] = [
-            "session_id": sessionId,
+            sessionKey: sessionId,
             "synthetic": true,
             "demo": true
         ]

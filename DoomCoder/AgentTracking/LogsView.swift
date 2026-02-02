@@ -9,6 +9,7 @@ struct LogsView: View {
         case cursor = "Cursor"
         case vscode = "VS Code"
         case copilot = "Copilot"
+        case windsurf = "Windsurf"
         case notifications = "🔔"
         var id: String { rawValue }
     }
@@ -303,7 +304,8 @@ struct LogsView: View {
         case "claude":     return .orange
         case "cursor":     return .blue
         case "vscode":     return .purple
-        case "copilotcli": return .green
+        case "copilot_cli": return .green
+        case "windsurf":   return Color(red: 0, green: 0.67, blue: 1)
         default:           return .gray
         }
     }
@@ -323,36 +325,31 @@ struct LogsView: View {
         return str
     }
 
-    private func reload() {
-        let agentKey: String?
-        switch filter {
-        case .all:            agentKey = nil
-        case .claude:         agentKey = TrackedAgent.claude.rawValue
-        case .cursor:         agentKey = TrackedAgent.cursor.rawValue
-        case .vscode:         agentKey = TrackedAgent.vscode.rawValue
-        case .copilot:        agentKey = TrackedAgent.copilotCLI.rawValue
-        case .notifications:  agentKey = nil
+    private func agentKey(for f: Filter) -> String? {
+        switch f {
+        case .claude:        return TrackedAgent.claude.rawValue
+        case .cursor:        return TrackedAgent.cursor.rawValue
+        case .vscode:        return TrackedAgent.vscode.rawValue
+        case .copilot:       return TrackedAgent.copilotCLI.rawValue
+        case .windsurf:      return TrackedAgent.windsurf.rawValue
+        case .all, .notifications: return nil
         }
+    }
+
+    private func reload() {
+        let key = agentKey(for: filter)
         if filter == .notifications {
             notifications = EventStore.shared.recentNotifications()
-        } else if let agentKey {
-            events = EventStore.shared.recent(agent: agentKey)
+        } else if let key {
+            events = EventStore.shared.recent(agent: key)
         } else {
             events = EventStore.shared.recent()
         }
-        totalCount = EventStore.shared.count(agent: agentKey)
+        totalCount = EventStore.shared.count(agent: key)
     }
 
     private func exportJSON() {
-        let agentKey: String?
-        switch filter {
-        case .claude:  agentKey = TrackedAgent.claude.rawValue
-        case .cursor:  agentKey = TrackedAgent.cursor.rawValue
-        case .vscode:  agentKey = TrackedAgent.vscode.rawValue
-        case .copilot: agentKey = TrackedAgent.copilotCLI.rawValue
-        default:       agentKey = nil
-        }
-        guard let data = EventStore.shared.exportJSON(agent: agentKey) else { return }
+        guard let data = EventStore.shared.exportJSON(agent: agentKey(for: filter)) else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "doomcoder-events.json"
         panel.allowedContentTypes = [.json]
@@ -362,15 +359,7 @@ struct LogsView: View {
     }
 
     private func exportCSV() {
-        let agentKey: String?
-        switch filter {
-        case .claude:  agentKey = TrackedAgent.claude.rawValue
-        case .cursor:  agentKey = TrackedAgent.cursor.rawValue
-        case .vscode:  agentKey = TrackedAgent.vscode.rawValue
-        case .copilot: agentKey = TrackedAgent.copilotCLI.rawValue
-        default:       agentKey = nil
-        }
-        let csv = EventStore.shared.exportCSV(agent: agentKey)
+        let csv = EventStore.shared.exportCSV(agent: agentKey(for: filter))
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "doomcoder-events.csv"
         panel.allowedContentTypes = [.commaSeparatedText]
