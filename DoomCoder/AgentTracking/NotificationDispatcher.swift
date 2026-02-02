@@ -71,7 +71,7 @@ final class NotificationDispatcher {
         let sessionKey: String
         let agent: TrackedAgent
         let event: String                   // raw event name from the hook
-        let phase: NormalizedEventPhase?    // nil only for synthetic events (e.g. inferredWaiting)
+        let phase: NormalizedEventPhase
     }
 
     func dispatch(_ ev: Event) {
@@ -134,8 +134,6 @@ final class NotificationDispatcher {
     // MARK: - Copy
 
     private func titleFor(_ ev: Event) -> String {
-        // Synthetic inferred-waiting bypasses the normalizer — handle by name.
-        if ev.event == "inferredWaiting" { return "DoomCoder · check in" }
         switch ev.phase {
         case .sessionStart:                 return "DoomCoder · started"
         case .sessionEnd:                   return "DoomCoder · done"
@@ -147,11 +145,6 @@ final class NotificationDispatcher {
 
     private func bodyFor(_ ev: Event) -> String {
         let name = ev.agent.displayName
-
-        // Synthetic inferred-waiting (60s timeout) — distinct phrasing.
-        if ev.event == "inferredWaiting" {
-            return "\(name) — may need your attention"
-        }
 
         switch ev.phase {
         case .sessionStart:
