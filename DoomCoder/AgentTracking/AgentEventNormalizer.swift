@@ -43,6 +43,46 @@ protocol AgentEventNormalizer: Sendable {
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent?
 }
 
+// MARK: - Shared interaction tool detection
+// Determines whether a tool name means the agent is BLOCKED waiting for the user.
+// PreToolUse with any matching name → fire `.permissionNeeded` immediately.
+//
+// Detection is two-tier for adaptivity:
+//   1. Exact match: known tool names from all supported agents (fast, zero false positives)
+//   2. Substring patterns: catches future / unknown tools with interaction semantics
+//
+// Claude Code / Cursor (Claude Code-compatible hooks):
+//   AskUserQuestion  – agent posted a question; execution stalls until answered
+//   ExitPlanMode     – agent finished planning; blocked until user approves the plan
+//
+// VS Code Copilot built-in interaction tools (confirmed tool_name values):
+//   vscode_askQuestions     – multiple-choice / clarifying questions
+//   vscode_getQuickPick     – user must pick from a list before work continues
+//   vscode_getInputBox      – user must type a value before work continues
+//   vscode_showConfirmation – yes / no dialog; agent is blocked until dismissed
+private let interactionToolExact: Set<String> = [
+    "AskUserQuestion",
+    "ExitPlanMode",
+    "vscode_askQuestions",
+    "vscode_getQuickPick",
+    "vscode_getInputBox",
+    "vscode_showConfirmation",
+]
+
+// Lowercase substrings that signal user interaction semantics in unknown/future tool names.
+private let interactionToolPatterns: [String] = [
+    "ask", "question", "confirm", "approve",
+    "permission", "dialog", "getinput", "promptuser", "pick",
+]
+
+/// Returns true when the tool name indicates the agent is blocked waiting for user input.
+/// Exact match is checked first (O(1)); pattern match is the fallback.
+private func isInteractionTool(_ name: String) -> Bool {
+    if interactionToolExact.contains(name) { return true }
+    let lower = name.lowercased()
+    return interactionToolPatterns.contains { lower.contains($0) }
+}
+
 // MARK: - Claude Code normalizer
 
 struct ClaudeEventNormalizer: AgentEventNormalizer {
@@ -64,13 +104,14 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         "SubagentStop":       .subagentEnd,
         "TaskCreated":        .other,
         "TaskCompleted":      .sessionEnd,
+        "TeammateIdle":       .other,
         "PreCompact":         .other,
         "PostCompact":        .other,
         "FileChanged":        .fileChanged,
         "CwdChanged":         .other,
         "ConfigChange":       .other,
         "InstructionsLoaded": .other,
-        "Elicitation":        .agentResponse,
+        "Elicitation":        .permissionNeeded,  // MCP server requesting user input
         "ElicitationResult":  .other,
         "WorktreeCreate":     .other,
         "WorktreeRemove":     .other,
@@ -78,7 +119,20 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
-        let phase = Self.phaseMap[envelope.event] ?? .other
+        var phase = Self.phaseMap[envelope.event] ?? .other
+
+        // PreToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
+        if envelope.event == "PreToolUse",
+           let toolName = payload["tool_name"] as? String,
+           isInteractionTool(toolName) {
+            phase = .permissionNeeded
+        }
+        if envelope.event == "Notification",
+           let notifType = payload["notification_type"] as? String,
+           ["permission_prompt", "idle_prompt", "elicitation_dialog"].contains(notifType) {
+            phase = .permissionNeeded
+        }
+
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
@@ -130,7 +184,16 @@ struct CursorEventNormalizer: AgentEventNormalizer {
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
-        let phase = Self.phaseMap[envelope.event] ?? .other
+        var phase = Self.phaseMap[envelope.event] ?? .other
+
+        // preToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
+        // (applies when Cursor loads Claude Code-compatible hooks)
+        if envelope.event == "preToolUse",
+           let toolName = payload["tool_name"] as? String,
+           isInteractionTool(toolName) {
+            phase = .permissionNeeded
+        }
+
         // Cursor uses conversation_id, then session_id, then generation_id
         let sessionId = (payload["conversation_id"] as? String)
             ?? (payload["session_id"] as? String)
@@ -164,6 +227,7 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
     private static let phaseMap: [String: NormalizedEventPhase] = [
         "SessionStart":       .sessionStart,
         "SessionEnd":         .sessionEnd,
+        "UserPromptSubmit":   .userPrompt,
         "PreToolUse":         .toolStart,
         "PostToolUse":        .toolEnd,
         "PostToolUseFailure": .toolError,
@@ -171,12 +235,19 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
         "Stop":               .sessionEnd,
         "SubagentStart":      .subagentStart,
         "SubagentStop":       .subagentEnd,
+        "PreCompact":         .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
-        let phase = Self.phaseMap[envelope.event] ?? .other
-        // VS Code uses camelCase sessionId
+        var phase = Self.phaseMap[envelope.event] ?? .other
+
+        // PreToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
+        if envelope.event == "PreToolUse",
+           let toolName = payload["tool_name"] as? String,
+           isInteractionTool(toolName) {
+            phase = .permissionNeeded
+        }
         let sessionId = (payload["sessionId"] as? String)
             ?? (payload["session_id"] as? String)
             ?? "pid-\(envelope.pid)"
@@ -216,7 +287,32 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
-        let phase = Self.phaseMap[envelope.event] ?? .other
+        var phase = Self.phaseMap[envelope.event] ?? .other
+        var isFatal = false
+
+        // errorOccurred fires for BOTH real errors and clean user exits (Ctrl+C, SIGTERM).
+        // Check payload for clean-exit signals before treating it as a fatal error.
+        if envelope.event == "errorOccurred" {
+            let isCleanExit: Bool = {
+                if payload["is_user_interrupt"] as? Bool == true { return true }
+                let signal = payload["signal"] as? String ?? ""
+                if ["SIGINT", "SIGTERM", "SIGHUP"].contains(signal) { return true }
+                let exitReason = payload["exit_reason"] as? String ?? ""
+                if exitReason == "user_exit" { return true }
+                let errorType = payload["error_type"] as? String ?? ""
+                if ["interrupt", "exit", "close", "cancelled"].contains(errorType) { return true }
+                // Unix exit codes: 0=clean, 130=SIGINT (Ctrl+C), 143=SIGTERM
+                if let code = payload["exit_code"] as? Int, [0, 130, 143].contains(code) { return true }
+                return false
+            }()
+            if isCleanExit {
+                phase = .sessionEnd   // treat as normal close — suppress error notification
+            } else {
+                phase = .error
+                isFatal = true
+            }
+        }
+
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
@@ -232,7 +328,7 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
-            isFatal: envelope.event == "errorOccurred",
+            isFatal: isFatal,
             payloadRaw: envelope.payloadRaw
         )
     }

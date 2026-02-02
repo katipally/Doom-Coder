@@ -47,6 +47,7 @@ final class AgentTrackingManager {
         var awaitingPermission: Bool = false
         var hasEnded: Bool = false
         var hasFailed: Bool = false
+        var hadUserPrompt: Bool = false  // true after first UserPromptSubmit; gates wait-inference timer
 
         /// Whether the session is still active (not terminal).
         var isLive: Bool { !hasEnded && !hasFailed }
@@ -91,6 +92,8 @@ final class AgentTrackingManager {
                 errorCount += 1
             case .permissionNeeded:
                 awaitingPermission = true
+            case .userPrompt:
+                hadUserPrompt = true
             case .sessionEnd:
                 hasEnded = true
             case .error:
@@ -100,7 +103,7 @@ final class AgentTrackingManager {
                 subagentCount += 1
             case .subagentEnd:
                 subagentCount = max(0, subagentCount - 1)
-            case .sessionStart, .userPrompt, .agentResponse,
+            case .sessionStart, .agentResponse,
                  .fileChanged, .other:
                 break
             }
@@ -115,12 +118,13 @@ final class AgentTrackingManager {
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
-    // 60-second inference timers: fire a "may need your attention" notification when
+    // Wait inference timers: fire a "may need your attention" notification when
     // a toolStart has no matching toolEnd/toolError within the window. Applied only
-    // to agents without explicit permission hooks (all agents except Claude Code).
+    // to agents without exhaustive explicit interaction hooks (all except Claude Code).
+    // Raised to 120s so long compilations/test runs don't cause false positives.
     private var waitTimers: [String: Task<Void, Never>] = [:]
     private static let waitInferenceAgents: Set<TrackedAgent> = [.cursor, .vscode, .copilotCLI, .windsurf]
-    private static let waitInferenceSeconds: TimeInterval = 60
+    private static let waitInferenceSeconds: TimeInterval = 180
 
     // MARK: - Entry point (called from socket listener)
 
@@ -203,8 +207,12 @@ final class AgentTrackingManager {
         if Self.waitInferenceAgents.contains(normalized.agent) {
             switch normalized.phase {
             case .toolStart:
-                startWaitInferenceTimer(sessionKey: sessionKey, agent: normalized.agent)
-            case .toolEnd, .toolError, .sessionEnd, .error:
+                // Only arm if user has already sent a prompt; avoids false fires on app open.
+                if s.hadUserPrompt {
+                    startWaitInferenceTimer(sessionKey: sessionKey, agent: normalized.agent)
+                }
+            case .toolEnd, .toolError, .sessionEnd, .error,
+                 .agentResponse, .permissionNeeded, .userPrompt:
                 cancelWaitInferenceTimer(sessionKey: sessionKey)
             default:
                 break
@@ -237,8 +245,13 @@ final class AgentTrackingManager {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self else { return }
-                // Only fire if the session is still live (not ended/failed)
-                guard let session = self.sessions[sessionKey], session.isLive else { return }
+                // Only fire if session is live, a tool is still running, and user
+                // has sent at least one prompt (guards against stale/startup false positives).
+                guard let session = self.sessions[sessionKey],
+                      session.isLive,
+                      session.activeToolCount > 0,
+                      session.hadUserPrompt
+                else { return }
                 self.logger.info("wait-inference fired sessionKey=\(sessionKey, privacy: .public)")
                 self.waitTimers.removeValue(forKey: sessionKey)
                 // Dispatch inferred-waiting notification

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-05-11 — Notification accuracy & false-positive fixes
+
+**Bug-fix release.** Fixes five notification quality issues reported after 2.0.0.
+
+### Fixed
+- **Adaptive tool detection** — interaction-tool matching is no longer hardcoded to a fixed
+  list of 6 names. A new `isInteractionTool()` helper tries an exact match first, then falls
+  back to 9 lowercase substring patterns (`ask`, `question`, `confirm`, `approve`,
+  `permission`, `dialog`, `getinput`, `promptuser`, `pick`), so future or unknown
+  agent tools that ask the user for input are caught automatically.
+- **Inference-timer false positives** — the "may need your attention" timer no longer fires
+  during long compilations or test runs (timer now requires `activeToolCount > 0`), no longer
+  fires when the app first opens before the user sends a prompt (`hadUserPrompt` gate), and
+  is cancelled when the agent responds or the user sends a new message. Threshold raised
+  120 s → 180 s.
+- **Agent misidentification (Claude ↔ VS Code)** — the cross-agent deduplication in
+  `dc-hook` now uses all three Claude identity signals symmetrically
+  (`CLAUDE_CODE_ENTRY_POINT`, `CLAUDE_CODE_SESSION`, `CLAUDE_SESSION_ID`). Previously
+  only one signal was checked for the claude case, causing events to show as
+  "VS Code Copilot" when `CLAUDE_CODE_SESSION` was set but `CLAUDE_CODE_ENTRY_POINT`
+  was not.
+- **Session-start notification on app open** — `sessionStart` notification preference
+  now defaults to **off**. IDEs/agents that reconnect hooks on launch no longer trigger
+  an immediate banner before the user sends any prompt.
+- **Copilot CLI error notification on normal close** — `gh copilot` Ctrl+C / terminal
+  close no longer shows a "failed" banner. `errorOccurred` events are now checked
+  against five payload signals (including Unix exit codes 0/130/143) to distinguish
+  a clean user exit from a real error.
+
+---
+
 ## [2.0.0] - 2026-05-10 — Windsurf support, smarter notifications, false-positive fix
 
 **Major release.** Windsurf Cascade is now fully tracked (all 12 hook events).
