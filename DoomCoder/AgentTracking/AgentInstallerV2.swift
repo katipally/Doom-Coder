@@ -390,7 +390,14 @@ struct AgentInstallerV2 {
                 "type": "command",
                 "command": cmdFor("codex_cli", event)
             ]
-            let matcherGroup: [String: Any] = ["hooks": [hookEntry]]
+            var matcherGroup: [String: Any] = ["hooks": [hookEntry]]
+            // SessionStart: only fire for "startup" and "resume" sources, NOT
+            // for "clear" (conversation reset). Per Codex hooks spec, the
+            // `matcher` field is compared against the `source` field in the
+            // SessionStart payload. Omitting matcher would fire on clear too.
+            if event == "SessionStart" {
+                matcherGroup["matcher"] = "startup|resume"
+            }
             var arr = (hooks[event] as? [[String: Any]]) ?? []
             arr.append(matcherGroup)
             hooks[event] = arr
