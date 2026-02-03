@@ -56,9 +56,6 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
 
-        // Pre-fetch logo.dev icons for CLI tools (background, cached 7 days).
-        AgentIconProvider.prefetchLogoDev()
-
         // Start the socket listener.
         HookSocketListener.shared.start { env in
             Task { @MainActor in AgentTrackingManager.shared.ingest(env) }

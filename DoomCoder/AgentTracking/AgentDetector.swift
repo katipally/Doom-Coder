@@ -20,6 +20,7 @@ enum AgentDetector {
         case .vscode:      return detectVSCode()
         case .copilotCLI:  return detectCopilotCLI()
         case .windsurf:    return detectWindsurf()
+        case .codexCLI:    return detectCodexCLI()
         }
     }
 
@@ -112,6 +113,18 @@ enum AgentDetector {
         let dirExists = FileManager.default.fileExists(atPath: codeiumDir)
         return AgentDetection(agent: .windsurf, installed: path != nil || dirExists,
                               version: version, details: path ?? (dirExists ? codeiumDir : nil))
+    }
+
+    private static func detectCodexCLI() -> AgentDetection {
+        // Probe 1: ~/.codex directory exists (Codex CLI's config home).
+        let codexDir = NSHomeDirectory() + "/.codex"
+        let dirExists = FileManager.default.fileExists(atPath: codexDir)
+        // Probe 2: login-shell PATH lookup.
+        let version = runLoginShell("command -v codex >/dev/null 2>&1 && codex --version 2>/dev/null")
+        return AgentDetection(agent: .codexCLI,
+                              installed: dirExists || version != nil,
+                              version: version,
+                              details: dirExists ? codexDir : nil)
     }
 
     // MARK: - Shell helpers

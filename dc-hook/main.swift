@@ -58,15 +58,38 @@ func sendFrame(_ data: Data) -> Bool {
         }
     }
 
-    var tv = timeval(tv_sec: 0, tv_usec: 400_000)
+    // Tight timeouts: total budget ≤ 150ms so a dead DoomCoder can never
+    // wedge an agent. 75ms each for send/recv, 50ms for non-blocking connect.
+    var tv = timeval(tv_sec: 0, tv_usec: 75_000)
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
+    let flags = fcntl(fd, F_GETFL, 0)
+    _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+
     let sz = socklen_t(MemoryLayout<sockaddr_un>.size)
-    let connected = withUnsafePointer(to: &addr) { p -> Int32 in
+    let connRC = withUnsafePointer(to: &addr) { p -> Int32 in
         p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in connect(fd, sp, sz) }
     }
-    if connected != 0 { return false }
+    if connRC != 0 {
+        if errno != EINPROGRESS { return false }
+        var wfds = fd_set()
+        let wfdsPtr = withUnsafeMutablePointer(to: &wfds) { $0 }
+        memset(wfdsPtr, 0, MemoryLayout<fd_set>.size)
+        let idx = Int(fd / 32)
+        let bit = Int32(1) << (fd % 32)
+        withUnsafeMutableBytes(of: &wfds) { raw in
+            let p = raw.baseAddress!.assumingMemoryBound(to: Int32.self)
+            p[idx] |= bit
+        }
+        var ctv = timeval(tv_sec: 0, tv_usec: 50_000)
+        let nr = select(fd + 1, nil, &wfds, nil, &ctv)
+        if nr <= 0 { return false }
+        var soErr: Int32 = 0
+        var soLen = socklen_t(MemoryLayout<Int32>.size)
+        if getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &soLen) != 0 || soErr != 0 { return false }
+    }
+    _ = fcntl(fd, F_SETFL, flags)
 
     var lenBE = UInt32(data.count).bigEndian
     var ok = true
@@ -96,52 +119,136 @@ func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: A
     return sendFrame(data)
 }
 
-// MARK: - Cross-agent deduplication
+// MARK: - Process-tree agent identification
 //
-// Claude and VS Code Copilot share ~/.claude/settings.json — all hooks fire
-// for both agents on every event. Cursor is VSCode-based, so it also runs
-// VS Code Copilot extensions, meaning dc-hook cursor AND dc-hook vscode both
-// fire when working in Cursor. This function returns true when the declared
-// agent should be skipped because a different agent is actually the caller.
+// Replaces brittle env-var dedup (Claude in VSCode terminal often missed
+// CLAUDE_CODE_ENTRY_POINT; VSCODE_PID leaks into Cursor; Copilot CLI had no
+// case). Walks the PPID chain via libproc and matches against per-agent
+// patterns. Pure C system calls — total budget ≤ a few ms.
 
-func isCursorEnvironment(_ env: [String: String]) -> Bool {
-    // CURSOR_TRACE_ID is set exclusively by Cursor.
-    if env["CURSOR_TRACE_ID"] != nil { return true }
-    // TERM_PROGRAM=cursor is set in Cursor's integrated terminal (post-0.44).
-    if env["TERM_PROGRAM"] == "cursor" { return true }
-    // IPC hook socket path contains "cursor" in Cursor, "vscode" in VS Code.
-    if let ipc = env["VSCODE_IPC_HOOK_CLI"], ipc.lowercased().contains("cursor") { return true }
-    if let ipc = env["VSCODE_IPC_HOOK"],     ipc.lowercased().contains("cursor") { return true }
+// proc_pidpath / proc_pidinfo signatures (from <libproc.h>).
+// We declare them via @_silgen_name to avoid an extra bridging header.
+@_silgen_name("proc_pidpath")
+private func proc_pidpath(_ pid: Int32, _ buffer: UnsafeMutableRawPointer, _ buffersize: UInt32) -> Int32
+
+private struct DCProcBSDShortInfo {
+    var pbsi_flags: UInt32 = 0
+    var pbsi_status: UInt32 = 0
+    var pbsi_xstatus: UInt32 = 0
+    var pbsi_pid: UInt32 = 0
+    var pbsi_ppid: UInt32 = 0
+    var pbsi_uid: UInt32 = 0
+    var pbsi_gid: UInt32 = 0
+    var pbsi_ruid: UInt32 = 0
+    var pbsi_rgid: UInt32 = 0
+    var pbsi_svuid: UInt32 = 0
+    var pbsi_svgid: UInt32 = 0
+    var pbsi_rfu1: UInt32 = 0
+    var pbsi_comm: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar,
+                     CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) =
+        (0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0)
+}
+
+@_silgen_name("proc_pidinfo")
+private func proc_pidinfo(_ pid: Int32, _ flavor: Int32, _ arg: UInt64,
+                           _ buffer: UnsafeMutableRawPointer, _ buffersize: Int32) -> Int32
+
+private let PROC_PIDT_SHORTBSDINFO: Int32 = 13
+
+private func procShortInfo(_ pid: Int32) -> DCProcBSDShortInfo? {
+    var info = DCProcBSDShortInfo()
+    let size = Int32(MemoryLayout<DCProcBSDShortInfo>.size)
+    let rc = withUnsafeMutablePointer(to: &info) { ptr -> Int32 in
+        proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 0, UnsafeMutableRawPointer(ptr), size)
+    }
+    guard rc == size else { return nil }
+    return info
+}
+
+private func psComm(_ pid: Int32) -> String? {
+    // Prefer full executable path (proc_pidpath) so we can match
+    // ".../claude/cli.js" style ancestors; fall back to short comm.
+    var buf = [CChar](repeating: 0, count: 4096) // PROC_PIDPATHINFO_MAXSIZE
+    let rc = buf.withUnsafeMutableBufferPointer { ptr -> Int32 in
+        proc_pidpath(pid, UnsafeMutableRawPointer(ptr.baseAddress!), UInt32(ptr.count))
+    }
+    if rc > 0 {
+        let s = String(cString: buf).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !s.isEmpty { return s }
+    }
+    guard let info = procShortInfo(pid) else { return nil }
+    let s: String = withUnsafePointer(to: info.pbsi_comm) {
+        $0.withMemoryRebound(to: CChar.self, capacity: 16) { String(cString: $0) }
+    }
+    return s.isEmpty ? nil : s
+}
+
+private func parentPID(of pid: Int32) -> Int32? {
+    guard let info = procShortInfo(pid) else { return nil }
+    return Int32(info.pbsi_ppid)
+}
+
+private func ancestorChain(maxDepth: Int = 6) -> [String] {
+    var chain: [String] = []
+    var pid: Int32 = getppid()
+    var depth = 0
+    while pid > 1 && depth < maxDepth {
+        if let c = psComm(pid) { chain.append(c.lowercased()) }
+        guard let pp = parentPID(of: pid), pp > 0, pp != pid else { break }
+        pid = pp
+        depth += 1
+    }
+    return chain
+}
+
+private func chainContains(_ chain: [String], anyOf needles: [String]) -> Bool {
+    for c in chain {
+        let last = (c.split(separator: "/").last.map(String.init) ?? c).lowercased()
+        for n in needles {
+            let nl = n.lowercased()
+            if c.contains(nl) || last.contains(nl) { return true }
+        }
+    }
     return false
 }
 
+// Per-agent ancestor patterns. Matching is case-insensitive substring on
+// either the full comm string or its trailing path component.
+private let kClaudePatterns:    [String] = ["claude", "anthropic"]
+private let kCursorPatterns:    [String] = ["cursor"]
+private let kVSCodePatterns:    [String] = ["code helper", "/code", "vscode", "visual studio code"]
+private let kCopilotCLIPatterns:[String] = ["gh-copilot", "copilot-cli", " copilot", "/copilot", "gh "]
+private let kWindsurfPatterns:  [String] = ["windsurf"]
+private let kCodexPatterns:     [String] = ["codex"]
+
+// Patterns that disqualify a "vscode" claim if found in the chain — these are
+// other agents whose hooks happen to share the vscode hook config files.
+private let kVSCodeDisqualifiers: [String] = ["claude", "cursor", "gh-copilot", "codex", "windsurf"]
+
 func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
-    let env = ProcessInfo.processInfo.environment
+    let chain = ancestorChain()
+    // No chain (race / sandbox) → don't skip; defer to app-layer dedup.
+    if chain.isEmpty { return false }
+
     switch declaredAgent {
     case "claude":
-        // Accept only when Claude Code CLI is the actual caller.
-        // Check all three Claude identity signals — symmetric with the vscode skip
-        // condition below (which skips if ANY of these is set). Using the same set
-        // of signals means exactly one hook fires per event regardless of which
-        // Claude signal is present in the environment.
-        if env["CLAUDE_CODE_ENTRY_POINT"] != nil
-            || env["CLAUDE_CODE_SESSION"] != nil
-            || env["CLAUDE_SESSION_ID"] != nil { return false }
-        // Otherwise a VSCode/Cursor terminal is present: caller is VS Code Copilot, not Claude.
-        if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" { return true }
-
+        return !chainContains(chain, anyOf: kClaudePatterns)
+    case "cursor":
+        return !chainContains(chain, anyOf: kCursorPatterns)
     case "vscode":
-        // Skip if Claude Code is the actual caller (shares ~/.claude/settings.json).
-        if env["CLAUDE_CODE_SESSION"] != nil || env["CLAUDE_SESSION_ID"] != nil
-            || env["CLAUDE_CODE_ENTRY_POINT"] != nil { return true }
-        // Skip if Cursor is the IDE — Cursor triggers VS Code extension hooks too,
-        // but dc-hook cursor already handles that session. Avoid the duplicate.
-        if isCursorEnvironment(env) { return true }
-
+        // Must look like VS Code AND must not contain another agent in the chain.
+        if !chainContains(chain, anyOf: kVSCodePatterns) { return true }
+        if chainContains(chain, anyOf: kVSCodeDisqualifiers) { return true }
+        return false
+    case "copilot_cli":
+        return !chainContains(chain, anyOf: kCopilotCLIPatterns)
+    case "windsurf":
+        return !chainContains(chain, anyOf: kWindsurfPatterns)
+    case "codex_cli":
+        return !chainContains(chain, anyOf: kCodexPatterns)
     default:
-        break
+        return false
     }
-    return false
 }
 
 // MARK: - Replay demo (30s synthetic lifecycle)
@@ -205,6 +312,15 @@ func replayDemo(agent: String) -> Int32 {
             ("pre_mcp_tool_use", 16),
             ("post_mcp_tool_use", 18),
             ("post_cascade_response", 25)
+        ]
+    case "codex_cli":
+        demoEvents = [
+            ("SessionStart", 0),
+            ("UserPromptSubmit", 3),
+            ("PreToolUse", 6),
+            ("PostToolUse", 10),
+            ("PermissionRequest", 14),
+            ("Stop", 25)
         ]
     default:
         demoEvents = [("sessionStart", 0), ("sessionEnd", 10)]

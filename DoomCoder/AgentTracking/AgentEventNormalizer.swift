@@ -43,45 +43,34 @@ protocol AgentEventNormalizer: Sendable {
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent?
 }
 
-// MARK: - Shared interaction tool detection
-// Determines whether a tool name means the agent is BLOCKED waiting for the user.
-// PreToolUse with any matching name → fire `.permissionNeeded` immediately.
+// MARK: - Per-agent interaction tool catalogs
 //
-// Detection is two-tier for adaptivity:
-//   1. Exact match: known tool names from all supported agents (fast, zero false positives)
-//   2. Substring patterns: catches future / unknown tools with interaction semantics
-//
-// Claude Code / Cursor (Claude Code-compatible hooks):
-//   AskUserQuestion  – agent posted a question; execution stalls until answered
-//   ExitPlanMode     – agent finished planning; blocked until user approves the plan
-//
-// VS Code Copilot built-in interaction tools (confirmed tool_name values):
-//   vscode_askQuestions     – multiple-choice / clarifying questions
-//   vscode_getQuickPick     – user must pick from a list before work continues
-//   vscode_getInputBox      – user must type a value before work continues
-//   vscode_showConfirmation – yes / no dialog; agent is blocked until dismissed
-private let interactionToolExact: Set<String> = [
+// Exact-match only. NO substring matching — `Task` contains `ask`, which used
+// to mis-flag every Claude subagent dispatch as `permissionNeeded`. Under-
+// notifying on unknown future tools is the correct default for an alerting
+// product; once a real interaction tool is observed it can be added here.
+
+private let claudeInteractionTools: Set<String> = [
     "AskUserQuestion",
     "ExitPlanMode",
+    "Elicitation",
+]
+
+private let cursorInteractionTools: Set<String> = [
+    "AskUserQuestion",
+    "ExitPlanMode",
+]
+
+private let vscodeInteractionTools: Set<String> = [
     "vscode_askQuestions",
     "vscode_getQuickPick",
     "vscode_getInputBox",
     "vscode_showConfirmation",
 ]
 
-// Lowercase substrings that signal user interaction semantics in unknown/future tool names.
-private let interactionToolPatterns: [String] = [
-    "ask", "question", "confirm", "approve",
-    "permission", "dialog", "getinput", "promptuser", "pick",
-]
-
-/// Returns true when the tool name indicates the agent is blocked waiting for user input.
-/// Exact match is checked first (O(1)); pattern match is the fallback.
-private func isInteractionTool(_ name: String) -> Bool {
-    if interactionToolExact.contains(name) { return true }
-    let lower = name.lowercased()
-    return interactionToolPatterns.contains { lower.contains($0) }
-}
+private let copilotCLIInteractionTools: Set<String> = []
+private let windsurfInteractionTools:   Set<String> = []
+private let codexInteractionTools:      Set<String> = []
 
 // MARK: - Claude Code normalizer
 
@@ -124,7 +113,7 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         // PreToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
         if envelope.event == "PreToolUse",
            let toolName = payload["tool_name"] as? String,
-           isInteractionTool(toolName) {
+           claudeInteractionTools.contains(toolName) {
             phase = .permissionNeeded
         }
         if envelope.event == "Notification",
@@ -186,11 +175,9 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         let payload = envelope.payloadDict ?? [:]
         var phase = Self.phaseMap[envelope.event] ?? .other
 
-        // preToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
-        // (applies when Cursor loads Claude Code-compatible hooks)
         if envelope.event == "preToolUse",
            let toolName = payload["tool_name"] as? String,
-           isInteractionTool(toolName) {
+           cursorInteractionTools.contains(toolName) {
             phase = .permissionNeeded
         }
 
@@ -242,10 +229,9 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
         let payload = envelope.payloadDict ?? [:]
         var phase = Self.phaseMap[envelope.event] ?? .other
 
-        // PreToolUse[AskUserQuestion/ExitPlanMode] = agent waiting for user answer
         if envelope.event == "PreToolUse",
            let toolName = payload["tool_name"] as? String,
-           isInteractionTool(toolName) {
+           vscodeInteractionTools.contains(toolName) {
             phase = .permissionNeeded
         }
         let sessionId = (payload["sessionId"] as? String)
@@ -408,6 +394,54 @@ struct WindsurfEventNormalizer: AgentEventNormalizer {
     }
 }
 
+// MARK: - OpenAI Codex CLI normalizer
+
+struct CodexCLIEventNormalizer: AgentEventNormalizer {
+    let agent = TrackedAgent.codexCLI
+
+    private static let phaseMap: [String: NormalizedEventPhase] = [
+        "SessionStart":       .sessionStart,
+        "UserPromptSubmit":   .userPrompt,
+        "PreToolUse":         .toolStart,
+        "PostToolUse":        .toolEnd,
+        "PermissionRequest":  .permissionNeeded,
+        "Stop":               .sessionEnd,
+    ]
+
+    func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
+        let payload = envelope.payloadDict ?? [:]
+        var phase = Self.phaseMap[envelope.event] ?? .other
+
+        if envelope.event == "PreToolUse",
+           let toolName = payload["tool_name"] as? String,
+           codexInteractionTools.contains(toolName) {
+            phase = .permissionNeeded
+        }
+        if envelope.event.lowercased().contains("error") { phase = .error }
+
+        let sessionId = (payload["session_id"] as? String)
+            ?? (payload["conversation_id"] as? String)
+            ?? "pid-\(envelope.pid)"
+        let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
+        let filePath = extractFilePath(from: payload)
+        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
+
+        return NormalizedHookEvent(
+            agent: agent,
+            phase: phase,
+            rawEvent: envelope.event,
+            sessionId: sessionId,
+            toolName: tool,
+            filePath: filePath,
+            cwd: payload["cwd"] as? String ?? envelope.cwd,
+            timestamp: Date(timeIntervalSince1970: envelope.ts),
+            summary: summary,
+            isFatal: phase == .error,
+            payloadRaw: envelope.payloadRaw
+        )
+    }
+}
+
 // MARK: - Normalizer registry
 
 enum EventNormalizerRegistry {
@@ -417,6 +451,7 @@ enum EventNormalizerRegistry {
         .vscode:     VSCodeEventNormalizer(),
         .copilotCLI: CopilotCLIEventNormalizer(),
         .windsurf:   WindsurfEventNormalizer(),
+        .codexCLI:   CodexCLIEventNormalizer(),
     ]
 
     static func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {

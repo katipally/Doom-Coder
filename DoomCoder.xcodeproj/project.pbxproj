@@ -43,6 +43,8 @@
 		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
 		DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000050 /* AccessibilityPermission.swift */; };
 		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
+		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
+		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -84,6 +86,8 @@
 		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
 		DC0000000000001000000050 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
+		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +158,8 @@
 				DC0000000000001000000044 /* AgentEventNormalizer.swift */,
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
 				DC0000000000001000000046 /* UIAnimations.swift */,
+				DC0000000000001000000100 /* PIDLiveness.swift */,
+				DC0000000000001000000101 /* RateLimiter.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -300,6 +306,8 @@
 				DC0000000000002000000049 /* GlobalHotkey.swift in Sources */,
 				DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */,
 				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
+				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
+				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
