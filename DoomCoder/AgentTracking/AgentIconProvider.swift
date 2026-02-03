@@ -1,46 +1,51 @@
 import Foundation
 import AppKit
 
-// Provides agent icons: tries NSWorkspace runtime icons for .app bundles,
-// falls back to bundled assets, then SF Symbols. All icons are local —
-// no network calls, no third-party logo services.
+// Provides agent icons. Priority order:
+//   1. NSWorkspace runtime icon from installed .app bundle (IDE agents only)
+//   2. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
+//   3. Bundled asset catalog image (user-supplied replacements)
+//   4. SF Symbol fallback (always available)
+//
+// CDN icons are fetched once at app launch by IconDownloader.prefetch().
 enum AgentIconProvider {
-    /// Returns an NSImage for the given agent. Tries runtime app icon first,
-    /// then bundled asset catalog image, then SF Symbol fallback.
+    /// Returns an NSImage for the given agent.
     static func icon(for agent: TrackedAgent, size: CGFloat = 32) -> NSImage {
         switch agent {
         case .claude:
+            if let cdn = IconDownloader.cachedIcon(for: .claude, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-claude", symbol: "c.circle.fill", size: size)
         case .cursor:
             if let appIcon = appIcon(bundleIds: ["com.todesktop.230313mzl4w4u92"],
-                                      paths: ["/Applications/Cursor.app",
-                                              NSHomeDirectory() + "/Applications/Cursor.app"],
-                                      size: size) {
-                return appIcon
-            }
+                                     paths: ["/Applications/Cursor.app",
+                                             NSHomeDirectory() + "/Applications/Cursor.app"],
+                                     size: size) { return appIcon }
+            if let cdn = IconDownloader.cachedIcon(for: .cursor, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-cursor", symbol: "cursorarrow.rays", size: size)
         case .vscode:
+            // No lobehub icon for VS Code — use installed app icon only.
             if let appIcon = appIcon(bundleIds: ["com.microsoft.VSCode",
-                                                  "com.microsoft.VSCodeInsiders"],
-                                      paths: ["/Applications/Visual Studio Code.app",
-                                              NSHomeDirectory() + "/Applications/Visual Studio Code.app",
-                                              "/Applications/Visual Studio Code - Insiders.app"],
-                                      size: size) {
-                return appIcon
-            }
-            return bundledOrSymbol(name: "agent-vscode", symbol: "chevron.left.forwardslash.chevron.right", size: size)
+                                                 "com.microsoft.VSCodeInsiders"],
+                                     paths: ["/Applications/Visual Studio Code.app",
+                                             NSHomeDirectory() + "/Applications/Visual Studio Code.app",
+                                             "/Applications/Visual Studio Code - Insiders.app"],
+                                     size: size) { return appIcon }
+            return bundledOrSymbol(name: "agent-vscode",
+                                   symbol: "chevron.left.forwardslash.chevron.right", size: size)
         case .copilotCLI:
+            if let cdn = IconDownloader.cachedIcon(for: .copilotCLI, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-copilot-cli", symbol: "terminal.fill", size: size)
         case .windsurf:
             if let appIcon = appIcon(bundleIds: ["com.codeium.windsurf", "com.exafunction.windsurf"],
-                                      paths: ["/Applications/Windsurf.app",
-                                              NSHomeDirectory() + "/Applications/Windsurf.app"],
-                                      size: size) {
-                return appIcon
-            }
+                                     paths: ["/Applications/Windsurf.app",
+                                             NSHomeDirectory() + "/Applications/Windsurf.app"],
+                                     size: size) { return appIcon }
+            if let cdn = IconDownloader.cachedIcon(for: .windsurf, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-windsurf", symbol: "wind", size: size)
         case .codexCLI:
-            return bundledOrSymbol(name: "agent-codex", symbol: "sparkles.rectangle.stack", size: size)
+            if let cdn = IconDownloader.cachedIcon(for: .codexCLI, size: size) { return cdn }
+            return bundledOrSymbol(name: "agent-codex",
+                                   symbol: "sparkles.rectangle.stack", size: size)
         }
     }
 
@@ -58,17 +63,27 @@ enum AgentIconProvider {
 
     // MARK: - Notification attachment URL
 
-    /// Returns a file URL to a cached PNG of the agent icon suitable for
-    /// UNNotificationAttachment. Creates the PNG cache on first call.
+    /// Returns a file URL to a PNG of the agent icon suitable for
+    /// UNNotificationAttachment.
+    ///
+    /// Priority:
+    ///   1. CDN-downloaded icon (best quality, downloaded by IconDownloader.prefetch())
+    ///   2. Rendered fallback (SF Symbol / app icon rendered to PNG, cached on disk)
     static func iconFileURL(for agent: TrackedAgent) -> URL? {
         let cacheDir = AgentSupportDir.url.appendingPathComponent("icons", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        let cached = cacheDir.appendingPathComponent("\(agent.rawValue).png")
-        if FileManager.default.fileExists(atPath: cached.path) { return cached }
+
+        // Prefer the CDN icon if already cached.
+        let cdnURL = IconDownloader.cdnCacheURL(for: agent)
+        if FileManager.default.fileExists(atPath: cdnURL.path) { return cdnURL }
+
+        // Fall back to a locally rendered PNG (SF Symbol or app icon).
+        let rendered = cacheDir.appendingPathComponent("\(agent.rawValue)-render.png")
+        if FileManager.default.fileExists(atPath: rendered.path) { return rendered }
         let image = icon(for: agent, size: 64)
         guard let data = image.pngData() else { return nil }
-        try? data.write(to: cached)
-        return cached
+        try? data.write(to: rendered)
+        return rendered
     }
 
     // MARK: - Private
