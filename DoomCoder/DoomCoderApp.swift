@@ -157,7 +157,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         window.isReleasedWhenClosed = false
         window.center()
         window.level = .floating
-        NSApp.activate(ignoringOtherApps: true)
+        // Also mark v1.9 as seen — users upgrading past v2 shouldn't see the
+        // older sheet on their next launch after dismissing this one.
+        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         whatsNewWindow = window
     }
@@ -185,7 +188,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         window.isReleasedWhenClosed = false
         window.center()
         window.level = .floating
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         whatsNewWindow = window
     }

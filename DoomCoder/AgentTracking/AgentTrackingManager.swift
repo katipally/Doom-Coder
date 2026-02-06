@@ -145,7 +145,6 @@ final class AgentTrackingManager {
             summary: normalized.summary
         )
 
-        let isNewSession = sessions[sessionKey] == nil
         var s = sessions[sessionKey] ?? Session(
             id: sessionKey,
             agent: normalized.agent,
@@ -163,7 +162,6 @@ final class AgentTrackingManager {
         // is safer than driving SwiftUI transactions from a socket-delivered
         // mutation (prior approach risked NSHostingView constraint loops when
         // hosted under MenuBarExtra(.window)).
-        _ = isNewSession
         sessions[sessionKey] = s
 
         // Persist to SQLite (with raw JSON payload for Logs detail view)

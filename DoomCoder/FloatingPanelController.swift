@@ -33,7 +33,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     // Entrance counter bumped on every show — used as a SwiftUI `.id()` so the
     // inner tree re-mounts cleanly, re-triggering the appear animation.
-    @Published private(set) var showToken: Int = 0
+    private(set) var showToken: Int = 0
 
     private let defaultWidth: CGFloat = 480
 
@@ -54,7 +54,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         // Pure alpha entrance; SwiftUI scaleEffect on inner content handles
         // the spring entrance without touching AppKit layers.
         panel.alphaValue = 0
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         isVisible = true
 

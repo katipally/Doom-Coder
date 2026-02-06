@@ -33,7 +33,9 @@ enum AgentIconProvider {
             return bundledOrSymbol(name: "agent-vscode",
                                    symbol: "chevron.left.forwardslash.chevron.right", size: size)
         case .copilotCLI:
-            if let cdn = IconDownloader.cachedIcon(for: .copilotCLI, size: size) { return cdn }
+            if let cdn = IconDownloader.cachedIcon(for: .copilotCLI, size: size) {
+                return avatarWrapped(cdn, size: size, cornerFraction: 0.22)
+            }
             return bundledOrSymbol(name: "agent-copilot-cli", symbol: "terminal.fill", size: size)
         case .windsurf:
             if let appIcon = appIcon(bundleIds: ["com.codeium.windsurf", "com.exafunction.windsurf"],
@@ -116,6 +118,22 @@ enum AgentIconProvider {
         let config = NSImage.SymbolConfiguration(pointSize: size * 0.6, weight: .medium)
         return NSImage(systemSymbolName: symbol, accessibilityDescription: name)?
             .withSymbolConfiguration(config) ?? NSImage()
+    }
+
+    /// Renders `icon` centred inside a rounded-square chip at `size × size`.
+    /// Mimics the @lobehub/icons Avatar style (white/dark background + rounded rect).
+    private static func avatarWrapped(_ icon: NSImage, size: CGFloat, cornerFraction: CGFloat) -> NSImage {
+        let result = NSImage(size: NSSize(width: size, height: size))
+        result.lockFocus()
+        let rect = NSRect(x: 0, y: 0, width: size, height: size)
+        let radius = size * cornerFraction
+        NSColor(calibratedWhite: 0.95, alpha: 1.0).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        let padding = size * 0.15
+        let inner = NSRect(x: padding, y: padding, width: size - padding * 2, height: size - padding * 2)
+        icon.draw(in: inner, from: .zero, operation: .sourceOver, fraction: 1.0)
+        result.unlockFocus()
+        return result
     }
 }
 

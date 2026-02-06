@@ -898,6 +898,8 @@ struct AgentInstallerV2 {
         let dst = backupDir.appendingPathComponent("\(name).\(ts)").path
         do {
             try FileManager.default.copyItem(atPath: path, toPath: dst)
+            // Keep only the 3 most recent backups for this filename.
+            pruneBackups(in: backupDir.path, baseName: name, keep: 3)
             return dst
         } catch {
             // Secondary fallback — sibling backup next to the file so we at
@@ -906,6 +908,18 @@ struct AgentInstallerV2 {
             let sibling = "\(path).doomcoder-backup-\(ts)"
             try? FileManager.default.copyItem(atPath: path, toPath: sibling)
             return FileManager.default.fileExists(atPath: sibling) ? sibling : nil
+        }
+    }
+
+    private static func pruneBackups(in dir: String, baseName: String, keep: Int) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
+        let matches = entries
+            .filter { $0.hasPrefix(baseName + ".") }
+            .sorted(by: >)   // ISO-8601 sort is chronological alphabetically
+        let toDelete = matches.dropFirst(keep)
+        for file in toDelete {
+            try? fm.removeItem(atPath: (dir as NSString).appendingPathComponent(file))
         }
     }
 
