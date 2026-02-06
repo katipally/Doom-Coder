@@ -97,22 +97,27 @@ jobs:
 
       - name: Notarize app
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZE_KEY_P8: ${{ secrets.NOTARIZE_KEY_P8 }}
+          NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
+          NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
         run: |
           # Create a ZIP for notarization submission
           ditto -c -k --sequesterRsrc --keepParent \
             "build/export/DoomCoder.app" \
             "build/DoomCoder-notarize.zip"
 
+          # Decode API key to temp file (notarytool requires a file path, not inline)
+          echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
+
           # Submit and wait — blocks until Apple approves (typically 2-10 min)
           xcrun notarytool submit "build/DoomCoder-notarize.zip" \
-            --apple-id "${APPLE_ID}" \
-            --password "${APPLE_APP_PASSWORD}" \
-            --team-id "${APPLE_TEAM_ID}" \
+            --key /tmp/AuthKey.p8 \
+            --key-id "${NOTARIZE_KEY_ID}" \
+            --issuer "${NOTARIZE_ISSUER_ID}" \
             --wait \
             --timeout 30m
+
+          rm -f /tmp/AuthKey.p8
 
       - name: Staple notarization ticket
         run: |
