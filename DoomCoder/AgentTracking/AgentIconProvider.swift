@@ -3,16 +3,22 @@ import AppKit
 
 // Provides agent icons. Priority order:
 //   1. NSWorkspace runtime icon from installed .app bundle (IDE agents only)
-//   2. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
-//   3. Bundled asset catalog image (user-supplied replacements)
+//   2. Bundled xcassets icon — instant, no network (CLI agents)
+//   3. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
 //   4. SF Symbol fallback (always available)
 //
-// CDN icons are fetched once at app launch by IconDownloader.prefetch().
+// Bundled icons are embedded in the app at build time. CDN fetch via
+// IconDownloader.prefetch() acts as an update path for when icons change.
 enum AgentIconProvider {
     /// Returns an NSImage for the given agent.
     static func icon(for agent: TrackedAgent, size: CGFloat = 32) -> NSImage {
         switch agent {
         case .claude:
+            // Bundled first — available without network on first launch.
+            if let bundled = NSImage(named: "agent-claude") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
             if let cdn = IconDownloader.cachedIcon(for: .claude, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-claude", symbol: "c.circle.fill", size: size)
         case .cursor:
@@ -33,6 +39,11 @@ enum AgentIconProvider {
             return bundledOrSymbol(name: "agent-vscode",
                                    symbol: "chevron.left.forwardslash.chevron.right", size: size)
         case .copilotCLI:
+            // Bundled first — wrap in avatar chip for consistency with CDN variant.
+            if let bundled = NSImage(named: "agent-copilot-cli") {
+                bundled.size = NSSize(width: size, height: size)
+                return avatarWrapped(bundled, size: size, cornerFraction: 0.22)
+            }
             if let cdn = IconDownloader.cachedIcon(for: .copilotCLI, size: size) {
                 return avatarWrapped(cdn, size: size, cornerFraction: 0.22)
             }
@@ -45,6 +56,11 @@ enum AgentIconProvider {
             if let cdn = IconDownloader.cachedIcon(for: .windsurf, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-windsurf", symbol: "wind", size: size)
         case .codexCLI:
+            // Bundled first — available without network on first launch.
+            if let bundled = NSImage(named: "agent-codex") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
             if let cdn = IconDownloader.cachedIcon(for: .codexCLI, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-codex",
                                    symbol: "sparkles.rectangle.stack", size: size)

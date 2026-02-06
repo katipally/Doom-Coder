@@ -107,7 +107,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         }
 
         // Show the most recent What's New sheet (checked newest-first).
-        if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
+        if !UserDefaults.standard.bool(forKey: WhatsNewSheet220.defaultsKey) {
+            Task { @MainActor in self.showWhatsNew220() }
+        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
             Task { @MainActor in self.showWhatsNewV2() }
         } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
             Task { @MainActor in self.showWhatsNew() }
@@ -135,6 +137,34 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         await MainActor.run {
             FloatingPanelController.shared.show()
         }
+    }
+
+    @MainActor
+    func showWhatsNew220() {
+        let hosting = NSHostingController(rootView: WhatsNewSheet220(onDismiss: { [weak self] in
+            self?.whatsNewWindow?.close()
+            self?.whatsNewWindow = nil
+        }))
+        hosting.sizingOptions = []
+        let contentSize = NSSize(width: 520, height: 420)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hosting
+        window.setContentSize(contentSize)
+        window.title = "What's New in DoomCoder"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.level = .floating
+        // Mark older sheets as seen so users don't see them on the next launch.
+        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
+        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        whatsNewWindow = window
     }
 
     @MainActor
