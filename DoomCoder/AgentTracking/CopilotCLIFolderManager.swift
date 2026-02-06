@@ -40,7 +40,16 @@ enum CopilotCLIFolderManager {
         return AgentInstallerV2.install(.copilotCLI, folder: folder)
     }
 
-    /// Uninstall hooks from a specific folder and remove from registered set.
+    /// Uninstall hooks from a specific folder WITHOUT removing it from the folder list.
+    /// Use this when the user clicks "Uninstall" on a per-folder row — hooks are deleted
+    /// from disk but the folder stays registered so they can reinstall later.
+    @discardableResult
+    static func uninstallHooksFromFolder(_ folder: URL) -> Result<Void, Error> {
+        AgentInstallerV2.uninstall(.copilotCLI, folder: folder)
+    }
+
+    /// Uninstall hooks from a specific folder AND remove it from the registered list.
+    /// Use only when the user wants a full cleanup of a single folder entry.
     @discardableResult
     static func uninstallHooks(from folder: URL) -> Result<Void, Error> {
         let result = AgentInstallerV2.uninstall(.copilotCLI, folder: folder)
@@ -68,6 +77,13 @@ enum CopilotCLIFolderManager {
         for folder in folders {
             _ = AgentInstallerV2.uninstall(.copilotCLI, folder: folder)
         }
+    }
+
+    /// Remove ALL folders from the registered list WITHOUT touching hooks on disk.
+    /// Hooks that were installed in these folders will remain on disk unchanged.
+    static func removeAllFolders() {
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+        logger.info("Cleared all registered CLI folders from list (hooks not touched)")
     }
 
     /// Uninstall from all registered folders AND clear the folder list.
