@@ -43,9 +43,9 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 }
             }
             for failed in sent.failedRecordSaves {
-                let code = (failed.error as? CKError)?.code
+                let code = failed.error.code
                 logger.error("ckpusher.delegate: failed save \(failed.record.recordID.recordName, privacy: .public) code=\(String(describing: code), privacy: .public)")
-                if let serverRec = (failed.error as? CKError)?.serverRecord {
+                if let serverRec = failed.error.serverRecord {
                     await MainActor.run { self.pusher?.serverRecords.store(serverRec) }
                 }
             }
