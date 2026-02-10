@@ -111,10 +111,10 @@ class NotificationService: UNNotificationServiceExtension {
         // Bundle (NSE target) → App Group cache. Bundle wins so a freshly
         // installed iOS build always has icons even before the first
         // CloudKit AgentIcon fetch resolves.
-        if let slug = agent?.iconSlug {
+        if let agent {
             let bundleURL = Bundle(for: NotificationService.self)
-                .url(forResource: slug, withExtension: "png")
-            let iconURL = bundleURL ?? AppGroupCache.iconURL(slug: slug)
+                .url(forResource: agent.bundledAssetName, withExtension: "png")
+            let iconURL = bundleURL ?? AppGroupCache.iconURL(slug: agent.iconSlug)
             if let url = iconURL,
                let attachment = try? UNNotificationAttachment(identifier: "icon", url: url) {
                 mutable.attachments = [attachment]
