@@ -9,13 +9,12 @@ name: iOS TestFlight
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   APP_STORE_CONNECT_KEY_ID           — App Store Connect API key ID (10 chars)
 #   APP_STORE_CONNECT_ISSUER_ID        — App Store Connect issuer UUID
-#   APP_STORE_CONNECT_PRIVATE_KEY      — Base64-encoded contents of AuthKey_xxx.p8
+#   APP_STORE_CONNECT_PRIVATE_KEY      — Raw text contents of AuthKey_xxx.p8 (paste the full file, including BEGIN/END lines)
 #   IOS_DISTRIBUTION_CERTIFICATE       — Base64-encoded Apple Distribution .p12
 #   IOS_DISTRIBUTION_CERT_PASSWORD     — Password for the .p12 above
 #   IOS_KEYCHAIN_PASSWORD              — Throwaway password for the runner keychain
-#
-# Required repository variables (Settings → Secrets and variables → Actions → Variables):
 #   APPLE_TEAM_ID                      — Apple Developer Team ID (e.g. A9P2388PHM)
+#
 
 on:
   push:
@@ -108,17 +107,26 @@ jobs:
 
       - name: Write App Store Connect API key
         env:
-          API_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
+          if [[ -z "$API_KEY" ]]; then
+            echo "::error::APP_STORE_CONNECT_PRIVATE_KEY secret is empty or not set"
+            exit 1
+          fi
+          if [[ -z "$API_KEY_ID" ]]; then
+            echo "::error::APP_STORE_CONNECT_KEY_ID secret is empty or not set"
+            exit 1
+          fi
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$API_KEY_B64" | base64 --decode \
-            > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+          # .p8 is a text/PEM file — write directly, no base64 needed.
+          printf '%s' "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+          echo "API key written: $(wc -c < ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8) bytes"
 
       - name: Archive (Release)
         working-directory: DoomCoderCompanion
         env:
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # Strip the agent's stale GIT_CONFIG vars so SwiftPM can resolve bare repos.
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
@@ -144,7 +152,7 @@ jobs:
           <dict>
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
-            <key>teamID</key><string>${{ vars.APPLE_TEAM_ID }}</string>
+            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
             <key>signingStyle</key><string>automatic</string>
             <key>uploadSymbols</key><true/>
             <key>uploadBitcode</key><false/>
