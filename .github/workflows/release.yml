@@ -216,18 +216,19 @@ jobs:
             python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
           echo "Submission ID: ${SUBMISSION_ID}"
 
-          # ── Poll with notarytool info (every 30 s, max 40 polls = 20 min) ──
+          # ── Poll with notarytool info (every 30 s, max 120 polls = 60 min) ──
           # We use short-lived `notarytool info` calls instead of the long-running
           # `notarytool wait`, which can hang indefinitely on beta runners when
           # the underlying HTTP connection drops or the response is delayed.
-          # Each info call is wrapped with `timeout 60` so a hung TLS handshake
-          # cannot block us for more than 60 seconds.
-          echo "Polling notarization status (up to 20 min)..."
+          # Each info call is wrapped with `timeout 90` so a hung TLS handshake
+          # cannot block us for more than 90 seconds (some first-time accounts
+          # see Apple take 20-45 minutes for extended validation).
+          echo "Polling notarization status (up to 60 min)..."
           FINAL_STATUS="in_progress"
-          for ATTEMPT in $(seq 1 40); do
+          for ATTEMPT in $(seq 1 120); do
             sleep 30
 
-            INFO_JSON=$(timeout 60 xcrun notarytool info "${SUBMISSION_ID}" \
+            INFO_JSON=$(timeout 90 xcrun notarytool info "${SUBMISSION_ID}" \
               --key /tmp/AuthKey.p8 \
               --key-id  "${NOTARIZE_KEY_ID}" \
               --issuer  "${NOTARIZE_ISSUER_ID}" \
@@ -238,7 +239,7 @@ jobs:
               python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" \
               2>/dev/null || echo "parse_error")
 
-            echo "  [$(printf '%02d' $ATTEMPT)/40] $(date -u '+%H:%M:%S UTC') — ${FINAL_STATUS}"
+            echo "  [$(printf '%03d' $ATTEMPT)/120] $(date -u '+%H:%M:%S UTC') — ${FINAL_STATUS}"
 
             case "${FINAL_STATUS}" in
               Accepted)
@@ -261,7 +262,7 @@ jobs:
 
           # ── Final verdict ──────────────────────────────────────────────────
           if [ "${FINAL_STATUS}" != "Accepted" ]; then
-            echo "::error::Notarization did not complete within 20 min. Final status: ${FINAL_STATUS}"
+            echo "::error::Notarization did not complete within 60 min. Final status: ${FINAL_STATUS}"
             echo "=== Apple Notarization Log ==="
             xcrun notarytool log "${SUBMISSION_ID}" \
               --key /tmp/AuthKey.p8 \
