@@ -6,7 +6,7 @@ import UserNotifications
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels, logs }
+    enum Tab: Hashable { case agents, channels, logs, settings }
     @State private var tab: Tab = .agents
     @State private var selected: TrackedAgent? = .claude
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
@@ -48,6 +48,8 @@ struct ConfigureAgentsViewV2: View {
                 channelsDetail
             case .logs:
                 LogsView()
+            case .settings:
+                ConfigureSettingsPane(sleepManager: SleepManager.shared)
             }
         }
         .frame(minWidth: 820, minHeight: 580)
@@ -65,6 +67,18 @@ struct ConfigureAgentsViewV2: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
             detectAll()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dcSelectConfigureTab)) { note in
+            guard let id = note.object as? String else { return }
+            withAnimation(DCAnim.fade) {
+                switch id {
+                case "settings":  tab = .settings; selected = nil
+                case "channels":  tab = .channels; selected = nil
+                case "logs":      tab = .logs;     selected = nil
+                case "agents":    tab = .agents
+                default: break
+                }
+            }
         }
         .alert("Update Hook Configs", isPresented: $showMigrationAlert) {
             Button("Update All") {
@@ -125,6 +139,18 @@ struct ConfigureAgentsViewV2: View {
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .logs ? Color.accentColor.opacity(0.15) : Color.clear)
                 .animation(DCAnim.fade, value: tab == .logs)
+
+                Button {
+                    withAnimation(DCAnim.fade) {
+                        tab = .settings
+                        selected = nil
+                    }
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(tab == .settings ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(DCAnim.fade, value: tab == .settings)
             }
         }
         .listStyle(.sidebar)
@@ -784,9 +810,9 @@ struct ConfigureAgentsViewV2: View {
             list.append(Prereq(label: "~/.cursor/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Cursor first"))
             list.append(Prereq(label: "Cursor 0.45+ with Hooks enabled", met: detections[.cursor]?.installed == true, fix: "Enable Hooks in Settings → Beta"))
         case .vscode:
-            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
-            list.append(Prereq(label: "~/.claude/ exists (shared config)", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `claude` once or create ~/.claude/ manually"))
-            list.append(Prereq(label: "VS Code + Copilot Chat extension", met: true, fix: nil))
+            let hooksDir = AgentInstallerV2.vscodeCopilotHooksDirAbsolute()
+            list.append(Prereq(label: "~/.copilot/vscode-hooks/ writable", met: FileManager.default.isWritableFile(atPath: hooksDir) || !FileManager.default.fileExists(atPath: hooksDir), fix: "Check permissions on ~/.copilot/vscode-hooks/"))
+            list.append(Prereq(label: "VS Code Copilot Chat extension installed", met: true, fix: nil))
         case .copilotCLI:
             list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm: `npm i -g @github/copilot`"))
             list.append(Prereq(label: "~/.copilot/ exists", met: FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.copilot"), fix: "Run `copilot` once to initialize"))

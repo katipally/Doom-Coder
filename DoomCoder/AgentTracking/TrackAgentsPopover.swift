@@ -103,7 +103,7 @@ struct TrackAgentsView: View {
                     Circle()
                         .fill(stateColor(state))
                         .frame(width: 7, height: 7)
-                        .symbolEffect(.pulse, isActive: state == .running || state == .stale)
+                        .symbolEffect(.pulse, isActive: state == .running)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -154,7 +154,7 @@ struct TrackAgentsView: View {
         if monitor.isAppRunning[agent] == true {
             return agent.isIDEAgent ? "idle" : "running"
         }
-        return "not running"
+        return "closed"
     }
 
     private func stateColor(_ s: AgentSessionState) -> Color {
@@ -164,7 +164,6 @@ struct TrackAgentsView: View {
         case .running:          return .green
         case .waitingInput:     return .yellow
         case .waitingApproval:  return .orange
-        case .stale:            return Color(red: 1, green: 0.75, blue: 0)
         case .completed:        return .gray
         case .failed:           return .red
         }
@@ -244,7 +243,7 @@ struct TrackAccordion: View {
                 Text(agent.displayName).font(.caption.weight(.medium))
                 HStack(spacing: 4) {
                     Circle().fill(stateColor(state)).frame(width: 6, height: 6)
-                        .symbolEffect(.pulse, isActive: state == .running || state == .stale)
+                        .symbolEffect(.pulse, isActive: state == .running)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption2).foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
@@ -284,7 +283,7 @@ struct TrackAccordion: View {
         if monitor.isAppRunning[agent] == true {
             return agent.isIDEAgent ? "idle" : "running"
         }
-        return "not running"
+        return "closed"
     }
 
     private func stateColor(_ s: AgentSessionState) -> Color {
@@ -294,7 +293,6 @@ struct TrackAccordion: View {
         case .running:          return .green
         case .waitingInput:     return .yellow
         case .waitingApproval:  return .orange
-        case .stale:            return Color(red: 1, green: 0.75, blue: 0)
         case .completed:        return .gray
         case .failed:           return .red
         }

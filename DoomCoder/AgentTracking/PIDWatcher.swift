@@ -1,7 +1,9 @@
 import Foundation
 
 // Watches a set of PIDs using DispatchSource (kqueue EVFILT_PROC + NOTE_EXIT under the hood).
-// When a watched PID exits without a terminal hook event, the session is marked stale.
+// When a watched PID exits without a terminal hook event, the session is
+// finalized as completed (so the badge transitions completed -> idle via
+// the auto-revert path, and no "disconnected" state is shown).
 //
 // Requirements:
 // - App must NOT be sandboxed (DoomCoder.entitlements: app-sandbox = false) — satisfied.
@@ -16,7 +18,8 @@ final class PIDWatcher {
 
     private init() {}
 
-    // Start watching `pid`. When the process exits, calls markStale on the session.
+    // Start watching `pid`. When the process exits, finalizes the session
+    // via AgentTrackingManager.finalizeOnPIDExit.
     // Safe to call repeatedly — duplicate watch for the same pid+key is a no-op.
     // PID recycle: if the same PID is now associated with a different sessionKey,
     // the old watcher is cancelled and replaced.
@@ -43,7 +46,7 @@ final class PIDWatcher {
             src.cancel()
             self.sources.removeValue(forKey: pid)
             if let key = self.pidToSessionKey.removeValue(forKey: pid) {
-                AgentTrackingManager.shared.markStale(sessionKey: key)
+                AgentTrackingManager.shared.finalizeOnPIDExit(sessionKey: key)
             }
         }
         src.resume()  // MUST call resume() or the source never fires.

@@ -174,6 +174,7 @@ enum WindowOpener {
 
 extension Notification.Name {
     static let dcOpenWindow = Notification.Name("com.doomcoder.openWindow")
+    static let dcSelectConfigureTab = Notification.Name("com.doomcoder.selectConfigureTab")
 }
 
 /// Invisible SwiftUI view that listens for dcOpenWindow notifications
@@ -187,7 +188,14 @@ struct WindowOpenerBridge: View {
             .frame(width: 0, height: 0)
             .onReceive(NotificationCenter.default.publisher(for: .dcOpenWindow)) { note in
                 guard let id = note.object as? String else { return }
-                openWindow(id: id)
+                // Settings is no longer a standalone scene — re-route to the
+                // Configure window with the Settings tab pre-selected.
+                if id == "settings" {
+                    openWindow(id: "configureAgents")
+                    NotificationCenter.default.post(name: .dcSelectConfigureTab, object: "settings")
+                } else {
+                    openWindow(id: id)
+                }
             }
     }
 }
