@@ -148,12 +148,26 @@ jobs:
 
           # Normalize via openssl so CryptoKit gets a canonical PEM structure
           # (correct line width, no stray bytes, clean header/footer).
-          if openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" 2>/dev/null; then
+          # Show the error if it fails — the error message is not secret data.
+          OPENSSL_OUT="$(openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" 2>&1)"
+          OPENSSL_RC=$?
+          if [ $OPENSSL_RC -eq 0 ]; then
             echo "Key normalized via openssl pkey"
           else
-            cp "$RAW_FILE" "$KEY_FILE"
-            echo "Warning: openssl normalization skipped — using cleaned raw key"
+            echo "openssl pkey failed (rc=${OPENSSL_RC}): ${OPENSSL_OUT}"
+            # Try pkcs8 sub-command as fallback (handles PKCS#8 keys explicitly)
+            OPENSSL_OUT2="$(openssl pkcs8 -nocrypt -in "$RAW_FILE" -out "$KEY_FILE" 2>&1)"
+            if [ $? -eq 0 ]; then
+              echo "Key normalized via openssl pkcs8"
+            else
+              echo "openssl pkcs8 also failed: ${OPENSSL_OUT2}"
+              cp "$RAW_FILE" "$KEY_FILE"
+              echo "Warning: using cleaned raw key without openssl normalization"
+            fi
           fi
+          # Print first line (PEM header) for diagnostics — not secret content
+          HEADER=$(head -1 "$RAW_FILE")
+          echo "PEM header line: '${HEADER}'"
           rm -f "$RAW_FILE"
           chmod 600 "$KEY_FILE"
 
