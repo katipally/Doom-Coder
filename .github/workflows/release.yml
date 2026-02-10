@@ -18,6 +18,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set version from tag
         run: |
@@ -73,6 +74,9 @@ jobs:
             -S apple-tool:,apple: \
             -s -k "${KEYCHAIN_PASSWORD}" build.keychain
 
+          # Add build.keychain to the search list so Xcode can find the cert
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+
           # Verify certificate is imported
           security find-identity -v -p codesigning build.keychain
 
@@ -107,34 +111,78 @@ jobs:
 
       - name: Re-sign embedded frameworks
         run: |
-          # Ensure all embedded frameworks/dylibs are signed with our Developer ID.
-          # Xcode's automatic export re-signs them, but this step is a belt-and-suspenders
-          # guarantee — unsigned inner binaries are the #1 cause of notarization hangs.
           APP="build/export/DoomCoder.app"
+          IDENTITY="Developer ID Application"
 
-          # Sign inner frameworks/plugins first (must sign leaves before the app)
-          find "$APP" \( -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" \) | \
-            sort -r | \
-            while read -r component; do
-              echo "Re-signing: $component"
-              codesign --force \
-                --sign "Developer ID Application" \
-                --timestamp \
-                --options runtime \
-                "$component"
+          # Sign every Mach-O binary inside the bundle BEFORE signing the bundle itself.
+          # Order: deepest paths first (XPC services, nested .apps, frameworks, dylibs,
+          # then plain binaries like dc-hook and Sparkle's Autoupdate helper).
+          #
+          # Why: notarization scans every binary in the bundle — any binary signed with
+          # the wrong identity (e.g. Sparkle's own cert) causes Apple to stall or fail.
+
+          echo "=== Signing all Mach-O binaries (deepest first) ==="
+          # Sort by path depth (most slashes = deepest = sign first) using tab-delimited cut
+          find "$APP" -type f | \
+            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
+            while IFS= read -r f; do
+              if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
+                echo "  Signing: $f"
+                codesign --force \
+                  --sign "$IDENTITY" \
+                  --timestamp \
+                  --options runtime \
+                  "$f"
+              fi
             done
 
-          # Re-sign the app itself last (includes entitlements)
+          echo "=== Signing XPC service bundles ==="
+          find "$APP" -type d -name "*.xpc" | \
+            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
+            while IFS= read -r xpc; do
+              echo "  Signing: $xpc"
+              codesign --force \
+                --sign "$IDENTITY" \
+                --timestamp \
+                --options runtime \
+                "$xpc"
+            done
+
+          echo "=== Signing nested .app bundles ==="
+          find "$APP" -mindepth 2 -type d -name "*.app" | \
+            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
+            while IFS= read -r nested; do
+              echo "  Signing: $nested"
+              codesign --force \
+                --sign "$IDENTITY" \
+                --timestamp \
+                --options runtime \
+                "$nested"
+            done
+
+          echo "=== Signing frameworks ==="
+          find "$APP" -type d -name "*.framework" | \
+            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
+            while IFS= read -r fw; do
+              echo "  Signing: $fw"
+              codesign --force \
+                --sign "$IDENTITY" \
+                --timestamp \
+                --options runtime \
+                "$fw"
+            done
+
+          echo "=== Signing main app bundle (with entitlements) ==="
           codesign --force \
-            --sign "Developer ID Application" \
+            --sign "$IDENTITY" \
             --timestamp \
             --options runtime \
             --entitlements "DoomCoder/DoomCoder.entitlements" \
             "$APP"
 
-          # Verify the final signature
+          echo "=== Verifying ==="
           codesign --verify --deep --strict --verbose=2 "$APP"
-          echo "✅ Signing OK"
+          echo "✅ All binaries signed and verified"
 
       - name: Notarize app
         env:
@@ -142,14 +190,16 @@ jobs:
           NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
           NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
         run: |
-          # Zip the app for submission (notarytool requires a zip/pkg, not .app directly)
+          echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
+          chmod 600 /tmp/AuthKey.p8
+
+          # Zip the app for submission (notarytool requires a zip, not .app directly)
           ditto -c -k --sequesterRsrc --keepParent \
             "build/export/DoomCoder.app" \
             "build/DoomCoder-notarize.zip"
 
-          echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
-
-          # Submit without --wait so we get a submission ID immediately
+          # Submit without --wait so we get an ID immediately and can monitor
+          echo "Submitting to Apple notarization..."
           SUBMISSION_OUTPUT=$(xcrun notarytool submit "build/DoomCoder-notarize.zip" \
             --key /tmp/AuthKey.p8 \
             --key-id "${NOTARIZE_KEY_ID}" \
@@ -157,23 +207,30 @@ jobs:
             --no-wait \
             --output-format json)
           echo "Submit response: ${SUBMISSION_OUTPUT}"
-          SUBMISSION_ID=$(echo "${SUBMISSION_OUTPUT}" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+
+          SUBMISSION_ID=$(echo "${SUBMISSION_OUTPUT}" | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); print(d['id'])")
           echo "Submission ID: ${SUBMISSION_ID}"
 
-          # Wait up to 90 minutes — Apple's service is usually 2-10 min but can spike
+          # Wait for Apple to finish — typically 2-10 min, up to 30 on a bad day.
+          # We use || to prevent set -e from killing us before we can print the log.
+          NOTARIZE_OK=0
           xcrun notarytool wait "${SUBMISSION_ID}" \
             --key /tmp/AuthKey.p8 \
             --key-id "${NOTARIZE_KEY_ID}" \
             --issuer "${NOTARIZE_ISSUER_ID}" \
-            --timeout 90m
+            --timeout 60m || NOTARIZE_OK=1
 
-          # Always fetch the log to help debug any future issues
+          # Always print the full Apple notarization log (essential for debugging)
+          echo "=== Apple Notarization Log ==="
           xcrun notarytool log "${SUBMISSION_ID}" \
             --key /tmp/AuthKey.p8 \
             --key-id "${NOTARIZE_KEY_ID}" \
             --issuer "${NOTARIZE_ISSUER_ID}" || true
 
           rm -f /tmp/AuthKey.p8
+
+          [ "${NOTARIZE_OK}" -eq 0 ] || { echo "::error::Notarization failed — see log above"; exit 1; }
 
       - name: Staple notarization ticket
         run: |
