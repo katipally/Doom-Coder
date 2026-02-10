@@ -568,9 +568,13 @@ struct AgentInstallerV2 {
 
     // OpenAI Codex CLI hook events (May 2026). Requires `codex_hooks = true`
     // feature flag in ~/.codex/config.toml.
+    // OpenAI Codex CLI hook events (May 2026). Requires `codex_hooks = true`
+    // feature flag in ~/.codex/config.toml.
+    // Source: openai/codex codex-rs/app-server-protocol/src/protocol/v2/hook.rs
     static let codexEvents = [
         "SessionStart", "PreToolUse", "PermissionRequest",
-        "PostToolUse", "UserPromptSubmit", "Stop"
+        "PostToolUse", "UserPromptSubmit", "Stop",
+        "PreCompact", "PostCompact"
     ]
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {

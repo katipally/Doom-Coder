@@ -122,7 +122,7 @@ struct ConfigureAgentsViewV2: View {
                         selected = nil
                     }
                 } label: {
-                    Label("Channels", systemImage: "bell.badge")
+                    Label("Notification Channels", systemImage: "bell.badge")
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
