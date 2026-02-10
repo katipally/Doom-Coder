@@ -218,28 +218,43 @@ jobs:
 
           # ── Poll with notarytool info (every 30 s, max 120 polls = 60 min) ──
           # We use short-lived `notarytool info` calls instead of the long-running
-          # `notarytool wait`, which can hang indefinitely on beta runners when
-          # the underlying HTTP connection drops or the response is delayed.
-          # Each info call is wrapped with `timeout 90` so a hung TLS handshake
-          # cannot block us for more than 90 seconds (some first-time accounts
-          # see Apple take 20-45 minutes for extended validation).
+          # `notarytool wait`, which has hung indefinitely on macos-26 beta runners
+          # when the underlying HTTPS connection drops mid-stream.
+          #
+          # NOTE: We deliberately do NOT wrap with `timeout` — that binary does not
+          # exist on macOS (it's GNU coreutils) and silently failed every poll in
+          # earlier runs, producing 40 consecutive `poll_error` with no diagnostics.
+          # `notarytool info` is a short HTTPS call and returns quickly on its own.
           echo "Polling notarization status (up to 60 min)..."
           FINAL_STATUS="in_progress"
           for ATTEMPT in $(seq 1 120); do
             sleep 30
 
-            INFO_JSON=$(timeout 90 xcrun notarytool info "${SUBMISSION_ID}" \
+            INFO_STDERR=$(mktemp)
+            INFO_JSON=$(xcrun notarytool info "${SUBMISSION_ID}" \
               --key /tmp/AuthKey.p8 \
               --key-id  "${NOTARIZE_KEY_ID}" \
               --issuer  "${NOTARIZE_ISSUER_ID}" \
-              --output-format json 2>/dev/null \
-              || echo '{"status":"poll_error"}')
+              --output-format json 2>"${INFO_STDERR}") || INFO_JSON='{"status":"poll_error"}'
 
             FINAL_STATUS=$(echo "${INFO_JSON}" | \
               python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" \
               2>/dev/null || echo "parse_error")
 
             echo "  [$(printf '%03d' $ATTEMPT)/120] $(date -u '+%H:%M:%S UTC') — ${FINAL_STATUS}"
+
+            # Surface stderr from notarytool whenever the call failed so we can
+            # actually diagnose problems (previously suppressed with 2>/dev/null).
+            if [ "${FINAL_STATUS}" = "poll_error" ] || [ "${FINAL_STATUS}" = "parse_error" ] || [ "${FINAL_STATUS}" = "unknown" ]; then
+              if [ -s "${INFO_STDERR}" ]; then
+                echo "    ↳ notarytool stderr:"
+                sed 's/^/      /' "${INFO_STDERR}"
+              fi
+              if [ -n "${INFO_JSON}" ]; then
+                echo "    ↳ notarytool stdout: ${INFO_JSON}"
+              fi
+            fi
+            rm -f "${INFO_STDERR}"
 
             case "${FINAL_STATUS}" in
               Accepted)
