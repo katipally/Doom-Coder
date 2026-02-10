@@ -1,13 +1,6 @@
 # XcodeGen spec for DoomCoder Companion (iOS) + NotificationService extension.
-#
 # Generate the project with:
-#   brew install xcodegen
 #   cd DoomCoderCompanion && xcodegen generate
-#
-# The generated DoomCoderCompanion.xcodeproj is then opened from the
-# top-level DoomCoder.xcworkspace (which references both .xcodeproj files
-# plus the DoomCoderCore SPM package).
-
 name: DoomCoderCompanion
 options:
   bundleIdPrefix: com.doomcoder.app
@@ -42,6 +35,7 @@ targets:
         excludes:
           - "Resources/Info.plist"
           - "Resources/DoomCoderCompanion.entitlements"
+          - "Resources/DoomCoderCompanion.Release.entitlements"
     resources:
       - DoomCoderCompanion/Resources/Assets.xcassets
     info:
@@ -55,26 +49,28 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - remote-notification
-          - processing
         UIRequiredDeviceCapabilities:
           - arm64
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        BGTaskSchedulerPermittedIdentifiers:
-          - com.doomcoder.app.companion.refresh
-        NSLocalNetworkUsageDescription: "DoomCoder Companion sends a Wake-on-LAN packet on your local Wi-Fi to wake your Mac. Network access is used only when you tap Wake."
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.doomcoder.app.companion
+            CFBundleURLSchemes:
+              - doomcoder
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.doomcoder.app.companion
         CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.entitlements
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.Release.entitlements
     dependencies:
       - package: DoomCoderCore
       - target: NotificationService
@@ -114,21 +110,11 @@ schemes:
         NotificationService: all
     run:
       config: Debug
-      commandLineArguments: {}
-      environmentVariables: []
     test:
       config: Debug
     profile:
       config: Release
     analyze:
-      config: Debug
-    archive:
-      config: Release
-  NotificationService:
-    build:
-      targets:
-        NotificationService: all
-    run:
       config: Debug
     archive:
       config: Release

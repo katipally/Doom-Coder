@@ -5,7 +5,6 @@
 
 import UIKit
 import UserNotifications
-import BackgroundTasks
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -20,22 +19,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         AppGroupCache.runV3MigrationOnce()
         AppGroupCache.enforceSchemaVersion()
 
-        // v3.0: do NOT request notification permission here. The user grants
-        // it from the Onboarding screen, AFTER reading the context copy that
-        // explains what the notifications are for. Calling
-        // requestAuthorization here would trigger the system prompt before
-        // the user has any frame of reference and is the #1 cause of users
-        // permanently denying the permission.
-
-        // BGTaskScheduler registration MUST happen synchronously before
-        // didFinishLaunchingWithOptions returns — the scheduler ignores (and
-        // in iOS 17+ kills) apps that register handlers after launch completes.
-        BackgroundRefresh.register()
-
-        // Sync engine + BGTask scheduling can be async (no launch deadline).
+        // Sync engine start
         Task { @MainActor in
             CompanionSyncEngine.shared.start()
-            BackgroundRefresh.schedule()
         }
 
         // Download agent icons into App Group so the NSE can attach them to banners.
