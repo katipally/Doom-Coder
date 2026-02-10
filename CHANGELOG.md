@@ -36,6 +36,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Agent status mirroring** — the Mac now embeds `installedAgents` + per-agent `statuses` JSON on each `AgentConfig` push; the iOS list shows a status dot and "not installed" pill matching the Mac panel.
 - **TestFlight CI workflow** (`.github/workflows/ios-testflight.yml`) — triggered by `ios-vX.Y.Z` tags or `workflow_dispatch`. Uses an App Store Connect API key, a temporary keychain for the Apple Distribution cert, and `xcodebuild -exportArchive` with `destination=upload` to push directly to TestFlight.
 
+### 2.4.0 polish round 2
+- **DoomCoder logo on the iOS onboarding screen** — replaced the generic `moon.zzz.fill` symbol with the bundled app icon so the notification-permission step is immediately recognisable as DoomCoder.
+- **Cursor capability copy fix** — Cursor cannot emit waiting-for-input events, so it has been removed from Cursor's capability list in both Mac (`AgentCapabilities.swift`) and iOS (`AgentCapabilityCatalog`) surfaces.
+- **`assets/Agent-logos/` is now the single source of truth** for all agent icons. The new `scripts/sync-agent-icons.sh` regenerates both the Mac and iOS imagesets from these files (webp/svg/png all supported). Drop a replacement file with the same name and re-run the script.
+- **Repository hygiene** — removed the tracked `DoomCoder-2.2.0.dmg` / `DoomCoder-2.3.0.dmg` (GitHub Releases is the canonical archive), removed tracked `certificate.p12`, removed tracked `Ref/` vendor docs. Added `*.dmg`, `*.p12`, `*.cer`, `*.mobileprovision`, and `Ref/` to `.gitignore`.
+- **Docs** — `README.md` rewritten to describe the actual app (sleep blocker + agent tracker + iPhone companion). `RELEASING.md` extended with a full first-time iOS App Store walkthrough (App Store Connect record, privacy nutrition label, screenshots, certificates, API key, CloudKit production deploy, submission notes).
+
 ### Migration
 Existing v2.3 users who had `ntfy = true` in their channel preference are migrated transparently — the new `cloudkit` channel reads the legacy key on first decode. No user action is required other than installing the iPhone companion app from the App Store.
 

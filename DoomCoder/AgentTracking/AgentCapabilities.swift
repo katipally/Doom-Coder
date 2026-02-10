@@ -66,7 +66,7 @@ enum AgentCapabilityCatalog {
     static func capabilities(for agent: TrackedAgent) -> [AgentCapability] {
         switch agent {
         case .claude:     return [completed, failed, waitingApproval, sessionStart, toolCalls]
-        case .cursor:     return [completed, failed, waitingInput, sessionStart]
+        case .cursor:     return [completed, failed, sessionStart]
         case .vscode:     return [completed, failed, waitingInput, sessionStart]
         case .copilotCLI: return [completed, failed, sessionStart, toolCalls]
         case .windsurf:   return [completed, failed, waitingInput, sessionStart]
