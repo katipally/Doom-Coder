@@ -14,8 +14,6 @@ struct TrackAgentsView: View {
     @State private var enabled: [TrackedAgent: Bool] = [:]
     @State private var installed: [TrackedAgent: Bool] = [:]
     @State private var cliFolderCount: Int = 0
-    @State private var tick = 0
-    @State private var refreshTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,24 +31,10 @@ struct TrackAgentsView: View {
             footer
         }
         .frame(width: 420, height: 420)
-        .onAppear {
-            reload()
-            refreshTask = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    guard !Task.isCancelled else { break }
-                    tick &+= 1
-                    reload()
-                }
-            }
-        }
-        .onDisappear {
-            refreshTask?.cancel()
-            refreshTask = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
-            reload()
-        }
+        .onAppear { reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomcoderNewEvent)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomcoderProcessStateChanged)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in reload() }
     }
 
     // MARK: - Pieces
@@ -89,6 +73,14 @@ struct TrackAgentsView: View {
         let live = manager.liveSessions.first { $0.agent == agent }
         let isInstalled = installed[agent] ?? false
         let isOn = enabled[agent] ?? true
+        // Derive effective display state: live session state, or process-monitor state when idle.
+        let state: AgentSessionState = {
+            if let live { return live.displayState }
+            if manager.processMonitor.isAppRunning[agent] == true {
+                return agent.isIDEAgent ? .open : .running
+            }
+            return .notRunning
+        }()
 
         HStack(alignment: .center, spacing: 10) {
             Image(nsImage: AgentIconProvider.icon(for: agent, size: 28))
@@ -110,9 +102,9 @@ struct TrackAgentsView: View {
                 }
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(stateColor(live?.displayState))
+                        .fill(stateColor(state))
                         .frame(width: 7, height: 7)
-                        .symbolEffect(.pulse, isActive: live?.displayState == .running)
+                        .symbolEffect(.pulse, isActive: state == .running || state == .stale)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -159,16 +151,22 @@ struct TrackAgentsView: View {
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
         if let live { return live.status }
+        let monitor = AgentTrackingManager.shared.processMonitor
+        if monitor.isAppRunning[agent] == true {
+            return agent.isIDEAgent ? "idle" : "running"
+        }
         if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
-        return "idle"
+        return "not running"
     }
 
-    private func stateColor(_ s: AgentSessionState?) -> Color {
-        guard let s else { return .secondary.opacity(0.5) }
+    private func stateColor(_ s: AgentSessionState) -> Color {
         switch s {
+        case .notRunning:       return .gray.opacity(0.35)
+        case .open:             return .secondary.opacity(0.5)
         case .running:          return .green
         case .waitingInput:     return .yellow
         case .waitingApproval:  return .orange
+        case .stale:            return Color(red: 1, green: 0.75, blue: 0)
         case .completed:        return .gray
         case .failed:           return .red
         }
@@ -204,8 +202,6 @@ struct TrackAccordion: View {
     @State private var enabled: [TrackedAgent: Bool] = [:]
     @State private var installed: [TrackedAgent: Bool] = [:]
     @State private var cliFolderCount: Int = 0
-    @State private var tick = 0
-    @State private var refreshTask: Task<Void, Never>? = nil
 
     var openConfigure: () -> Void = {}
 
@@ -230,29 +226,22 @@ struct TrackAccordion: View {
                 }
             }
         }
-        .onAppear {
-            reload()
-            refreshTask = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(2))
-                    guard !Task.isCancelled else { break }
-                    tick &+= 1
-                    reload()
-                }
-            }
-        }
-        .onDisappear {
-            refreshTask?.cancel()
-            refreshTask = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
-            reload()
-        }
+        .onAppear { reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomcoderNewEvent)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomcoderProcessStateChanged)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in reload() }
     }
 
     @ViewBuilder
     private func compactRow(_ agent: TrackedAgent) -> some View {
         let live = manager.liveSessions.first { $0.agent == agent }
+        let state: AgentSessionState = {
+            if let live { return live.displayState }
+            if manager.processMonitor.isAppRunning[agent] == true {
+                return agent.isIDEAgent ? .open : .running
+            }
+            return .notRunning
+        }()
         HStack(alignment: .center, spacing: 10) {
             Image(nsImage: AgentIconProvider.icon(for: agent, size: 20))
                 .resizable()
@@ -262,8 +251,8 @@ struct TrackAccordion: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.displayName).font(.caption.weight(.medium))
                 HStack(spacing: 4) {
-                    Circle().fill(stateColor(live?.displayState)).frame(width: 6, height: 6)
-                        .symbolEffect(.pulse, isActive: live?.displayState == .running)
+                    Circle().fill(stateColor(state)).frame(width: 6, height: 6)
+                        .symbolEffect(.pulse, isActive: state == .running || state == .stale)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption2).foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
@@ -299,16 +288,22 @@ struct TrackAccordion: View {
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
         if let live { return live.status }
+        let monitor = AgentTrackingManager.shared.processMonitor
+        if monitor.isAppRunning[agent] == true {
+            return agent.isIDEAgent ? "idle" : "running"
+        }
         if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
-        return "idle"
+        return "not running"
     }
 
-    private func stateColor(_ s: AgentSessionState?) -> Color {
-        guard let s else { return .secondary.opacity(0.5) }
+    private func stateColor(_ s: AgentSessionState) -> Color {
         switch s {
+        case .notRunning:       return .gray.opacity(0.35)
+        case .open:             return .secondary.opacity(0.5)
         case .running:          return .green
         case .waitingInput:     return .yellow
         case .waitingApproval:  return .orange
+        case .stale:            return Color(red: 1, green: 0.75, blue: 0)
         case .completed:        return .gray
         case .failed:           return .red
         }

@@ -38,6 +38,7 @@
 		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
 		DC0000000000002000000046 /* UIAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000046 /* UIAnimations.swift */; };
+		DC0000000000002000000104 /* PayloadRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* PayloadRendererView.swift */; };
 		DC0000000000002000000047 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000047 /* FloatingPanelController.swift */; };
 		DC0000000000002000000048 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000048 /* StatusItemController.swift */; };
 		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
@@ -47,6 +48,8 @@
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
 		DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* PrivacyInfo.xcprivacy */; };
+		DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000110 /* AgentProcessMonitor.swift */; };
+		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +86,7 @@
 		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000046 /* UIAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAnimations.swift; sourceTree = "<group>"; };
+		DC0000000000001000000104 /* PayloadRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadRendererView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000047 /* FloatingPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelController.swift; sourceTree = "<group>"; };
 		DC0000000000001000000048 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
@@ -92,6 +96,8 @@
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
 		DC0000000000001000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		DC0000000000001000000110 /* AgentProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProcessMonitor.swift; sourceTree = "<group>"; };
+		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,7 +169,10 @@
 				DC0000000000001000000044 /* AgentEventNormalizer.swift */,
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
 				DC0000000000001000000046 /* UIAnimations.swift */,
+				DC0000000000001000000104 /* PayloadRendererView.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
+				DC0000000000001000000110 /* AgentProcessMonitor.swift */,
+				DC0000000000001000000111 /* PIDWatcher.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
 				DC0000000000001000000102 /* IconDownloader.swift */,
 			);
@@ -308,12 +317,15 @@
 				DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */,
 				DC0000000000002000000045 /* LiveEventsStore.swift in Sources */,
 				DC0000000000002000000046 /* UIAnimations.swift in Sources */,
+				DC0000000000002000000104 /* PayloadRendererView.swift in Sources */,
 				DC0000000000002000000047 /* FloatingPanelController.swift in Sources */,
 				DC0000000000002000000048 /* StatusItemController.swift in Sources */,
 				DC0000000000002000000049 /* GlobalHotkey.swift in Sources */,
 				DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */,
 				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
+				DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */,
+				DC0000000000002000000111 /* PIDWatcher.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 			);
