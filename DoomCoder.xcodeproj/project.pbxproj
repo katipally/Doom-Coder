@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87477377B262B2B2BA39729A /* CloudKitPusher.swift */; };
+		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
@@ -19,7 +21,6 @@
 		DC0000000000002000000021 /* PauseFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* PauseFlag.swift */; };
 		DC0000000000002000000022 /* AgentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* AgentDetector.swift */; };
 		DC0000000000002000000023 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000023 /* EventStore.swift */; };
-		DC0000000000002000000024 /* NtfyTopic.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* NtfyTopic.swift */; };
 		DC0000000000002000000025 /* HookSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* HookSocketListener.swift */; };
 		DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* NotificationDispatcher.swift */; };
 		DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* AgentTrackingManager.swift */; };
@@ -54,6 +55,8 @@
 
 /* Begin PBXFileReference section */
 		10BE8A907052E381A9766A37 /* DoomCoder.Release.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DoomCoder.Release.entitlements; sourceTree = "<group>"; };
+		87477377B262B2B2BA39729A /* CloudKitPusher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusher.swift; sourceTree = "<group>"; };
+		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
@@ -67,7 +70,6 @@
 		DC0000000000001000000021 /* PauseFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseFlag.swift; sourceTree = "<group>"; };
 		DC0000000000001000000022 /* AgentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000023 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
-		DC0000000000001000000024 /* NtfyTopic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyTopic.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* HookSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketListener.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000028 /* AgentTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingManager.swift; sourceTree = "<group>"; };
@@ -159,7 +161,6 @@
 				DC0000000000001000000021 /* PauseFlag.swift */,
 				DC0000000000001000000022 /* AgentDetector.swift */,
 				DC0000000000001000000023 /* EventStore.swift */,
-				DC0000000000001000000024 /* NtfyTopic.swift */,
 				DC0000000000001000000025 /* HookSocketListener.swift */,
 				DC0000000000001000000032 /* AgentInstallerV2.swift */,
 				DC0000000000001000000027 /* NotificationDispatcher.swift */,
@@ -184,6 +185,8 @@
 				DC0000000000001000000111 /* PIDWatcher.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
 				DC0000000000001000000102 /* IconDownloader.swift */,
+				87477377B262B2B2BA39729A /* CloudKitPusher.swift */,
+				CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -300,7 +303,6 @@
 				DC0000000000002000000021 /* PauseFlag.swift in Sources */,
 				DC0000000000002000000022 /* AgentDetector.swift in Sources */,
 				DC0000000000002000000023 /* EventStore.swift in Sources */,
-				DC0000000000002000000024 /* NtfyTopic.swift in Sources */,
 				DC0000000000002000000025 /* HookSocketListener.swift in Sources */,
 				DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */,
 				DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */,
@@ -330,6 +332,8 @@
 				DC0000000000002000000111 /* PIDWatcher.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
+				086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */,
+				1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

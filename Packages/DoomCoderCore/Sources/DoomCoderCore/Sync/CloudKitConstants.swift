@@ -17,6 +17,7 @@ public enum CloudKitConstants {
         public static let controlCommand    = "ControlCommand"
         public static let wolProfile        = "WoLProfile"
         public static let agentIcon         = "AgentIcon"
+        public static let agentConfig       = "AgentConfig"
     }
 
     /// Current schema version published to CloudKit. Bump together with field

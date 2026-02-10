@@ -430,10 +430,10 @@ struct ConfigureAgentsViewV2: View {
                                     if v { NotificationDispatcher.shared.requestPermission() }
                                 }
                             ))
-                            Toggle("ntfy", isOn: Binding(
-                                get: { override.ntfy },
+                            Toggle("iPhone / iPad", isOn: Binding(
+                                get: { override.cloudkit },
                                 set: { v in
-                                    var c = override; c.ntfy = v
+                                    var c = override; c.cloudkit = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
                                 }
@@ -580,80 +580,43 @@ struct ConfigureAgentsViewV2: View {
                     Label("macOS", systemImage: "bell.fill")
                 }
 
-                // ntfy
+                // iPhone / iPad (iCloud)
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Toggle("ntfy", isOn: Binding(
-                                get: { channelConfig.global.ntfy },
+                            Toggle("iPhone / iPad", isOn: Binding(
+                                get: { channelConfig.global.cloudkit },
                                 set: { v in
-                                    channelConfig.global.ntfy = v
+                                    channelConfig.global.cloudkit = v
                                     ChannelStore.setGlobal(channelConfig.global)
                                 }
                             ))
                             Spacer()
                             Button("Test") {
-                                ChannelTester.sendTest(channel: .ntfy) { ok, msg in
+                                ChannelTester.sendTest(channel: .cloudKit) { ok, msg in
                                     testResult = (ok, msg)
                                 }
                             }
                         }
 
-                        HStack {
-                            Text("Topic:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.getOrCreate())
-                                .font(.system(.callout, design: .monospaced))
-                                .textSelection(.enabled)
-                            Spacer()
-                            Button("Copy Topic") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(NtfyTopic.getOrCreate(), forType: .string)
-                            }
-                            Button("Regenerate") { _ = NtfyTopic.regenerate() }
-                        }
+                        Text("Mirror notifications to the DoomCoder companion app on your iPhone or iPad via iCloud. Sign in to the same iCloud account on both devices — no servers, no tokens.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         HStack {
-                            Text("Server:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.server ?? "https://ntfy.sh")
+                            Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
+                                .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
+                            Text(CloudKitPusher.shared.isReady
+                                 ? "Connected to iCloud as \(CloudKitPusher.shared.macName)"
+                                 : "Connecting to iCloud…")
                                 .font(.callout)
+                                .foregroundStyle(.secondary)
                             Spacer()
-                        }
-
-                        HStack {
-                            if let url = NtfyTopic.shareURL {
-                                Text("Subscribe URL:")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                Text(url.absoluteString)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                Spacer()
-                                Button("Copy Subscribe URL") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                }
-                            }
-                        }
-
-                        // QR Code
-                        if let url = NtfyTopic.shareURL {
-                            HStack {
-                                Spacer()
-                                qrCodeImage(for: url.absoluteString)
-                                    .resizable()
-                                    .interpolation(.none)
-                                    .frame(width: 120, height: 120)
-                                Spacer()
-                            }
-                            Text("Scan to subscribe on your phone")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity)
                         }
                     }
                 } label: {
-                    Label("ntfy", systemImage: "paperplane.fill")
+                    Label("iPhone / iPad", systemImage: "iphone.gen3")
                 }
 
                 // Notification event preferences
