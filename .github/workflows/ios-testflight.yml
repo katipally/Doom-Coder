@@ -122,20 +122,29 @@ jobs:
           KEY_FILE=~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
 
           # Auto-detect: raw PEM (starts with -----BEGIN) or base64-encoded.
-          # Both formats are accepted so users don't have to re-set the secret.
           if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
-            printf '%s\n' "$API_KEY" > "$KEY_FILE"
+            # Raw PEM — strip carriage returns (Windows \r\n → \n) then write.
+            printf '%s' "$API_KEY" | tr -d '\r' > "$KEY_FILE"
             echo "Detected raw PEM format"
           else
-            printf '%s' "$API_KEY" | base64 -D > "$KEY_FILE"
+            # Base64-encoded .p8 — decode then strip carriage returns.
+            printf '%s' "$API_KEY" | tr -d '\r ' | base64 -D > "$KEY_FILE"
             echo "Detected base64-encoded format, decoded successfully"
           fi
 
+          # Ensure file ends with a single newline (CryptoKit requires it)
+          if [[ "$(tail -c 1 "$KEY_FILE" | xxd -p)" != "0a" ]]; then
+            printf '\n' >> "$KEY_FILE"
+          fi
+
           if ! head -c 20 "$KEY_FILE" | grep -q "^-----BEGIN"; then
-            echo "::error::Written .p8 doesn't look like PEM. First 20 chars: $(head -c 20 "$KEY_FILE")"
+            echo "::error::Written .p8 doesn't look like PEM."
             exit 1
           fi
-          echo "API key validated: $(wc -c < "$KEY_FILE" | tr -d ' ') bytes"
+          SIZE=$(wc -c < "$KEY_FILE" | tr -d ' ')
+          FIRST=$(head -1 "$KEY_FILE")
+          LAST=$(tail -1 "$KEY_FILE")
+          echo "API key: ${SIZE} bytes | first: '${FIRST}' | last: '${LAST}'"
 
       - name: Archive (Release)
         working-directory: DoomCoderCompanion
