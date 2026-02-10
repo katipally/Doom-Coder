@@ -132,55 +132,52 @@ jobs:
 
           # Auto-detect: raw PEM (starts with -----BEGIN) or base64-encoded.
           if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
-            # Raw PEM: strip CR and trailing whitespace per line.
-            printf '%s' "$API_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//' > "$RAW_FILE"
+            # Raw PEM: strip CR, write as-is.
+            printf '%s' "$API_KEY" | tr -d '\r' > "$RAW_FILE"
             echo "Detected raw PEM format"
           else
-            # Base64-encoded: decode then strip CR.
+            # Base64-encoded outer wrapper: decode it first, strip CR.
             printf '%s' "$API_KEY" | tr -d '\r ' | base64 -D > "$RAW_FILE"
             echo "Detected base64-encoded format"
           fi
 
-          # Ensure file ends with exactly one newline.
-          if [[ "$(tail -c 1 "$RAW_FILE" | xxd -p)" != "0a" ]]; then
-            printf '\n' >> "$RAW_FILE"
+          # ── CANONICAL PEM RECONSTRUCTION ─────────────────────────────────────
+          # GitHub Secrets often strips newlines when pasting multiline values,
+          # resulting in: -----BEGIN PRIVATE KEY-----<base64>-----END PRIVATE KEY-----
+          # CryptoKit (used by xcodebuild) requires base64 wrapped at 64 chars.
+          # We always reconstruct the PEM regardless, so we handle both cases.
+          RAW_CONTENT=$(cat "$RAW_FILE" | tr -d '\r')
+          # Extract type from first "-----BEGIN <TYPE>-----" token
+          KEY_TYPE=$(printf '%s' "$RAW_CONTENT" | grep -o -- "-----BEGIN [^-]*-----" | head -1 | sed 's/-----BEGIN //;s/-----//')
+          if [[ -z "$KEY_TYPE" ]]; then
+            echo "::error::Could not detect PEM type from key content"
+            exit 1
           fi
-
-          # Normalize via openssl so CryptoKit gets a canonical PEM structure.
-          # Use || RC=$? to prevent set -e from triggering — we handle the failure.
-          # Try 1: unencrypted PKCS8 (standard Apple API key format)
-          OPENSSL_RC=0
-          OPENSSL_OUT="$(openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" 2>&1)" || OPENSSL_RC=$?
-          if [ $OPENSSL_RC -eq 0 ]; then
-            echo "Key normalized via openssl pkey (unencrypted)"
-          else
-            echo "openssl pkey failed (rc=${OPENSSL_RC}): ${OPENSSL_OUT}"
-            # Try 2: encrypted PKCS8 with empty passphrase → strip encryption
-            OPENSSL_RC2=0
-            OPENSSL_OUT2="$(openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" -passin pass: 2>&1)" || OPENSSL_RC2=$?
-            if [ $OPENSSL_RC2 -eq 0 ]; then
-              echo "Key decrypted (empty passphrase) and normalized"
-            else
-              echo "openssl pkey (empty passphrase) failed (rc=${OPENSSL_RC2}): ${OPENSSL_OUT2}"
-              # Try 3: explicit pkcs8 decode with empty passphrase
-              OPENSSL_RC3=0
-              OPENSSL_OUT3="$(openssl pkcs8 -nocrypt -in "$RAW_FILE" -out "$KEY_FILE" -passin pass: 2>&1)" || OPENSSL_RC3=$?
-              if [ $OPENSSL_RC3 -eq 0 ]; then
-                echo "Key normalized via openssl pkcs8 (empty passphrase)"
-              else
-                echo "openssl pkcs8 (empty passphrase) also failed (rc=${OPENSSL_RC3}): ${OPENSSL_OUT3}"
-                cp "$RAW_FILE" "$KEY_FILE"
-                echo "::warning::All openssl normalization attempts failed — using raw key as-is"
-                echo "::warning::If xcodebuild fails with invalidPEMDocument, the key in APP_STORE_CONNECT_PRIVATE_KEY may be corrupted."
-                echo "::warning::Verify locally: openssl pkey -in AuthKey_*.p8 -noout"
-                echo "::warning::If that fails, re-download the key from App Store Connect and update the secret."
-              fi
-            fi
+          echo "PEM type detected: ${KEY_TYPE}"
+          # Extract raw base64 payload (strip all PEM headers/footers and whitespace)
+          B64=$(printf '%s' "$RAW_CONTENT" | grep -v "^-----" | tr -d '\n\r ')
+          if [[ -z "$B64" ]]; then
+            echo "::error::Empty base64 payload in key"
+            exit 1
           fi
-          # Print PEM header for diagnostics (not secret content — header is masked)
-          HEADER=$(head -1 "$RAW_FILE")
-          echo "PEM header: '${HEADER}'"
+          # Reconstruct with standard 64-char line wrapping
+          {
+            printf -- "-----BEGIN %s-----\n" "$KEY_TYPE"
+            printf '%s' "$B64" | fold -w 64
+            printf "\n-----END %s-----\n" "$KEY_TYPE"
+          } > "$KEY_FILE"
+          echo "PEM reconstructed: $(wc -l < "$KEY_FILE") lines, $(wc -c < "$KEY_FILE" | tr -d ' ') bytes"
           rm -f "$RAW_FILE"
+
+          # Validate via openssl (non-fatal — CryptoKit may still accept it)
+          OPENSSL_RC=0
+          OPENSSL_OUT="$(openssl pkey -in "$KEY_FILE" -noout 2>&1)" || OPENSSL_RC=$?
+          if [ $OPENSSL_RC -eq 0 ]; then
+            echo "openssl validation: PASSED"
+          else
+            echo "::warning::openssl validation: ${OPENSSL_OUT}"
+            echo "::warning::Key may still work with xcodebuild — proceeding"
+          fi
           chmod 600 "$KEY_FILE"
 
           # Validate written file
