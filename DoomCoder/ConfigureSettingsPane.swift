@@ -79,19 +79,7 @@ struct ConfigureSettingsPane: View {
                             UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
                         }
                     Divider()
-                    HStack {
-                        Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
-                            .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
-                        Text("iPhone / iPad sync")
-                        Spacer()
-                        Text(CloudKitPusher.shared.isReady ? "Connected" : "Connecting…")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("Install the DoomCoder companion app from the App Store and sign in to the same iCloud account to mirror notifications on your iPhone or iPad.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    companionBanner
                 }
 
                 section("Diagnostics") {
@@ -107,6 +95,66 @@ struct ConfigureSettingsPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    @ViewBuilder
+    private var companionBanner: some View {
+        let isReady = CloudKitPusher.shared.isReady
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "iphone.gen3")
+                .font(.system(size: 26))
+                .foregroundStyle(isReady ? Color.accentColor : .secondary)
+                .frame(width: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("DoomCoder for iPhone & iPad")
+                        .font(.body.weight(.semibold))
+                    Spacer()
+                    Image(systemName: isReady ? "checkmark.icloud.fill" : "icloud.slash")
+                        .foregroundStyle(isReady ? .green : .secondary)
+                    Text(isReady ? "iCloud connected" : "Connecting…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Mirror every agent notification, see installed-agent status, and read session logs from your phone. Notifications are delivered through your private iCloud — no servers, no tokens, no QR codes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button {
+                        if let url = URL(string: Self.companionAppStoreURL) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Label("Get on the App Store", systemImage: "arrow.down.app.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+
+                    Button {
+                        if let url = URL(string: Self.companionHelpURL) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Text("How it works")
+                    }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                }
+                Text("Sign in to the same iCloud account on your Mac and your iPhone. The agent list and notifications appear automatically.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    /// App Store landing page for the DoomCoder Companion iOS app.
+    /// Falls back to a search URL until the App Store ID is locked in.
+    private static let companionAppStoreURL =
+        "https://apps.apple.com/app/doomcoder-companion/id0000000000"
+    private static let companionHelpURL =
+        "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
 
     @ViewBuilder
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {

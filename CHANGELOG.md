@@ -28,6 +28,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `DoomCoder/AgentTracking/NtfyTopic.swift` and all ntfy QR-code / topic-management UI.
 - ntfy POST path in `NotificationDispatcher`.
 
+### Polish (post-Phase-2)
+- **Companion install banner** in the Mac Configure → Notification & Privacy section: dedicated card with the App Store link, iCloud connection status, and a "How it works" deep link to the README anchor. Replaces the thin "iPhone / iPad sync" row.
+- **VS Code agent icon bundled** in both asset catalogs (`agent-vscode.imageset`). The Mac still prefers the live runtime icon via `NSWorkspace`, but Macs without VS Code installed and the iOS NSE now have a consistent fallback.
+- **Notification Service Extension icon seeding** — `AgentIconFetcher` now writes each bundled PNG into the shared App Group cache on launch so the NSE can attach the correct logo to the very first push, before any CloudKit `AgentIcon` sync has run.
+- **"What you'll be notified about" panel** in the Configure Agents detail view: per-agent capability list driven by `AgentCapabilityCatalog` (completed / failed / waiting-for-approval / waiting-for-input / session-start / tool-calls). The iOS companion surfaces the same list at the bottom of each agent's log view.
+- **Agent status mirroring** — the Mac now embeds `installedAgents` + per-agent `statuses` JSON on each `AgentConfig` push; the iOS list shows a status dot and "not installed" pill matching the Mac panel.
+- **TestFlight CI workflow** (`.github/workflows/ios-testflight.yml`) — triggered by `ios-vX.Y.Z` tags or `workflow_dispatch`. Uses an App Store Connect API key, a temporary keychain for the Apple Distribution cert, and `xcodebuild -exportArchive` with `destination=upload` to push directly to TestFlight.
+
 ### Migration
 Existing v2.3 users who had `ntfy = true` in their channel preference are migrated transparently — the new `cloudkit` channel reads the legacy key on first decode. No user action is required other than installing the iPhone companion app from the App Store.
 

@@ -52,6 +52,7 @@
 		DC0000000000002000000104 /* PayloadRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* PayloadRendererView.swift */; };
 		DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000110 /* AgentProcessMonitor.swift */; };
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
+		DC0000000000002000000120 /* AgentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000120 /* AgentCapabilities.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -102,6 +103,7 @@
 		DC0000000000001000000104 /* PayloadRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadRendererView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000110 /* AgentProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProcessMonitor.swift; sourceTree = "<group>"; };
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000120 /* AgentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCapabilities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +192,7 @@
 				87477377B262B2B2BA39729A /* CloudKitPusher.swift */,
 				CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */,
 				AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */,
+				DC0000000000001000000120 /* AgentCapabilities.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -338,6 +341,7 @@
 				086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */,
 				1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */,
 				581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */,
+				DC0000000000002000000120 /* AgentCapabilities.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

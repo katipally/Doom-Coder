@@ -15,15 +15,26 @@ struct AgentLogsView: View {
             if isLoading {
                 ProgressView("Loading logs...")
             } else if logs.isEmpty {
-                ContentUnavailableView(
-                    "No Logs Yet",
-                    systemImage: "tray",
-                    description: Text("Notifications will appear here")
-                )
+                ScrollView {
+                    VStack(spacing: 24) {
+                        ContentUnavailableView(
+                            "No Logs Yet",
+                            systemImage: "tray",
+                            description: Text("Notifications will appear here")
+                        )
+                        capabilityFooter
+                            .padding(.horizontal)
+                    }
+                }
             } else {
                 List {
                     ForEach(logs, id: \.notifId) { log in
                         LogRow(log: log)
+                    }
+                    Section {
+                        capabilityFooter
+                    } header: {
+                        Text("Notifications this agent sends")
                     }
                 }
             }
@@ -36,6 +47,27 @@ struct AgentLogsView: View {
         .refreshable {
             await loadLogs()
         }
+    }
+
+    @ViewBuilder
+    private var capabilityFooter: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(AgentCapabilityCatalog.capabilities(for: agent)) { cap in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: cap.symbolName)
+                        .foregroundStyle(.tint)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(cap.title).font(.callout.weight(.medium))
+                        Text(cap.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
     
     private func loadLogs() async {
