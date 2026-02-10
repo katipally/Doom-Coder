@@ -4,6 +4,35 @@ All notable changes to Doom Coder will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [2.4.0] - Unreleased
+
+### Added
+- **DoomCoder Companion for iPhone & iPad** — a read-only mirror that shows every agent configured on your Mac and renders the exact same notifications (title, body, agent icon) the Mac would display. Built on Apple's CloudKit + APNs stack; no third-party servers, no tokens, no QR codes.
+- **iCloud push channel** on the Mac, replacing the ntfy channel. Notifications are written to the user's private CloudKit database (`iCloud.com.doomcoder.app`) and delivered to the companion app via a `CKQuerySubscription`. The Notification Service Extension renders the alert before the OS shows the banner.
+- `CloudKitPusher` (`DoomCoder/AgentTracking/CloudKitPusher.swift`) — push-only `CKSyncEngine` wrapper that publishes:
+  - `NotificationLog` (one per dispatched notification)
+  - `MacStatus` (per-Mac heartbeat singleton, 60s + sleep/wake)
+  - `AgentConfig` (the list of tracked agents on this Mac)
+  - `AgentIcon` (CKAsset PNGs, hash-gated, one upload per launch)
+- `CloudKitPusherLifecycle` glues runtime events to the pusher: re-publishes AgentConfig on Tracking pane toggles, runs an hourly reaper that deletes `NotificationLog` records older than 7 days.
+- `DoomCoderCore` Swift package (`Packages/DoomCoderCore/`) — shared models (`TrackedAgent`, `NormalizedEventPhase`, `NotificationCopy`, record types, `CloudKitConstants`, `ServerRecordCache`, `SyncTelemetry`). Linked by both the Mac app and the iOS companion + NSE.
+
+### Changed
+- `ChannelStore.ChannelConfig.ntfy` → `.cloudkit`. A custom `Decodable` transparently reads the legacy `ntfy` key on upgrade, so users keep their channel preference without any migration prompt.
+- `ChannelTester.Channel.ntfy` → `.cloudKit`. Test pushes now write a `NotificationLog` record that the iPhone renders within seconds.
+- Configure window: the ntfy panel (topic / server / QR code / regenerate) is gone. In its place: an "iPhone / iPad" panel with the iCloud connection status and a Test button.
+- Settings pane: "ntfy topic" row replaced with an iPhone/iPad sync status row.
+- Entitlements: `com.apple.developer.icloud-services`, `com.apple.developer.icloud-container-identifiers = iCloud.com.doomcoder.app`, `aps-environment` (development + production variants), and `com.apple.security.application-groups = group.com.doomcoder.app.companion`. The app remains unsandboxed (`com.apple.security.app-sandbox = false`).
+
+### Removed
+- `DoomCoder/AgentTracking/NtfyTopic.swift` and all ntfy QR-code / topic-management UI.
+- ntfy POST path in `NotificationDispatcher`.
+
+### Migration
+Existing v2.3 users who had `ntfy = true` in their channel preference are migrated transparently — the new `cloudkit` channel reads the legacy key on first decode. No user action is required other than installing the iPhone companion app from the App Store.
+
+---
+
 ## [2.2.0] - 2025-05-13
 
 ### Added
