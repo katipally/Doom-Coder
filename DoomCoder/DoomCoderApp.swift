@@ -54,6 +54,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // subscribes to). Safe to call before iCloud account is ready —
         // the pusher waits for accountStatus internally.
         CloudKitPusher.shared.start()
+        CloudKitPusherLifecycle.shared.start()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()

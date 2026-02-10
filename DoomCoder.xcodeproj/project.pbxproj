@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87477377B262B2B2BA39729A /* CloudKitPusher.swift */; };
 		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
+		581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
@@ -56,6 +57,7 @@
 /* Begin PBXFileReference section */
 		10BE8A907052E381A9766A37 /* DoomCoder.Release.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DoomCoder.Release.entitlements; sourceTree = "<group>"; };
 		87477377B262B2B2BA39729A /* CloudKitPusher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusher.swift; sourceTree = "<group>"; };
+		AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherLifecycle.swift; sourceTree = "<group>"; };
 		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				DC0000000000001000000102 /* IconDownloader.swift */,
 				87477377B262B2B2BA39729A /* CloudKitPusher.swift */,
 				CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */,
+				AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -334,6 +337,7 @@
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 				086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */,
 				1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */,
+				581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
