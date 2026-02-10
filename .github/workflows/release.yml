@@ -105,6 +105,37 @@ jobs:
             -exportPath build/export \
             -exportOptionsPlist scripts/ExportOptions.plist
 
+      - name: Re-sign embedded frameworks
+        run: |
+          # Ensure all embedded frameworks/dylibs are signed with our Developer ID.
+          # Xcode's automatic export re-signs them, but this step is a belt-and-suspenders
+          # guarantee — unsigned inner binaries are the #1 cause of notarization hangs.
+          APP="build/export/DoomCoder.app"
+
+          # Sign inner frameworks/plugins first (must sign leaves before the app)
+          find "$APP" \( -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" \) | \
+            sort -r | \
+            while read -r component; do
+              echo "Re-signing: $component"
+              codesign --force \
+                --sign "Developer ID Application" \
+                --timestamp \
+                --options runtime \
+                "$component"
+            done
+
+          # Re-sign the app itself last (includes entitlements)
+          codesign --force \
+            --sign "Developer ID Application" \
+            --timestamp \
+            --options runtime \
+            --entitlements "DoomCoder/DoomCoder.entitlements" \
+            "$APP"
+
+          # Verify the final signature
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "✅ Signing OK"
+
       - name: Notarize app
         env:
           NOTARIZE_KEY_P8: ${{ secrets.NOTARIZE_KEY_P8 }}
