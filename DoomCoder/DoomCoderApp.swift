@@ -66,6 +66,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
         // Path-heal any installed hooks off the main thread (JSON I/O).
         Task.detached(priority: .utility) {
+            // Silent v2 → v3 migration: per-folder Copilot CLI installs →
+            // global ~/.copilot/hooks/doomcoder.json. Idempotent, gated by
+            // its own UserDefault flag.
+            MigrationManager.migrateV2toV3()
             AgentInstallerV2.healAllPaths()
         }
 
@@ -110,7 +114,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         }
 
         // Show the most recent What's New sheet (checked newest-first).
-        if !UserDefaults.standard.bool(forKey: WhatsNewSheet220.defaultsKey) {
+        if !UserDefaults.standard.bool(forKey: WhatsNewSheet230.defaultsKey) {
+            Task { @MainActor in self.showWhatsNew230() }
+        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet220.defaultsKey) {
             Task { @MainActor in self.showWhatsNew220() }
         } else if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
             Task { @MainActor in self.showWhatsNewV2() }
@@ -140,6 +146,35 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         await MainActor.run {
             FloatingPanelController.shared.show()
         }
+    }
+
+    @MainActor
+    func showWhatsNew230() {
+        let hosting = NSHostingController(rootView: WhatsNewSheet230(onDismiss: { [weak self] in
+            self?.whatsNewWindow?.close()
+            self?.whatsNewWindow = nil
+        }))
+        hosting.sizingOptions = []
+        let contentSize = NSSize(width: 520, height: 460)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hosting
+        window.setContentSize(contentSize)
+        window.title = "What's New in DoomCoder"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.level = .floating
+        // Mark every older sheet as seen so users don't see them next launch.
+        UserDefaults.standard.set(true, forKey: WhatsNewSheet220.defaultsKey)
+        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
+        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        whatsNewWindow = window
     }
 
     @MainActor

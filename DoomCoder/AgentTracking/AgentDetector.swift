@@ -98,6 +98,12 @@ enum AgentDetector {
         let ghCopilot = runLoginShell("gh copilot --version 2>/dev/null")
         if let ghCopilot { return AgentDetection(agent: .copilotCLI, installed: true, version: ghCopilot, details: "gh copilot") }
 
+        // Probe 6: DoomCoder global hooks file is the strongest "configured" signal.
+        let hooksPath = NSHomeDirectory() + "/.copilot/hooks/doomcoder.json"
+        if FileManager.default.fileExists(atPath: hooksPath) {
+            return AgentDetection(agent: .copilotCLI, installed: true, version: nil, details: "DoomCoder hooks installed")
+        }
+
         return AgentDetection(agent: .copilotCLI, installed: false, version: nil, details: nil)
     }
 
