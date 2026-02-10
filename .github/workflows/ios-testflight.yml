@@ -94,16 +94,29 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          echo "$DIST_CERT_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
-          security import "$RUNNER_TEMP/dist.p12" \
-            -k "$KEYCHAIN_PATH" \
-            -P "$DIST_CERT_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          rm "$RUNNER_TEMP/dist.p12"
+          # Import the distribution certificate if provided.
+          # If the cert is revoked, skip import — allowProvisioningUpdates will
+          # create a fresh distribution certificate via the App Manager API key.
+          if [[ -n "$DIST_CERT_B64" ]]; then
+            echo "$DIST_CERT_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
+            IMPORT_RC=0
+            security import "$RUNNER_TEMP/dist.p12" \
+              -k "$KEYCHAIN_PATH" \
+              -P "$DIST_CERT_PASSWORD" \
+              -T /usr/bin/codesign \
+              -T /usr/bin/security 2>&1 || IMPORT_RC=$?
+            rm -f "$RUNNER_TEMP/dist.p12"
+            if [ $IMPORT_RC -ne 0 ]; then
+              echo "::warning::Distribution cert import failed (rc=${IMPORT_RC}) — may be revoked. allowProvisioningUpdates will create a fresh cert."
+            else
+              security set-key-partition-list \
+                -S apple-tool:,apple:,codesign: \
+                -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+              echo "Distribution certificate imported successfully."
+            fi
+          else
+            echo "::warning::IOS_DISTRIBUTION_CERTIFICATE not set — relying on allowProvisioningUpdates."
+          fi
 
       - name: Write App Store Connect API key
         id: write-api-key
