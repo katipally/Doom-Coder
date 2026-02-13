@@ -109,19 +109,14 @@ jobs:
           rm -f "$RUNNER_TEMP/dist.p12"
           echo "Distribution certificate imported."
 
-          # Install provisioning profiles.
+          # Install provisioning profiles — Xcode scans all .mobileprovision files
+          # in this directory and matches by profile name, so fixed filenames work fine.
           PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PP_DIR"
-          echo "$PROFILE_APP_B64" | base64 -D > "$RUNNER_TEMP/app.mobileprovision"
-          echo "$PROFILE_NS_B64"  | base64 -D > "$RUNNER_TEMP/ns.mobileprovision"
-          # Install using the UUID embedded in the profile as the filename.
-          for f in "$RUNNER_TEMP/app.mobileprovision" "$RUNNER_TEMP/ns.mobileprovision"; do
-            UUID=$(security cms -D -i "$f" 2>/dev/null | \
-              /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin 2>/dev/null || \
-              grep -a -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' "$f" | head -1)
-            cp "$f" "$PP_DIR/${UUID}.mobileprovision"
-            echo "Installed profile: $UUID"
-          done
+          echo "$PROFILE_APP_B64" | base64 -D > "$PP_DIR/companion_app.mobileprovision"
+          echo "$PROFILE_NS_B64"  | base64 -D > "$PP_DIR/companion_ns.mobileprovision"
+          echo "Profiles installed:"
+          ls -lh "$PP_DIR/"
 
       - name: Write App Store Connect API key
         id: write-api-key
