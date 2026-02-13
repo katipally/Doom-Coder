@@ -136,32 +136,28 @@ jobs:
 
       - name: Build Release Archive
         run: |
-          # Archive with Automatic signing + allowProvisioningUpdates.
-          # The API key lets Xcode auto-create/download the Mac Development
-          # provisioning profile for iCloud/App Groups entitlements.
-          # CODE_SIGN_IDENTITY is NOT overridden here — that conflicts with
-          # Automatic style. The export + re-sign steps apply Developer ID.
+          # Manual signing with Developer ID identity + our Developer ID
+          # provisioning profile. Xcode reconciles app entitlements with the
+          # profile's authorized entitlements at sign time — no re-sign step
+          # is needed (and re-sign was the root cause of AMFI rejections in
+          # v2.4.0–v2.4.2: codesign --entitlements embedded a verbatim plist
+          # whose format/values did not match the embedded profile).
           xcodebuild \
             -project DoomCoder.xcodeproj \
             -scheme DoomCoder \
             -configuration Release \
             -archivePath build/DoomCoder.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.write-asc-key.outputs.key_path }}" \
-            -authenticationKeyID "${{ steps.write-asc-key.outputs.key_id }}" \
-            -authenticationKeyIssuerID "${{ steps.write-asc-key.outputs.issuer_id }}" \
             archive \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            PROVISIONING_PROFILE_SPECIFIER="DoomCoder Mac DevID" \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             MARKETING_VERSION="${{ env.VERSION }}" \
-            CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
+            CURRENT_PROJECT_VERSION="${{ env.BUILD }}" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp --options=runtime"
 
-      - name: Extract app from archive
+      - name: Extract signed app from archive
         run: |
-          # Skip xcodebuild -exportArchive — it requires downloading a
-          # Developer ID provisioning profile via cloud signing (needs Admin
-          # role). The archive already contains the built .app; we extract it
-          # directly and the re-sign step will apply the correct Developer ID.
           mkdir -p build/export
           APP_IN_ARCHIVE="build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app"
           if [ ! -d "$APP_IN_ARCHIVE" ]; then
@@ -170,84 +166,24 @@ jobs:
             exit 1
           fi
           cp -R "$APP_IN_ARCHIVE" build/export/DoomCoder.app
+          APP="build/export/DoomCoder.app"
           echo "✅ Extracted DoomCoder.app from archive"
-          echo "   Size: $(du -sh build/export/DoomCoder.app | cut -f1)"
-
-      - name: Embed Developer ID provisioning profile
-        run: |
-          APP="build/export/DoomCoder.app"
-          # Replace the auto-generated Mac Development profile (from the
-          # archive's Automatic signing) with our Developer ID profile.
-          # Gatekeeper verifies signing identity is listed in this profile.
-          cp "${MAC_PROFILE_PATH}" "${APP}/Contents/embedded.provisionprofile"
-          echo "✅ Embedded Developer ID profile"
-          security cms -D -i "${APP}/Contents/embedded.provisionprofile" \
+          echo "   Size: $(du -sh "$APP" | cut -f1)"
+          echo ""
+          echo "=== Embedded provisioning profile ==="
+          security cms -D -i "$APP/Contents/embedded.provisionprofile" \
             | plutil -extract Name xml1 -o - - | grep '<string>'
-
-      - name: Re-sign all embedded code (inside-out)
-        run: |
-          APP="build/export/DoomCoder.app"
-          IDENTITY="Developer ID Application"
-          ENTS="DoomCoder/DoomCoder.Release.entitlements"
-
-          # Fail loudly if the app wasn't exported where we expect
-          if [ ! -d "$APP" ]; then
-            echo "::error::Exported app not found at $APP — contents of build/export/:"
-            ls -laR build/export/ || true
-            exit 1
-          fi
-
-          sign_file() {
-            echo "  → $(basename "$1")"
-            codesign --force --sign "$IDENTITY" --timestamp --options runtime "$1"
-          }
-
-          # ── Pass 1: every Mach-O binary (deepest path first) ──────────────
-          # Use process substitution (<) so the while loop runs in the CURRENT
-          # shell — pipe-to-while runs in a subshell where errors are swallowed.
-          echo "=== Pass 1: Mach-O binaries ==="
-          FAIL=0
-          while IFS= read -r f; do
-            if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
-              sign_file "$f" || FAIL=1
-            fi
-          done < <(find "$APP" -type f \
-            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
-            | sort -rn | cut -f2-)
-          [ "$FAIL" -eq 0 ] || { echo "::error::One or more Mach-O binaries failed to sign"; exit 1; }
-
-          # ── Pass 2: XPC service bundles ────────────────────────────────────
-          echo "=== Pass 2: XPC service bundles ==="
-          while IFS= read -r xpc; do
-            sign_file "$xpc"
-          done < <(find "$APP" -type d -name "*.xpc" \
-            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
-            | sort -rn | cut -f2-)
-
-          # ── Pass 3: nested .app bundles (e.g. Sparkle's Updater.app) ──────
-          echo "=== Pass 3: nested .app bundles ==="
-          while IFS= read -r nested; do
-            sign_file "$nested"
-          done < <(find "$APP" -mindepth 2 -type d -name "*.app" \
-            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
-            | sort -rn | cut -f2-)
-
-          # ── Pass 4: frameworks ─────────────────────────────────────────────
-          echo "=== Pass 4: frameworks ==="
-          while IFS= read -r fw; do
-            sign_file "$fw"
-          done < <(find "$APP" -type d -name "*.framework" \
-            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
-            | sort -rn | cut -f2-)
-
-          # ── Pass 5: main app bundle (with entitlements, always last) ───────
-          echo "=== Pass 5: main app ==="
-          codesign --force --sign "$IDENTITY" --timestamp --options runtime \
-            --entitlements "$ENTS" "$APP"
-
-          echo "=== Verify bundle ==="
+          echo ""
+          echo "=== Signing identity ==="
+          codesign -dv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier="
+          echo ""
+          echo "=== Bundled entitlements ==="
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null \
+            | plutil -convert xml1 -o - -
+          echo ""
+          echo "=== Deep verify ==="
           codesign --verify --deep --strict --verbose=2 "$APP"
-          echo "✅ Re-sign complete"
+          echo "✅ Archive signing verified"
 
       - name: Audit all binary signatures
         run: |
