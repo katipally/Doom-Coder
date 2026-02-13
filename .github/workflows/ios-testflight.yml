@@ -228,28 +228,29 @@ jobs:
             -authenticationKeyID "${ASC_KEY_ID}" \
             -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
             DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
 
       - name: Write ExportOptions.plist
         run: |
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          # method=app-store: traditional cert-based signing (uses dist cert from keychain).
+          # destination=export: produce a signed IPA locally; upload is a separate step.
+          # This avoids "Cloud signing permission error" from method=app-store-connect
+          # which requires cloud-managed distribution certificates.
+          TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" << PLIST_EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
-            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
             <key>uploadSymbols</key><true/>
-            <key>uploadBitcode</key><false/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict>
           </plist>
-          EOF
+          PLIST_EOF
 
-      - name: Export & upload to TestFlight
+      - name: Export archive to IPA
         env:
           ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
           ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
@@ -265,6 +266,26 @@ jobs:
             -authenticationKeyPath "${ASC_KEY_PATH}" \
             -authenticationKeyID "${ASC_KEY_ID}" \
             -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+          echo "IPA exported:"
+          ls -lh "$RUNNER_TEMP/export/"*.ipa 2>/dev/null || ls -lh "$RUNNER_TEMP/export/"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
+          ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
+        run: |
+          IPA_PATH=$(find "$RUNNER_TEMP/export" -name "*.ipa" | head -1)
+          if [[ -z "$IPA_PATH" ]]; then
+            echo "::error::No IPA found in export directory"
+            ls -la "$RUNNER_TEMP/export/"
+            exit 1
+          fi
+          echo "Uploading: $IPA_PATH"
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
 
       - name: Clean up API key
         if: always()
