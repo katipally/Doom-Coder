@@ -142,6 +142,24 @@ final class CloudKitPusher {
             return
         }
 
+        // ── Environment migration guard ──────────────────────────────────
+        // v2.4.3 used the Development CloudKit environment (no explicit
+        // icloud-container-environment entitlement). v2.4.4 adds Production.
+        // Any CKSyncEngine state serialisation and ServerRecordCache blobs
+        // written under Development are incompatible with Production (different
+        // server-side record-change tags, sync tokens, etc.).
+        // On the first launch in Production we wipe both so the engine starts
+        // fresh: records are saved without a stale base changeTag, meaning
+        // CloudKit creates them from scratch in the Production database.
+        let environmentKey = "doomcoder.ckpusher.environment.v1"
+        let currentEnv = "production"
+        if UserDefaults.standard.string(forKey: environmentKey) != currentEnv {
+            logger.notice("ckpusher: environment changed → wiping stale engine state and server-record cache")
+            serverRecords.clear()
+            UserDefaults.standard.removeObject(forKey: "doomcoder.ckpusher.engineState.v1")
+            UserDefaults.standard.set(currentEnv, forKey: environmentKey)
+        }
+
         let stateKey = "doomcoder.ckpusher.engineState.v1"
         let state: CKSyncEngine.State.Serialization?
         if let data = UserDefaults.standard.data(forKey: stateKey),
