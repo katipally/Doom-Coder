@@ -1,3 +1,8 @@
+---
+layout: default
+title: Privacy Policy
+---
+
 # DoomCoder Companion — Privacy Policy
 
 **Last updated: May 2026**
