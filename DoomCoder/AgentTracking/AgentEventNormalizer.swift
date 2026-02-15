@@ -105,7 +105,7 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         "SubagentStart":         .subagentStart,
         "SubagentStop":          .subagentEnd,
         "TaskCreated":           .other,
-        "TaskCompleted":         .sessionEnd,
+        "TaskCompleted":         .other,
         "TeammateIdle":          .other,
         "PreCompact":            .other,
         "PostCompact":           .other,
@@ -129,9 +129,12 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
            claudeInteractionTools.contains(toolName) {
             phase = .permissionNeeded
         }
+        // idle_prompt means Claude finished and is waiting for the user's NEXT message.
+        // It is NOT a permission request — map it to agentResponse (silent by default)
+        // so users don't receive a spurious "needs you" alert after the "done" notification.
         if envelope.event == "Notification",
            let notifType = payload["notification_type"] as? String,
-           ["permission_prompt", "idle_prompt", "elicitation_dialog"].contains(notifType) {
+           ["permission_prompt", "elicitation_dialog"].contains(notifType) {
             phase = .permissionNeeded
         }
 
