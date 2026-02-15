@@ -64,11 +64,19 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in self?.persistEngineStateNow() }
         }
         
-        // Fetch changes when app becomes active
+        // Fetch changes when app becomes active; re-attempt full setup if engine
+        // never initialized (handles transient accountStatus failure at launch).
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.fetchChanges() }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.syncEngine == nil {
+                    await self.setupSyncEngine()
+                } else {
+                    await self.fetchChanges()
+                }
+            }
         }
     }
 
@@ -115,14 +123,19 @@ final class CompanionSyncEngine: NSObject {
         setupInProgress = true
         defer { setupInProgress = false }
 
-        // Verify account status
-        do {
-            let status = try await container.accountStatus()
-            accountAvailable = (status == .available)
-        } catch {
-            accountAvailable = false
-            print("[CompanionSyncEngine] accountStatus error: \(error)")
+        // Verify account status — retry up to 3 times for .couldNotDetermine
+        // (common on first launch before iCloud finishes initializing).
+        var lastStatus: CKAccountStatus = .couldNotDetermine
+        for attempt in 1...3 {
+            do {
+                lastStatus = try await container.accountStatus()
+                if lastStatus != .couldNotDetermine { break }
+            } catch {
+                print("[CompanionSyncEngine] accountStatus error (attempt \(attempt)): \(error)")
+            }
+            if attempt < 3 { try? await Task.sleep(for: .seconds(2)) }
         }
+        accountAvailable = (lastStatus == .available)
 
         guard accountAvailable else { return }
 
@@ -214,6 +227,11 @@ final class CompanionSyncEngine: NSObject {
 
     func handleRemoteNotification() async {
         SyncTelemetry.shared.record(.pushReceived, side: .ios)
+        // If the engine never initialized (e.g. accountStatus failed at launch),
+        // use the push arrival as an opportunity to re-attempt setup.
+        if syncEngine == nil {
+            await setupSyncEngine()
+        }
         await fetchChanges()
     }
 
