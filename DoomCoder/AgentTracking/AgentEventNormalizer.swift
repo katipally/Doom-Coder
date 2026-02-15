@@ -138,6 +138,21 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
             phase = .permissionNeeded
         }
 
+        // Defense-in-depth: sessions whose cwd equals the user's HOME directory are
+        // Claude Desktop internal sessions (startup probes, spare sessions). These fire
+        // SessionEnd/Stop immediately after opening Claude Desktop and produce spurious
+        // "Finished in <username>" notifications. dc-hook filters them at the process
+        // level (dc-hook inherits the session's cwd); this guard catches any that slip
+        // through at the app layer by inspecting the cwd field in the hook payload.
+        // A real user coding session always has a project directory, never bare HOME.
+        if phase == .sessionEnd {
+            let eventCwd = payload["cwd"] as? String ?? envelope.cwd
+            let home     = NSHomeDirectory()
+            if !eventCwd.isEmpty && !home.isEmpty && eventCwd == home {
+                phase = .other   // record the event, but fire no "Finished" notification
+            }
+        }
+
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
