@@ -31,8 +31,10 @@ final class CopilotPermissionsReader {
 
         case "commands":
             // Each command identifier in the request must be covered by an
-            // approved identifier. Matching is prefix-based so that an approval
-            // for "git add" covers "git add -A" etc.
+            // approved identifier. Matching is prefix-based:
+            //   allowed "git add"  covers reqId "git add" or "git add -A ..."
+            //   allowed "rm"       covers reqId "rm" or "rm -rf ..."
+            // Comparison is case-sensitive (same as Copilot's own matching).
             let reqIds = promptRequest["commandIdentifiers"] as? [String] ?? []
             guard !reqIds.isEmpty else { return false }
             return reqIds.allSatisfy { reqId in
@@ -41,6 +43,8 @@ final class CopilotPermissionsReader {
                           let allowed = entry["commandIdentifiers"] as? [String]
                     else { return false }
                     return allowed.contains { prefix in
+                        // Exact match or "prefix + space" so we don't match
+                        // "rm" against "rmdir" etc.
                         reqId == prefix || reqId.hasPrefix(prefix + " ")
                     }
                 }
@@ -81,12 +85,21 @@ final class CopilotPermissionsReader {
         let config = loadConfig()
         guard let locations = config["locations"] as? [String: Any] else { return [] }
 
+        // Normalise the incoming cwd: resolve symlinks and strip trailing slash
+        // so path comparison works regardless of how the hook reports it.
+        let resolvedCwd = URL(fileURLWithPath: cwd)
+            .resolvingSymlinksInPath().path
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .isEmpty ? cwd : URL(fileURLWithPath: cwd).resolvingSymlinksInPath().path
+
         // Walk from the most specific (deepest) key toward root so that a
         // project-level rule takes precedence over a parent directory rule.
         let sortedKeys = locations.keys.sorted { $0.count > $1.count }
         for key in sortedKeys {
-            let dirPath = key.hasSuffix("/") ? key : key + "/"
-            if cwd == key || cwd.hasPrefix(dirPath) {
+            let resolvedKey = URL(fileURLWithPath: key)
+                .resolvingSymlinksInPath().path
+            let dirPath = resolvedKey.hasSuffix("/") ? resolvedKey : resolvedKey + "/"
+            if resolvedCwd == resolvedKey || resolvedCwd.hasPrefix(dirPath) {
                 let loc = locations[key] as? [String: Any] ?? [:]
                 return loc["tool_approvals"] as? [[String: Any]] ?? []
             }
