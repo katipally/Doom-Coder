@@ -24,30 +24,38 @@ struct AgentListView: View {
                     .padding(.vertical, 40)
                 }
             } else {
-                Section {
-                    ForEach(agentStore.agents, id: \.rawValue) { agent in
-                        NavigationLink {
-                            AgentLogsView(agent: agent)
-                        } label: {
-                            AgentRow(
-                                agent: agent,
-                                status: agentStore.statuses[agent],
-                                isInstalled: agentStore.installedAgents.isEmpty
-                                    ? true
-                                    : agentStore.installedAgents.contains(agent)
-                            )
+                // Only show agents that are BOTH configured (installed) AND have toggle ON.
+                // If installedAgents is empty we haven't loaded yet — show all toggle-ON agents.
+                let visibleAgents: [TrackedAgent] = agentStore.installedAgents.isEmpty
+                    ? agentStore.agents
+                    : agentStore.agents.filter { agentStore.installedAgents.contains($0) }
+
+                if visibleAgents.isEmpty {
+                    EmptyStateView()
+                } else {
+                    Section {
+                        ForEach(visibleAgents, id: \.rawValue) { agent in
+                            NavigationLink {
+                                AgentLogsView(agent: agent)
+                            } label: {
+                                AgentRow(
+                                    agent: agent,
+                                    status: agentStore.statuses[agent],
+                                    isInstalled: true
+                                )
+                            }
                         }
-                    }
-                } header: {
-                    if let mac = macStore.primary {
-                        HStack {
-                            Image(systemName: "desktopcomputer")
-                            Text(mac.name)
-                            Spacer()
-                            Text(relativeTime(mac.lastSeen))
-                                .foregroundStyle(.secondary)
+                    } header: {
+                        if let mac = macStore.primary {
+                            HStack {
+                                Image(systemName: "desktopcomputer")
+                                Text(mac.name)
+                                Spacer()
+                                Text(relativeTime(mac.lastSeen))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.caption)
                         }
-                        .font(.caption)
                     }
                 }
             }
