@@ -11,6 +11,7 @@ struct SyncDiagnosticsView: View {
     @State private var events: [SyncEvent] = SyncTelemetry.shared.snapshot()
     @State private var sync = CompanionSyncEngine.shared
     @State private var lastLatencyMs: Int? = SyncTelemetry.shared.lastRoundTripLatencyMs()
+    @State private var isForceSyncing = false
 
     private let eventStream = NotificationCenter.default
         .publisher(for: SyncTelemetry.eventRecordedNotification)
@@ -55,10 +56,23 @@ struct SyncDiagnosticsView: View {
     private var actionsSection: some View {
         Section {
             Button {
-                Task { await sync.fetchChanges() }
+                guard !isForceSyncing else { return }
+                isForceSyncing = true
+                Task {
+                    await sync.fetchChanges()
+                    isForceSyncing = false
+                }
             } label: {
-                Label("Force re-sync now", systemImage: "arrow.clockwise")
+                HStack(spacing: 8) {
+                    if isForceSyncing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(isForceSyncing ? "Syncing..." : "Force re-sync now")
+                }
             }
+            .disabled(isForceSyncing)
             Button(role: .destructive) {
                 SyncTelemetry.shared.clear()
                 events = []

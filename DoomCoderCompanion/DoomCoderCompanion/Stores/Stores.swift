@@ -152,4 +152,10 @@ final class NotificationLogStore {
         entries.removeAll()
         AppGroupCache.defaults.removeObject(forKey: AppGroupCache.notificationLogKey)
     }
+
+    func clear(forAgent agent: TrackedAgent) {
+        entries.removeAll { $0.agent == agent.rawValue }
+        AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
+        LocalStore.shared.clearNotifications(forAgent: agent)
+    }
 }

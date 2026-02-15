@@ -44,6 +44,10 @@ jobs:
         run: |
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ env.VERSION }}" DoomCoder/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ env.BUILD }}" DoomCoder/Info.plist
+          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoder.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCoder.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCoderCompanion/project.yml
 
       - name: Import Developer ID certificate
         env:
@@ -449,22 +453,37 @@ jobs:
             --size "${{ env.ZIP_SIZE }}" \
             --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
 
-      - name: Commit updated appcast.xml
+      - name: Commit version bump and appcast.xml
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # CRITICAL: stage ONLY appcast.xml. `git add -A` was picking up
-          # spurious workspace mutations (likely .github/workflows/release.yml
-          # touched by checkout/version-bump steps) which then caused the push
-          # to be rejected — GITHUB_TOKEN cannot modify workflow files at all,
-          # regardless of `permissions:`. Restricting the stage to the file we
-          # actually want to commit avoids the entire class of issue.
+          # Helper: re-apply version bumps to pbxproj files and project.yml.
+          # Called once at the start and again after any git reset in the retry
+          # loop — a reset reverts these files to origin/main so they must be
+          # re-patched before staging.
+          bump_versions() {
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoder.xcodeproj/project.pbxproj
+            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCoder.xcodeproj/project.pbxproj
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj
+            sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCoderCompanion/project.yml
+          }
+
+          # The "Update version in project" step already ran sed, but calling
+          # bump_versions again here is idempotent and handles the reset case.
+          bump_versions
+
+          # CRITICAL: stage ONLY the specific files we intend to commit.
+          # `git add -A` picks up .github/workflows changes which GITHUB_TOKEN
+          # cannot push (workflow files are protected), causing the push to fail.
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
-            git add appcast.xml
+            git add appcast.xml \
+              DoomCoder.xcodeproj/project.pbxproj \
+              DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj \
+              DoomCoderCompanion/project.yml
             if ! git diff --cached --quiet; then
-              git commit -m "chore: update appcast.xml for ${{ env.TAG }}"
+              git commit -m "chore: bump version to ${{ env.TAG }}"
             fi
 
             git fetch origin main
@@ -472,6 +491,7 @@ jobs:
             if ! git pull --rebase -X theirs origin main; then
               git rebase --abort || true
               git reset --hard "origin/main"
+              bump_versions
               python3 scripts/update_appcast.py \
                 --version "${{ env.VERSION }}" \
                 --build "${{ env.BUILD }}" \
@@ -489,7 +509,7 @@ jobs:
             sleep $((attempt * 2))
           done
 
-          echo "::error::Failed to push appcast.xml after 5 attempts"
+          echo "::error::Failed to push version bump after 5 attempts"
           exit 1
 
       - name: Create GitHub Release

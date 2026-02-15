@@ -90,6 +90,16 @@ struct OnboardingView: View {
         }
         .padding(.bottom, 32)
         .task { await runChecks() }
+        .task(id: macState) {
+            // Poll CloudKit while Mac is not yet visible so a new user who opens
+            // iOS before the Mac has published doesn't stay stuck indefinitely.
+            guard macState == .actionNeeded else { return }
+            for _ in 0..<20 {
+                try? await Task.sleep(for: .seconds(3))
+                await CompanionSyncEngine.shared.fetchChanges()
+                if !macStore.byMacId.isEmpty { break }
+            }
+        }
         .onChange(of: macStore.byMacId.count) { _, count in
             macState = count > 0 ? .ok : .actionNeeded
         }

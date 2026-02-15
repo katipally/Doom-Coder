@@ -46,6 +46,9 @@ struct AgentListView: View {
                         }
                     }
                 }
+                .refreshable {
+                    await CompanionSyncEngine.shared.fetchChanges()
+                }
             }
         }
         .navigationTitle("Agents")
