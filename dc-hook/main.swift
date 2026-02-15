@@ -294,11 +294,16 @@ func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
     case "claude":
         // Must look like a claude CLI invocation.
         if !chainContains(chain, anyOf: kClaudePatterns) { return true }
-        // Skip hooks fired by Claude Desktop's internal computer-use sub-agents.
-        // Those sessions are always spawned with --allowed-tools containing
-        // mcp__computer-use__* and are unrelated to the user's Claude Code work.
+        // Skip hooks fired by Claude Desktop's internal sessions, which are NOT
+        // initiated by the user in a terminal:
+        //   --bg-spare  : pre-warmed spare sessions the daemon keeps ready for
+        //                 Claude Desktop to claim on startup (fires Stop/SessionEnd
+        //                 as soon as Claude Desktop opens — the false positive).
+        //   mcp__computer-use : Claude Desktop computer-use sub-agent sessions.
         let parentArgs = procArgs(getppid())
-        if parentArgs.contains(where: { $0.contains("mcp__computer-use") }) { return true }
+        if parentArgs.contains(where: { arg in
+            arg.hasPrefix("--bg-spare") || arg.contains("mcp__computer-use")
+        }) { return true }
         return false
     case "cursor":
         return !chainContains(chain, anyOf: kCursorPatterns)
