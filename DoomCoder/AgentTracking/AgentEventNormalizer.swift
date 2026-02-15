@@ -79,7 +79,10 @@ private let vscodeInteractionTools: Set<String> = [
     "vscode_showConfirmation",
 ]
 
-private let copilotCLIInteractionTools: Set<String> = []
+private let copilotCLIInteractionTools: Set<String> = [
+    "ask_user",        // agent asking you a question mid-task
+    "exit_plan_mode",  // agent needs your approval on a plan
+]
 private let windsurfInteractionTools:   Set<String> = []
 private let codexInteractionTools:      Set<String> = []
 
@@ -382,9 +385,53 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
             phase = Self.notificationTypeMap[kind] ?? .other
         }
 
-        let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
-        let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
+        // Copilot CLI sends camelCase field names; fall back to snake_case for
+        // forward-compatibility in case a future release switches conventions.
+        let sessionId = (payload["sessionId"] as? String)
+            ?? (payload["session_id"] as? String)
+            ?? "pid-\(envelope.pid)"
+        let tool = payload["toolName"] as? String
+            ?? payload["tool_name"] as? String
+            ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
+
+        // preToolUse + interaction tool → agent is waiting for the user's
+        // answer or plan approval. Promote to permissionNeeded so a
+        // notification fires (same pattern as Claude/VS Code normalizers).
+        if envelope.event == "preToolUse",
+           let toolName = tool,
+           copilotCLIInteractionTools.contains(toolName) {
+            phase = .permissionNeeded
+        }
+
+        // Belt-and-suspenders: if toolArgs JSON has a "question" key for an
+        // otherwise-unknown tool, treat it as an elicitation too.
+        if envelope.event == "preToolUse",
+           phase == .toolStart,
+           let toolArgsStr = payload["toolArgs"] as? String,
+           let argsData = toolArgsStr.data(using: .utf8),
+           let argsDict = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any],
+           argsDict["question"] != nil {
+            phase = .permissionNeeded
+        }
+
+        // permissionRequest allowlist filter: Copilot fires the hook for ALL
+        // permission checks, including those the user has pre-approved via
+        // ~/.copilot/permissions-config.json. For pre-approved requests Copilot
+        // shows no UI, so DoomCoder must not notify either. Suppress by
+        // downgrading to .other.
+        if envelope.event == "permissionRequest", phase == .permissionNeeded {
+            let cwd = payload["cwd"] as? String ?? envelope.cwd
+            // Prefer "promptRequest" (user-facing kind like "commands") over
+            // the raw "permissionRequest" (which uses "shell" for commands).
+            let promptReq = payload["promptRequest"] as? [String: Any]
+                ?? payload["permissionRequest"] as? [String: Any]
+                ?? [:]
+            if !promptReq.isEmpty,
+               CopilotPermissionsReader.shared.isAutoApproved(promptRequest: promptReq, cwd: cwd) {
+                phase = .other
+            }
+        }
 
         return NormalizedHookEvent(
             agent: agent,
