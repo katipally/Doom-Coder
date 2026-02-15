@@ -250,6 +250,19 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
+    /// Clears the saved sync token and re-initialises the engine so the next
+    /// fetch retrieves ALL records from CloudKit — not just incremental changes.
+    /// Lighter than resetLocalSyncState(): does not wipe stores or environment keys.
+    func forceFetchAll() async {
+        sharedDefaults.removeObject(forKey: Self.engineStateKey)
+        sharedDefaults.synchronize()
+        syncEngine = nil
+        zoneReady = false
+        firstFetchCompleted = false
+        setupInProgress = false          // Clear guard so setupSyncEngine() runs
+        await setupSyncEngine()
+    }
+
     func handleRemoteNotification() async {
         SyncTelemetry.shared.record(.pushReceived, side: .ios)
         // If the engine never initialized (e.g. accountStatus failed at launch),
@@ -460,8 +473,15 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             if let data = try? JSONEncoder().encode(e.stateSerialization) {
                 await MainActor.run {
                     AppGroupCache.defaults.set(data, forKey: Self.engineStateKey)
-                    self.lastSyncAt = Date()
                 }
+            }
+            // Always update sync timestamp and mark zone/fetch ready on state update —
+            // stateUpdate fires after every fetchChanges() call regardless of whether
+            // any records were returned, making it the reliable "sync completed" signal.
+            await MainActor.run {
+                self.lastSyncAt = Date()
+                self.zoneReady = true
+                self.firstFetchCompleted = true
             }
             SyncTelemetry.shared.record(.stateUpdate, side: .ios)
 
