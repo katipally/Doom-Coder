@@ -30,6 +30,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var notifPrefs = ChannelStore.loadPrefs()
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    private static let companionAppStoreURL = "https://apps.apple.com/app/doomcoder-companion/id6772514212"
+    private static let companionHelpURL = "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
 
     var body: some View {
         NavigationSplitView {
@@ -642,6 +644,38 @@ struct ConfigureAgentsViewV2: View {
                                 .foregroundStyle(.secondary)
                             Spacer()
                         }
+
+                        Divider()
+
+                        Text("Don't have the app yet?")
+                            .font(.subheadline.weight(.medium))
+
+                        HStack(spacing: 10) {
+                            Button {
+                                if let url = URL(string: Self.companionAppStoreURL) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Label("Get on the App Store", systemImage: "arrow.down.app.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+
+                            Button {
+                                if let url = URL(string: Self.companionHelpURL) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Text("How it works")
+                            }
+                            .buttonStyle(.link)
+                            .controlSize(.small)
+                        }
+
+                        Text("Sign in to the same iCloud account on your Mac and iPhone. That's it.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } label: {
                     Label("iPhone / iPad", systemImage: "iphone.gen3")

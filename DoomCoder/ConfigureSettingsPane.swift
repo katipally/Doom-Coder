@@ -15,12 +15,12 @@ struct ConfigureSettingsPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Settings")
-                    .font(.largeTitle.bold())
+                    .font(.title.bold())
                     .padding(.top, 8)
 
-                section("General") {
+                GroupBox {
                     Toggle("Launch at Login", isOn: Binding(
                         get: { sleepManager.isLaunchAtLoginEnabled },
                         set: { _ in sleepManager.toggleLaunchAtLogin() }
@@ -43,9 +43,11 @@ struct ConfigureSettingsPane: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                } label: {
+                    Label("General", systemImage: "gear")
                 }
 
-                section("Screen Off") {
+                GroupBox {
                     Stepper(value: $sleepManager.screenOffRearmMinutes, in: 1...60) {
                         HStack {
                             Text("Re-sleep display after")
@@ -54,9 +56,11 @@ struct ConfigureSettingsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                } label: {
+                    Label("Screen Off", systemImage: "moon.fill")
                 }
 
-                section("Session Lifecycle") {
+                GroupBox {
                     Stepper(value: $autoRevertSeconds, in: 10...120, step: 5) {
                         HStack {
                             Text("Auto-revert completed sessions to idle after")
@@ -71,26 +75,32 @@ struct ConfigureSettingsPane: View {
                     Text("How long the badge shows \"completed\" or \"failed\" before reverting to \"idle\".")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } label: {
+                    Label("Session Lifecycle", systemImage: "clock.arrow.circlepath")
                 }
 
-                section("Notifications & Privacy") {
+                GroupBox {
                     Toggle("Redact prompt text in local history", isOn: $redact)
                         .onChange(of: redact) { _, new in
                             UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
                         }
                     Divider()
                     companionBanner
+                } label: {
+                    Label("Notifications & Privacy", systemImage: "bell.badge")
                 }
 
-                section("Diagnostics") {
+                GroupBox {
                     HStack {
                         Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
                         Spacer()
                     }
                     .buttonStyle(.bordered)
+                } label: {
+                    Label("Diagnostics", systemImage: "stethoscope")
                 }
             }
-            .padding(24)
+            .padding(20)
             .frame(maxWidth: 720, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -149,25 +159,8 @@ struct ConfigureSettingsPane: View {
         }
     }
 
-    /// App Store landing page for the DoomCoder Companion iOS app.
-    /// Falls back to a search URL until the App Store ID is locked in.
     private static let companionAppStoreURL =
         "https://apps.apple.com/app/doomcoder-companion/id6772514212"
     private static let companionHelpURL =
         "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
-
-    @ViewBuilder
-    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 10) {
-                content()
-            }
-            .padding(16)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
 }
