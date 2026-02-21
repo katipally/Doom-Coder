@@ -11,6 +11,7 @@
 		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
 		581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
+		DC0000000000002000000123 /* HelpTip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000123 /* HelpTip.swift */; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
@@ -63,6 +64,7 @@
 		AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherLifecycle.swift; sourceTree = "<group>"; };
 		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC0000000000001000000123 /* HelpTip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTip.swift; sourceTree = "<group>"; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -134,6 +136,7 @@
 		DC0000000000003000000002 /* DoomCoder */ = {
 			isa = PBXGroup;
 			children = (
+				DC0000000000001000000123 /* HelpTip.swift */,
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
@@ -306,6 +309,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DC0000000000002000000123 /* HelpTip.swift in Sources */,
 				DC0000000000002000000002 /* DoomCoderApp.swift in Sources */,
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,

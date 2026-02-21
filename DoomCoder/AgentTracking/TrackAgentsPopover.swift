@@ -45,6 +45,7 @@ struct TrackAgentsView: View {
                 .foregroundStyle(.secondary)
             Text("Track Agents").font(.headline)
             Spacer()
+            HelpTip("Pauses all agent notifications until you un-pause or restart DoomCoder. Hook events are still recorded — only the notifications are suppressed. The sleep blocker keeps running.")
             Toggle("Paused", isOn: Binding(
                 get: { pausedFlag },
                 set: { on in PauseFlag.set(on); pausedFlag = on }

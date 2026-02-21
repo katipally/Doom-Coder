@@ -162,6 +162,7 @@ struct PanelRootView: View {
                         .contentTransition(.interpolate)
                 }
                 Spacer()
+                HelpTip("Master on/off switch. When turned off, the sleep blocker stops and all agent notifications are suspended. Everything resumes when you turn it back on.")
                 Toggle("", isOn: Binding(
                     get: { masterEnabled },
                     set: { on in
@@ -210,22 +211,28 @@ struct PanelRootView: View {
                     }
                     Spacer()
                     if sleepManager.isActive, !compactElapsed.isEmpty {
-                        Text(compactElapsed)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.white.opacity(0.06)))
-                            .contentTransition(.numericText())
+                        HStack(spacing: 4) {
+                            Text(compactElapsed)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .contentTransition(.numericText())
+                            HelpTip("Time elapsed since the sleep blocker was started this session.")
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.06)))
                     }
                 }
 
                 // Mode section
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("MODE")
-                        .font(.system(size: 9, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 5) {
+                        Text("MODE")
+                            .font(.system(size: 9, weight: .semibold))
+                            .tracking(0.6)
+                            .foregroundStyle(.tertiary)
+                        HelpTip("Screen On keeps the display fully lit the whole time. Screen Off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces screen burn.")
+                    }
                     ModeSegmentedControl(mode: Binding(
                         get: { sleepManager.mode },
                         set: { newMode in
@@ -246,6 +253,7 @@ struct PanelRootView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .tracking(0.6)
                             .foregroundStyle(.tertiary)
+                        HelpTip("Auto-disables the sleep blocker after the chosen time. Pick 'None' to run indefinitely until you stop it manually. Tap a duration tile to start; tap the stop tile to stop early.")
                         Spacer()
                         Text(durationSubtitle)
                             .font(.caption2)
