@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import DoomCoderCore
 
 // Root SwiftUI view for the floating panel.
 //
@@ -167,8 +168,11 @@ struct PanelRootView: View {
                     get: { masterEnabled },
                     set: { on in
                         withAnimation(DCAnim.smooth) { masterEnabled = on }
-                        if on { sleepManager.enable() }
-                        else if sleepManager.isActive { sleepManager.disable() }
+                        // Master is the app-wide suspend gate. Turning it OFF
+                        // releases any keep-awake assertion. Turning it ON does
+                        // NOT force keep-awake — the Keep Awake card's
+                        // Off/On/Auto selector owns that intent.
+                        if !on { sleepManager.disable() }
                     }
                 ))
                 .toggleStyle(.switch)
@@ -193,21 +197,25 @@ struct PanelRootView: View {
         return "Ready"
     }
 
-    // MARK: - Keep Mac Awake card (a.k.a. Prevent Sleep)
+    // MARK: - Keep Mac Awake card
+    //
+    // Off · On · ✦Auto selector (the single keep-awake control), an explicit
+    // Screen mode (keep on / allow off), an Auto-off dropdown, and a status
+    // line (elapsed, agents working, screen-off, auto-off countdown).
 
     private var keepAwakeCard: some View {
         InnerCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    iconChip(system: sleepManager.isActive ? "bolt.fill" : "bolt.slash",
-                             active: sleepManager.isActive)
+                    iconChip(system: keepAwakeIcon, active: sleepManager.isActive)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Prevent Sleep")
+                        Text("Keep Awake")
                             .font(.system(size: 13, weight: .medium))
                         Text(keepAwakeSubtitle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .contentTransition(.interpolate)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
                     if sleepManager.isActive, !compactElapsed.isEmpty {
@@ -216,7 +224,7 @@ struct PanelRootView: View {
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.tertiary)
                                 .contentTransition(.numericText())
-                            HelpTip("Time elapsed since the sleep blocker was started this session.")
+                            HelpTip("Time the Mac has been kept awake this session.")
                         }
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -224,94 +232,129 @@ struct PanelRootView: View {
                     }
                 }
 
-                // Mode section
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 5) {
-                        Text("MODE")
-                            .font(.system(size: 9, weight: .semibold))
-                            .tracking(0.6)
-                            .foregroundStyle(.tertiary)
-                        HelpTip("Screen On keeps the display fully lit the whole time. Screen Off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces screen burn.")
+                // Off / On / Auto — the keep-awake intent.
+                KeepAwakeModeControl(mode: Binding(
+                    get: { sleepManager.keepAwakeMode },
+                    set: { newMode in
+                        guard masterEnabled else { return }
+                        withAnimation(DCAnim.smooth) { sleepManager.keepAwakeMode = newMode }
                     }
-                    ModeSegmentedControl(mode: Binding(
-                        get: { sleepManager.mode },
-                        set: { newMode in
-                            withAnimation(DCAnim.smooth) { sleepManager.mode = newMode }
-                            if masterEnabled, !sleepManager.isActive {
-                                sleepManager.enable()
-                            }
-                        }
-                    ), isActive: sleepManager.isActive)
-                }
+                ))
 
-                // Duration section — the ONLY start/stop surface. Tapping a
-                // duration starts sleep blocking (or updates the cap); the
-                // leading Stop tile disables it.
+                // Screen mode — only meaningful while keeping awake.
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Text("DURATION")
-                            .font(.system(size: 9, weight: .semibold))
-                            .tracking(0.6)
-                            .foregroundStyle(.tertiary)
-                        HelpTip("Auto-disables the sleep blocker after the chosen time. Pick 'None' to run indefinitely until you stop it manually. Tap a duration tile to start; tap the stop tile to stop early.")
-                        Spacer()
-                        Text(durationSubtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .contentTransition(.interpolate)
-                    }
-                    DurationStrip(
-                        isActive: sleepManager.isActive,
-                        selectedHours: sleepManager.sessionTimerHours,
-                        onSelect: { hours in
-                            guard masterEnabled else { return }
-                            withAnimation(DCAnim.smooth) {
-                                sleepManager.sessionTimerHours = hours
-                            }
-                            // Sleep is already active when DoomCoder is on;
-                            // enable only as a belt-and-braces guard.
-                            if !sleepManager.isActive { sleepManager.enable() }
-                        }
-                    )
+                    sectionLabel("SCREEN", help: "Keep screen on holds the display lit. Allow screen off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces burn-in.")
+                    ModeSegmentedControl(mode: $sleepManager.mode, isActive: sleepManager.isActive)
                 }
+                .opacity(sleepManager.keepAwakeMode == .off ? 0.45 : 1.0)
+                .disabled(sleepManager.keepAwakeMode == .off)
+                .animation(DCAnim.smooth, value: sleepManager.keepAwakeMode)
 
-                if let countdown = sleepManager.screenOffCountdown {
-                    statusPill(icon: "display", text: "Display off in \(countdown)s…", tint: .orange)
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                } else if sleepManager.isScreenOff {
-                    statusPill(icon: "display", text: "Display off — move mouse to wake", tint: .orange)
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                // Auto-off timer (hard cap, applies to On mode only).
+                HStack(spacing: 6) {
+                    sectionLabel("AUTO-OFF", help: "Automatically turns keep-awake off after the chosen time. Applies to On mode. (In Auto, the Mac sleeps automatically once agents finish.)")
+                    Spacer()
+                    autoOffMenu
                 }
+                .opacity(sleepManager.keepAwakeMode == .on ? 1.0 : 0.45)
+                .disabled(sleepManager.keepAwakeMode != .on)
+                .animation(DCAnim.smooth, value: sleepManager.keepAwakeMode)
+
+                keepAwakeStatus
             }
             .padding(14)
         }
     }
 
-    private var keepAwakeSubtitle: String {
-        if sleepManager.isActive {
-            switch sleepManager.mode {
-            case .screenOn:  return "Screen on · display stays lit"
-            case .screenOff: return "Screen off · display sleeps"
-            }
+    @ViewBuilder
+    private var keepAwakeStatus: some View {
+        if let countdown = sleepManager.screenOffCountdown {
+            statusPill(icon: "display", text: "Display off in \(countdown)s…", tint: .orange)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        } else if sleepManager.isScreenOff {
+            statusPill(icon: "display", text: "Display off — move mouse to wake", tint: .orange)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        } else if sleepManager.keepAwakeMode == .auto {
+            let n = sleepManager.activeAgentCount
+            statusPill(icon: n > 0 ? "sparkles" : "moon.zzz",
+                       text: n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s") working"
+                                   : "Waiting · sleeps when agents finish",
+                       tint: n > 0 ? .accentColor : .secondary)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        } else if let remaining = sleepManager.sessionTimerRemainingText {
+            statusPill(icon: "timer", text: remaining, tint: .secondary)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
-        return "Prevent sleep while you work"
+    }
+
+    private var autoOffMenu: some View {
+        Menu {
+            ForEach([0, 1, 2, 4, 8], id: \.self) { h in
+                Button {
+                    withAnimation(DCAnim.smooth) { sleepManager.sessionTimerHours = h }
+                } label: {
+                    if sleepManager.sessionTimerHours == h {
+                        Label(autoOffLabel(h), systemImage: "checkmark")
+                    } else {
+                        Text(autoOffLabel(h))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(autoOffLabel(sleepManager.sessionTimerHours))
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.06)))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Auto-off timer, currently \(autoOffLabel(sleepManager.sessionTimerHours))")
+    }
+
+    private func autoOffLabel(_ h: Int) -> String {
+        h == 0 ? "Never" : "\(h)h"
+    }
+
+    @ViewBuilder
+    private func sectionLabel(_ text: String, help: String) -> some View {
+        HStack(spacing: 5) {
+            Text(text)
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.tertiary)
+            HelpTip(help)
+        }
+    }
+
+    private var keepAwakeIcon: String {
+        switch sleepManager.keepAwakeMode {
+        case .off:  return "bolt.slash"
+        case .on:   return "bolt.fill"
+        case .auto: return "sparkles"
+        }
+    }
+
+    private var keepAwakeSubtitle: String {
+        switch sleepManager.keepAwakeMode {
+        case .off:
+            return "Mac sleeps normally"
+        case .on:
+            return sleepManager.mode == .screenOff ? "On · display sleeps" : "On · display stays lit"
+        case .auto:
+            return sleepManager.isActive ? "Auto · awake for agents" : "Auto · sleeps when idle"
+        }
     }
 
     private var compactElapsed: String {
         sleepManager.elapsedTimeString
             .replacingOccurrences(of: "Active for ", with: "")
-    }
-
-    private var durationSubtitle: String {
-        let h = sleepManager.sessionTimerHours
-        if h == 0 { return sleepManager.isActive ? "Runs indefinitely" : "No auto-stop" }
-        if let remaining = sleepManager.sessionTimerRemainingText {
-            // e.g. "Auto-disable in 1h 23m" → "1h 23m left"
-            return remaining
-                .replacingOccurrences(of: "Auto-disable in ", with: "")
-                + " left"
-        }
-        return "\(h)h session"
     }
 
     // MARK: - Agents card
@@ -379,7 +422,7 @@ struct PanelRootView: View {
             .disabled(!updaterViewModel.canCheckForUpdates)
             .opacity(updaterViewModel.canCheckForUpdates ? 1 : 0.4)
             footerItem("power", label: "Quit") {
-                sleepManager.disable()
+                sleepManager.prepareForTermination()
                 NSApplication.shared.terminate(nil)
             }
         }
@@ -511,50 +554,64 @@ private struct ModeSegmentedControl: View {
     }
 }
 
-// MARK: - Duration strip (dot indicator)
+// MARK: - Keep-awake mode control (Off · On · ✦Auto)
 
-private struct DurationStrip: View {
-    let isActive: Bool
-    let selectedHours: Int
-    var onSelect: (Int) -> Void
-
-    // 0 = ∞ (default/infinite), then fixed durations.
-    private let options: [Int] = [0, 1, 2, 4, 8]
+private struct KeepAwakeModeControl: View {
+    @Binding var mode: KeepAwakeMode
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(options, id: \.self) { h in
-                let selected: Bool = isActive && selectedHours == h
-                Button { onSelect(h) } label: {
-                    VStack(spacing: 4) {
-                        Text(label(for: h))
-                            .font(.caption.weight(selected ? .semibold : .regular))
-                            .foregroundStyle(selected ? Color.accentColor : .secondary)
-                            .contentTransition(.interpolate)
-                        Circle()
-                            .fill(selected ? Color.accentColor : Color.white.opacity(0.18))
-                            .frame(width: 5, height: 5)
-                            .scaleEffect(selected ? 1.2 : 1.0)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 5)
-                }
-                .buttonStyle(.plain)
-                .help(helpText(for: h))
-                .animation(DCAnim.smooth, value: selected)
-            }
+            segment(.off,  label: "Off",  icon: "moon.zzz.fill")
+            segment(.on,   label: "On",   icon: "bolt.fill")
+            segment(.auto, label: "Auto", icon: "sparkles")
         }
-        .padding(.horizontal, 2)
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
     }
 
-    private func label(for h: Int) -> String {
-        if h == 0 { return "∞" }
-        return "\(h)h"
+    @ViewBuilder
+    private func segment(_ target: KeepAwakeMode, label: String, icon: String) -> some View {
+        let selected = mode == target
+        Button {
+            mode = target
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.caption2)
+                Text(label).font(.caption.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                ZStack {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(tint(target).opacity(0.85))
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
+                }
+            )
+            .foregroundStyle(selected ? .white : .secondary)
+        }
+        .buttonStyle(.plain)
+        .animation(DCAnim.smooth, value: selected)
+        .help(helpText(target))
+        .accessibilityLabel("\(label) keep awake")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func helpText(for h: Int) -> String {
-        if h == 0 { return "Prevent sleep indefinitely" }
-        return "Prevent sleep for \(h) hour\(h == 1 ? "" : "s")"
+    private func tint(_ m: KeepAwakeMode) -> Color {
+        m == .off ? .gray : .accentColor
+    }
+
+    private func helpText(_ m: KeepAwakeMode) -> String {
+        switch m {
+        case .off:  return "Let the Mac sleep normally."
+        case .on:   return "Keep the Mac awake until you turn it off or the auto-off timer fires."
+        case .auto: return "Keep the Mac awake only while an agent is working; sleep shortly after they finish."
+        }
     }
 }
 

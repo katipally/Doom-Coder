@@ -149,7 +149,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func quit() {
-        SleepManager.shared.disable()
+        SleepManager.shared.prepareForTermination()
         NSApp.terminate(nil)
     }
 }

@@ -1,6 +1,8 @@
 // CompanionApp.swift — DoomCoder Companion
 // Entry point for the iOS companion app.
-// Boots CompanionSyncEngine and gates main UI behind OnboardingView.
+// Boots CompanionSyncEngine and launches RootTabView directly. The app is
+// fully usable on first launch with no Mac / iCloud / notifications — required
+// by App Store Guideline 4.2.3 (standalone functionality).
 
 import SwiftUI
 import DoomCoderCore
@@ -10,26 +12,12 @@ struct CompanionApp: App {
 
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    /// Persisted via App Group so NSE can read it too.
-    @State private var onboardingDone: Bool = {
-        AppGroupCache.defaults.object(forKey: "onboarding.completedAt") != nil
-    }()
-
     var body: some Scene {
         WindowGroup {
-            Group {
-                if onboardingDone {
-                    RootTabView()
-                } else {
-                    OnboardingView(onComplete: {
-                        AppGroupCache.defaults.set(Date(), forKey: "onboarding.completedAt")
-                        onboardingDone = true
-                    })
+            RootTabView()
+                .onOpenURL { url in
+                    handleDeeplink(url)
                 }
-            }
-            .onOpenURL { url in
-                handleDeeplink(url)
-            }
         }
     }
 

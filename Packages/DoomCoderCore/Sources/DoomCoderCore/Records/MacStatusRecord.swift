@@ -27,6 +27,25 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     /// so the magic packet reaches the correct subnet.
     public var broadcastIPv4: String?
 
+    // MARK: - Keep-Awake state (schema v2+, additive — old clients ignore)
+
+    /// User-selected keep-awake intent: "off" | "on" | "auto".
+    /// Distinct from `sleepActive`, which reflects whether the assertion is
+    /// CURRENTLY held (in Auto mode it toggles with agent activity).
+    public var keepAwakeMode: String?
+    /// Number of tracked agents currently in a live/active state. Drives the
+    /// "awake because N agents working" subtitle in Auto mode.
+    public var activeAgentCount: Int?
+    /// Configured auto-off timer in hours (0 = never). Mirrors the dropdown.
+    public var sessionTimerHours: Int?
+    /// Elapsed seconds the current keep-awake session has been active.
+    public var elapsedSeconds: Int?
+    /// Ack channel: the last ControlCommand.commandId the Mac applied, so the
+    /// iOS client can confirm its remote command landed.
+    public var lastAppliedCommandId: String?
+    /// When `lastAppliedCommandId` was applied.
+    public var lastAppliedAt: Date?
+
     public init(macId: String,
                 name: String,
                 version: String,
@@ -37,6 +56,12 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 thermalState: String = "Normal",
                 macAddress: String? = nil,
                 broadcastIPv4: String? = nil,
+                keepAwakeMode: String? = nil,
+                activeAgentCount: Int? = nil,
+                sessionTimerHours: Int? = nil,
+                elapsedSeconds: Int? = nil,
+                lastAppliedCommandId: String? = nil,
+                lastAppliedAt: Date? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -48,6 +73,12 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.thermalState = thermalState
         self.macAddress = macAddress
         self.broadcastIPv4 = broadcastIPv4
+        self.keepAwakeMode = keepAwakeMode
+        self.activeAgentCount = activeAgentCount
+        self.sessionTimerHours = sessionTimerHours
+        self.elapsedSeconds = elapsedSeconds
+        self.lastAppliedCommandId = lastAppliedCommandId
+        self.lastAppliedAt = lastAppliedAt
         self.schemaVersion = schemaVersion
     }
 }
@@ -81,6 +112,12 @@ extension MacStatusRecord {
         r["thermalState"]  = thermalState as CKRecordValue
         if let m = macAddress { r["macAddress"] = m as CKRecordValue } else { r["macAddress"] = nil }
         if let b = broadcastIPv4 { r["broadcastIPv4"] = b as CKRecordValue } else { r["broadcastIPv4"] = nil }
+        if let k = keepAwakeMode { r["keepAwakeMode"] = k as CKRecordValue } else { r["keepAwakeMode"] = nil }
+        if let a = activeAgentCount { r["activeAgentCount"] = a as CKRecordValue } else { r["activeAgentCount"] = nil }
+        if let s = sessionTimerHours { r["sessionTimerHours"] = s as CKRecordValue } else { r["sessionTimerHours"] = nil }
+        if let e = elapsedSeconds { r["elapsedSeconds"] = e as CKRecordValue } else { r["elapsedSeconds"] = nil }
+        if let c = lastAppliedCommandId { r["lastAppliedCommandId"] = c as CKRecordValue } else { r["lastAppliedCommandId"] = nil }
+        if let t = lastAppliedAt { r["lastAppliedAt"] = t as CKRecordValue } else { r["lastAppliedAt"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -101,6 +138,12 @@ extension MacStatusRecord {
             thermalState: (r["thermalState"] as? String) ?? "Normal",
             macAddress: r["macAddress"] as? String,
             broadcastIPv4: r["broadcastIPv4"] as? String,
+            keepAwakeMode: r["keepAwakeMode"] as? String,
+            activeAgentCount: r["activeAgentCount"] as? Int,
+            sessionTimerHours: r["sessionTimerHours"] as? Int,
+            elapsedSeconds: r["elapsedSeconds"] as? Int,
+            lastAppliedCommandId: r["lastAppliedCommandId"] as? String,
+            lastAppliedAt: r["lastAppliedAt"] as? Date,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

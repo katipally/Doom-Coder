@@ -54,8 +54,17 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             break
 
         case .fetchedRecordZoneChanges(let fetched):
+            var commands: [ControlCommandRecord] = []
             for mod in fetched.modifications {
-                await MainActor.run { self.pusher?.serverRecords.store(mod.record) }
+                let record = mod.record
+                await MainActor.run { self.pusher?.serverRecords.store(record) }
+                if record.recordType == ControlCommandRecord.recordType,
+                   let cmd = ControlCommandRecord(record) {
+                    commands.append(cmd)
+                }
+            }
+            if !commands.isEmpty {
+                await MainActor.run { self.applyControlCommands(commands) }
             }
 
         case .willSendChanges, .didSendChanges,
@@ -79,6 +88,71 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             await MainActor.run { self.pusher?.buildRecord(for: recordID) }
         }
     }
+
+    // MARK: - Remote control ingestion
+
+    /// Applies fetched ControlCommands to SleepManager (on the main actor).
+    ///
+    /// Ordering/idempotency: commands are sorted by `issuedAt` ascending and
+    /// applied in order so the newest intent for each field wins. A persisted
+    /// high-water `issuedAt` plus the last-applied `commandId` ensure a command
+    /// re-fetched after a newer one (or after a state reset) is never re-applied.
+    /// Commands for other Macs, expired commands, and (when the master suspend
+    /// gate is off) all commands are ignored.
+    @MainActor
+    private func applyControlCommands(_ commands: [ControlCommandRecord]) {
+        guard let pusher else { return }
+
+        // Respect the local master suspend gate — remote control must not
+        // override an explicit "suspend everything" on the Mac.
+        let masterOn = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+        guard masterOn else {
+            logger.notice("ckpusher.delegate: master suspended — ignoring \(commands.count, privacy: .public) remote command(s)")
+            return
+        }
+
+        let ud = UserDefaults.standard
+        let lastId = ud.string(forKey: CloudKitPusher.lastAppliedCommandIdKey)
+        let highWater = (ud.object(forKey: Self.lastAppliedIssuedAtKey) as? Date) ?? .distantPast
+
+        let applicable = commands
+            .filter { $0.targetMacId == pusher.macId && !$0.isExpired }
+            .filter { $0.issuedAt > highWater && $0.commandId != lastId }
+            .sorted { $0.issuedAt < $1.issuedAt }
+
+        guard !applicable.isEmpty else { return }
+
+        let sm = SleepManager.shared
+        var applied = false
+        for cmd in applicable {
+            switch cmd.verb {
+            case .setKeepAwakeMode:
+                guard let m = KeepAwakeMode(rawValue: cmd.value) else { continue }
+                sm.keepAwakeMode = m
+            case .setScreenMode:
+                guard let s = DoomCoderMode(rawValue: cmd.value) else { continue }
+                sm.mode = s
+            case .setSessionTimerHours:
+                guard let raw = Int(cmd.value) else { continue }
+                sm.sessionTimerHours = max(0, min(raw, 24))   // clamp to a sane range
+            case .none:
+                logger.notice("ckpusher.delegate: unknown command verb \(cmd.command, privacy: .public)")
+                continue
+            }
+            ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
+            ud.set(cmd.issuedAt, forKey: Self.lastAppliedIssuedAtKey)
+            applied = true
+            logger.notice("ckpusher.delegate: applied \(cmd.command, privacy: .public)=\(cmd.value, privacy: .public)")
+        }
+
+        guard applied else { return }
+        ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
+        // Publish fresh status so iOS confirms the command(s) landed.
+        pusher.publishMacStatus()
+    }
+
+    /// High-water mark for the most recent applied command's `issuedAt`.
+    private static let lastAppliedIssuedAtKey = "doomcoder.ckpusher.lastAppliedIssuedAt"
 
     // MARK: - State persistence
 
