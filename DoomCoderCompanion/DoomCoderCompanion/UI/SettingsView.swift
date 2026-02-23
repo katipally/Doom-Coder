@@ -28,6 +28,10 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await CompanionSyncEngine.shared.fetchChanges()
+            await refreshNotifStatus()
+        }
         .sheet(isPresented: $showConnect) {
             ConnectFlowView(onFinished: {})
         }

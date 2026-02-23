@@ -136,6 +136,7 @@ final class SleepManager {
     @ObservationIgnored nonisolated(unsafe) private var _screenOffTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var _screenWakeObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var _hotkeyMonitor: Any?
+    @ObservationIgnored nonisolated(unsafe) private var _trackingObserver: NSObjectProtocol?
 
     // MARK: - Init
 
@@ -168,6 +169,17 @@ final class SleepManager {
         // (explicit user intent). `.auto` does NOT acquire without fresh agent
         // evidence (crash-safety — never restore a stale assertion).
         applyKeepAwakeMode()
+        // Re-evaluate Auto immediately when the user toggles an agent's tracking
+        // on/off (the `sessions` map doesn't mutate, so the observation-tracking
+        // path wouldn't otherwise fire until the 20s backstop).
+        _trackingObserver = NotificationCenter.default.addObserver(
+            forName: .trackingStoreChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.keepAwakeMode == .auto else { return }
+                self.evaluateAuto()
+            }
+        }
     }
 
     // MARK: - Global Hotkey
@@ -267,9 +279,15 @@ final class SleepManager {
     @ObservationIgnored private var _autoObservationGeneration: Int = 0
 
     /// Number of tracked agents currently in a live state and not stale.
+    ///
+    /// Agents the user has switched OFF in Agent Tracking are excluded: their
+    /// hooks may still arrive, but the user has opted out of tracking them, so
+    /// they must not hold the Mac awake in Auto mode. With no other live agents
+    /// this lets macOS resume its normal sleep behaviour.
     var activeAgentCount: Int {
         let now = Date.now
         return AgentTrackingManager.shared.sessions.values.filter { session in
+            guard TrackingStore.isEnabled(session.agent) else { return false }
             guard now.timeIntervalSince(session.updatedAt) < autoStaleTTLSeconds else { return false }
             return Self.autoLiveStates.contains(session.displayState)
         }.count
@@ -584,6 +602,7 @@ final class SleepManager {
         if let obs = thermalObserver  { NotificationCenter.default.removeObserver(obs) }
         if let obs = _screenWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         if let monitor = _hotkeyMonitor { NSEvent.removeMonitor(monitor) }
+        if let obs = _trackingObserver { NotificationCenter.default.removeObserver(obs) }
     }
 }
 
