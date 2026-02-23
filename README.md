@@ -30,18 +30,26 @@ No accounts, no servers, no telemetry. Notifications travel through your own pri
 
 ## Sleep Prevention
 
-### Two modes
+### Three keep-awake modes
+
+| Mode | What it does |
+|---|---|
+| **Off** | macOS manages sleep normally. DoomCoder is running but holds no assertion. |
+| **On** | Always holds the sleep assertion. Sub-option: **Screen On** (display stays lit) or **Screen Off** (display dims; CPU stays awake). |
+| **Auto** | Holds the assertion only while at least one tracked agent is actively working, then releases it after a 5-minute grace period. Respects per-agent tracking toggles. |
+
+Switch modes from the menu bar panel. **⌥ Space** opens the panel.
+
+### Screen modes (when Keep-Awake is On)
 
 | Mode | What it does |
 |---|---|
 | **Screen On** | Display stays fully lit. Mac never sleeps. Good for glancing at progress. |
 | **Screen Off** | Display sleeps after a short delay; Mac CPU stays awake. Saves power and reduces screen burn. |
 
-Toggle from the menu bar, or globally with **⌥ Space**.
+### Session timer (when Keep-Awake is On)
 
-### Session timer
-
-Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it running indefinitely). Tap a duration tile in the panel to set it — the elapsed time is shown live in the panel header.
+Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it running indefinitely). Tap a duration tile in the panel to set it.
 
 ### Screen Off re-arm
 
