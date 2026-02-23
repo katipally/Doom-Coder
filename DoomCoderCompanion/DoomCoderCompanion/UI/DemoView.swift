@@ -65,7 +65,6 @@ struct DemoView: View {
                         timerHours: demoTimer,
                         awakeActive: demoMode != .off,
                         activeAgentCount: 2,
-                        elapsedSeconds: 1_530,
                         waiting: false,
                         onChangeMode: { demoMode = $0; Haptics.selection() },
                         onChangeScreen: { demoScreen = $0; Haptics.selection() },

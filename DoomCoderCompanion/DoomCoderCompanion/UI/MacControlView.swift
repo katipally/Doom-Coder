@@ -28,7 +28,6 @@ struct MacControlCard: View {
 
     let awakeActive: Bool
     let activeAgentCount: Int
-    let elapsedSeconds: Int
     let waiting: Bool
 
     var onChangeMode: (KeepAwakeMode) -> Void
@@ -172,10 +171,7 @@ struct MacControlCard: View {
         case .off:
             return "Your Mac sleeps normally"
         case .on:
-            if awakeActive {
-                return elapsedSeconds > 0 ? "Awake · \(elapsedString)" : "Awake"
-            }
-            return "Starting…"
+            return awakeActive ? "Awake" : "Starting…"
         case .auto:
             if awakeActive {
                 let n = activeAgentCount
@@ -183,12 +179,6 @@ struct MacControlCard: View {
             }
             return "Idle · sleeps when agents finish"
         }
-    }
-
-    private var elapsedString: String {
-        let m = elapsedSeconds / 60
-        if m < 60 { return "\(m)m" }
-        return "\(m / 60)h \(m % 60)m"
     }
 }
 
@@ -217,7 +207,6 @@ struct MacControlView: View {
                     timerHours: timerHours,
                     awakeActive: mac.sleepActive,
                     activeAgentCount: mac.activeAgentCount ?? 0,
-                    elapsedSeconds: mac.elapsedSeconds ?? 0,
                     waiting: waitingCommandId != nil,
                     onChangeMode: { newMode in
                         Haptics.selection()
