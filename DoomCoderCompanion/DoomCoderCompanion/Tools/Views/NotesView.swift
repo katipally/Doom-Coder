@@ -133,6 +133,7 @@ private struct NoteEditorView: View {
     @State private var reminderDate: Date
     @State private var hasReminder: Bool
     @State private var showReminderDenied = false
+    @State private var reminderPastDate = false
     @State private var didTurnIntoPrompt = false
     @FocusState private var bodyFocused: Bool
 
@@ -263,7 +264,15 @@ private struct NoteEditorView: View {
                 DatePicker("When", selection: $reminderDate,
                            in: Date()...,
                            displayedComponents: [.date, .hourAndMinute])
-                    .onChange(of: reminderDate) { _, _ in Task { await scheduleReminder() } }
+                    .onChange(of: reminderDate) { _, _ in
+                        reminderPastDate = false
+                        Task { await scheduleReminder() }
+                    }
+                if reminderPastDate {
+                    Label("Pick a time in the future.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         } footer: {
             if hasReminder {
@@ -278,13 +287,14 @@ private struct NoteEditorView: View {
         let result = await store.setReminder(reminderDate, for: note)
         switch result {
         case .scheduled:
+            reminderPastDate = false
             Haptics.success()
         case .permissionDenied:
             hasReminder = false
             showReminderDenied = true
             Haptics.warning()
         case .dateInPast:
-            hasReminder = false
+            reminderPastDate = true
             Haptics.warning()
         case .failed:
             hasReminder = false

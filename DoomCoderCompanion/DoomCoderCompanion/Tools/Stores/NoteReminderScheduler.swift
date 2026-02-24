@@ -20,7 +20,7 @@ enum NoteReminderScheduler {
     /// notification firing at `reminder.date`. Returns the outcome so the UI can
     /// guide the user (e.g. to Settings) when permission is denied.
     static func schedule(reminder: NoteReminder, noteTitle: String) async -> ScheduleResult {
-        guard reminder.date > Date() else { return .dateInPast }
+        guard reminder.date > Date().addingTimeInterval(5) else { return .dateInPast }
 
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
