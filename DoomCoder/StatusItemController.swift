@@ -40,7 +40,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshIcon()
+            MainActor.assumeIsolated { self?.refreshIcon() }
         }
     }
 
