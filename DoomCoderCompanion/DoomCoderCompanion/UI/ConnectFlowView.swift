@@ -161,11 +161,19 @@ struct ConnectFlowView: View {
         let available = await isiCloudAvailable()
         guard available else { step = .icloudNeeded; return }
         step = .searching
-        // Poll a few times so a freshly-launched Mac has time to publish.
-        for _ in 0..<6 {
-            await CompanionSyncEngine.shared.fetchChanges()
+        // After disconnect, the sync engine holds a stale incremental token that
+        // causes fetchChanges() to return zero records (the Mac's MacStatus was
+        // already "seen" before the disconnect). forceFetchAll() wipes the token
+        // and re-initialises the engine, then awaits a full CloudKit re-fetch so
+        // all current records (including the Mac heartbeat) arrive via the
+        // delegate before this call returns.
+        await CompanionSyncEngine.shared.forceFetchAll()
+        // Fallback: if the Mac published its heartbeat after our initial import
+        // window (e.g. just restarted), poll a couple more times.
+        for _ in 0..<3 {
             if !macStore.byMacId.isEmpty { break }
             try? await Task.sleep(for: .seconds(2))
+            await CompanionSyncEngine.shared.fetchChanges()
         }
         switch macStore.byMacId.count {
         case 0:

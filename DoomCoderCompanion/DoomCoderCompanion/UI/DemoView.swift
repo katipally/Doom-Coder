@@ -7,6 +7,7 @@
 // Everything here is local sample data; nothing is written to CloudKit.
 
 import SwiftUI
+import UserNotifications
 import DoomCoderCore
 
 struct DemoView: View {
@@ -45,7 +46,7 @@ struct DemoView: View {
                 section(title: "Notifications", subtitle: "See how an agent alert looks on your device.") {
                     Button {
                         Haptics.tap()
-                        showNotificationPreview = true
+                        Task { await previewNotification() }
                     } label: {
                         Label("Preview a notification", systemImage: "bell.badge")
                             .font(.headline)
@@ -116,6 +117,39 @@ struct DemoView: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Notification preview
+
+    private func previewNotification() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            scheduleDemoLocalNotification()
+        case .notDetermined:
+            let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+            if granted { scheduleDemoLocalNotification() } else { showNotificationPreview = true }
+        default:
+            // Permission denied — fall back to the in-app visual preview.
+            showNotificationPreview = true
+        }
+    }
+
+    /// Schedules a real local notification with a 2-second delay so the user can
+    /// background the app and see the system banner appear on their device.
+    private func scheduleDemoLocalNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "Claude needs approval"
+        content.body = "Wants to run `git push` in ~/Projects/api"
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "doomcoder.demo.\(UUID().uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Sample data
