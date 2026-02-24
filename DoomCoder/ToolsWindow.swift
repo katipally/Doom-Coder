@@ -10,6 +10,7 @@
 
 import SwiftUI
 import AppKit
+import UserNotifications
 import DoomCoderCore
 
 // MARK: - Local persistence (atomic, local-only)
@@ -78,6 +79,8 @@ final class MacNotesStore {
         }
     }
 
+    func note(id: UUID) -> Note? { notes.first { $0.id == id } }
+
     func load() {
         guard let url = ToolsPaths.fileURL(file), let data = try? Data(contentsOf: url) else { return }
         do { notes = try JSONDecoder().decode([Note].self, from: data) }
@@ -99,18 +102,120 @@ final class MacNotesStore {
         notes.insert(note, at: 0); save()
         return note
     }
-    func update(_ note: Note) {
-        if let i = notes.firstIndex(where: { $0.id == note.id }) {
-            var n = note; n.updatedAt = Date(); notes[i] = n; save()
+
+    /// Persists only the editable content fields, preserving store-owned fields
+    /// (reminder, notificationID) so an editor's stale snapshot can never wipe a
+    /// reminder set via `setReminder`/`togglePin`.
+    func updateContent(id: UUID, body: String, checklist: [NoteChecklistItem]) {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[i].body = body
+        notes[i].checklist = checklist
+        notes[i].updatedAt = Date()
+        save()
+    }
+
+    func togglePin(_ id: UUID) {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[i].isPinned.toggle(); notes[i].updatedAt = Date(); save()
+    }
+
+    /// Schedules (or reschedules) a reminder and persists it on success.
+    @discardableResult
+    func setReminder(_ date: Date, for id: UUID) async -> MacNoteReminderScheduler.ScheduleResult {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return .failed("Note not found") }
+        let notificationID = notes[i].reminder?.notificationID ?? UUID().uuidString
+        let reminder = NoteReminder(date: date, isEnabled: true, notificationID: notificationID)
+        let result = await MacNoteReminderScheduler.schedule(reminder: reminder, noteTitle: notes[i].title)
+        if result == .scheduled, let j = notes.firstIndex(where: { $0.id == id }) {
+            notes[j].reminder = reminder
+            notes[j].updatedAt = Date()
+            save()
+        }
+        return result
+    }
+
+    func clearReminder(for id: UUID) {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        if let nid = notes[i].reminder?.notificationID {
+            MacNoteReminderScheduler.cancel(notificationID: nid)
+        }
+        notes[i].reminder = nil
+        notes[i].updatedAt = Date()
+        save()
+    }
+
+    func delete(_ id: UUID) {
+        if let nid = notes.first(where: { $0.id == id })?.reminder?.notificationID {
+            MacNoteReminderScheduler.cancel(notificationID: nid)
+        }
+        notes.removeAll { $0.id == id }
+        save()
+    }
+
+    /// Drops empty notes — but keeps any that still carry a reminder.
+    func pruneEmpty() {
+        let before = notes.count
+        notes.removeAll { $0.isEffectivelyEmpty && $0.reminder == nil }
+        if notes.count != before { save() }
+    }
+}
+
+// MARK: - Mac note reminder scheduling (local notifications)
+
+/// Schedules/cancels a single one-shot local notification per note reminder.
+/// Notification permission is requested lazily — only when the user first sets a
+/// reminder. The Mac app is LSUIElement, so the app delegate's `willPresent`
+/// delegate is what makes these banners appear while the app is "foreground".
+enum MacNoteReminderScheduler {
+    enum ScheduleResult: Equatable {
+        case scheduled
+        case permissionDenied
+        case dateInPast
+        case failed(String)
+    }
+
+    static func schedule(reminder: NoteReminder, noteTitle: String) async -> ScheduleResult {
+        // Require a small buffer so a just-passed minute doesn't silently no-op.
+        guard reminder.date > Date().addingTimeInterval(5) else { return .dateInPast }
+
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+            guard granted else { return .permissionDenied }
+        case .denied:
+            return .permissionDenied
+        default:
+            break
+        }
+
+        center.removePendingNotificationRequests(withIdentifiers: [reminder.notificationID])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Note reminder"
+        content.body = noteTitle.isEmpty ? "You set a reminder on a note." : noteTitle
+        content.sound = .default
+        content.userInfo = ["doomcoder.noteReminder": true]
+
+        let comps = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: reminder.date)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: reminder.notificationID, content: content, trigger: trigger)
+
+        do {
+            try await center.add(request)
+            return .scheduled
+        } catch {
+            return .failed(error.localizedDescription)
         }
     }
-    func togglePin(_ note: Note) {
-        if let i = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[i].isPinned.toggle(); notes[i].updatedAt = Date(); save()
-        }
+
+    static func cancel(notificationID: String) {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [notificationID])
     }
-    func delete(_ note: Note) { notes.removeAll { $0.id == note.id }; save() }
-    func pruneEmpty() { notes.removeAll { $0.isEffectivelyEmpty }; save() }
 }
 
 private enum MacClipboard {
@@ -154,197 +259,282 @@ enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
         case .settings: return "gearshape"
         }
     }
+    var hint: String {
+        switch self {
+        case .prompts: return "Write, enhance, and copy prompts; browse the library."
+        case .notes: return "Capture notes, checklists, and reminders."
+        case .settings: return "Choose the on-device or API-key AI engine."
+        }
+    }
 }
 
 struct ToolsRootView: View {
-    @State private var selection: ToolsSection? = .prompts
+    @State private var selection: ToolsSection = .prompts
 
     var body: some View {
         NavigationSplitView {
             List(ToolsSection.allCases, selection: $selection) { section in
-                NavigationLink(value: section) {
-                    Label(section.title, systemImage: section.symbol)
+                Label(section.title, systemImage: section.symbol)
+                    .tag(section)
+                    .accessibilityHint(section.hint)
+            }
+            .navigationSplitViewColumnWidth(min: 188, ideal: 208)
+            .navigationTitle("DoomCoder Tools")
+            .safeAreaInset(edge: .bottom) {
+                Text("Local to this Mac · not synced")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+                    .accessibilityHidden(true)
+            }
+        } detail: {
+            Group {
+                switch selection {
+                case .prompts:   MacPromptsPane()
+                case .notes:     MacNotesPane()
+                case .settings:  MacToolsSettingsPane()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .navigationTitle("DoomCoder Tools")
-        } detail: {
-            switch selection ?? .prompts {
-            case .prompts:   MacPromptsPane()
-            case .notes:     MacNotesPane()
-            case .settings:  MacToolsSettingsPane()
-            }
+            .frame(minWidth: 560, minHeight: 540)
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: 860, minHeight: 580)
         .background(WindowFocus())
     }
 }
 
-// MARK: - Prompts (single-screen composer + saved drafts)
 
-/// The Prompt Composer mirrors iOS: a freeform draft editor with an action bar
-/// (Enhance-in-place / Copy / Save / Undo) and a saved-drafts sidebar. The store
-/// is the source of truth; the editor owns only transient state so there are no
-/// stale-snapshot bugs. Writing and copying never require AI.
+// MARK: - Prompts (Compose | Library, toolbar-driven, inspector)
+
+/// macOS 26 prompt workspace. A segmented Compose | Library control switches
+/// between a toolbar-driven draft editor (with a saved-drafts sidebar and an
+/// inspector for AI status + metadata) and the shared curated prompt library.
+/// The store is the source of truth; the editor owns only transient state, so
+/// there are no stale-snapshot bugs. Writing and copying never require AI.
 struct MacPromptsPane: View {
+    private enum Mode: String, Hashable { case compose, library }
+
     @State private var store = MacPromptStore.shared
     @State private var coordinator = AIEngineCoordinator.shared
+    @State private var mode: Mode = .compose
+
+    // Compose state.
     @State private var search = ""
     @State private var currentID: UUID?
-
-    // Transient editor state (never a captured Prompt value).
     @State private var draft = ""
     @State private var preEnhance: String?
     @State private var isEnhancing = false
+    @State private var enhanceTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var statusMessage: String?
     @State private var suppressSelectionHandling = false
+    @State private var showInspector = true
+
+    // Library state.
+    @State private var librarySearch = ""
+
     @FocusState private var editorFocused: Bool
 
     private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var hasContent: Bool { !trimmed.isEmpty }
 
-    private var sortedDrafts: [Prompt] {
-        store.prompts.sorted { $0.updatedAt > $1.updatedAt }
-    }
-    private var filtered: [Prompt] {
+    private var sortedDrafts: [Prompt] { store.prompts.sorted { $0.updatedAt > $1.updatedAt } }
+    private var filteredDrafts: [Prompt] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return sortedDrafts }
-        return sortedDrafts.filter {
-            $0.title.lowercased().contains(q) || $0.body.lowercased().contains(q)
-        }
+        return sortedDrafts.filter { $0.title.lowercased().contains(q) || $0.body.lowercased().contains(q) }
     }
 
     var body: some View {
-        HSplitView {
-            sidebar.frame(minWidth: 240, idealWidth: 300)
-            composer.frame(minWidth: 440)
+        Group {
+            switch mode {
+            case .compose: composeLayout
+            case .library: MacPromptLibraryView(search: $librarySearch, onOpen: openInComposer)
+            }
         }
         .navigationTitle("Prompts")
-        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
-        .onDisappear { saveCurrentIfDirty(asID: currentID) }
+        .navigationSubtitle(mode == .compose ? "Compose" : "Library")
+        .toolbar { toolbarContent }
+        .onDisappear {
+            enhanceTask?.cancel()
+            saveCurrentIfDirty(asID: currentID)
+        }
     }
 
-    // MARK: Sidebar
+    // MARK: Toolbar
 
-    private var sidebar: some View {
-        VStack(spacing: 0) {
-            HStack {
-                TextField("Search drafts", text: $search)
-                    .textFieldStyle(.roundedBorder)
-                Button { newDraft() } label: { Image(systemName: "square.and.pencil") }
-                    .keyboardShortcut("n", modifiers: .command)
-                    .help("New draft")
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("View", selection: $mode.animation(.easeInOut(duration: 0.18))) {
+                Text("Compose").tag(Mode.compose)
+                Text("Library").tag(Mode.library)
             }
-            .padding(8)
-            Divider()
-            if filtered.isEmpty {
-                ContentUnavailableView(
-                    search.isEmpty ? "No saved drafts" : "No matches",
-                    systemImage: "sparkles",
-                    description: Text(search.isEmpty
-                        ? "Write a prompt on the right, then Save it to keep it here."
-                        : "No drafts match “\(search)”."))
-            } else {
-                List(filtered, selection: $currentID) { prompt in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Self.title(for: prompt.body)).font(.headline).lineLimit(1)
-                        Text(prompt.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                    .tag(prompt.id)
+            .pickerStyle(.segmented)
+            .frame(width: 200)
+            .accessibilityLabel("Prompts view")
+        }
+
+        if mode == .compose {
+            ToolbarItemGroup {
+                Button { newDraft() } label: { Label("New", systemImage: "square.and.pencil") }
+                    .help("New draft (⌘N)")
+                    .keyboardShortcut("n", modifiers: .command)
+
+                Button { enhance() } label: { Label("Enhance", systemImage: "sparkles") }
+                    .help("Rewrite the draft with AI")
+                    .disabled(!hasContent || isEnhancing)
+
+                Button { copyDraft() } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .help("Copy draft (⇧⌘C)")
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .disabled(!hasContent)
+
+                Button { saveDraft() } label: {
+                    Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
                 }
+                .help("Save draft (⌘S)")
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!hasContent)
+
+                Spacer()
+
+                Button { showInspector.toggle() } label: {
+                    Label("Inspector", systemImage: "sidebar.trailing")
+                }
+                .help("Show or hide the inspector")
             }
         }
     }
 
-    // MARK: Composer
+    // MARK: Compose layout
 
-    private var composer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(hasContent ? Self.title(for: draft) : "New draft")
-                    .font(.title3.bold())
-                    .lineLimit(1)
-                Spacer()
-                if isEnhancing {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Enhancing with \(coordinator.selection.displayName)…")
-                            .font(.caption).foregroundStyle(.secondary)
+    private var composeLayout: some View {
+        HSplitView {
+            draftsSidebar
+                .frame(minWidth: 230, idealWidth: 270)
+            editor
+                .frame(minWidth: 360)
+        }
+        .inspector(isPresented: $showInspector) { inspector.inspectorColumnWidth(min: 240, ideal: 280, max: 360) }
+        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
+    }
+
+    private var draftsSidebar: some View {
+        VStack(spacing: 0) {
+            if filteredDrafts.isEmpty {
+                ContentUnavailableView(
+                    search.isEmpty ? "No saved drafts" : "No matches",
+                    systemImage: "tray",
+                    description: Text(search.isEmpty
+                        ? "Write a prompt, then Save to keep it here."
+                        : "No drafts match “\(search)”."))
+            } else {
+                List(selection: $currentID) {
+                    ForEach(filteredDrafts) { prompt in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Self.title(for: prompt.body)).font(.headline).lineLimit(1)
+                            Text(prompt.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                        .tag(prompt.id)
+                        .contextMenu {
+                            Button(role: .destructive) { delete(prompt) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
+                .listStyle(.inset)
             }
+        }
+        .searchable(text: $search, placement: .sidebar, prompt: "Search drafts")
+    }
 
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 if draft.isEmpty {
                     Text("Describe what you want your AI coding agent to do…")
                         .foregroundStyle(.secondary)
-                        .padding(.top, 8).padding(.leading, 6)
+                        .padding(.top, 12).padding(.leading, 8)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
                 TextEditor(text: $draft)
                     .font(.body)
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
+                    .padding(6)
             }
-            .frame(minHeight: 240)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
             .accessibilityLabel("Prompt draft")
-
-            actionBar
-            footer
-            Spacer(minLength: 0)
         }
-        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.background)
     }
 
-    private var actionBar: some View {
-        HStack(spacing: 8) {
-            Button { enhance() } label: {
-                Label(preEnhance == nil ? "Enhance with AI" : "Enhance again", systemImage: "sparkles")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!hasContent || isEnhancing)
+    // MARK: Inspector
 
-            Button { copyDraft() } label: { Label("Copy", systemImage: "doc.on.doc") }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-                .disabled(!hasContent)
+    private var inspector: some View {
+        Form {
+            Section("AI") {
+                LabeledContent("Engine") { Text(coordinator.selection.displayName) }
+                if isEnhancing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Enhancing…").foregroundStyle(.secondary)
+                    }
+                }
+                Button { enhance() } label: {
+                    Label(preEnhance == nil ? "Enhance with AI" : "Enhance again", systemImage: "sparkles")
+                }
+                .disabled(!hasContent || isEnhancing)
 
-            Button { saveDraft() } label: {
-                Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
-            }
-            .keyboardShortcut("s", modifiers: .command)
-            .disabled(!hasContent)
-
-            if preEnhance != nil {
-                Button { revertEnhance() } label: {
-                    Label("Undo enhance", systemImage: "arrow.uturn.backward")
+                if preEnhance != nil {
+                    Button { revertEnhance() } label: {
+                        Label("Undo enhance", systemImage: "arrow.uturn.backward")
+                    }
                 }
             }
 
-            Spacer()
+            Section("Draft") {
+                LabeledContent("Characters") { Text("\(trimmed.count)") }
+                LabeledContent("Status") {
+                    Text(currentID == nil ? "Unsaved" : "Saved")
+                        .foregroundStyle(currentID == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.green))
+                }
+                if currentID != nil {
+                    Button(role: .destructive) {
+                        if let id = currentID, let p = store.prompts.first(where: { $0.id == id }) { delete(p) }
+                    } label: { Label("Delete draft", systemImage: "trash") }
+                }
+            }
 
-            if currentID != nil {
-                Button(role: .destructive) { deleteCurrent() } label: {
-                    Label("Delete", systemImage: "trash")
+            Section {
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if let statusMessage {
+                    Label(statusMessage, systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green)
+                } else {
+                    Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Writing and copying never require AI — set up AI in Settings.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
+        .formStyle(.grouped)
     }
 
-    @ViewBuilder
-    private var footer: some View {
-        if let errorMessage {
-            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption).foregroundStyle(.orange)
-        } else if let statusMessage {
-            Label(statusMessage, systemImage: "checkmark.circle.fill")
-                .font(.caption).foregroundStyle(.green)
-        } else {
-            Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Set up AI in Settings.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
+    // MARK: Library bridge
+
+    private func openInComposer(_ prompt: Prompt) {
+        saveCurrentIfDirty(asID: currentID)
+        suppressSelectionHandling = true
+        currentID = nil
+        draft = prompt.body
+        preEnhance = nil; errorMessage = nil; statusMessage = nil
+        withAnimation(.easeInOut(duration: 0.18)) { mode = .compose }
+        editorFocused = true
     }
 
     // MARK: Actions
@@ -356,12 +546,12 @@ struct MacPromptsPane: View {
         let snapshot = draft
         let capturedID = currentID
         isEnhancing = true
-        Task {
+        enhanceTask?.cancel()
+        enhanceTask = Task {
             let result = await coordinator.enhance(trimmed)
             await MainActor.run {
                 isEnhancing = false
-                // Ignore the result if the user switched drafts or edited while it ran.
-                guard currentID == capturedID, draft == snapshot else { return }
+                guard !Task.isCancelled, currentID == capturedID, draft == snapshot else { return }
                 switch result {
                 case .success(let improved, _):
                     preEnhance = snapshot
@@ -410,16 +600,17 @@ struct MacPromptsPane: View {
         editorFocused = true
     }
 
-    private func deleteCurrent() {
-        guard let id = currentID, let prompt = store.prompts.first(where: { $0.id == id }) else { return }
+    private func delete(_ prompt: Prompt) {
+        let wasCurrent = prompt.id == currentID
         store.delete(prompt)
-        suppressSelectionHandling = true
-        currentID = nil
-        draft = ""
-        preEnhance = nil
+        if wasCurrent {
+            suppressSelectionHandling = true
+            currentID = nil
+            draft = ""
+            preEnhance = nil
+        }
     }
 
-    /// Loads a newly-selected draft, auto-saving the previous editor content first.
     private func handleSelectionChange(from old: UUID?, to new: UUID?) {
         if suppressSelectionHandling { suppressSelectionHandling = false; return }
         saveCurrentIfDirty(asID: old)
@@ -431,8 +622,8 @@ struct MacPromptsPane: View {
         }
     }
 
-    /// Persists the current editor content to `id` (or as a new draft) when it
-    /// has unsaved changes — prevents silent data loss on switch/new/close.
+    /// Persists current editor content when it has unsaved changes — prevents
+    /// silent data loss on switch/new/close.
     private func saveCurrentIfDirty(asID id: UUID?) {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
@@ -480,12 +671,108 @@ struct MacPromptsPane: View {
     }
 }
 
-// MARK: - Notes
+// MARK: - Prompt Library (shared curated prompts)
 
+/// Browses the shared `PromptLibrary`, grouped by category. Each row copies the
+/// rendered prompt or opens its template in the composer. Works with zero setup.
+private struct MacPromptLibraryView: View {
+    @Binding var search: String
+    let onOpen: (Prompt) -> Void
+
+    @State private var flashMessage: String?
+
+    private var groups: [(category: PromptCategory, prompts: [Prompt])] {
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return PromptLibrary.grouped().compactMap { group in
+            guard !q.isEmpty else { return group }
+            let matches = group.prompts.filter {
+                $0.title.lowercased().contains(q)
+                    || $0.body.lowercased().contains(q)
+                    || $0.tags.contains { $0.lowercased().contains(q) }
+            }
+            return matches.isEmpty ? nil : (group.category, matches)
+        }
+    }
+
+    var body: some View {
+        List {
+            if groups.isEmpty {
+                ContentUnavailableView.search(text: search)
+            } else {
+                ForEach(groups, id: \.category) { group in
+                    Section {
+                        ForEach(group.prompts) { prompt in row(prompt) }
+                    } header: {
+                        Label(group.category.displayName, systemImage: group.category.symbol)
+                    }
+                }
+            }
+        }
+        .listStyle(.inset)
+        .searchable(text: $search, placement: .sidebar, prompt: "Search prompts")
+        .overlay(alignment: .bottom) {
+            if let flashMessage {
+                Label(flashMessage, systemImage: "checkmark.circle.fill")
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.green.opacity(0.4)))
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ prompt: Prompt) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(prompt.title).font(.headline)
+                Text(prompt.render(values: [:]))
+                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { onOpen(prompt) }
+
+            Button { copy(prompt) } label: { Image(systemName: "doc.on.doc") }
+                .buttonStyle(.borderless)
+                .help("Copy prompt")
+                .accessibilityLabel("Copy “\(prompt.title)”")
+        }
+        .padding(.vertical, 2)
+        .contextMenu {
+            Button { copy(prompt) } label: { Label("Copy prompt", systemImage: "doc.on.doc") }
+            Button { onOpen(prompt) } label: { Label("Open in composer", systemImage: "square.and.pencil") }
+        }
+    }
+
+    private func copy(_ prompt: Prompt) {
+        MacClipboard.copy(prompt.render(values: [:]))
+        withAnimation { flashMessage = "Copied “\(prompt.title)”" }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run { withAnimation { if flashMessage?.contains(prompt.title) == true { flashMessage = nil } } }
+        }
+    }
+}
+
+
+
+
+
+// MARK: - Notes (toolbar-driven editor + reminder/checklist inspector)
+
+/// macOS 26 notes workspace: a list (search + new), a comfortable body editor
+/// with inline checklist, and an inspector for reminder, pin, and metadata.
+/// Selection is by `UUID` so store edits never desync the selection. Reminders
+/// schedule a local notification and persist on this Mac only.
 struct MacNotesPane: View {
     @State private var store = MacNotesStore.shared
     @State private var search = ""
-    @State private var selected: Note?
+    @State private var selectedID: UUID?
+    @State private var showInspector = true
 
     private var filtered: [Note] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -495,104 +782,332 @@ struct MacNotesPane: View {
         }
     }
 
+    private var selectedNote: Note? { selectedID.flatMap { store.note(id: $0) } }
+
     var body: some View {
         HSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    TextField("Search notes", text: $search).textFieldStyle(.roundedBorder)
-                    Button { selected = store.newNote() } label: { Image(systemName: "square.and.pencil") }
-                        .help("New note")
-                        .accessibilityLabel("New note")
-                }
-                .padding(8)
-                Divider()
-                if filtered.isEmpty {
-                    ContentUnavailableView("No notes", systemImage: "note.text",
-                        description: Text("Jot ideas, checklists, and snippets. Pin the important ones."))
-                } else {
-                    List(filtered, selection: $selected) { note in
-                        HStack {
-                            if note.isPinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.orange) }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(note.title).font(.headline).lineLimit(1)
-                                Text(note.preview).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                        }
-                        .tag(note)
-                    }
-                }
-            }
-            .frame(minWidth: 240, idealWidth: 280)
-
+            list.frame(minWidth: 240, idealWidth: 280)
+            detail.frame(minWidth: 360)
+        }
+        .inspector(isPresented: $showInspector) {
             Group {
-                if let note = selected {
-                    MacNoteEditor(note: note, store: store)
-                        .id(note.id)
+                if let note = selectedNote {
+                    MacNoteInspector(note: note, store: store).id(note.id)
                 } else {
-                    ContentUnavailableView("Select a note", systemImage: "note.text")
+                    ContentUnavailableView("No note selected", systemImage: "sidebar.trailing")
                 }
             }
-            .frame(minWidth: 380)
+            .inspectorColumnWidth(min: 260, ideal: 300, max: 360)
         }
         .navigationTitle("Notes")
+        .toolbar { toolbarContent }
         .onDisappear { store.pruneEmpty() }
+    }
+
+    private var list: some View {
+        Group {
+            if filtered.isEmpty {
+                ContentUnavailableView("No notes", systemImage: "note.text",
+                    description: Text("Jot ideas, checklists, and reminders. Pin the important ones."))
+            } else {
+                List(selection: $selectedID) {
+                    ForEach(filtered) { note in
+                        NoteRow(note: note).tag(note.id)
+                            .contextMenu {
+                                Button { store.togglePin(note.id) } label: {
+                                    Label(note.isPinned ? "Unpin" : "Pin",
+                                          systemImage: note.isPinned ? "pin.slash" : "pin")
+                                }
+                                Button(role: .destructive) { delete(note.id) } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                    }
+                }
+                .listStyle(.inset)
+            }
+        }
+        .searchable(text: $search, placement: .sidebar, prompt: "Search notes")
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        if let id = selectedID, store.note(id: id) != nil {
+            MacNoteEditor(noteID: id, store: store).id(id)
+        } else {
+            ContentUnavailableView {
+                Label("Select a note", systemImage: "note.text")
+            } description: {
+                Text("Choose a note on the left, or create a new one.")
+            } actions: {
+                Button { create() } label: { Label("New note", systemImage: "square.and.pencil") }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup {
+            Button { create() } label: { Label("New", systemImage: "square.and.pencil") }
+                .help("New note (⌘N)")
+                .keyboardShortcut("n", modifiers: .command)
+
+            if let note = selectedNote {
+                Button { store.togglePin(note.id) } label: {
+                    Label(note.isPinned ? "Unpin" : "Pin",
+                          systemImage: note.isPinned ? "pin.slash" : "pin")
+                }
+                .help(note.isPinned ? "Unpin note" : "Pin note")
+
+                Button { MacClipboard.copy(note.body) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .help("Copy note text")
+                    .disabled(note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button { turnIntoPrompt(note) } label: { Label("To Prompt", systemImage: "text.alignleft") }
+                    .help("Turn this note into a prompt draft")
+                    .disabled(note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button(role: .destructive) { delete(note.id) } label: { Label("Delete", systemImage: "trash") }
+                    .help("Delete note")
+            }
+
+            Spacer()
+
+            Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
+                .help("Show or hide the inspector")
+        }
+    }
+
+    private func create() {
+        let note = store.newNote()
+        selectedID = note.id
+        showInspector = true
+    }
+
+    private func delete(_ id: UUID) {
+        store.delete(id)
+        if selectedID == id { selectedID = nil }
+    }
+
+    private func turnIntoPrompt(_ note: Note) {
+        let body = note.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return }
+        let title = note.title
+        MacPromptStore.shared.add(Prompt(title: title.isEmpty ? "Note" : title, category: .general, body: body))
     }
 }
 
+private struct NoteRow: View {
+    let note: Note
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                if note.isPinned {
+                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.orange)
+                        .accessibilityLabel("Pinned")
+                }
+                Text(note.title).font(.headline).lineLimit(1)
+            }
+            HStack(spacing: 6) {
+                Text(note.updatedAt, style: .date)
+                if !note.preview.isEmpty {
+                    Text("·"); Text(note.preview).lineLimit(1)
+                }
+                if let r = note.reminder, r.isEnabled {
+                    Text("·")
+                    Label(r.date.formatted(date: .abbreviated, time: .shortened), systemImage: "bell.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(r.date > Date() ? .blue : .secondary)
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// Body + inline checklist editor. Holds transient text/checklist state and
+/// persists via `updateContent`, which preserves store-owned fields (reminder).
 private struct MacNoteEditor: View {
-    @State var note: Note
+    let noteID: UUID
     let store: MacNotesStore
+
+    @State private var body_ = ""
+    @State private var checklist: [NoteChecklistItem] = []
     @State private var newItem = ""
+    @FocusState private var bodyFocused: Bool
+
+    init(noteID: UUID, store: MacNotesStore) {
+        self.noteID = noteID
+        self.store = store
+        let note = store.note(id: noteID)
+        _body_ = State(initialValue: note?.body ?? "")
+        _checklist = State(initialValue: note?.checklist ?? [])
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Button { store.togglePin(note); note.isPinned.toggle() } label: {
-                        Label(note.isPinned ? "Pinned" : "Pin", systemImage: note.isPinned ? "pin.fill" : "pin")
-                    }
-                    Spacer()
-                    Button { MacClipboard.copy(note.body) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    Button(role: .destructive) { store.delete(note) } label: { Image(systemName: "trash") }
-                        .help("Delete note")
-                        .accessibilityLabel("Delete note")
+            VStack(alignment: .leading, spacing: 14) {
+                if let r = store.note(id: noteID)?.reminder, r.isEnabled {
+                    Label("Reminder \(r.date.formatted(date: .abbreviated, time: .shortened))",
+                          systemImage: "bell.fill")
+                        .font(.caption).foregroundStyle(r.date > Date() ? .blue : .secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.blue.opacity(0.1), in: Capsule())
                 }
-                TextEditor(text: $note.body)
-                    .font(.body)
-                    .frame(minHeight: 200)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
-                    .onChange(of: note.body) { _, _ in store.update(note) }
 
-                GroupBox("Checklist") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach($note.checklist) { $item in
-                            HStack {
-                                Button { item.isDone.toggle(); store.update(note) } label: {
+                ZStack(alignment: .topLeading) {
+                    if body_.isEmpty {
+                        Text("Write your note…")
+                            .foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 6)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                    TextEditor(text: $body_)
+                        .font(.body).focused($bodyFocused)
+                        .scrollContentBackground(.hidden).padding(4)
+                        .frame(minHeight: 220)
+                        .onChange(of: body_) { _, _ in persist() }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                .accessibilityLabel("Note body")
+
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach($checklist) { $item in
+                            HStack(spacing: 8) {
+                                Button { item.isDone.toggle(); persist() } label: {
                                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                                }.buttonStyle(.plain)
+                                        .foregroundStyle(item.isDone ? .green : .secondary)
+                                }
+                                .buttonStyle(.plain)
                                 .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
                                 TextField("Item", text: $item.text)
                                     .textFieldStyle(.plain)
                                     .strikethrough(item.isDone)
-                                    .onChange(of: item.text) { _, _ in store.update(note) }
+                                    .onChange(of: item.text) { _, _ in persist() }
                             }
                         }
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "plus.circle").foregroundStyle(.secondary)
                             TextField("Add item", text: $newItem)
                                 .textFieldStyle(.plain)
-                                .onSubmit {
-                                    let t = newItem.trimmingCharacters(in: .whitespaces)
-                                    guard !t.isEmpty else { return }
-                                    note.checklist.append(NoteChecklistItem(id: UUID(), text: t, isDone: false))
-                                    newItem = ""
-                                    store.update(note)
-                                }
+                                .onSubmit(addItem)
                         }
                     }
+                    .padding(4)
+                } label: {
+                    Label("Checklist", systemImage: "checklist")
                 }
             }
             .padding()
+        }
+        .onAppear { if body_.isEmpty && checklist.isEmpty { bodyFocused = true } }
+    }
+
+    private func addItem() {
+        let t = newItem.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return }
+        checklist.append(NoteChecklistItem(id: UUID(), text: t, isDone: false))
+        newItem = ""
+        persist()
+    }
+
+    private func persist() {
+        store.updateContent(id: noteID, body: body_, checklist: checklist)
+    }
+}
+
+/// Inspector: reminder scheduling, pin, and metadata. Writes directly to the
+/// store so a stale editor snapshot can never clobber the reminder.
+private struct MacNoteInspector: View {
+    let note: Note
+    let store: MacNotesStore
+
+    @State private var hasReminder: Bool
+    @State private var reminderDate: Date
+    @State private var showDenied = false
+    @State private var pastDate = false
+
+    init(note: Note, store: MacNotesStore) {
+        self.note = note
+        self.store = store
+        _hasReminder = State(initialValue: note.reminder?.isEnabled ?? false)
+        _reminderDate = State(initialValue: note.reminder?.date
+            ?? (Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)))
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: Binding(
+                    get: { hasReminder },
+                    set: { on in
+                        hasReminder = on
+                        pastDate = false
+                        if on { Task { await schedule() } }
+                        else { store.clearReminder(for: note.id) }
+                    }
+                )) {
+                    Label("Remind me", systemImage: "bell")
+                }
+                if hasReminder {
+                    DatePicker("When", selection: $reminderDate, in: Date()...,
+                               displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: reminderDate) { _, _ in Task { await schedule() } }
+                }
+                if pastDate {
+                    Label("Pick a time in the future.", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Reminder")
+            } footer: {
+                Text(hasReminder
+                     ? "A local notification fires at the chosen time. Reminders stay on this Mac."
+                     : "Optional. Get a local notification at a time you choose.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Note") {
+                Toggle(isOn: Binding(
+                    get: { note.isPinned },
+                    set: { _ in store.togglePin(note.id) }
+                )) { Label("Pinned", systemImage: "pin") }
+                LabeledContent("Created") { Text(note.createdAt, style: .date) }
+                LabeledContent("Updated") { Text(note.updatedAt, style: .date) }
+                if !note.checklist.isEmpty {
+                    let done = note.checklist.filter(\.isDone).count
+                    LabeledContent("Checklist") { Text("\(done)/\(note.checklist.count) done") }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .alert("Reminders are turned off", isPresented: $showDenied) {
+            Button("Open Settings") { openNotificationSettings() }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("Enable notifications for DoomCoder in System Settings to get note reminders.")
+        }
+    }
+
+    private func schedule() async {
+        let result = await store.setReminder(reminderDate, for: note.id)
+        switch result {
+        case .scheduled:
+            pastDate = false
+        case .permissionDenied:
+            hasReminder = false; showDenied = true
+        case .dateInPast:
+            pastDate = true
+        case .failed:
+            hasReminder = false
+        }
+    }
+
+    private func openNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
         }
     }
 }
