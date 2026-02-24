@@ -11,6 +11,14 @@ struct AgentListView: View {
     
     var body: some View {
         List {
+            if macStore.primary != nil {
+                Section {
+                    MacReachabilityBanner()
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
             if agentStore.agents.isEmpty {
                 if engine.firstFetchCompleted {
                     EmptyStateView()

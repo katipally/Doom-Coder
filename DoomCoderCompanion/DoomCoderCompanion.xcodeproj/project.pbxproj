@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		13080AA8AC50EB8EC7B7CE3F /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4038EC43DC5D6E9E65F27D /* DoomCoderCore */; };
+		1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */; };
 		2203CEAF31C04E97C2F12EA6 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DEE8563E810CC992559FA8 /* Haptics.swift */; };
 		2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */; };
 		3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A67B01FA77C05717991E37 /* RootTabView.swift */; };
@@ -62,6 +63,7 @@
 
 /* Begin PBXFileReference section */
 		12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSyncEngine.swift; sourceTree = "<group>"; };
+		15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReachabilityBanner.swift; sourceTree = "<group>"; };
 		16A67B01FA77C05717991E37 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
 		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				D8DEE8563E810CC992559FA8 /* Haptics.swift */,
 				F4DA4FB5F5754B7516043CF0 /* HomeView.swift */,
 				C5B9DE90A2213084C9D99462 /* MacControlView.swift */,
+				15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
 				D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */,
 				E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */,
@@ -356,6 +359,7 @@
 				3A4B25C5A59BB9FD1A9801E8 /* HomeView.swift in Sources */,
 				92DC98D7E394C60ED12FBDBA /* LocalStore.swift in Sources */,
 				BFC889543E4CBE92A36E2B75 /* MacControlView.swift in Sources */,
+				1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */,
 				3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */,
 				AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */,
 				653506D5B5B8468A7E91F1EB /* Stores.swift in Sources */,
@@ -444,7 +448,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -459,7 +463,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.5.0;
+				MARKETING_VERSION = 2.5.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
@@ -526,7 +530,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -547,7 +551,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.5.0;
+				MARKETING_VERSION = 2.5.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

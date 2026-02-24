@@ -16,6 +16,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                MacReachabilityBanner()
                 connectionSection
                 whatIsSection
                 keepAwakeGuide

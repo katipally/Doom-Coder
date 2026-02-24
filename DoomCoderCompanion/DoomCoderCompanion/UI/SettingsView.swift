@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var forceSyncDone = false
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
     @State private var showConnect = false
+    @State private var showDisconnectConfirm = false
 
     var body: some View {
         List {
@@ -35,22 +36,44 @@ struct SettingsView: View {
         .sheet(isPresented: $showConnect) {
             ConnectFlowView(onFinished: {})
         }
+        .confirmationDialog(
+            "Disconnect from this Mac?",
+            isPresented: $showDisconnectConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                disconnectCurrentMac()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCoder Mac app are not affected. You can reconnect any time.")
+        }
         .task { await refreshNotifStatus() }
     }
 
     // MARK: - Connection
 
     private var connectionSection: some View {
-        Section("Connection") {
+        Section {
             if let mac = macStore.primary {
                 LabeledContent("Connected to") {
                     Text(mac.name).foregroundStyle(.secondary)
+                }
+                LabeledContent("Last seen") {
+                    Text(mac.lastSeen, style: .relative)
+                        .foregroundStyle(.secondary)
                 }
                 Button {
                     Haptics.tap()
                     showConnect = true
                 } label: {
                     Label("Switch Mac", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button(role: .destructive) {
+                    Haptics.tap()
+                    showDisconnectConfirm = true
+                } label: {
+                    Label("Disconnect", systemImage: "link.badge.minus")
                 }
             } else {
                 Button {
@@ -60,7 +83,22 @@ struct SettingsView: View {
                     Label("Connect your Mac", systemImage: "link")
                 }
             }
+        } header: {
+            Text("Connection")
+        } footer: {
+            if macStore.primary != nil {
+                Text("Disconnect if you want to switch iCloud accounts or pair a different Mac. Your data stays in iCloud and the Mac app keeps running.")
+            } else {
+                Text("Connect to the DoomCoder Mac app to see live agent status and control keep-awake remotely. The app is fully usable without a Mac.")
+            }
         }
+    }
+
+    private func disconnectCurrentMac() {
+        MacStatusStore.shared.clear()
+        AgentListStore.shared.clear()
+        NotificationLogStore.shared.clear()
+        Haptics.success()
     }
 
     // MARK: - Notifications

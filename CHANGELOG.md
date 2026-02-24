@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [iOS 2.5.1] - 2026-05-28
+
+### Added — iOS Companion (build 6)
+- **Disconnect button** in Settings to unpair the current Mac, clear cached agent data on the device, and let the user reconnect or switch iCloud accounts. Confirms with a destructive-action dialog and a clear explanation that iCloud data and the Mac app are untouched.
+- **Last seen** row in the Settings connection section so you can see at a glance how recent the Mac heartbeat is.
+- **Mac reachability banner** on Home and Agents tabs. When the paired Mac has not sent a heartbeat in over 3 minutes, the app shows an orange warning banner ("may be out of date"). Past 10 minutes it becomes a red banner ("not reachable"). Both banners include a "Try again" refresh button. Threshold is time-based and works for any paired Mac.
+- **Empty / standalone clarity** retained: new downloads still see the Home tab content, demo, and connect card on first launch; no behavioural change for the standalone experience.
+
+### Changed — iOS
+- Settings connection section now uses a header + footer pattern that explains what Disconnect does and what stays in iCloud.
+
+### Fixed
+- Stale `com.katipally.DoomCoder` fallback bundle ID in the Mac notification dispatcher replaced with the current `com.doomcoder.app`. The fallback only fires if `Bundle.main.bundleIdentifier` is nil at runtime (which does not happen on shipped builds), but the constant is now correct.
+
+---
+
 ## [2.5.0] - 2026-05-28
 
 ### Added — macOS
