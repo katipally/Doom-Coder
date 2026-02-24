@@ -4,6 +4,7 @@
 // Full create / edit / delete / favorite. 100% on-device.
 
 import SwiftUI
+import DoomCoderCore
 
 // MARK: - Library
 
@@ -14,6 +15,7 @@ struct PromptsView: View {
     @State private var favoritesOnly = false
     @State private var editor: EditorTarget?
     @State private var showEnhance = false
+    @State private var showComposer = false
 
     private var visible: [Prompt] {
         store.filtered(search: search, category: category, favoritesOnly: favoritesOnly)
@@ -25,10 +27,10 @@ struct PromptsView: View {
                 ToolEmptyState(
                     symbol: "text.alignleft",
                     title: "No Prompts",
-                    message: "Create your own prompt template, or restore the curated starter set.",
-                    actionTitle: "New Prompt",
-                    action: { editor = .create },
-                    secondaryActionTitle: "Restore starter prompts",
+                    message: "Compose a new prompt from a plain description, or restore the curated examples.",
+                    actionTitle: "Compose a Prompt",
+                    action: { showComposer = true },
+                    secondaryActionTitle: "Restore example prompts",
                     secondaryAction: {
                         store.restoreCuratedStarters()
                         Haptics.success()
@@ -42,9 +44,19 @@ struct PromptsView: View {
         .searchable(text: $search, prompt: "Search prompts")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showComposer = true
+                } label: {
+                    Label("Compose", systemImage: "wand.and.stars")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button { showComposer = true } label: {
+                        Label("Compose a prompt", systemImage: "wand.and.stars")
+                    }
                     Button { editor = .create } label: {
-                        Label("New prompt", systemImage: "square.and.pencil")
+                        Label("New blank prompt", systemImage: "square.and.pencil")
                     }
                     Button { showEnhance = true } label: {
                         Label("Enhance an idea", systemImage: "sparkles")
@@ -57,12 +69,15 @@ struct PromptsView: View {
                         store.restoreCuratedStarters()
                         Haptics.success()
                     } label: {
-                        Label("Restore starters", systemImage: "arrow.clockwise")
+                        Label("Restore examples", systemImage: "arrow.clockwise")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+        }
+        .sheet(isPresented: $showComposer) {
+            ComposerView()
         }
         .sheet(item: $editor) { target in
             switch target {

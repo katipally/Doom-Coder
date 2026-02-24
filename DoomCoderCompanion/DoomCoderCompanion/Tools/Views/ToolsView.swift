@@ -7,7 +7,6 @@ import SwiftUI
 
 struct ToolsView: View {
     @State private var prompts = PromptStore.shared
-    @State private var tasks = TaskStore.shared
     @State private var notes = NotesStore.shared
 
     var body: some View {
@@ -17,7 +16,7 @@ struct ToolsView: View {
                     symbol: "text.alignleft",
                     tint: .purple,
                     title: "Prompts",
-                    subtitle: "Ready-to-use prompt templates for your AI coding agent. Fill in the blanks and copy.",
+                    subtitle: "Compose reusable prompt templates for your AI coding agent. Fill in the blanks and copy.",
                     badge: "\(prompts.prompts.count)"
                 ) { PromptsView() }
 
@@ -25,23 +24,15 @@ struct ToolsView: View {
                     symbol: "terminal",
                     tint: .blue,
                     title: "Reference",
-                    subtitle: "CLI cheat sheets for Claude Code, Codex, Copilot, Cursor & more.",
+                    subtitle: "Full docs + AI chat for Claude Code, Codex, Copilot, Cursor & more.",
                     badge: nil
                 ) { ReferenceView() }
-
-                ToolRow(
-                    symbol: "checklist",
-                    tint: .green,
-                    title: "Tasks",
-                    subtitle: "Plan what to hand your agent. Turn any task into a prompt.",
-                    badge: tasks.openCount > 0 ? "\(tasks.openCount)" : nil
-                ) { TasksView() }
 
                 ToolRow(
                     symbol: "note.text",
                     tint: .orange,
                     title: "Notes",
-                    subtitle: "A quick scratchpad for ideas and agent output.",
+                    subtitle: "Notes with checklists and reminders for your coding work.",
                     badge: notes.notes.isEmpty ? nil : "\(notes.notes.count)"
                 ) { NotesView() }
             } header: {

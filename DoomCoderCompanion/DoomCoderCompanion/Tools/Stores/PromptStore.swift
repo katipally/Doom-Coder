@@ -4,6 +4,7 @@
 
 import Foundation
 import Observation
+import DoomCoderCore
 
 @MainActor
 @Observable
