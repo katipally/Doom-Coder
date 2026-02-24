@@ -1,11 +1,10 @@
 // ToolsWindow.swift — DoomCoder (macOS)
 // A dedicated sidebar window that brings the standalone toolkit (Prompts /
-// Reference / Notes / Settings / About) to the Mac, reusing the shared
-// DoomCoderCore engine + docs. Tools data is LOCAL-ONLY on this device — no sync.
+// Notes / Settings) to the Mac, reusing the shared DoomCoderCore AI engine.
+// Tools data is LOCAL-ONLY on this device — no sync.
 //
 // Design notes (per critique):
 //  • Stores are long-lived singletons so they survive window close/reopen.
-//  • Chat state is intentionally ephemeral.
 //  • JSON persistence is atomic; the directory is created on demand.
 //  • A small window accessor brings the scene forward in this accessory app.
 
@@ -139,12 +138,11 @@ private struct WindowFocus: NSViewRepresentable {
 // MARK: - Root
 
 enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
-    case prompts, reference, notes, settings, about
+    case prompts, notes, settings, about
     var id: String { rawValue }
     var title: String {
         switch self {
         case .prompts: return "Prompts"
-        case .reference: return "Reference"
         case .notes: return "Notes"
         case .settings: return "Settings"
         case .about: return "About"
@@ -153,7 +151,6 @@ enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .prompts: return "sparkles"
-        case .reference: return "book"
         case .notes: return "note.text"
         case .settings: return "gearshape"
         case .about: return "info.circle"
@@ -176,7 +173,6 @@ struct ToolsRootView: View {
         } detail: {
             switch selection ?? .prompts {
             case .prompts:   MacPromptsPane()
-            case .reference: MacReferencePane()
             case .notes:     MacNotesPane()
             case .settings:  MacToolsSettingsPane()
             case .about:     AboutView()
@@ -387,182 +383,6 @@ struct MacComposerView: View {
     }
 }
 
-// MARK: - Reference (docs reader + grounded chat)
-
-struct MacReferencePane: View {
-    @State private var docs = DocsService.shared
-    @State private var selected: AgentDoc?
-
-    var body: some View {
-        HSplitView {
-            List(docs.agents, selection: $selected) { agent in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(agent.title).font(.headline)
-                    Text(agent.tagline).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
-                .tag(agent)
-            }
-            .frame(minWidth: 220, idealWidth: 240)
-
-            Group {
-                if let agent = selected {
-                    MacAgentDocDetail(agent: agent)
-                } else {
-                    ContentUnavailableView("Select a tool", systemImage: "book",
-                        description: Text("Read the docs and ask the AI questions answered only from them."))
-                }
-            }
-            .frame(minWidth: 420)
-        }
-        .navigationTitle("Reference")
-        .onAppear { if selected == nil { selected = docs.agents.first } }
-    }
-}
-
-private struct MacAgentDocDetail: View {
-    let agent: AgentDoc
-    @State private var showChat = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(agent.title).font(.title2.bold())
-                        Text(agent.tagline).font(.callout).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button { showChat = true } label: { Label("Ask AI", systemImage: "sparkles") }
-                }
-                ForEach(agent.sections) { section in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(section.heading).font(.headline)
-                        Text(macInlineMarkdown(section.body))
-                            .font(.callout)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                if let source = agent.source, let url = URL(string: source) {
-                    Link(destination: url) { Label("Official documentation", systemImage: "safari") }
-                }
-                Text("Commands change between releases — run the tool's `--help` for the latest.")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding()
-        }
-        .sheet(isPresented: $showChat) { MacAgentChatView(agent: agent) }
-    }
-}
-
-private func macInlineMarkdown(_ text: String) -> AttributedString {
-    let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    if let a = try? AttributedString(markdown: text, options: opts) { return a }
-    return AttributedString(text)
-}
-
-struct MacAgentChatView: View {
-    let agent: AgentDoc
-    @State private var coordinator = AIEngineCoordinator.shared
-    @State private var question = ""
-    @State private var messages: [Msg] = []
-    @State private var isThinking = false
-    @Environment(\.dismiss) private var dismiss
-
-    struct Msg: Identifiable {
-        enum Role { case user, assistant }
-        let id = UUID(); let role: Role; let text: String; var citations: [Citation] = []
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Ask \(agent.title)").font(.headline)
-                Spacer()
-                Button("Done") { dismiss() }
-            }
-            .padding()
-            Divider()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        if messages.isEmpty {
-                            Text("Answers come only from the bundled docs, with citations. Works offline.")
-                                .font(.caption).foregroundStyle(.secondary).padding()
-                        }
-                        ForEach(messages) { m in
-                            VStack(alignment: m.role == .user ? .trailing : .leading, spacing: 4) {
-                                Text(m.text)
-                                    .textSelection(.enabled)
-                                    .padding(8)
-                                    .background(m.role == .user ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor),
-                                                in: RoundedRectangle(cornerRadius: 10))
-                                    .frame(maxWidth: .infinity, alignment: m.role == .user ? .trailing : .leading)
-                                if !m.citations.isEmpty {
-                                    ForEach(m.citations) { c in
-                                        Label(c.title, systemImage: "text.quote")
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                            .id(m.id)
-                        }
-                        if isThinking {
-                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Searching the docs…").foregroundStyle(.secondary) }
-                                .font(.caption)
-                        }
-                    }
-                    .padding()
-                    .onChange(of: messages.count) { _, _ in
-                        if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
-                    }
-                }
-            }
-            Divider()
-            HStack {
-                TextField("Ask about \(agent.title)…", text: $question, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...3)
-                    .onSubmit(ask)
-                Button(action: ask) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
-                    .buttonStyle(.plain)
-                    .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || isThinking)
-            }
-            .padding()
-        }
-        .frame(width: 520, height: 520)
-    }
-
-    private func ask() {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !isThinking else { return }
-        question = ""
-        messages.append(Msg(role: .user, text: q))
-        isThinking = true
-        Task {
-            let chunks = DocsService.shared.retrieve(query: q, agentID: agent.id, limit: 4)
-            let result = await coordinator.chat(question: q, context: chunks)
-            await MainActor.run {
-                isThinking = false
-                switch result {
-                case .success(let a, _):
-                    messages.append(Msg(role: .assistant, text: a.answer, citations: a.citations))
-                case .failure(let f, _):
-                    messages.append(Msg(role: .assistant, text: friendly(f)))
-                }
-            }
-        }
-    }
-
-    private func friendly(_ f: AIFailure) -> String {
-        switch f {
-        case .missingKey: return "Add an API key in Settings, or switch to the built-in engine — both answer from these docs."
-        case .network: return "Couldn't reach the provider. Switch to the built-in engine to keep working offline."
-        case .rateLimited: return "The provider is rate-limiting. Try again shortly, or use the built-in engine."
-        default: return "I couldn't find that in the bundled docs. Try rephrasing, or read the sections."
-        }
-    }
-}
 
 // MARK: - Notes
 

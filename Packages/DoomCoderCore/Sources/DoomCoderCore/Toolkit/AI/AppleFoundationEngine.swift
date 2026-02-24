@@ -1,9 +1,9 @@
 // AppleFoundationEngine.swift — DoomCoderCore
-// Tier 1: Apple FoundationModels on-device engine. Free, offline, private, no
-// account. Fully gated: compiles only where the framework exists, runs only on
-// iOS 26 / macOS 26 with an eligible device that has Apple Intelligence ready.
-// Never crashes when unavailable — returns a precise `.unavailable(reason)` so
-// the coordinator can fall back to the heuristic tier.
+// Apple FoundationModels on-device engine. Free, offline, private, no account.
+// Fully gated: compiles only where the framework exists, runs only on iOS 26 /
+// macOS 26 with an eligible device that has Apple Intelligence ready. Never
+// crashes when unavailable — returns a precise `.unavailable(reason)` so the UI
+// can show actionable guidance.
 
 import Foundation
 #if canImport(FoundationModels)
@@ -94,45 +94,6 @@ public struct AppleFoundationEngine: AIEngine {
         return .failure(.unavailable(.platformUnsupported), tier: tier)
     }
 
-    // MARK: Chat (grounded)
-
-    public func chat(question: String, context: [DocChunk]) async -> AIResult<DocAnswer> {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return .failure(.malformed, tier: tier) }
-
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
-            if let f = await probe() { return .failure(f, tier: tier) }
-            let allowedIDs = context.map(\.id)
-            let contextBlock = context
-                .map { "[\($0.id)] \($0.title)\n\(HeuristicEngine.condense($0.text, maxChars: 1000))" }
-                .joined(separator: "\n\n")
-            let instructions = """
-            Answer questions about developer CLI/agent tools using ONLY the provided \
-            documentation excerpts. Each excerpt is prefixed with its id in brackets. \
-            If the answer isn't in the excerpts, say so plainly. In citationIDs, list \
-            only the excerpt ids you actually used.
-            """
-            let prompt = "Documentation excerpts:\n\n\(contextBlock)\n\n---\nQuestion: \(q)"
-            do {
-                let session = LanguageModelSession(instructions: instructions)
-                let response = try await session.respond(to: prompt, generating: GeneratedAnswer.self)
-                let gen = response.content
-                let answer = gen.answer.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !answer.isEmpty else { return .failure(.malformed, tier: tier) }
-                let valid = gen.citationIDs.filter { allowedIDs.contains($0) }
-                let citations = valid.compactMap { id in
-                    context.first(where: { $0.id == id }).map { Citation(chunkID: $0.id, title: $0.title) }
-                }
-                return .success(DocAnswer(answer: answer, citations: citations), tier: tier)
-            } catch {
-                return .failure(Self.mapError(error), tier: tier)
-            }
-        }
-        #endif
-        return .failure(.unavailable(.platformUnsupported), tier: tier)
-    }
-
     // MARK: - Error mapping
 
     #if canImport(FoundationModels)
@@ -192,14 +153,5 @@ struct GeneratedTemplate {
     var body: String
     @Guide(description: "One entry per placeholder in the body")
     var fields: [GeneratedField]
-}
-
-@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
-@Generable
-struct GeneratedAnswer {
-    @Guide(description: "The answer, grounded only in the supplied excerpts")
-    var answer: String
-    @Guide(description: "Ids of the excerpts actually used, e.g. [\"abc\"]")
-    var citationIDs: [String]
 }
 #endif

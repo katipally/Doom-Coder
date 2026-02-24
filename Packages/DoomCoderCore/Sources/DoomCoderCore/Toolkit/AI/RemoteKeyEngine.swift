@@ -1,8 +1,8 @@
 // RemoteKeyEngine.swift — DoomCoderCore
-// Tier 2: BYO-key engine. Sends requests device → provider (OpenAI / Anthropic)
-// over HTTPS using the USER's key. DoomCoder runs no server and never sees the
-// key. Used ONLY when the user explicitly opts into remote processing — never as
-// a silent fallback for on-device content. Actor-isolated for session safety.
+// BYO-key engine. Sends requests device → provider (OpenAI / Anthropic) over
+// HTTPS using the USER's key. DoomCoder runs no server and never sees the key.
+// Used ONLY when the user explicitly selects "My API key" — never as a silent
+// fallback for on-device content. Actor-isolated for session safety.
 
 import Foundation
 
@@ -83,37 +83,6 @@ public actor RemoteKeyEngine: AIEngine {
                 return .failure(.malformed, tier: tier)
             }
             return .success(template, tier: tier)
-        }
-    }
-
-    public func chat(question: String, context: [DocChunk]) async -> AIResult<DocAnswer> {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return .failure(.malformed, tier: tier) }
-
-        let contextBlock = context.map { "[\($0.id)] \($0.title)\n\(HeuristicEngine.condense($0.text, maxChars: 1200))" }
-            .joined(separator: "\n\n")
-        let allowedIDs = context.map(\.id)
-        let system = """
-        You answer questions about developer CLI/agent tools using ONLY the provided \
-        documentation excerpts. Each excerpt is prefixed with its id in brackets, e.g. [abc]. \
-        If the answer isn't in the excerpts, say so. Return ONLY a JSON object (no code fences):
-        {"answer":"...", "citation_ids":["id1","id2"]}
-        citation_ids MUST be a subset of the excerpt ids you actually used.
-        """
-        let user = "Documentation excerpts:\n\n\(contextBlock)\n\n---\nQuestion: \(q)"
-        let result = await complete(system: system, user: user, temperature: 0.2, maxTokens: 900)
-        switch result {
-        case .failure(let f): return .failure(f, tier: tier)
-        case .success(let text):
-            guard let obj = Self.extractJSONObject(text),
-                  let answer = obj["answer"] as? String, !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .failure(.malformed, tier: tier)
-            }
-            // Enforce citation invariant: only ids actually present in context.
-            let claimed = (obj["citation_ids"] as? [String]) ?? []
-            let valid = claimed.filter { allowedIDs.contains($0) }
-            let citations = valid.compactMap { id in context.first(where: { $0.id == id }).map { Citation(chunkID: $0.id, title: $0.title) } }
-            return .success(DocAnswer(answer: answer.trimmingCharacters(in: .whitespacesAndNewlines), citations: citations), tier: tier)
         }
     }
 

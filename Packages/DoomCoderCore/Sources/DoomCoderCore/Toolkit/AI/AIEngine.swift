@@ -1,13 +1,13 @@
 // AIEngine.swift — DoomCoderCore
-// Core types + protocol for the shared 3-tier AI engine used by both the macOS
-// app and the iOS companion. Tiers, in priority order:
+// Core types + protocol for the shared AI engine used by both the macOS app and
+// the iOS companion. Two user-selectable backends:
 //   1. .appleOnDevice — Apple FoundationModels (on-device, offline, free, private)
 //   2. .remoteKey     — BYO-key OpenAI / Anthropic (opt-in; content leaves device)
-//   3. .heuristic     — deterministic offline (always available, product-quality)
 //
-// Privacy: in "automatic" selection the engine NEVER sends on-device content to a
-// remote provider — remote is used ONLY when the user explicitly selects it. This
-// keeps the standalone experience private and App Store 4.2.3 / privacy-safe.
+// Privacy: remote is used ONLY when the user explicitly selects "My API key" —
+// on-device content is never sent to a provider automatically. Manual prompt
+// authoring + Notes work with no AI at all, keeping the app standalone
+// (App Store 4.2.3 / privacy-safe).
 
 import Foundation
 
@@ -15,7 +15,6 @@ import Foundation
 public enum AITier: String, Codable, Sendable, CaseIterable, Identifiable {
     case appleOnDevice
     case remoteKey
-    case heuristic
 
     public var id: String { rawValue }
 
@@ -23,7 +22,6 @@ public enum AITier: String, Codable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .appleOnDevice: return "On-device (Apple Intelligence)"
         case .remoteKey:     return "My API key"
-        case .heuristic:     return "Built-in (offline)"
         }
     }
 
@@ -31,7 +29,6 @@ public enum AITier: String, Codable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .appleOnDevice: return "On-device"
         case .remoteKey:     return "API key"
-        case .heuristic:     return "Built-in"
         }
     }
 }
@@ -170,51 +167,11 @@ public struct ComposedTemplate: Codable, Sendable, Hashable {
     }
 }
 
-// MARK: - Docs chat (grounded, with citations)
-
-/// A retrieved documentation passage passed into `chat`. The engine may only cite
-/// chunks present in the supplied context.
-public struct DocChunk: Codable, Sendable, Identifiable, Hashable {
-    public let id: String
-    public let title: String
-    public let source: String?
-    public let text: String
-
-    public init(id: String, title: String, source: String? = nil, text: String) {
-        self.id = id
-        self.title = title
-        self.source = source
-        self.text = text
-    }
-}
-
-/// A citation referencing a `DocChunk.id` from the supplied context.
-public struct Citation: Codable, Sendable, Hashable, Identifiable {
-    public let chunkID: String
-    public let title: String
-    public var id: String { chunkID }
-
-    public init(chunkID: String, title: String) {
-        self.chunkID = chunkID
-        self.title = title
-    }
-}
-
-/// A grounded answer with citations limited to the supplied context.
-public struct DocAnswer: Codable, Sendable, Hashable {
-    public var answer: String
-    public var citations: [Citation]
-
-    public init(answer: String, citations: [Citation] = []) {
-        self.answer = answer
-        self.citations = citations
-    }
-}
-
 // MARK: - Engine protocol
 
-/// A single AI backend. All three tiers implement every capability so the product
-/// is fully usable with no key and no Apple Intelligence (App Store 4.2.3 safe).
+/// A single AI backend. Both tiers implement every capability. The app stays
+/// usable with no key and no Apple Intelligence because manual authoring + Notes
+/// need no AI (App Store 4.2.3 safe).
 public protocol AIEngine: Sendable {
     var tier: AITier { get }
 
@@ -226,7 +183,4 @@ public protocol AIEngine: Sendable {
 
     /// Builds a reusable template (body + fill-in fields) from a freeform intent.
     func compose(intent: String) async -> AIResult<ComposedTemplate>
-
-    /// Answers a question grounded ONLY in the supplied documentation chunks.
-    func chat(question: String, context: [DocChunk]) async -> AIResult<DocAnswer>
 }

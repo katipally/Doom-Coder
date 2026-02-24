@@ -80,12 +80,12 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - AI engine (on-device / BYO key / built-in)
+    // MARK: - AI (on-device / BYO key)
 
     @ViewBuilder
     private var aiSection: some View {
         Section {
-            Picker("Engine", selection: Binding(
+            Picker("Mode", selection: Binding(
                 get: { ai.selection },
                 set: { ai.selection = $0; keyTestState = .idle }
             )) {
@@ -93,8 +93,9 @@ struct SettingsView: View {
                     Text(sel.displayName).tag(sel)
                 }
             }
+            .accessibilityLabel("AI mode")
 
-            if ai.selection == .automatic || ai.selection == .appleOnDevice {
+            if ai.selection == .appleOnDevice {
                 LabeledContent("On-device model") {
                     if !appleProbed {
                         ProgressView().controlSize(.small)
@@ -104,10 +105,17 @@ struct SettingsView: View {
                             .foregroundStyle(.green)
                             .font(.callout)
                     } else {
-                        Text("Unavailable")
-                            .foregroundStyle(.secondary)
+                        Label("Unavailable", systemImage: "exclamationmark.triangle.fill")
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.orange)
                             .font(.callout)
                     }
+                }
+                if appleProbed, let status = appleStatus {
+                    Text(status.message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -115,7 +123,7 @@ struct SettingsView: View {
                 remoteKeyControls
             }
         } header: {
-            Text("AI Engine")
+            Text("AI")
         } footer: {
             aiFooter
         }

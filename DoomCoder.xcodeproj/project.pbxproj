@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87477377B262B2B2BA39729A /* CloudKitPusher.swift */; };
+		DC0000000000001000000060 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC0000000000005000000060 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
 		581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
@@ -61,6 +62,7 @@
 
 /* Begin PBXFileReference section */
 		10BE8A907052E381A9766A37 /* DoomCoder.Release.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DoomCoder.Release.entitlements; sourceTree = "<group>"; };
+		DC0000000000005000000060 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 		87477377B262B2B2BA39729A /* CloudKitPusher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusher.swift; sourceTree = "<group>"; };
 		AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherLifecycle.swift; sourceTree = "<group>"; };
 		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 			files = (
 				DC0000000000002000000010 /* Sparkle in Frameworks */,
 				75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */,
+				DC0000000000001000000060 /* FoundationModels.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
