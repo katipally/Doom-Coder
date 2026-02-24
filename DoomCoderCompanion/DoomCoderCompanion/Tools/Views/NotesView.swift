@@ -222,6 +222,7 @@ private struct NoteEditorView: View {
                             .font(.title3)
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Rectangle())
                     .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
 
                     TextField("Item", text: $item.text)

@@ -101,6 +101,7 @@ struct SyncDiagnosticsView: View {
                         Circle()
                             .fill(color(for: ev.kind))
                             .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
                                 Text(ev.kind.rawValue)

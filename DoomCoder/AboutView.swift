@@ -9,6 +9,7 @@ struct AboutView: View {
                 .resizable()
                 .frame(width: 80, height: 80)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
+                .accessibilityHidden(true)
 
             Text("Doom Coder")
                 .font(.title.bold())

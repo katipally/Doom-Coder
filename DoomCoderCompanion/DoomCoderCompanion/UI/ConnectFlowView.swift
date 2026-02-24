@@ -84,13 +84,16 @@ struct ConnectFlowView: View {
                     } label: {
                         HStack {
                             Image(systemName: "desktopcomputer")
+                                .accessibilityHidden(true)
                             VStack(alignment: .leading) {
                                 Text(mac.name).font(.headline)
                                 Text("Last seen \(mac.lastSeen, style: .relative) ago")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
                         }
                         .padding()
                         .background(Color(.secondarySystemGroupedBackground))

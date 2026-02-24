@@ -140,9 +140,11 @@ Each agent can override the global channel settings — for example, send Claude
 
 ---
 
-## iPhone companion
+## iPhone & iPad companion
 
-`DoomCoder Companion` (iOS 26+) mirrors every Mac notification to your iPhone in 1–5 seconds. It shows the same agent list, per-agent status, and a 7-day notification log. Install from the App Store and sign into the same iCloud account as your Mac — that's the entire setup.
+`DoomCoder Companion` (iOS 26+) is a **standalone app, usable on first launch with no setup**. On its own it gives you a curated **Prompt Library** plus a prompt composer, and on-device **Notes** with checklists and reminders — no Mac, no iCloud, and no API key required. Optional **Enhance** uses Apple's on-device model or your own API key.
+
+Pair it with your Mac (sign into the same iCloud account) and it also mirrors every Mac notification in 1–5 seconds, showing the live agent list, per-agent status, a 7-day notification log, and remote keep-awake / on-off controls — no third-party server, no tokens, no QR codes.
 
 [Get on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 

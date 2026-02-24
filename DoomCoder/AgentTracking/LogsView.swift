@@ -82,6 +82,7 @@ struct LogsView: View {
                     Image(systemName: "tray")
                         .font(.title2)
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                     Text("No events yet")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -131,6 +132,7 @@ struct LogsView: View {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -138,6 +140,7 @@ struct LogsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
             if isExpanded, let payload = row.payload {
                 PayloadRendererView(json: payload)
@@ -156,6 +159,7 @@ struct LogsView: View {
                     Image(systemName: "bell.slash")
                         .font(.title2)
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                     Text("No notifications sent yet")
                         .font(.caption)
                         .foregroundStyle(.secondary)
