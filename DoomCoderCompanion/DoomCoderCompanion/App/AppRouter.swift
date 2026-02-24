@@ -7,7 +7,7 @@ import SwiftUI
 import DoomCoderCore
 
 enum RootTab: Hashable {
-    case tools, dashboard, settings
+    case prompts, notes, dashboard, settings
 }
 
 @MainActor
@@ -16,7 +16,7 @@ final class AppRouter {
     static let shared = AppRouter()
     private init() {}
 
-    var selectedTab: RootTab = .tools
+    var selectedTab: RootTab = .prompts
     /// Navigation path for the Dashboard tab's NavigationStack.
     var agentPath: [TrackedAgent] = []
 

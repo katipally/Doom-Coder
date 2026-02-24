@@ -1,7 +1,7 @@
 // RootTabView.swift — DoomCoder Companion
-// Three-tab structure (Tools / Dashboard / Settings), launching on Tools. The
-// Tools tab is 100% standalone — the AI prompt composer and notes work with no
-// Mac, no account, and no internet (App Store 4.2.3 standalone functionality).
+// Four-tab structure (Prompts / Notes / Dashboard / Settings), launching on
+// Prompts. Prompts and Notes are 100% standalone — they work with no Mac, no
+// account, and no internet (App Store 4.2.3 standalone functionality).
 // Dashboard adds live Mac monitoring when connected.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
@@ -17,8 +17,11 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
-            Tab("Tools", systemImage: "wrench.and.screwdriver", value: RootTab.tools) {
-                NavigationStack { ToolsView() }
+            Tab("Prompts", systemImage: "text.alignleft", value: RootTab.prompts) {
+                NavigationStack { PromptsView() }
+            }
+            Tab("Notes", systemImage: "note.text", value: RootTab.notes) {
+                NavigationStack { NotesView() }
             }
             Tab("Dashboard", systemImage: "macbook.and.iphone", value: RootTab.dashboard) {
                 NavigationStack(path: $router.agentPath) {
