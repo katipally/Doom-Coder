@@ -16,6 +16,11 @@ public struct AppleFoundationEngine: AIEngine {
     public init() {}
 
     public func probe() async -> AIFailure? {
+        #if targetEnvironment(simulator)
+        // FoundationModels has no model assets in the iOS Simulator — generation
+        // always fails there. Be honest up front instead of failing mid-request.
+        return .unavailable(.simulatorUnsupported)
+        #else
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
@@ -27,6 +32,7 @@ public struct AppleFoundationEngine: AIEngine {
         }
         #endif
         return .unavailable(.platformUnsupported)
+        #endif
     }
 
     // MARK: Enhance
@@ -74,6 +80,9 @@ public struct AppleFoundationEngine: AIEngine {
 
     static func mapError(_ error: Error) -> AIFailure {
         if error is CancellationError { return .cancelled }
+        #if targetEnvironment(simulator)
+        return .unavailable(.simulatorUnsupported)
+        #else
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
             if let gen = error as? LanguageModelSession.GenerationError {
@@ -87,5 +96,6 @@ public struct AppleFoundationEngine: AIEngine {
         }
         #endif
         return .malformed
+        #endif
     }
 }

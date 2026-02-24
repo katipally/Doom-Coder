@@ -18,6 +18,15 @@ public enum KeepAwakeMode: String, Sendable, Codable, CaseIterable {
         case .auto: return "Auto"
         }
     }
+
+    /// SF Symbol shared by the Mac panel and the iOS remote card.
+    public var symbol: String {
+        switch self {
+        case .off:  return "powersleep"
+        case .on:   return "cup.and.saucer.fill"
+        case .auto: return "sparkles"
+        }
+    }
 }
 
 /// Screen behaviour while keep-awake is active. Raw values match the legacy
@@ -33,6 +42,14 @@ public enum ScreenMode: String, Sendable, Codable, CaseIterable {
         switch self {
         case .screenOn:  return "Keep screen on"
         case .screenOff: return "Allow screen off"
+        }
+    }
+
+    /// SF Symbol shared by the Mac panel and the iOS remote card.
+    public var symbol: String {
+        switch self {
+        case .screenOn:  return "sun.max.fill"
+        case .screenOff: return "moon.fill"
         }
     }
 }
