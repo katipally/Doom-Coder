@@ -1,7 +1,7 @@
 // RootTabView.swift — DoomCoder Companion
 // Three-tab structure (Tools / Dashboard / Settings), launching on Tools. The
-// Tools tab is 100% standalone — prompts, CLI reference, tasks and notes work
-// with no Mac, no iCloud, and no notifications (App Store 4.2.3 standalone
+// Tools tab is 100% standalone — AI prompt composer, agent docs + chat, and notes
+// work with no Mac, no account, and no internet (App Store 4.2.3 standalone
 // functionality). Dashboard adds live Mac monitoring when connected.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
