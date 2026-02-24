@@ -45,47 +45,6 @@ public actor RemoteKeyEngine: AIEngine {
         }
     }
 
-    public func compose(intent: String) async -> AIResult<ComposedTemplate> {
-        let trimmed = intent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .failure(.malformed, tier: tier) }
-
-        let categories = PromptCategory.allCases.map(\.rawValue).joined(separator: ", ")
-        let system = """
-        You build REUSABLE prompt templates for AI coding agents. Given a user's \
-        intent, return ONLY a JSON object (no code fences, no prose) with this shape:
-        {
-          "title": "short title",
-          "category": "one of: \(categories)",
-          "body": "the prompt text with {{snake_case}} placeholders for the parts the user should fill in",
-          "fields": [{"key":"snake_case","label":"Human label","hint":"short help","multiline":true|false}]
-        }
-        Rules: placeholders in body MUST use {{snake_case}} and MUST each have a \
-        matching entry in fields. Use 1–8 fields. Do not solve the task; produce a \
-        template the user can reuse.
-        """
-        let result = await complete(system: system, user: trimmed, temperature: 0.5, maxTokens: 1200)
-        switch result {
-        case .failure(let f): return .failure(f, tier: tier)
-        case .success(let text):
-            guard let obj = Self.extractJSONObject(text) else { return .failure(.malformed, tier: tier) }
-            let title = obj["title"] as? String ?? ""
-            let category = obj["category"] as? String ?? "general"
-            let body = obj["body"] as? String ?? ""
-            let rawFields: [ComposedField] = (obj["fields"] as? [[String: Any]] ?? []).compactMap { dict in
-                guard let key = dict["key"] as? String else { return nil }
-                return ComposedField(
-                    key: key,
-                    label: dict["label"] as? String ?? "",
-                    hint: dict["hint"] as? String ?? "",
-                    multiline: dict["multiline"] as? Bool ?? false)
-            }
-            guard let template = TemplateValidator.validate(title: title, category: category, body: body, fields: rawFields) else {
-                return .failure(.malformed, tier: tier)
-            }
-            return .success(template, tier: tier)
-        }
-    }
-
     // MARK: - Transport
 
     private enum Completion {
@@ -188,23 +147,6 @@ public actor RemoteKeyEngine: AIEngine {
               let error = json["error"] as? [String: Any],
               let message = error["message"] as? String else { return "" }
         return message
-    }
-
-    /// Extracts the first top-level JSON object from a model response, tolerating
-    /// code fences and surrounding prose.
-    static func extractJSONObject(_ text: String) -> [String: Any]? {
-        var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s.hasPrefix("```") {
-            // Strip ```json ... ``` fences.
-            s = s.replacingOccurrences(of: "```json", with: "```")
-            let parts = s.components(separatedBy: "```")
-            s = parts.first(where: { $0.contains("{") }) ?? s
-        }
-        guard let start = s.firstIndex(of: "{"), let end = s.lastIndex(of: "}"), start < end else { return nil }
-        let slice = String(s[start...end])
-        guard let data = slice.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return obj
     }
 
     // MARK: - Live model listing + key test

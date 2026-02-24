@@ -191,6 +191,7 @@ private struct NoteEditorView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .accessibilityLabel("More options")
                 }
             }
             .onAppear { if text.isEmpty && checklist.isEmpty { bodyFocused = true } }
@@ -294,7 +295,10 @@ private struct NoteEditorView: View {
     // MARK: Save / actions
 
     private func save() {
-        var updated = note
+        // Start from the store's freshest copy so fields it owns (reminder,
+        // notificationID) are preserved — otherwise autosave would clobber a
+        // reminder set via setReminder/togglePin with this view's stale snapshot.
+        var updated = store.notes.first(where: { $0.id == note.id }) ?? note
         updated.body = text
         updated.checklist = checklist
         updated.isPinned = isPinned

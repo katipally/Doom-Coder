@@ -126,10 +126,6 @@ public final class AIEngineCoordinator {
         await run { await $0.enhance(raw) }
     }
 
-    public func compose(intent: String) async -> AIResult<ComposedTemplate> {
-        await run { await $0.compose(intent: intent) }
-    }
-
     // MARK: - Engine routing
 
     /// The engine(s) to run for the current selection. There is no silent
