@@ -10,6 +10,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     static let shared = StatusItemController()
 
     private var statusItem: NSStatusItem?
+    private var _udObserver: NSObjectProtocol?
 
     private override init() {
         super.init()
@@ -32,16 +33,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         // Watch masterEnabled toggle (stored in UserDefaults) so the menu-bar
         // icon swaps between bolt.fill / bolt.slash immediately.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(userDefaultsChanged),
-            name: UserDefaults.didChangeNotification,
-            object: nil
-        )
-    }
-
-    @objc private func userDefaultsChanged() {
-        Task { @MainActor [weak self] in self?.refreshIcon() }
+        // IMPORTANT: Use queue: .main so CloudKit's background UserDefaults
+        // writes don't call this on a non-main thread and crash actor isolation.
+        _udObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshIcon()
+        }
     }
 
     // MARK: - Observation of @Observable state
