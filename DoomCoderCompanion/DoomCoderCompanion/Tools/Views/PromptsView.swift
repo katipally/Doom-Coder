@@ -229,8 +229,14 @@ private struct CategoryChip: View {
 struct PromptDetailView: View {
     let promptID: UUID
     @State private var store = PromptStore.shared
+    @State private var ai = AIEngineCoordinator.shared
     @State private var values: [String: String] = [:]
+    @State private var editedBody = ""
+    @State private var usingEditedBody = false
+    @State private var isWorking = false
+    @State private var notice: String?
     @State private var showEditor = false
+    @State private var showSavedConfirmation = false
 
     private var prompt: Prompt? { store.prompts.first(where: { $0.id == promptID }) }
 
@@ -244,9 +250,13 @@ struct PromptDetailView: View {
         }
     }
 
+    private func rendered(for prompt: Prompt) -> String {
+        usingEditedBody ? editedBody : prompt.render(values: values)
+    }
+
     private func content(for prompt: Prompt) -> some View {
         let fields = prompt.resolvedFields()
-        let rendered = prompt.render(values: values)
+        let finalText = rendered(for: prompt)
         return Form {
             if !fields.isEmpty {
                 Section("Fill in") {
@@ -266,12 +276,57 @@ struct PromptDetailView: View {
                 }
             }
 
-            Section("Prompt") {
-                Text(rendered)
+            Section {
+                TextEditor(text: finalBinding(for: prompt))
                     .font(.callout)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                CopyButton(text: rendered, title: "Copy prompt", prominent: true)
+                    .frame(minHeight: 180)
+            } header: {
+                Text("Prompt")
+            } footer: {
+                Text(fields.isEmpty
+                     ? "Edit the prompt directly here, then enhance or copy it."
+                     : "Fill the fields above, or edit the prompt directly here. Enhance and copy are right below.")
+            }
+
+            Section {
+                CopyButton(text: finalText, title: "Copy prompt", prominent: true)
+                Button {
+                    Task { await enhance(prompt) }
+                } label: {
+                    HStack {
+                        if isWorking { ProgressView().controlSize(.small) }
+                        Label(isWorking ? "Enhancing…" : "Enhance with AI", systemImage: "sparkles")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isWorking)
+                if usingEditedBody {
+                    Button {
+                        saveEdits(prompt)
+                    } label: {
+                        Label(showSavedConfirmation ? "Saved" : "Save changes",
+                              systemImage: showSavedConfirmation ? "checkmark" : "tray.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        usingEditedBody = false
+                        editedBody = ""
+                        notice = nil
+                        Haptics.tap()
+                    } label: {
+                        Label("Revert to template", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            } footer: {
+                if let notice {
+                    Label(notice, systemImage: "info.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             if !prompt.tags.isEmpty {
@@ -295,7 +350,7 @@ struct PromptDetailView: View {
                               systemImage: prompt.isFavorite ? "star.slash" : "star")
                     }
                     Button { showEditor = true } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Label("Edit title & details", systemImage: "pencil")
                     }
                     Button {
                         _ = store.duplicate(prompt)
@@ -311,6 +366,46 @@ struct PromptDetailView: View {
         .sheet(isPresented: $showEditor) {
             PromptEditorView(existing: prompt)
         }
+    }
+
+    private func enhance(_ prompt: Prompt) async {
+        isWorking = true; notice = nil
+        defer { isWorking = false }
+        let outcome = await ai.enhance(rendered(for: prompt))
+        switch outcome {
+        case .success(let improved, let tier):
+            usingEditedBody = true
+            editedBody = improved
+            notice = "Enhanced with \(tier.displayName). Tap Save changes to keep it."
+            Haptics.success()
+        case .failure(let failure, _):
+            notice = failure.message
+            Haptics.warning()
+        }
+    }
+
+    private func saveEdits(_ prompt: Prompt) {
+        var updated = prompt
+        updated.body = editedBody
+        store.update(updated)
+        usingEditedBody = false
+        editedBody = ""
+        notice = nil
+        showSavedConfirmation = true
+        Haptics.success()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            showSavedConfirmation = false
+        }
+    }
+
+    private func finalBinding(for prompt: Prompt) -> Binding<String> {
+        Binding(
+            get: { usingEditedBody ? editedBody : prompt.render(values: values) },
+            set: { newValue in
+                usingEditedBody = true
+                editedBody = newValue
+            }
+        )
     }
 
     private func binding(for key: String) -> Binding<String> {

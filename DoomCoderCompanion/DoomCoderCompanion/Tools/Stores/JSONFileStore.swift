@@ -1,6 +1,6 @@
 // JSONFileStore.swift — DoomCoder Companion (Tools)
 // Tiny Codable-to-JSON persistence helper for the on-device tool data
-// (prompts, tasks, notes). Writes to the app's Application Support directory —
+// (prompts, notes). Writes to the app's Application Support directory —
 // app-private, NOT the App Group (this data is local-only and never shared with
 // the Notification Service Extension).
 

@@ -1,6 +1,6 @@
 // ToolsView.swift — DoomCoder Companion (Tools)
 // The default tab: a hub of 100%-on-device developer tools that work with NO Mac.
-// Prompts · Reference · Tasks · Notes. This is the standalone functionality that
+// Prompts · Reference · Notes. This is the standalone functionality that
 // makes the app useful on first launch (App Store guideline 4.2.3).
 
 import SwiftUI

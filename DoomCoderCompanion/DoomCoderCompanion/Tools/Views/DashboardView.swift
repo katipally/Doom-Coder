@@ -115,7 +115,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("No Mac? No problem.")
                     .font(.subheadline.weight(.semibold))
-                Text("The Tools tab — prompts, CLI reference, tasks and notes — works fully on this device without connecting anything.")
+                Text("The Tools tab — AI prompt composer, agent docs with chat, and smart notes — works fully on this device without connecting anything.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -128,33 +128,56 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Agent summary (links into the full list)
+// MARK: - Inline agents list (no drill-in; full list right on the Dashboard)
 
 private struct AgentSummaryCard: View {
     @State private var agentStore = AgentListStore.shared
+    @State private var macStore = MacStatusStore.shared
+
+    private var visibleAgents: [TrackedAgent] {
+        agentStore.installedAgents.isEmpty
+            ? agentStore.agents
+            : agentStore.agents.filter { agentStore.installedAgents.contains($0) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Agents", systemImage: "square.stack.3d.up.fill")
-                .font(.headline)
-            if agentStore.agents.isEmpty {
+            HStack {
+                Label("Agents", systemImage: "square.stack.3d.up.fill")
+                    .font(.headline)
+                Spacer()
+                if !visibleAgents.isEmpty {
+                    Text("\(visibleAgents.count)")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("\(visibleAgents.count) agents")
+                }
+            }
+
+            if visibleAgents.isEmpty {
                 Text("No agent activity yet. Agents appear here as they run on your Mac.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                NavigationLink {
-                    AgentListView()
-                } label: {
-                    HStack {
-                        Text("\(agentStore.agents.count) agent\(agentStore.agents.count == 1 ? "" : "s") tracked")
-                            .font(.subheadline)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                VStack(spacing: 0) {
+                    ForEach(Array(visibleAgents.enumerated()), id: \.element.rawValue) { index, agent in
+                        NavigationLink {
+                            AgentLogsView(agent: agent)
+                        } label: {
+                            AgentRow(
+                                agent: agent,
+                                status: agentStore.statuses[agent],
+                                isInstalled: true
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if index < visibleAgents.count - 1 {
+                            Divider().padding(.leading, 44)
+                        }
                     }
                 }
-                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
