@@ -407,9 +407,9 @@ struct PanelRootView: View {
                 NSApplication.shared.activate()
                 WindowOpener.open(.settings)
             }
-            footerItem("info.circle", label: "About") {
+            footerItem("wrench.and.screwdriver", label: "Tools") {
                 NSApplication.shared.activate()
-                WindowOpener.open(.about)
+                WindowOpener.open(.tools)
             }
             footerItem("arrow.triangle.2.circlepath", label: "Updates") {
                 updaterViewModel.checkForUpdates()

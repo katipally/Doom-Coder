@@ -14,6 +14,7 @@
 		DC0000000000002000000123 /* HelpTip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000123 /* HelpTip.swift */; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
+		DC0000000000002000000052 /* ToolsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000052 /* ToolsWindow.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
@@ -67,6 +68,7 @@
 		DC0000000000001000000123 /* HelpTip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTip.swift; sourceTree = "<group>"; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000052 /* ToolsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsWindow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 				DC0000000000001000000123 /* HelpTip.swift */,
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
+				DC0000000000001000000052 /* ToolsWindow.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
 				DC0000000000001000000014 /* ConfigureSettingsPane.swift */,
@@ -312,6 +315,7 @@
 				DC0000000000002000000123 /* HelpTip.swift in Sources */,
 				DC0000000000002000000002 /* DoomCoderApp.swift in Sources */,
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
+				DC0000000000002000000052 /* ToolsWindow.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
 				DC0000000000002000000014 /* ConfigureSettingsPane.swift in Sources */,
