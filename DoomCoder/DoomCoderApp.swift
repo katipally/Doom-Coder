@@ -13,8 +13,8 @@ struct DoomCoderApp: App {
         //
         // Settings is no longer a standalone Window — it lives as the
         // 4th tab inside Configure (see ConfigureSettingsPane). The
-        // WindowOpenerBridge re-routes any legacy `settings` open
-        // request to Configure with the Settings tab pre-selected.
+        // floating panel's Settings button routes through
+        // WindowOpener.openSettings() to Configure with Settings focused.
 
         Window("About Doom Coder", id: "about") {
             AboutView()
@@ -51,15 +51,6 @@ struct DoomCoderApp: App {
                 .background(FloatingWindowConfigurator(autosaveName: "doomcoder.window.notes"))
         }
         .defaultSize(width: 1000, height: 660)
-        .windowResizability(.contentMinSize)
-        .defaultLaunchBehavior(.suppressed)
-
-        Window("Settings", id: "settings") {
-            MacSettingsSurface()
-                .background(WindowOpenerBridge())
-                .background(FloatingWindowConfigurator(autosaveName: "doomcoder.window.settings"))
-        }
-        .defaultSize(width: 680, height: 600)
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
     }
@@ -125,7 +116,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             // older SDK paths or stale saved window state can briefly spawn
             // a Settings/About/Configure window at launch. Close any that
             // appear before the user ever sees them.
-            let auxIDs: Set<String> = ["settings", "about", "configureAgents", "prompts", "notes"]
+            let auxIDs: Set<String> = ["about", "configureAgents", "prompts", "notes"]
             for win in NSApp.windows {
                 if let id = win.identifier?.rawValue, auxIDs.contains(id) {
                     win.close()

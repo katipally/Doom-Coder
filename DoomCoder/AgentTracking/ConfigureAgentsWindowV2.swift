@@ -6,7 +6,11 @@ import UserNotifications
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels, logs, settings }
+    enum Tab: Hashable { case agents, channels, logs, settings, ai }
+    /// Set by `WindowOpener.openSettings()` before the window is created so a
+    /// cold-opened Configure window lands on the right tab (the
+    /// `.dcSelectConfigureTab` notification only reaches an already-live view).
+    @MainActor static var pendingTab: Tab?
     @State private var tab: Tab = .agents
     @State private var selected: TrackedAgent? = .claude
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
@@ -52,9 +56,18 @@ struct ConfigureAgentsViewV2: View {
                 LogsView()
             case .settings:
                 ConfigureSettingsPane(sleepManager: SleepManager.shared)
+            case .ai:
+                MacToolsSettingsPane()
             }
         }
         .frame(minWidth: 820, minHeight: 580)
+        .onAppear {
+            if let pending = Self.pendingTab {
+                Self.pendingTab = nil
+                tab = pending
+                if pending != .agents { selected = nil }
+            }
+        }
         .task {
             await detectAllAsync()
             checkMigration()
@@ -75,6 +88,7 @@ struct ConfigureAgentsViewV2: View {
             withAnimation(DCAnim.fade) {
                 switch id {
                 case "settings":  tab = .settings; selected = nil
+                case "ai":        tab = .ai;       selected = nil
                 case "channels":  tab = .channels; selected = nil
                 case "logs":      tab = .logs;     selected = nil
                 case "agents":    tab = .agents
@@ -153,6 +167,18 @@ struct ConfigureAgentsViewV2: View {
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .settings ? Color.accentColor.opacity(0.15) : Color.clear)
                 .animation(DCAnim.fade, value: tab == .settings)
+
+                Button {
+                    withAnimation(DCAnim.fade) {
+                        tab = .ai
+                        selected = nil
+                    }
+                } label: {
+                    Label("AI", systemImage: "sparkles")
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(tab == .ai ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(DCAnim.fade, value: tab == .ai)
             }
         }
         .listStyle(.sidebar)

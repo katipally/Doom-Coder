@@ -140,7 +140,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func openSettings() {
         NSApp.activate()
-        WindowOpener.open(.settings)
+        WindowOpener.openSettings()
     }
 
     @objc private func openAbout() {
@@ -162,7 +162,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 @MainActor
 enum WindowOpener {
     enum Target: String {
-        case settings
         case about
         case configureAgents
         case prompts
@@ -171,6 +170,14 @@ enum WindowOpener {
 
     static func open(_ target: Target) {
         NotificationCenter.default.post(name: .dcOpenWindow, object: target.rawValue)
+    }
+
+    /// Settings now lives inside the Configure window. Open Configure and focus
+    /// the Settings tab — works whether or not the window is already open.
+    static func openSettings() {
+        ConfigureAgentsViewV2.pendingTab = .settings
+        open(.configureAgents)
+        NotificationCenter.default.post(name: .dcSelectConfigureTab, object: "settings")
     }
 }
 
