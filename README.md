@@ -2,7 +2,7 @@
 
 <img src="assets/logo.png" alt="Doom Coder" width="400" />
 
-# ⚡ Doom Coder
+# DoomCoder
 
 **Keep your Mac awake. Track your AI agents. Get notified on your iPhone.**
 
@@ -15,12 +15,12 @@
 
 ---
 
-## What is Doom Coder?
+## What is DoomCoder?
 
 A macOS menu bar app that does two things:
 
-1. **Keeps your Mac awake** while long-running jobs (builds, downloads, agents) finish — without changing system settings.
-2. **Tracks coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention — on your Mac and on your iPhone via the free **DoomCoder Companion** iOS app.
+1. **Keeps your Mac awake** while long-running jobs (builds, downloads, agents) finish, without changing any system settings.
+2. **Tracks coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention, on your Mac and on your iPhone via the free **DoomCoder Companion** iOS app.
 
 No accounts, no servers, no telemetry. Notifications travel through your own private iCloud container.
 
@@ -38,7 +38,7 @@ No accounts, no servers, no telemetry. Notifications travel through your own pri
 | **On** | Always holds the sleep assertion. Sub-option: **Screen On** (display stays lit) or **Screen Off** (display dims; CPU stays awake). |
 | **Auto** | Holds the assertion only while at least one tracked agent is actively working, then releases it after a 5-minute grace period. Respects per-agent tracking toggles. |
 
-Switch modes from the menu bar panel. **⌥ Space** opens the panel.
+Switch modes from the menu bar panel. **Option Space** opens the panel.
 
 ### Screen modes (when Keep-Awake is On)
 
@@ -53,21 +53,21 @@ Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it runnin
 
 ### Screen Off re-arm
 
-When using Screen Off mode, the display wakes when you move the mouse. DoomCoder will put it back to sleep automatically after a configurable idle interval (default: **5 minutes**). Adjust in **Configure → Settings → Screen Off**.
+When using Screen Off mode, the display wakes when you move the mouse. DoomCoder will put it back to sleep automatically after a configurable idle interval (default: **5 minutes**). Adjust in **Configure > Settings > Screen Off**.
 
 ---
 
 ## How the sleep blocker works
 
-DoomCoder holds an `IOPMAssertion` — the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
+DoomCoder holds an `IOPMAssertion`, the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
 
-- ✅ **Zero CPU / < 10 MB RAM** — one flag in the kernel, no polling
-- ✅ **Auto-released** on crash, quit, or disable
-- ✅ **No system settings modified** — nothing to clean up
-- ✅ **Session timer** — auto-disable after 1 / 2 / 4 / 8 hours
-- ✅ **Launch at Login** (optional)
-- ✅ **Sparkle auto-updates**
-- ✅ **Global hotkey** (⌥ Space, rebindable)
+- Zero CPU / less than 10 MB RAM -- one flag in the kernel, no polling
+- Auto-released on crash, quit, or disable
+- No system settings modified -- nothing to clean up
+- Session timer -- auto-disable after 1 / 2 / 4 / 8 hours
+- Launch at Login (optional)
+- Sparkle auto-updates
+- Global hotkey (Option Space, rebindable)
 
 ---
 
@@ -84,7 +84,7 @@ DoomCoder holds an `IOPMAssertion` — the same kernel-level flag used by Amphet
 | **Windsurf** | Completed, failed, waiting input, session start | `~/.codeium/windsurf/hooks.json` |
 | **Codex CLI** | Completed, failed, session start, tool calls | `~/.codex/hooks.json` |
 
-VS Code hooks support multiple variants simultaneously: VS Code Stable, VS Code Insiders, VSCodium, Cursor, and Windsurf — choose which `settings.json` files to patch in **Configure → VS Code**.
+VS Code hooks support multiple variants simultaneously: VS Code Stable, VS Code Insiders, VSCodium, Cursor, and Windsurf -- choose which `settings.json` files to patch in **Configure > VS Code**.
 
 ### How hooks work
 
@@ -92,7 +92,7 @@ DoomCoder installs a lightweight `dc-hook` binary into each agent's hook configu
 
 ### Setting up hooks
 
-1. Open the panel (click the menu bar icon or press **⌥ Space**).
+1. Open the panel (click the menu bar icon or press **Option Space**).
 2. Click **Configure** in the Agent Tracking card.
 3. Select an agent in the sidebar.
 4. Check prerequisites, then click **Install**.
@@ -103,8 +103,8 @@ DoomCoder backs up your config before writing and can **Repair** hooks if they d
 ### Tracking toggles
 
 Use **Track Agents** (accessible from the main panel) to:
-- Enable or disable notifications **per agent** without uninstalling hooks.
-- **Pause all notifications** temporarily (the Pause toggle resets when DoomCoder quits — it's in-memory only).
+- Enable or disable notifications per agent without uninstalling hooks.
+- **Pause all notifications** temporarily (the Pause toggle resets when DoomCoder quits -- it is in-memory only).
 
 Events are still recorded in the local log even when an agent is paused or disabled.
 
@@ -116,19 +116,19 @@ Events are still recorded in the local log even when an agent is paused or disab
 
 Standard macOS notification banners. Grant permission once; they work system-wide.
 
-### iPhone & iPad (iCloud)
+### iPhone and iPad (iCloud)
 
-Requires the free **DoomCoder Companion** iOS app. Notifications mirror to your phone in 1–5 seconds via your private iCloud container — no third-party server, no tokens, no QR codes. Sign in to the same iCloud account on both devices.
+Requires the free **DoomCoder Companion** iOS app. Notifications mirror to your phone in 1-5 seconds via your private iCloud container -- no third-party server, no tokens, no QR codes. Sign in to the same iCloud account on both devices.
 
 ### Notification event preferences
 
-Choose exactly which events trigger a notification under **Configure → Notification Channels → Notify me when…**:
+Choose exactly which events trigger a notification under **Configure > Notification Channels > Notify me when...**:
 
 | Event | Default |
 |---|---|
-| Session completed | ✅ On |
-| Errors | ✅ On |
-| Permission requests | ✅ On |
+| Session completed | On |
+| Errors | On |
+| Permission requests | On |
 | Agent responses | Off |
 | Session started | Off |
 | Sub-agent activity | Off |
@@ -136,15 +136,30 @@ Choose exactly which events trigger a notification under **Configure → Notific
 
 ### Per-agent channel overrides
 
-Each agent can override the global channel settings — for example, send Claude Code completions to your iPhone but skip VS Code Copilot. Enable **Use custom channels** in the agent's detail pane.
+Each agent can override the global channel settings. For example, send Claude Code completions to your iPhone but skip VS Code Copilot. Enable **Use custom channels** in the agent's detail pane.
 
 ---
 
-## iPhone & iPad companion
+## iPhone and iPad companion
 
-`DoomCoder Companion` (iOS 26+) is a **standalone app, usable on first launch with no setup**. On its own it gives you a curated **Prompt Library** plus a prompt composer, and on-device **Notes** with checklists and reminders — no Mac, no iCloud, and no API key required. Optional **Enhance** uses Apple's on-device model or your own API key.
+**DoomCoder Companion** (iOS 26+) is a standalone app, fully usable on first launch with no setup required. No Mac connection, no API key, no account.
 
-Pair it with your Mac (sign into the same iCloud account) and it also mirrors every Mac notification in 1–5 seconds, showing the live agent list, per-agent status, a 7-day notification log, and remote keep-awake / on-off controls — no third-party server, no tokens, no QR codes.
+### What works with zero setup
+
+**Prompts tab** -- a chat-style prompt workspace. Type a prompt, hit send, and the AI rewrites it into a clear, structured version. Conversation history is saved automatically; use the History button in the toolbar to switch between sessions. The Library button opens a curated collection of ready-made development prompts (write tests, refactor, explain errors, code review, debug, docstrings, commit messages, SQL, API design, security review, and more) that you can copy or open in the chat.
+
+**Notes tab** -- on-device notes with title, body, inline task checklists, reminders (local notifications), pinning, and search. Notes can be turned into a prompt with one tap. Works entirely on-device, no network required.
+
+**Prompt Enhance (AI)** -- rewrites your draft prompt using Apple's on-device model (no text leaves your device) or your own API key from OpenAI, Anthropic, or similar providers (BYOK). Enhance is optional; the rest of the app works without it.
+
+### What you get when connected to a Mac
+
+Pair by signing into the same iCloud account on both devices. Once paired, the **Dashboard** tab mirrors the Mac panel in real time:
+- Live agent list with status (running, waiting, idle, failed)
+- Master on/off and keep-awake controls you can change from your phone
+- 7-day notification log with full event detail
+
+Notifications arrive on your iPhone within 1-5 seconds of the agent event, via your private iCloud container.
 
 [Get on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
@@ -154,22 +169,22 @@ Pair it with your Mac (sign into the same iCloud account) and it also mirrors ev
 
 | Setting | Default | Where |
 |---|---|---|
-| Launch at Login | Off | Configure → Settings → General |
-| Global hotkey | ⌥ Space | Configure → Settings → General |
-| Screen Off re-arm interval | 5 min | Configure → Settings → Screen Off |
-| Auto-revert completed sessions | 30 s | Configure → Settings → Session Lifecycle |
-| Redact prompt text in local history | On | Configure → Settings → Notifications & Privacy |
+| Launch at Login | Off | Configure > Settings > General |
+| Global hotkey | Option Space | Configure > Settings > General |
+| Screen Off re-arm interval | 5 min | Configure > Settings > Screen Off |
+| Auto-revert completed sessions | 30 s | Configure > Settings > Session Lifecycle |
+| Redact prompt text in local history | On | Configure > Settings > Notifications & Privacy |
 
-> Full details: [docs/features.md](docs/features.md)
+Full details: [docs/features.md](docs/features.md)
 
 ---
 
-## Logs & diagnostics
+## Logs and diagnostics
 
-- **Live Events** — real-time event stream per agent in the Configure window.
-- **Logs view** — browsable, filterable history of all hook events and notifications. Export to JSON or CSV. Accessible in Configure → Logs.
-- **Raw log files** — stored in `~/Library/Logs/DoomCoder/`, retained for 7 days. Click **Reveal Logs** in Configure → Settings → Diagnostics.
-- **Connection Doctor** — runs a synthetic test event end-to-end to verify the hook pipeline works.
+- **Live Events** -- real-time event stream per agent in the Configure window.
+- **Logs view** -- browsable, filterable history of all hook events and notifications. Export to JSON or CSV. Accessible in Configure > Logs.
+- **Raw log files** -- stored in `~/Library/Logs/DoomCoder/`, retained for 7 days. Click **Reveal Logs** in Configure > Settings > Diagnostics.
+- **Connection Doctor** -- runs a synthetic test event end-to-end to verify the hook pipeline works.
 
 ---
 
@@ -177,9 +192,9 @@ Pair it with your Mac (sign into the same iCloud account) and it also mirrors ev
 
 Download the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip, drag `DoomCoder.app` to `/Applications`, and double-click to open.
 
-DoomCoder is **signed with an Apple Developer ID and notarized by Apple** — no Gatekeeper prompts, no extra steps.
+DoomCoder is signed with an Apple Developer ID and notarized by Apple -- no Gatekeeper prompts, no extra steps.
 
-First launch: macOS may ask for Accessibility permission — only needed for the **⌥ Space** global shortcut. You can skip it if you don't need the hotkey.
+First launch: macOS may ask for Accessibility permission -- only needed for the **Option Space** global shortcut. You can skip it if you do not need the hotkey.
 
 ---
 
@@ -188,10 +203,16 @@ First launch: macOS may ask for Accessibility permission — only needed for the
 ```bash
 git clone https://github.com/katipally/Doom-Coder.git
 cd Doom-Coder
-open DoomCoder.xcodeproj
+open DoomCoder.xcworkspace
 ```
 
 Requires Xcode 26, macOS 26, Swift 6. Sparkle is pulled via SPM.
+
+---
+
+## Privacy
+
+DoomCoder collects no analytics, sends no data to any server, and has no telemetry. See [docs/privacy.md](docs/privacy.md) for the full policy.
 
 ---
 
