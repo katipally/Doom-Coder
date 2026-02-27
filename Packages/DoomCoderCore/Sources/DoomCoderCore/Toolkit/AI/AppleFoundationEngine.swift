@@ -10,10 +10,33 @@ import Foundation
 import FoundationModels
 #endif
 
+#if canImport(FoundationModels)
+/// Structured result the on-device model must return. Constraining generation to
+/// this schema (instead of free-form text) guarantees the model returns ONLY the
+/// improved prompt — no preamble, apologies, or code fences leaking into the UI.
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
+@Generable
+struct EnhancedPrompt {
+    @Guide(description: "The single, improved, ready-to-paste prompt. No preamble, commentary, or code fences.")
+    var prompt: String
+}
+#endif
+
 public struct AppleFoundationEngine: AIEngine {
     public nonisolated let tier: AITier = .appleOnDevice
 
     public init() {}
+
+    /// Concise system prompt. Short on purpose: the on-device model follows tight,
+    /// imperative instructions far more reliably than long prose, and the
+    /// `@Generable` schema already enforces "return only the prompt."
+    static let instructions = """
+    You are a prompt engineer for AI coding agents. Rewrite the user's rough \
+    request into one clear, well-structured prompt that preserves their intent. \
+    Briefly state context, the concrete task, and the expected output. Keep it \
+    tight — no filler. Do not answer or solve the request; return only the \
+    improved prompt.
+    """
 
     public func probe() async -> AIFailure? {
         #if targetEnvironment(simulator)
@@ -44,17 +67,17 @@ public struct AppleFoundationEngine: AIEngine {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
             if let f = await probe() { return .failure(f, tier: tier) }
-            let instructions = """
-            You are an expert prompt engineer for AI coding agents. Rewrite the user's \
-            rough request into a single, clear, well-structured prompt that preserves \
-            their intent. Add concise sections for context, requirements, and expected \
-            output where helpful. Do NOT solve the request — only return the improved \
-            prompt text, with no preamble or code fences.
-            """
             do {
-                let session = LanguageModelSession(instructions: instructions)
-                let response = try await session.respond(to: idea)
-                let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                let session = LanguageModelSession(instructions: Self.instructions)
+                // Low temperature → deterministic, faithful rewriting rather than
+                // creative drift. Bounded tokens keep latency + memory predictable.
+                let options = GenerationOptions(temperature: 0.3, maximumResponseTokens: 1200)
+                let response = try await session.respond(
+                    to: idea,
+                    generating: EnhancedPrompt.self,
+                    options: options
+                )
+                let text = response.content.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 return text.isEmpty ? .failure(.malformed, tier: tier) : .success(text, tier: tier)
             } catch {
                 return .failure(Self.mapError(error), tier: tier)

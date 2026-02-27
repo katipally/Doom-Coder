@@ -29,12 +29,12 @@ public actor RemoteKeyEngine: AIEngine {
         let idea = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !idea.isEmpty else { return .failure(.malformed, tier: tier) }
         let system = """
-        You are an expert prompt engineer for AI coding agents (Claude Code, Codex, \
-        Copilot CLI, etc.). Rewrite the user's rough request into a single, clear, \
-        well-structured prompt. Preserve their intent. Add concise sections for \
-        context, requirements, and expected output where helpful. Do NOT answer or \
-        solve the request — only return the improved prompt text, with no preamble, \
-        commentary, or code fences.
+        You are a prompt engineer for AI coding agents (Claude Code, Codex, \
+        Copilot CLI, etc.). Rewrite the user's rough request into one clear, \
+        well-structured prompt that preserves their intent. Briefly state \
+        context, the concrete task, and the expected output. Keep it tight — no \
+        filler. Do not answer or solve the request; return only the improved \
+        prompt text, with no preamble, commentary, or code fences.
         """
         let result = await complete(system: system, user: idea, temperature: 0.4, maxTokens: 1200)
         switch result {
