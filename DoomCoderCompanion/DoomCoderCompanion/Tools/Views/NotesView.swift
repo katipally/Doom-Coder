@@ -135,8 +135,14 @@ private struct NoteEditorView: View {
     @State private var hasReminder: Bool
     @State private var showReminderDenied = false
     @State private var reminderPastDate = false
-    @State private var didTurnIntoPrompt = false
-    @FocusState private var bodyFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    /// Focusable fields in the editor, so a single keyboard "Done" can dismiss
+    /// whichever field is active (body or any checklist item).
+    private enum Field: Hashable {
+        case body
+        case checklist(UUID)
+    }
 
     init(note: Note) {
         self.note = note
@@ -152,8 +158,8 @@ private struct NoteEditorView: View {
             Form {
                 Section {
                     TextEditor(text: $text)
-                        .frame(minHeight: 140)
-                        .focused($bodyFocused)
+                        .frame(minHeight: 120, maxHeight: 200)
+                        .focused($focusedField, equals: .body)
                         .onChange(of: text) { _, _ in save() }
                 } header: {
                     Text("Note")
@@ -162,6 +168,7 @@ private struct NoteEditorView: View {
                 checklistSection
                 reminderSection
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -196,7 +203,7 @@ private struct NoteEditorView: View {
                     .accessibilityLabel("More options")
                 }
             }
-            .onAppear { if text.isEmpty && checklist.isEmpty { bodyFocused = true } }
+            .onAppear { if text.isEmpty && checklist.isEmpty { focusedField = .body } }
             .alert("Reminders are turned off", isPresented: $showReminderDenied) {
                 Button("Open Settings") { openSystemSettings() }
                 Button("Not now", role: .cancel) { }
@@ -227,6 +234,7 @@ private struct NoteEditorView: View {
                     .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
 
                     TextField("Item", text: $item.text)
+                        .focused($focusedField, equals: .checklist(item.id))
                         .strikethrough(item.isDone, color: .secondary)
                         .foregroundStyle(item.isDone ? .secondary : .primary)
                         .onChange(of: item.text) { _, _ in save() }
@@ -320,11 +328,11 @@ private struct NoteEditorView: View {
     private func turnIntoPrompt() {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
-        let title = note.title
-        let prompt = Prompt(title: title.isEmpty ? "Note" : title, body: body)
-        PromptStore.shared.add(prompt)
-        didTurnIntoPrompt = true
         Haptics.success()
+        // Hand the note text to the Prompts tab, which opens a fresh refine chat
+        // pre-filled with this text (it does not auto-send — the user can edit).
+        dismiss()
+        AppRouter.shared.composePrompt(seededWith: body)
     }
 
     private func openSystemSettings() {
