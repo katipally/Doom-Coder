@@ -32,6 +32,8 @@ struct PromptsView: View {
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
     @State private var pendingEditID: UUID?
+    /// Non-nil when on-device AI is selected but unavailable — drives the setup banner.
+    @State private var onDeviceUnavailable: AIFailure?
 
     @FocusState private var inputFocused: Bool
 
@@ -92,6 +94,14 @@ struct PromptsView: View {
             }
             .onAppear(perform: consumePendingSeed)
             .onChange(of: router.pendingPromptSeed) { _, _ in consumePendingSeed() }
+            .task { await probeOnDeviceAI() }
+            .onChange(of: ai.selection) { _, newMode in
+                if newMode == .appleOnDevice {
+                    Task { await probeOnDeviceAI() }
+                } else {
+                    onDeviceUnavailable = nil
+                }
+            }
     }
 
     // MARK: - Toolbar
@@ -227,6 +237,17 @@ struct PromptsView: View {
                 }
                 .padding(.horizontal, 24)
             }
+
+            // Library is always accessible without AI — gives reviewers / new users
+            // standalone value even before AI is configured.
+            Button {
+                showLibrary = true
+                Haptics.tap()
+            } label: {
+                Label("Browse prompt library", systemImage: "books.vertical")
+                    .font(.subheadline.weight(.medium))
+            }
+            .padding(.top, 4)
         }
         .padding(.vertical, 32)
     }
@@ -300,7 +321,20 @@ struct PromptsView: View {
     }
 
     private var showSetupBanner: Bool {
-        ai.selection == .remoteKey && !ai.hasKeyForCurrentProvider
+        switch ai.selection {
+        case .remoteKey:     return !ai.hasKeyForCurrentProvider
+        case .appleOnDevice: return onDeviceUnavailable != nil
+        }
+    }
+
+    private var setupBannerMessage: String {
+        switch ai.selection {
+        case .remoteKey:
+            return "Add an API key in Settings → AI, or switch to On-device."
+        case .appleOnDevice:
+            let detail = onDeviceUnavailable?.message ?? "On-device AI is unavailable."
+            return "\(detail) Switch to \"My API key\" in Settings → AI."
+        }
     }
 
     private var setupBanner: some View {
@@ -308,8 +342,9 @@ struct PromptsView: View {
             router.selectedTab = .settings
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "key.fill").font(.footnote)
-                Text("Add an API key in Settings, or switch to On-device.")
+                Image(systemName: ai.selection == .remoteKey ? "key.fill" : "exclamationmark.triangle")
+                    .font(.footnote)
+                Text(setupBannerMessage)
                     .font(.footnote)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
@@ -322,6 +357,8 @@ struct PromptsView: View {
             .glassEffect(.regular, in: .rect(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(setupBannerMessage)
+        .accessibilityHint("Opens Settings to configure AI")
     }
 
     // MARK: - History sheet
@@ -695,6 +732,13 @@ struct PromptsView: View {
         default:
             return failure.message
         }
+    }
+
+    @MainActor
+    private func probeOnDeviceAI() async {
+        guard ai.selection == .appleOnDevice else { return }
+        let failure = await ai.appleAvailability()
+        onDeviceUnavailable = failure
     }
 }
 
