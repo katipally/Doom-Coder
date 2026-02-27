@@ -139,6 +139,24 @@ public final class AIEngineCoordinator {
         await run { await $0.enhance(raw) }
     }
 
+    /// Streams a refined prompt from the selected engine. Yields CUMULATIVE text
+    /// so the UI can assign it directly to the in-flight message. Throws
+    /// `AIFailure` on error and finishes early on cancellation (Stop button).
+    public func stream(transcript: [AIChatTurn]) -> AsyncThrowingStream<String, Error> {
+        guard let engine = engineChain().first else {
+            return AsyncThrowingStream { $0.finish(throwing: AIFailure.unavailable(.unknown("No engine available"))) }
+        }
+        return engine.stream(transcript: transcript)
+    }
+
+    /// The tier that will currently answer, for tagging persisted messages.
+    public var activeTier: AITier {
+        switch selection {
+        case .appleOnDevice: return .appleOnDevice
+        case .remoteKey:     return .remoteKey
+        }
+    }
+
     // MARK: - Engine routing
 
     /// The engine(s) to run for the current selection. There is no silent

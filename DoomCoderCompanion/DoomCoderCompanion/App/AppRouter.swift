@@ -20,6 +20,17 @@ final class AppRouter {
     /// Navigation path for the Dashboard tab's NavigationStack.
     var agentPath: [TrackedAgent] = []
 
+    /// Text handed off from Notes' "Turn into a prompt". PromptsView consumes it
+    /// on appear: it opens a fresh chat with this text pre-filled in the input
+    /// (it does NOT auto-send — the user can edit first).
+    var pendingPromptSeed: String?
+
+    /// Switches to the Prompts tab and seeds the composer with `text`.
+    func composePrompt(seededWith text: String) {
+        pendingPromptSeed = text
+        selectedTab = .prompts
+    }
+
     /// Selects the Dashboard tab and pushes the given agent's logs.
     func openAgent(_ agent: TrackedAgent) {
         selectedTab = .dashboard

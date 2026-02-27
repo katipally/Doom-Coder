@@ -124,6 +124,22 @@ public enum AIResult<T: Sendable>: Sendable {
     }
 }
 
+// MARK: - Transcript
+
+/// A single turn fed to an engine when refining. The transcript lets follow-up
+/// instructions ("make it shorter", "go back to the earlier version") stay
+/// coherent across multiple refinements and across BOTH engines — every engine
+/// reconstructs context from this transcript on each call and holds no live
+/// session state of its own.
+public struct AIChatTurn: Sendable, Hashable {
+    public let role: ChatRole
+    public let text: String
+    public init(role: ChatRole, text: String) {
+        self.role = role
+        self.text = text
+    }
+}
+
 // MARK: - Engine protocol
 
 /// A single AI backend. Both tiers implement every capability. The app stays
@@ -137,4 +153,33 @@ public protocol AIEngine: Sendable {
 
     /// Rewrites a rough idea into a clear, structured prompt.
     func enhance(_ raw: String) async -> AIResult<String>
+
+    /// Streams a refined prompt for the given transcript. The first turn is the
+    /// user's rough idea; later assistant/user turns drive iterative refinement.
+    /// Each yielded value is the **cumulative** text so far (not a delta), so the
+    /// UI can simply assign it to the in-flight message. Throws `AIFailure` on
+    /// error and honors task cancellation (Stop button) by finishing early.
+    func stream(transcript: [AIChatTurn]) -> AsyncThrowingStream<String, Error>
+}
+
+public extension AIEngine {
+    /// Non-streaming convenience: drains `stream(transcript:)` to a final result,
+    /// tagged with this engine's tier. Used as a fallback where streaming UI
+    /// isn't needed.
+    func refine(transcript: [AIChatTurn]) async -> AIResult<String> {
+        var latest = ""
+        do {
+            for try await chunk in stream(transcript: transcript) {
+                latest = chunk
+            }
+            let trimmed = latest.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? .failure(.malformed, tier: tier) : .success(trimmed, tier: tier)
+        } catch let failure as AIFailure {
+            return .failure(failure, tier: tier)
+        } catch is CancellationError {
+            return .failure(.cancelled, tier: tier)
+        } catch {
+            return .failure(.malformed, tier: tier)
+        }
+    }
 }
