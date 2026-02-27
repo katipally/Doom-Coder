@@ -16,14 +16,26 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - **Notes with reminders** — notes support pinning, inline checklists, search, reminders (local notifications), and "Turn into prompt". Works entirely on-device.
 
 ### Added — Mac Tools window (macOS 26 redesign)
-- **Toolbar-driven editor** for both Prompts and Notes: native window toolbar actions (New / Enhance / Copy / Save / Inspector), a refined sidebar, and a comfortable centered editor.
-- **Mac Notes parity with iOS** — body, inline checklist, pin, search, Turn-into-prompt, and **reminders (new on Mac)** via `UNUserNotificationCenter`, presented in the foreground for the menu-bar app.
-- **Prompt Library segment on Mac** mirroring iOS, with copy and open-in-composer.
+- **Focused editors** for both Prompts and Notes: labeled bottom action bars (instead of cramped window toolbars), a refined sidebar, and a comfortable centered editor that focuses on open so first-time users can start typing immediately.
+- **Mac Notes** — an explicit **title** field plus body, **Tasks** (inline checklist), and **Reminders** as first-class editor sections (reminders new on Mac, via `UNUserNotificationCenter`, presented in the foreground for the menu-bar app). Pin, search (title/body/tasks), and Turn-into-prompt included.
+- **Prompt Library on Mac** mirroring iOS, with copy and open-in-composer.
+
+### Added — Brand
+- **Refreshed app icon & logo** — re-framed from the source art to a balanced "sweet spot" showing the full hooded figure, regenerated crisply at every size for both apps (no more pixelated panel logo).
+
+### Changed — One Settings, one window (macOS)
+- Settings now live **only** in the Configure window. The standalone Settings window was removed; the floating panel's Settings button and the hotkey-conflict **Fix** link open Configure focused on Settings.
+- **AI is its own sidebar section** in the Configure window (not a sub-tab/segment), alongside Agents, Notification Channels, Logs, and Settings.
 
 ### Changed — AI
+- **Structured on-device output** — Apple Foundation Models prompt enhancement now uses a `@Generable` structured result with a concise system prompt and tuned generation options, for more reliable, well-formed rewrites. The BYOK provider system prompt was tightened to match.
 - **On-device AI honesty** — Apple Foundation Models are detected per environment. In the iOS Simulator (where model assets do not exist) and on unsupported devices, Settings and Enhance now show clear guidance instead of failing silently; the rest of the app is never blocked.
 - **Model picker** — saving an API key now **auto-tests the key and fetches the live model list** from the provider. A recommended model is selected by default, the selection applies instantly, and an invalid/removed saved model falls back to a valid one. Inline loading and error states.
 - **AI naming cleanup** — engine options are limited to **On-device** and **My API key (BYOK)**; legacy "automatic"/"built-in offline" wording removed.
+
+### Changed — iOS Dashboard parity
+- The Dashboard is now **three titled sections that mirror the Mac panel**: a **DoomCoder** master on/off toggle, a **Keep Awake** sleep-control section, and an **Agents** list — using the same SF Symbols, tints, and status states as the Mac.
+- The paired **Mac device info** (name, last-seen, live status) moved out of the dashboard card into **Settings → Connection**.
 
 ### Changed — iOS sleep card / remote control
 - Adopted the Mac sleep-card icons and per-mode color tints; fixed a duplicated "Auto-off after" label.
