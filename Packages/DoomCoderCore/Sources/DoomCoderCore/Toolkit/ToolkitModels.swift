@@ -241,6 +241,9 @@ public struct NoteReminder: Codable, Hashable, Sendable {
 /// reminder + pin. Local only — never synced.
 public struct Note: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
+    /// Explicit user-entered title. When empty, `title` falls back to the first
+    /// body line (legacy behavior), keeping old notes working unchanged.
+    public var titleText: String
     public var body: String
     public var checklist: [NoteChecklistItem]
     public var reminder: NoteReminder?
@@ -249,6 +252,7 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
     public var updatedAt: Date
 
     public init(id: UUID = UUID(),
+                titleText: String = "",
                 body: String = "",
                 checklist: [NoteChecklistItem] = [],
                 reminder: NoteReminder? = nil,
@@ -256,6 +260,7 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
                 createdAt: Date = Date(),
                 updatedAt: Date = Date()) {
         self.id = id
+        self.titleText = titleText
         self.body = body
         self.checklist = checklist
         self.reminder = reminder
@@ -265,13 +270,15 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, body, checklist, reminder, isPinned, createdAt, updatedAt
+        case id, titleText, body, checklist, reminder, isPinned, createdAt, updatedAt
     }
 
-    // Backward compatible: legacy notes.json had only id/body/createdAt/updatedAt.
+    // Backward compatible: legacy notes.json had only id/body/createdAt/updatedAt
+    // and no explicit title.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        titleText = try c.decodeIfPresent(String.self, forKey: .titleText) ?? ""
         body = try c.decodeIfPresent(String.self, forKey: .body) ?? ""
         checklist = try c.decodeIfPresent([NoteChecklistItem].self, forKey: .checklist) ?? []
         reminder = try c.decodeIfPresent(NoteReminder.self, forKey: .reminder)
@@ -280,8 +287,11 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 
-    /// First non-empty line, used as the list title.
+    /// Display title: the explicit title when set, otherwise the first non-empty
+    /// body line (then first checklist item, then a default).
     public var title: String {
+        let explicit = titleText.trimmingCharacters(in: .whitespaces)
+        if !explicit.isEmpty { return explicit }
         let line = body
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first
@@ -294,10 +304,17 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
         return "New Note"
     }
 
-    /// Remainder preview shown under the title in the list.
+    /// Remainder preview shown under the title in the list. When an explicit
+    /// title exists, the first body line is part of the content (not the title),
+    /// so it is shown; otherwise the first line is the title and is dropped.
     public var preview: String {
+        let hasExplicitTitle = !titleText.trimmingCharacters(in: .whitespaces).isEmpty
         let lines = body.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-        if lines.count > 1 {
+        if hasExplicitTitle {
+            if let first = lines.first?.trimmingCharacters(in: .whitespaces), !first.isEmpty {
+                return first
+            }
+        } else if lines.count > 1 {
             return lines.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
         }
         if !checklist.isEmpty {
@@ -307,10 +324,11 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
         return ""
     }
 
-    /// True when the note has no body text and no non-empty checklist items.
+    /// True when the note has no title, no body text, and no non-empty checklist items.
     public var isEffectivelyEmpty: Bool {
+        let emptyTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let emptyBody = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let emptyList = checklist.allSatisfy { $0.text.trimmingCharacters(in: .whitespaces).isEmpty }
-        return emptyBody && emptyList
+        return emptyTitle && emptyBody && emptyList
     }
 }

@@ -105,9 +105,14 @@ final class MacNotesStore {
 
     /// Persists only the editable content fields, preserving store-owned fields
     /// (reminder, notificationID) so an editor's stale snapshot can never wipe a
-    /// reminder set via `setReminder`/`togglePin`.
-    func updateContent(id: UUID, body: String, checklist: [NoteChecklistItem]) {
+    /// reminder set via `setReminder`/`togglePin`. No-ops when nothing changed to
+    /// avoid needless `updatedAt` churn (which would reorder the sorted list).
+    func updateContent(id: UUID, title: String, body: String, checklist: [NoteChecklistItem]) {
         guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        guard notes[i].titleText != title
+            || notes[i].body != body
+            || notes[i].checklist != checklist else { return }
+        notes[i].titleText = title
         notes[i].body = body
         notes[i].checklist = checklist
         notes[i].updatedAt = Date()
@@ -762,14 +767,14 @@ struct MacNotesPane: View {
     @State private var store = MacNotesStore.shared
     @State private var search = ""
     @State private var selectedID: UUID?
-    // Inspector hidden by default; revealed via the toolbar or when creating a note.
-    @State private var showInspector = false
 
     private var filtered: [Note] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return store.sorted }
         return store.sorted.filter {
-            $0.body.lowercased().contains(q) || $0.checklist.contains { $0.text.lowercased().contains(q) }
+            $0.title.lowercased().contains(q)
+                || $0.body.lowercased().contains(q)
+                || $0.checklist.contains { $0.text.lowercased().contains(q) }
         }
     }
 
@@ -781,16 +786,6 @@ struct MacNotesPane: View {
                 .navigationSplitViewColumnWidth(min: 250, ideal: 300)
         } detail: {
             noteDetail
-                .inspector(isPresented: $showInspector) {
-                    Group {
-                        if let note = selectedNote {
-                            MacNoteInspector(note: note, store: store).id(note.id)
-                        } else {
-                            ContentUnavailableView("No note selected", systemImage: "sidebar.trailing")
-                        }
-                    }
-                    .inspectorColumnWidth(min: 260, ideal: 300, max: 360)
-                }
         }
         .navigationTitle("Notes")
         .onDisappear { store.pruneEmpty() }
@@ -886,11 +881,6 @@ struct MacNotesPane: View {
                 }
 
                 Spacer()
-
-                Button { showInspector.toggle() } label: {
-                    Label("Details", systemImage: "sidebar.trailing")
-                }
-                .help("Reminder, pin, and metadata")
             }
             .controlSize(.large)
             .padding(12)
@@ -945,84 +935,168 @@ private struct NoteRow: View {
     }
 }
 
-/// Body + inline checklist editor. Holds transient text/checklist state and
-/// persists via `updateContent`, which preserves store-owned fields (reminder).
+/// The full note editor: title, body, tasks, and reminder are all primary,
+/// first-class sections. Content (title/body/checklist) autosaves via
+/// `updateContent`; the reminder is set through the store's async scheduler so a
+/// stale content snapshot can never clobber it.
 private struct MacNoteEditor: View {
     let noteID: UUID
     let store: MacNotesStore
 
+    @State private var title = ""
     @State private var body_ = ""
     @State private var checklist: [NoteChecklistItem] = []
     @State private var newItem = ""
-    @FocusState private var bodyFocused: Bool
+
+    // Reminder state (a primary feature, surfaced directly in the editor).
+    @State private var hasReminder: Bool
+    @State private var reminderDate: Date
+    @State private var showDenied = false
+    @State private var pastDate = false
+    @State private var reminderTask: Task<Void, Never>?
+
+    @FocusState private var focus: Field?
+    private enum Field { case title, body }
 
     init(noteID: UUID, store: MacNotesStore) {
         self.noteID = noteID
         self.store = store
         let note = store.note(id: noteID)
+        _title = State(initialValue: note?.titleText ?? "")
         _body_ = State(initialValue: note?.body ?? "")
         _checklist = State(initialValue: note?.checklist ?? [])
+        _hasReminder = State(initialValue: note?.reminder?.isEnabled ?? false)
+        _reminderDate = State(initialValue: note?.reminder?.date
+            ?? (Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)))
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if let r = store.note(id: noteID)?.reminder, r.isEnabled {
-                    Label("Reminder \(r.date.formatted(date: .abbreviated, time: .shortened))",
-                          systemImage: "bell.fill")
-                        .font(.caption).foregroundStyle(r.date > Date() ? .blue : .secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.blue.opacity(0.1), in: Capsule())
-                }
+            VStack(alignment: .leading, spacing: 18) {
+                titleField
+                Divider()
+                bodySection
+                tasksSection
+                reminderSection
+            }
+            .padding(20)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onAppear {
+            if title.isEmpty && body_.isEmpty && checklist.isEmpty { focus = .title }
+        }
+        .onDisappear { reminderTask?.cancel() }
+        .alert("Reminders are turned off", isPresented: $showDenied) {
+            Button("Open Settings") { openNotificationSettings() }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("Enable notifications for DoomCoder in System Settings to get note reminders.")
+        }
+    }
 
-                ZStack(alignment: .topLeading) {
-                    if body_.isEmpty {
-                        Text("Write your note…")
-                            .foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 6)
-                            .allowsHitTesting(false).accessibilityHidden(true)
-                    }
-                    TextEditor(text: $body_)
-                        .font(.body).focused($bodyFocused)
-                        .scrollContentBackground(.hidden).padding(4)
-                        .frame(minHeight: 220)
-                        .onChange(of: body_) { _, _ in persist() }
-                }
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
-                .accessibilityLabel("Note body")
+    private var titleField: some View {
+        TextField("Title", text: $title)
+            .textFieldStyle(.plain)
+            .font(.title2.weight(.semibold))
+            .focused($focus, equals: .title)
+            .onChange(of: title) { _, _ in persist() }
+            .onSubmit { focus = .body }
+            .accessibilityLabel("Note title")
+    }
 
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach($checklist) { $item in
-                            HStack(spacing: 8) {
-                                Button { item.isDone.toggle(); persist() } label: {
-                                    Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(item.isDone ? .green : .secondary)
-                                }
-                                .buttonStyle(.plain)
-                                .contentShape(Rectangle())
-                                .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
-                                TextField("Item", text: $item.text)
-                                    .textFieldStyle(.plain)
-                                    .strikethrough(item.isDone)
-                                    .onChange(of: item.text) { _, _ in persist() }
-                            }
+    private var bodySection: some View {
+        ZStack(alignment: .topLeading) {
+            if body_.isEmpty {
+                Text("Write your note…")
+                    .foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 6)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            TextEditor(text: $body_)
+                .font(.body).focused($focus, equals: .body)
+                .scrollContentBackground(.hidden).padding(4)
+                .frame(minHeight: 200)
+                .onChange(of: body_) { _, _ in persist() }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+        .accessibilityLabel("Note body")
+    }
+
+    private var tasksSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                if checklist.isEmpty {
+                    Text("Add tasks to track to-dos inside this note.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach($checklist) { $item in
+                    HStack(spacing: 8) {
+                        Button { item.isDone.toggle(); persist() } label: {
+                            Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(item.isDone ? .green : .secondary)
                         }
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle").foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            TextField("Add item", text: $newItem)
-                                .textFieldStyle(.plain)
-                                .onSubmit(addItem)
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
+                        TextField("Task", text: $item.text)
+                            .textFieldStyle(.plain)
+                            .strikethrough(item.isDone)
+                            .onChange(of: item.text) { _, _ in persist() }
+                        Button { removeItem(item.id) } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove task")
                     }
-                    .padding(4)
-                } label: {
-                    Label("Checklist", systemImage: "checklist")
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle").foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    TextField("Add a task", text: $newItem)
+                        .textFieldStyle(.plain)
+                        .onSubmit(addItem)
                 }
             }
-            .padding()
+            .padding(4)
+        } label: {
+            Label("Tasks", systemImage: "checklist")
         }
-        .onAppear { if body_.isEmpty && checklist.isEmpty { bodyFocused = true } }
+    }
+
+    private var reminderSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { hasReminder },
+                    set: { on in
+                        hasReminder = on
+                        pastDate = false
+                        if on { scheduleReminder() }
+                        else { reminderTask?.cancel(); store.clearReminder(for: noteID) }
+                    }
+                )) {
+                    Label("Remind me", systemImage: "bell")
+                }
+                if hasReminder {
+                    DatePicker("When", selection: $reminderDate, in: Date()...,
+                               displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: reminderDate) { _, _ in scheduleReminder() }
+                }
+                if pastDate {
+                    Label("Pick a time in the future.", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Text(hasReminder
+                     ? "A local notification fires at the chosen time. Reminders stay on this Mac."
+                     : "Get a local notification at a time you choose.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(4)
+        } label: {
+            Label("Reminder", systemImage: "bell.badge")
+        }
     }
 
     private func addItem() {
@@ -1033,95 +1107,35 @@ private struct MacNoteEditor: View {
         persist()
     }
 
+    private func removeItem(_ id: UUID) {
+        checklist.removeAll { $0.id == id }
+        persist()
+    }
+
     private func persist() {
-        store.updateContent(id: noteID, body: body_, checklist: checklist)
-    }
-}
-
-/// Inspector: reminder scheduling, pin, and metadata. Writes directly to the
-/// store so a stale editor snapshot can never clobber the reminder.
-private struct MacNoteInspector: View {
-    let note: Note
-    let store: MacNotesStore
-
-    @State private var hasReminder: Bool
-    @State private var reminderDate: Date
-    @State private var showDenied = false
-    @State private var pastDate = false
-
-    init(note: Note, store: MacNotesStore) {
-        self.note = note
-        self.store = store
-        _hasReminder = State(initialValue: note.reminder?.isEnabled ?? false)
-        _reminderDate = State(initialValue: note.reminder?.date
-            ?? (Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)))
+        store.updateContent(id: noteID, title: title, body: body_, checklist: checklist)
     }
 
-    var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: Binding(
-                    get: { hasReminder },
-                    set: { on in
-                        hasReminder = on
-                        pastDate = false
-                        if on { Task { await schedule() } }
-                        else { store.clearReminder(for: note.id) }
-                    }
-                )) {
-                    Label("Remind me", systemImage: "bell")
-                }
-                if hasReminder {
-                    DatePicker("When", selection: $reminderDate, in: Date()...,
-                               displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: reminderDate) { _, _ in Task { await schedule() } }
-                }
-                if pastDate {
-                    Label("Pick a time in the future.", systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-            } header: {
-                Text("Reminder")
-            } footer: {
-                Text(hasReminder
-                     ? "A local notification fires at the chosen time. Reminders stay on this Mac."
-                     : "Optional. Get a local notification at a time you choose.")
-                    .font(.caption).foregroundStyle(.secondary)
+    /// Schedules the reminder, cancelling any in-flight attempt first. If the
+    /// user toggled the reminder off while a schedule was in flight, the late
+    /// success is undone so we never fire a notification they cancelled.
+    private func scheduleReminder() {
+        reminderTask?.cancel()
+        let date = reminderDate
+        reminderTask = Task { @MainActor in
+            let result = await store.setReminder(date, for: noteID)
+            guard !Task.isCancelled else { return }
+            switch result {
+            case .scheduled:
+                pastDate = false
+                if !hasReminder { store.clearReminder(for: noteID) }
+            case .permissionDenied:
+                hasReminder = false; showDenied = true
+            case .dateInPast:
+                pastDate = true
+            case .failed:
+                hasReminder = false
             }
-
-            Section("Note") {
-                Toggle(isOn: Binding(
-                    get: { note.isPinned },
-                    set: { _ in store.togglePin(note.id) }
-                )) { Label("Pinned", systemImage: "pin") }
-                LabeledContent("Created") { Text(note.createdAt, style: .date) }
-                LabeledContent("Updated") { Text(note.updatedAt, style: .date) }
-                if !note.checklist.isEmpty {
-                    let done = note.checklist.filter(\.isDone).count
-                    LabeledContent("Checklist") { Text("\(done)/\(note.checklist.count) done") }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .alert("Reminders are turned off", isPresented: $showDenied) {
-            Button("Open Settings") { openNotificationSettings() }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text("Enable notifications for DoomCoder in System Settings to get note reminders.")
-        }
-    }
-
-    private func schedule() async {
-        let result = await store.setReminder(reminderDate, for: note.id)
-        switch result {
-        case .scheduled:
-            pastDate = false
-        case .permissionDenied:
-            hasReminder = false; showDenied = true
-        case .dateInPast:
-            pastDate = true
-        case .failed:
-            hasReminder = false
         }
     }
 
