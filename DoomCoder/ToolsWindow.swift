@@ -616,7 +616,6 @@ struct MacPromptsPane: View {
     private var inputBar: some View {
         VStack(spacing: 8) {
             if showSetupBanner { setupBanner }
-            // iMessage-style capsule: button lives inside the glass container.
             HStack(alignment: .bottom, spacing: 0) {
                 TextField("Describe your prompt…", text: $input, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -626,6 +625,8 @@ struct MacPromptsPane: View {
                     .padding(.vertical, 10)
                     .padding(.trailing, 4)
 
+                // Trailing action — only visible when needed; fixed frame prevents
+                // the capsule from resizing when transitioning between states.
                 Group {
                     if isGenerating {
                         Button { stop() } label: {
@@ -636,20 +637,19 @@ struct MacPromptsPane: View {
                                 .background(.red.gradient, in: .circle)
                         }
                         .help("Stop generating")
-                    } else {
+                    } else if canSend {
                         Button { send() } label: {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 13, weight: .semibold))
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(width: 28, height: 28)
                                 .background {
-                                    Circle().fill(canSend
-                                        ? AnyShapeStyle(Color.accentColor.gradient)
-                                        : AnyShapeStyle(Color.secondary.opacity(0.25)))
+                                    Circle().fill(AnyShapeStyle(Color.accentColor.gradient))
                                 }
                         }
-                        .disabled(!canSend)
                         .help("Refine prompt")
+                    } else {
+                        Color.clear.frame(width: 28, height: 28)
                     }
                 }
                 .buttonStyle(.plain)
@@ -1159,7 +1159,8 @@ struct MacNotesPane: View {
         .toolbar {
             ToolbarItem {
                 Button { create() } label: { Label("New Note", systemImage: "square.and.pencil") }
-                    .help("New note")
+                    .keyboardShortcut("n", modifiers: .command)
+                    .help("New note (⌘N)")
             }
         }
         .onDisappear { store.pruneEmpty() }
@@ -1169,19 +1170,6 @@ struct MacNotesPane: View {
 
     private var notesSidebar: some View {
         list
-            .safeAreaInset(edge: .bottom) {
-                HStack {
-                    Button { create() } label: {
-                        Label("New Note", systemImage: "square.and.pencil")
-                    }
-                    .keyboardShortcut("n", modifiers: .command)
-                    Spacer()
-                }
-                .controlSize(.large)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.bar)
-            }
     }
 
     private var list: some View {
@@ -1225,9 +1213,6 @@ struct MacNotesPane: View {
                 Label("Select a note", systemImage: "note.text")
             } description: {
                 Text("Choose a note on the left, or create a new one.")
-            } actions: {
-                Button { create() } label: { Label("New note", systemImage: "square.and.pencil") }
-                    .buttonStyle(.borderedProminent)
             }
         }
     }
