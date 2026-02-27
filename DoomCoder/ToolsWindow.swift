@@ -226,80 +226,96 @@ private enum MacClipboard {
     }
 }
 
-// MARK: - Window focus accessor (brings the scene forward reliably)
+// MARK: - Floating tool surfaces (Prompts / Notes / Settings)
+//
+// The old single sidebar "Tools" window is gone. Each toolkit surface now opens
+// in its own standalone window that:
+//   • floats above all apps, including full-screen Spaces,
+//   • carries a real traffic-light close button (native titled scene),
+//   • remembers its size/position across launches,
+//   • can be open alongside the others (Prompts + Notes side-by-side).
+// Closing a window only hides it; the SwiftUI scene + shared singleton stores
+// keep the data, so reopening from the floating bar restores the prior state.
 
-private struct WindowFocus: NSViewRepresentable {
+enum ToolSurface: String, CaseIterable {
+    case prompts, notes, settings
+    /// Matches the SwiftUI `Window(id:)` scene identifiers in DoomCoderApp.
+    var windowID: String { rawValue }
+}
+
+/// Configures the host NSWindow of a SwiftUI scene to float above everything
+/// (incl. full-screen apps) and to remember its frame. Applied once on appear.
+struct FloatingWindowConfigurator: NSViewRepresentable {
+    let autosaveName: String
+
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
         DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            v.window?.makeKeyAndOrderFront(nil)
+            guard let window = v.window else { return }
+            window.level = .floating
+            window.collectionBehavior.insert(.canJoinAllSpaces)
+            window.collectionBehavior.insert(.fullScreenAuxiliary)
+            window.isReleasedWhenClosed = false
+            window.setFrameAutosaveName(autosaveName)
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
         }
         return v
     }
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-// MARK: - Root
+/// Opens tool surfaces and drives the floating bar's Minimize / restore.
+@MainActor
+enum ToolSurfaceManager {
+    /// Surfaces hidden by the last Minimize, reopened when the bar returns.
+    private(set) static var pendingRestore: [ToolSurface] = []
 
-enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
-    case prompts, notes, settings
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .prompts: return "Prompts"
-        case .notes: return "Notes"
-        case .settings: return "Settings"
+    static func open(_ surface: ToolSurface) {
+        NSApp.activate()
+        switch surface {
+        case .prompts:  WindowOpener.open(.prompts)
+        case .notes:    WindowOpener.open(.notes)
+        case .settings: WindowOpener.open(.settings)
         }
     }
-    var symbol: String {
-        switch self {
-        case .prompts: return "sparkles"
-        case .notes: return "note.text"
-        case .settings: return "gearshape"
+
+    static func visibleSurfaces() -> [ToolSurface] {
+        ToolSurface.allCases.filter { surface in
+            NSApp.windows.contains { $0.isVisible && $0.identifier?.rawValue == surface.windowID }
         }
     }
-    var hint: String {
-        switch self {
-        case .prompts: return "Write, enhance, and copy prompts; browse the library."
-        case .notes: return "Capture notes, checklists, and reminders."
-        case .settings: return "Choose the on-device or API-key AI engine."
+
+    /// Hides every open surface window, remembering them for the next restore.
+    static func hideOpenSurfaces() {
+        let open = visibleSurfaces()
+        pendingRestore = open
+        for surface in open {
+            NSApp.windows.first { $0.identifier?.rawValue == surface.windowID }?.close()
         }
+    }
+
+    /// Reopens whatever Minimize last hid. Called when the bar is shown again.
+    static func restorePendingSurfaces() {
+        let toRestore = pendingRestore
+        pendingRestore = []
+        for surface in toRestore { open(surface) }
     }
 }
 
-struct ToolsRootView: View {
-    @State private var selection: ToolsSection = .prompts
+// MARK: - Settings surface (General + AI), shown as a floating window
 
+/// The Mac Settings window: native tabbed layout pairing General preferences
+/// with full AI configuration (on-device / API key), at parity with iOS.
+struct MacSettingsSurface: View {
     var body: some View {
-        NavigationSplitView {
-            List(ToolsSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.symbol)
-                    .tag(section)
-                    .accessibilityHint(section.hint)
-            }
-            .navigationSplitViewColumnWidth(min: 188, ideal: 208)
-            .navigationTitle("DoomCoder Tools")
-            .safeAreaInset(edge: .bottom) {
-                Text("Local to this Mac · not synced")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
-                    .accessibilityHidden(true)
-            }
-        } detail: {
-            Group {
-                switch selection {
-                case .prompts:   MacPromptsPane()
-                case .notes:     MacNotesPane()
-                case .settings:  MacToolsSettingsPane()
-                }
-            }
-            .frame(minWidth: 560, minHeight: 540)
+        TabView {
+            ConfigureSettingsPane(sleepManager: SleepManager.shared)
+                .tabItem { Label("General", systemImage: "gear") }
+            MacToolsSettingsPane()
+                .tabItem { Label("AI", systemImage: "sparkles") }
         }
-        .frame(minWidth: 860, minHeight: 580)
-        .background(WindowFocus())
+        .frame(minWidth: 640, minHeight: 580)
     }
 }
 
@@ -312,11 +328,9 @@ struct ToolsRootView: View {
 /// The store is the source of truth; the editor owns only transient state, so
 /// there are no stale-snapshot bugs. Writing and copying never require AI.
 struct MacPromptsPane: View {
-    private enum Mode: String, Hashable { case compose, library }
-
     @State private var store = MacPromptStore.shared
     @State private var coordinator = AIEngineCoordinator.shared
-    @State private var mode: Mode = .compose
+    @State private var showLibrary = false
 
     // Compose state.
     @State private var search = ""
@@ -328,7 +342,6 @@ struct MacPromptsPane: View {
     @State private var errorMessage: String?
     @State private var statusMessage: String?
     @State private var suppressSelectionHandling = false
-    @State private var showInspector = true
 
     // Library state.
     @State private var librarySearch = ""
@@ -346,82 +359,42 @@ struct MacPromptsPane: View {
     }
 
     var body: some View {
-        Group {
-            switch mode {
-            case .compose: composeLayout
-            case .library: MacPromptLibraryView(search: $librarySearch, onOpen: openInComposer)
-            }
+        NavigationSplitView {
+            historySidebar
+                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
+        } detail: {
+            composer
         }
         .navigationTitle("Prompts")
-        .navigationSubtitle(mode == .compose ? "Compose" : "Library")
-        .toolbar { toolbarContent }
+        .sheet(isPresented: $showLibrary) { librarySheet }
+        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
         .onDisappear {
             enhanceTask?.cancel()
             saveCurrentIfDirty(asID: currentID)
         }
     }
 
-    // MARK: Toolbar
+    // MARK: Library sheet
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Picker("View", selection: $mode.animation(.easeInOut(duration: 0.18))) {
-                Text("Compose").tag(Mode.compose)
-                Text("Library").tag(Mode.library)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
-            .accessibilityLabel("Prompts view")
-        }
-
-        if mode == .compose {
-            ToolbarItemGroup {
-                Button { newDraft() } label: { Label("New", systemImage: "square.and.pencil") }
-                    .help("New draft (⌘N)")
-                    .keyboardShortcut("n", modifiers: .command)
-
-                Button { enhance() } label: { Label("Enhance", systemImage: "sparkles") }
-                    .help("Rewrite the draft with AI")
-                    .disabled(!hasContent || isEnhancing)
-
-                Button { copyDraft() } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    .help("Copy draft (⇧⌘C)")
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-                    .disabled(!hasContent)
-
-                Button { saveDraft() } label: {
-                    Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
+    /// The curated library, presented as a panel over the composer. Picking a
+    /// prompt loads it into the editor and dismisses — mirrors the iOS flow.
+    private var librarySheet: some View {
+        NavigationStack {
+            MacPromptLibraryView(search: $librarySearch, onOpen: openInComposer)
+                .navigationTitle("Prompt Library")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showLibrary = false }
+                    }
                 }
-                .help("Save draft (⌘S)")
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!hasContent)
-
-                Spacer()
-
-                Button { showInspector.toggle() } label: {
-                    Label("Inspector", systemImage: "sidebar.trailing")
-                }
-                .help("Show or hide the inspector")
-            }
         }
+        .frame(minWidth: 560, minHeight: 520)
     }
 
-    // MARK: Compose layout
+    // MARK: History sidebar (saved drafts)
 
-    private var composeLayout: some View {
-        HSplitView {
-            draftsSidebar
-                .frame(minWidth: 230, idealWidth: 270)
-            editor
-                .frame(minWidth: 360)
-        }
-        .inspector(isPresented: $showInspector) { inspector.inspectorColumnWidth(min: 240, ideal: 280, max: 360) }
-        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
-    }
-
-    private var draftsSidebar: some View {
-        VStack(spacing: 0) {
+    private var historySidebar: some View {
+        Group {
             if filteredDrafts.isEmpty {
                 ContentUnavailableView(
                     search.isEmpty ? "No saved drafts" : "No matches",
@@ -444,19 +417,42 @@ struct MacPromptsPane: View {
                         }
                     }
                 }
-                .listStyle(.inset)
+                .listStyle(.sidebar)
             }
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search drafts")
+        // Primary actions live as proper buttons (not a cramped toolbar): a
+        // pinned bottom bar, matching the friendly iOS layout.
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 8) {
+                Button { newDraft() } label: {
+                    Label("New", systemImage: "square.and.pencil")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button { showLibrary = true } label: {
+                    Label("Library", systemImage: "books.vertical")
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+
+                Spacer()
+            }
+            .controlSize(.large)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
     }
 
-    private var editor: some View {
-        VStack(alignment: .leading, spacing: 0) {
+    // MARK: Composer (editor + action buttons, iOS-style)
+
+    private var composer: some View {
+        VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 if draft.isEmpty {
                     Text("Describe what you want your AI coding agent to do…")
                         .foregroundStyle(.secondary)
-                        .padding(.top, 12).padding(.leading, 8)
+                        .padding(.top, 14).padding(.leading, 10)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -464,65 +460,76 @@ struct MacPromptsPane: View {
                     .font(.body)
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
-                    .padding(6)
+                    .padding(8)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityLabel("Prompt draft")
+
+            Divider()
+            actionBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.background)
     }
 
-    // MARK: Inspector
+    /// Big, labeled action buttons in the body — the friendly iOS layout rather
+    /// than icon buttons crammed into the window toolbar.
+    private var actionBar: some View {
+        VStack(spacing: 10) {
+            Button { enhance() } label: {
+                Label(isEnhancing ? "Enhancing…" : (preEnhance == nil ? "Enhance with AI" : "Enhance again"),
+                      systemImage: "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(!hasContent || isEnhancing)
 
-    private var inspector: some View {
-        Form {
-            Section("AI") {
-                LabeledContent("Engine") { Text(coordinator.selection.displayName) }
-                if isEnhancing {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Enhancing…").foregroundStyle(.secondary)
-                    }
+            HStack(spacing: 10) {
+                Button { copyDraft() } label: {
+                    Label("Copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
                 }
-                Button { enhance() } label: {
-                    Label(preEnhance == nil ? "Enhance with AI" : "Enhance again", systemImage: "sparkles")
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(!hasContent)
+
+                Button { saveDraft() } label: {
+                    Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
+                        .frame(maxWidth: .infinity)
                 }
-                .disabled(!hasContent || isEnhancing)
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!hasContent)
 
                 if preEnhance != nil {
                     Button { revertEnhance() } label: {
-                        Label("Undo enhance", systemImage: "arrow.uturn.backward")
+                        Label("Undo", systemImage: "arrow.uturn.backward").frame(maxWidth: .infinity)
                     }
                 }
             }
+            .controlSize(.large)
 
-            Section("Draft") {
-                LabeledContent("Characters") { Text("\(trimmed.count)") }
-                LabeledContent("Status") {
-                    Text(currentID == nil ? "Unsaved" : "Saved")
-                        .foregroundStyle(currentID == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.green))
-                }
-                if currentID != nil {
-                    Button(role: .destructive) {
-                        if let id = currentID, let p = store.prompts.first(where: { $0.id == id }) { delete(p) }
-                    } label: { Label("Delete draft", systemImage: "trash") }
-                }
-            }
-
-            Section {
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange)
-                } else if let statusMessage {
-                    Label(statusMessage, systemImage: "checkmark.circle.fill")
-                        .font(.caption).foregroundStyle(.green)
-                } else {
-                    Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Writing and copying never require AI — set up AI in Settings.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
+            footerLine
         }
-        .formStyle(.grouped)
+        .padding(12)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private var footerLine: some View {
+        HStack(spacing: 6) {
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else if let statusMessage {
+                Label(statusMessage, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Writing and copying never require AI — set up AI in Settings.")
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Library bridge
@@ -533,7 +540,7 @@ struct MacPromptsPane: View {
         currentID = nil
         draft = prompt.body
         preEnhance = nil; errorMessage = nil; statusMessage = nil
-        withAnimation(.easeInOut(duration: 0.18)) { mode = .compose }
+        showLibrary = false
         editorFocused = true
     }
 
@@ -709,7 +716,7 @@ private struct MacPromptLibraryView: View {
             }
         }
         .listStyle(.inset)
-        .searchable(text: $search, placement: .sidebar, prompt: "Search prompts")
+        .searchable(text: $search, prompt: "Search prompts")
         .overlay(alignment: .bottom) {
             if let flashMessage {
                 Label(flashMessage, systemImage: "checkmark.circle.fill")
@@ -773,7 +780,8 @@ struct MacNotesPane: View {
     @State private var store = MacNotesStore.shared
     @State private var search = ""
     @State private var selectedID: UUID?
-    @State private var showInspector = true
+    // Inspector hidden by default; revealed via the toolbar or when creating a note.
+    @State private var showInspector = false
 
     private var filtered: [Note] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -786,23 +794,43 @@ struct MacNotesPane: View {
     private var selectedNote: Note? { selectedID.flatMap { store.note(id: $0) } }
 
     var body: some View {
-        HSplitView {
-            list.frame(minWidth: 240, idealWidth: 280)
-            detail.frame(minWidth: 360)
-        }
-        .inspector(isPresented: $showInspector) {
-            Group {
-                if let note = selectedNote {
-                    MacNoteInspector(note: note, store: store).id(note.id)
-                } else {
-                    ContentUnavailableView("No note selected", systemImage: "sidebar.trailing")
+        NavigationSplitView {
+            notesSidebar
+                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
+        } detail: {
+            noteDetail
+                .inspector(isPresented: $showInspector) {
+                    Group {
+                        if let note = selectedNote {
+                            MacNoteInspector(note: note, store: store).id(note.id)
+                        } else {
+                            ContentUnavailableView("No note selected", systemImage: "sidebar.trailing")
+                        }
+                    }
+                    .inspectorColumnWidth(min: 260, ideal: 300, max: 360)
                 }
-            }
-            .inspectorColumnWidth(min: 260, ideal: 300, max: 360)
         }
         .navigationTitle("Notes")
-        .toolbar { toolbarContent }
         .onDisappear { store.pruneEmpty() }
+    }
+
+    // MARK: History sidebar (saved notes)
+
+    private var notesSidebar: some View {
+        list
+            .safeAreaInset(edge: .bottom) {
+                HStack {
+                    Button { create() } label: {
+                        Label("New Note", systemImage: "square.and.pencil")
+                    }
+                    .keyboardShortcut("n", modifiers: .command)
+                    Spacer()
+                }
+                .controlSize(.large)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
     }
 
     private var list: some View {
@@ -825,16 +853,22 @@ struct MacNotesPane: View {
                             }
                     }
                 }
-                .listStyle(.inset)
+                .listStyle(.sidebar)
             }
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search notes")
     }
 
+    // MARK: Note detail (editor + body action buttons)
+
     @ViewBuilder
-    private var detail: some View {
+    private var noteDetail: some View {
         if let id = selectedID, store.note(id: id) != nil {
-            MacNoteEditor(noteID: id, store: store).id(id)
+            VStack(spacing: 0) {
+                MacNoteEditor(noteID: id, store: store).id(id)
+                Divider()
+                notesActionBar
+            }
         } else {
             ContentUnavailableView {
                 Label("Select a note", systemImage: "note.text")
@@ -847,43 +881,44 @@ struct MacNotesPane: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            Button { create() } label: { Label("New", systemImage: "square.and.pencil") }
-                .help("New note (⌘N)")
-                .keyboardShortcut("n", modifiers: .command)
-
-            if let note = selectedNote {
+    /// Labeled action buttons in the body (not a cramped toolbar), iOS-style.
+    @ViewBuilder
+    private var notesActionBar: some View {
+        if let note = selectedNote {
+            let empty = note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            HStack(spacing: 10) {
                 Button { store.togglePin(note.id) } label: {
                     Label(note.isPinned ? "Unpin" : "Pin",
                           systemImage: note.isPinned ? "pin.slash" : "pin")
                 }
-                .help(note.isPinned ? "Unpin note" : "Pin note")
+                Button { MacClipboard.copy(note.body) } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .disabled(empty)
+                Button { turnIntoPrompt(note) } label: {
+                    Label("To Prompt", systemImage: "text.alignleft")
+                }
+                .disabled(empty)
+                Button(role: .destructive) { delete(note.id) } label: {
+                    Label("Delete", systemImage: "trash")
+                }
 
-                Button { MacClipboard.copy(note.body) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    .help("Copy note text")
-                    .disabled(note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Spacer()
 
-                Button { turnIntoPrompt(note) } label: { Label("To Prompt", systemImage: "text.alignleft") }
-                    .help("Turn this note into a prompt draft")
-                    .disabled(note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button(role: .destructive) { delete(note.id) } label: { Label("Delete", systemImage: "trash") }
-                    .help("Delete note")
+                Button { showInspector.toggle() } label: {
+                    Label("Details", systemImage: "sidebar.trailing")
+                }
+                .help("Reminder, pin, and metadata")
             }
-
-            Spacer()
-
-            Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
-                .help("Show or hide the inspector")
+            .controlSize(.large)
+            .padding(12)
+            .background(.bar)
         }
     }
 
     private func create() {
         let note = store.newNote()
         selectedID = note.id
-        showInspector = true
     }
 
     private func delete(_ id: UUID) {

@@ -17,6 +17,11 @@ final class NotesStore {
         notes = JSONFileStore.load([Note].self, from: fileName) ?? []
     }
 
+    /// Re-reads notes from disk (drives pull-to-refresh).
+    func reload() {
+        notes = JSONFileStore.load([Note].self, from: fileName) ?? []
+    }
+
     func filtered(search: String) -> [Note] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let base: [Note]

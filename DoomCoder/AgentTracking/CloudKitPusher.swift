@@ -131,6 +131,28 @@ final class CloudKitPusher {
         Task { try? await engine.sendChanges() }
     }
 
+    private var lastTouchAt: Date = .distantPast
+
+    /// Re-stamps `MacStatus.lastSeen` whenever we have proof the Mac is actively
+    /// reaching CloudKit (a successful fetch / poll / command-apply). This keeps
+    /// the iOS "last seen" honest: the "not reachable" banner used to fire purely
+    /// off the 60s heartbeat, so a throttled status write made iOS show the Mac
+    /// as offline even while it was applying commands. Debounced to one write
+    /// per 25s unless forced.
+    ///
+    /// IMPORTANT: this only *queues* a pending record-zone change (the same
+    /// thing `publishMacStatus` does). It must NOT call `kickEngine()` /
+    /// `sendChanges()`, because `touchLastSeen` runs from inside the
+    /// `CKSyncEngine` fetch delegate callback — awaiting back into the engine
+    /// from a delegate callback is a fatal CloudKit misuse. `automaticallySync`
+    /// plus the 30s safety timer flush the queued change for us.
+    func touchLastSeen(force: Bool = false) {
+        let now = Date()
+        if !force, now.timeIntervalSince(lastTouchAt) < 25 { return }
+        lastTouchAt = now
+        publishMacStatus()
+    }
+
     private func setupSyncEngine() async {
         // Lesson #3: re-entry guard
         guard !setupInProgress, !didSetup else { return }
