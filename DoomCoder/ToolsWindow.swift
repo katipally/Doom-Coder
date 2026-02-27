@@ -373,6 +373,8 @@ struct MacPromptsPane: View {
 
     private var trimmedInput: String { input.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool { !trimmedInput.isEmpty && !isGenerating }
+    /// True when the bar is completely idle: empty, unfocused, not generating.
+    private var isIdle: Bool { input.isEmpty && !inputFocused && !isGenerating }
 
     var body: some View {
         NavigationSplitView {
@@ -652,6 +654,13 @@ struct MacPromptsPane: View {
             // Fixed corner radius — stays a consistent rounded rectangle as the
             // field grows, never distorting into a more circular capsule shape.
             .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            // Apple Intelligence-style rainbow aurora glow while the bar is idle.
+            .overlay {
+                RainbowIdleGlow(cornerRadius: 20)
+                    .opacity(isIdle ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.5), value: isIdle)
+                    .allowsHitTesting(false)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -1112,6 +1121,54 @@ private struct MacPromptLibraryView: View {
         Task {
             try? await Task.sleep(for: .seconds(2))
             await MainActor.run { withAnimation { if flashMessage?.contains(prompt.title) == true { flashMessage = nil } } }
+        }
+    }
+}
+
+// MARK: - Rainbow idle glow
+
+/// Apple Intelligence-style rotating rainbow aurora rendered on the input bar
+/// border when the bar is idle (empty + unfocused). Purely decorative — no
+/// interaction. Respects the system Reduce Motion accessibility setting.
+private struct RainbowIdleGlow: View {
+    let cornerRadius: CGFloat
+    @State private var angle: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Apple Intelligence aurora palette — purple → blue → cyan → teal →
+    // green → yellow → orange → pink → purple (loops cleanly).
+    private let colors: [Color] = [
+        Color(hue: 0.75, saturation: 0.90, brightness: 1.0),
+        Color(hue: 0.63, saturation: 0.90, brightness: 1.0),
+        Color(hue: 0.53, saturation: 0.90, brightness: 1.0),
+        Color(hue: 0.46, saturation: 0.80, brightness: 1.0),
+        Color(hue: 0.36, saturation: 0.85, brightness: 1.0),
+        Color(hue: 0.15, saturation: 0.95, brightness: 1.0),
+        Color(hue: 0.08, saturation: 0.95, brightness: 1.0),
+        Color(hue: 0.95, saturation: 0.90, brightness: 1.0),
+        Color(hue: 0.75, saturation: 0.90, brightness: 1.0),
+    ]
+
+    var body: some View {
+        let gradient = AngularGradient(
+            colors: colors, center: .center, angle: .degrees(angle)
+        )
+        ZStack {
+            // Soft outer bloom
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(gradient, lineWidth: 5)
+                .blur(radius: 9)
+                .opacity(0.65)
+            // Crisp inner ring
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(gradient, lineWidth: 1.5)
+                .opacity(0.9)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 4.5).repeatForever(autoreverses: false)) {
+                angle = 360
+            }
         }
     }
 }
