@@ -4,7 +4,6 @@ import Foundation
 // Channels: macOS notifications, ntfy. Each can be toggled globally and overridden per-agent.
 struct ChannelStore {
     static let defaultsKey = "doomcoder.channels.v2"
-    static let prefsKey = "doomcoder.notification.prefs.v1"
 
     struct ChannelConfig: Codable, Sendable, Equatable {
         var macNotification: Bool = true
@@ -44,32 +43,6 @@ struct ChannelStore {
         }
     }
 
-    /// Which event phases should trigger a push notification.
-    struct NotificationPrefs: Codable, Sendable, Equatable {
-        var sessionStart: Bool = false
-        var sessionEnd: Bool = true
-        var error: Bool = true
-        var permissionNeeded: Bool = true
-        var agentResponse: Bool = false
-        var subagentStart: Bool = false
-        var subagentEnd: Bool = false
-        var toolUse: Bool = false
-
-        func shouldNotify(phase: String) -> Bool {
-            switch phase {
-            case "sessionStart":      return sessionStart
-            case "sessionEnd":        return sessionEnd
-            case "error", "toolError": return error
-            case "permissionNeeded":  return permissionNeeded
-            case "agentResponse":     return agentResponse
-            // "Sub-agent activity" toggle controls both start and end phases.
-            case "subagentStart", "subagentEnd": return subagentStart
-            case "toolStart", "toolEnd": return toolUse
-            default:                  return false
-            }
-        }
-    }
-
     struct Store: Codable, Sendable {
         var global: ChannelConfig = ChannelConfig()
         var perAgent: [String: ChannelConfig] = [:]
@@ -88,10 +61,12 @@ struct ChannelStore {
         }
     }
 
-    /// Returns effective channels for an agent (per-agent override if set, else global).
+    /// Effective channels for an agent. Per-agent overrides were removed — the
+    /// global mac + iPhone setting now applies to every agent. The `perAgent`
+    /// field is retained in the Codable model only for backward-compatible
+    /// decode of pre-existing JSON (cleared by `migrateClearPerAgentOverridesIfNeeded`).
     static func effectiveChannels(for agent: TrackedAgent) -> ChannelConfig {
-        let store = load()
-        return store.perAgent[agent.rawValue] ?? store.global
+        load().global
     }
 
     static func setGlobal(_ config: ChannelConfig) {
@@ -100,52 +75,18 @@ struct ChannelStore {
         save(store)
     }
 
-    static func setPerAgent(_ agent: TrackedAgent, config: ChannelConfig?) {
-        var store = load()
-        if let config {
-            store.perAgent[agent.rawValue] = config
-        } else {
-            store.perAgent.removeValue(forKey: agent.rawValue)
-        }
-        save(store)
-    }
-
-    static func hasOverride(for agent: TrackedAgent) -> Bool {
-        load().perAgent[agent.rawValue] != nil
-    }
-
-    static func clearOverride(for agent: TrackedAgent) {
-        setPerAgent(agent, config: nil)
-    }
-
-    // MARK: - Notification preferences
-
-    /// Bumped when the default allowlist changes. Setting this flag to a new
-    /// value on launch overwrites older saved prefs so users pick up the new
-    /// curated defaults. Current defaults: 4-phase — sessionStart, sessionEnd,
-    /// error, permissionNeeded. agentResponse is intentionally OFF to prevent
-    /// notification spam from Claude's frequent Notification hook events.
-    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v5"
-
-    /// Run once at launch. If this build's migration flag hasn't been set,
-    /// overwrite saved prefs with the curated defaults and record the flag.
-    static func migratePrefsIfNeeded() {
+    /// One-time cleanup of legacy per-agent channel overrides. Safe to call on
+    /// every launch; it no-ops after the first run.
+    static func migrateClearPerAgentOverridesIfNeeded() {
+        let flag = "doomcoder.channels.perAgentOverrides.cleared.v1"
         let ud = UserDefaults.standard
-        guard !ud.bool(forKey: prefsMigrationKey) else { return }
-        savePrefs(NotificationPrefs())
-        ud.set(true, forKey: prefsMigrationKey)
-    }
-
-    static func loadPrefs() -> NotificationPrefs {
-        guard let data = UserDefaults.standard.data(forKey: prefsKey),
-              let decoded = try? JSONDecoder().decode(NotificationPrefs.self, from: data)
-        else { return NotificationPrefs() }
-        return decoded
-    }
-
-    static func savePrefs(_ prefs: NotificationPrefs) {
-        if let data = try? JSONEncoder().encode(prefs) {
-            UserDefaults.standard.set(data, forKey: prefsKey)
+        guard !ud.bool(forKey: flag) else { return }
+        var store = load()
+        if !store.perAgent.isEmpty {
+            store.perAgent = [:]
+            save(store)
         }
+        ud.set(true, forKey: flag)
     }
+
 }

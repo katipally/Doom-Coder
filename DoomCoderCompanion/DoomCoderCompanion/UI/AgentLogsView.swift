@@ -230,6 +230,10 @@ struct PhasePill: View {
         case .subagentStart: return "Sub-agent"
         case .subagentEnd: return "Sub-end"
         case .error: return "Error"
+        case .fileEdit: return "Edit"
+        case .compaction: return "Compact"
+        case .thinking: return "Thinking"
+        case .housekeeping: return "Housekeeping"
         case .other: return "Other"
         }
     }

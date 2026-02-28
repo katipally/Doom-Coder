@@ -32,6 +32,9 @@
 		DC0000000000002000000031 /* WhatsNewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000031 /* WhatsNewSheet.swift */; };
 		DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000032 /* AgentInstallerV2.swift */; };
 		DC0000000000002000000033 /* ChannelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000033 /* ChannelStore.swift */; };
+		DC0000000000002000000201 /* AgentNotificationPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* AgentNotificationPrefs.swift */; };
+		DC0000000000002000000202 /* AgentNotificationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* AgentNotificationCatalog.swift */; };
+		DC0000000000002000000203 /* NotifyAboutCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000203 /* NotifyAboutCard.swift */; };
 		DC0000000000002000000034 /* AgentIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000034 /* AgentIconProvider.swift */; };
 		DC0000000000002000000122 /* AgentIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000122 /* AgentIconView.swift */; };
 		DC0000000000002000000035 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000035 /* DeepLink.swift */; };
@@ -58,6 +61,7 @@
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
 		DC0000000000002000000120 /* AgentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000120 /* AgentCapabilities.swift */; };
 		DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000121 /* CopilotPermissionsReader.swift */; };
+		DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000701 /* ApprovalArbiter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +92,9 @@
 		DC0000000000001000000031 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
 		DC0000000000001000000032 /* AgentInstallerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentInstallerV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000033 /* ChannelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelStore.swift; sourceTree = "<group>"; };
+		DC0000000000001000000201 /* AgentNotificationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationPrefs.swift; sourceTree = "<group>"; };
+		DC0000000000001000000202 /* AgentNotificationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationCatalog.swift; sourceTree = "<group>"; };
+		DC0000000000001000000203 /* NotifyAboutCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifyAboutCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000034 /* AgentIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconProvider.swift; sourceTree = "<group>"; };
 		DC0000000000001000000122 /* AgentIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000035 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
@@ -114,6 +121,7 @@
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000120 /* AgentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCapabilities.swift; sourceTree = "<group>"; };
 		DC0000000000001000000121 /* CopilotPermissionsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotPermissionsReader.swift; sourceTree = "<group>"; };
+		DC0000000000001000000701 /* ApprovalArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalArbiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -186,6 +194,9 @@
 				DC0000000000001000000030 /* TrackAgentsPopover.swift */,
 				DC0000000000001000000031 /* WhatsNewSheet.swift */,
 				DC0000000000001000000033 /* ChannelStore.swift */,
+				DC0000000000001000000201 /* AgentNotificationPrefs.swift */,
+				DC0000000000001000000202 /* AgentNotificationCatalog.swift */,
+				DC0000000000001000000203 /* NotifyAboutCard.swift */,
 				DC0000000000001000000034 /* AgentIconProvider.swift */,
 				DC0000000000001000000122 /* AgentIconView.swift */,
 				DC0000000000001000000035 /* DeepLink.swift */,
@@ -208,6 +219,7 @@
 				AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */,
 				DC0000000000001000000120 /* AgentCapabilities.swift */,
 				DC0000000000001000000121 /* CopilotPermissionsReader.swift */,
+				DC0000000000001000000701 /* ApprovalArbiter.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -334,6 +346,9 @@
 				DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */,
 				DC0000000000002000000031 /* WhatsNewSheet.swift in Sources */,
 				DC0000000000002000000033 /* ChannelStore.swift in Sources */,
+				DC0000000000002000000201 /* AgentNotificationPrefs.swift in Sources */,
+				DC0000000000002000000202 /* AgentNotificationCatalog.swift in Sources */,
+				DC0000000000002000000203 /* NotifyAboutCard.swift in Sources */,
 				DC0000000000002000000034 /* AgentIconProvider.swift in Sources */,
 				DC0000000000002000000122 /* AgentIconView.swift in Sources */,
 				DC0000000000002000000035 /* DeepLink.swift in Sources */,
@@ -361,6 +376,7 @@
 				581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */,
 				DC0000000000002000000120 /* AgentCapabilities.swift in Sources */,
 				DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */,
+				DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

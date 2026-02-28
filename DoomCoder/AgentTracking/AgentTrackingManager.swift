@@ -118,6 +118,7 @@ final class AgentTrackingManager {
             case .subagentEnd:
                 subagentCount = max(0, subagentCount - 1)
             case .sessionStart, .agentResponse, .userPrompt,
+                 .fileEdit, .compaction, .thinking, .housekeeping,
                  .other:
                 break
             }
@@ -131,6 +132,12 @@ final class AgentTrackingManager {
 
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
+
+    /// Monotonic counter stamped on every ingested event. Used by
+    /// `ApprovalArbiter` for "arrived after the permission request" reasoning
+    /// (hook timestamps are cross-process and skewed, so they can't be trusted
+    /// for ordering).
+    private var ingestSeq: Int = 0
 
     private init() {
         // Periodic eviction sweep: drop sessions whose updatedAt is older than evictionDelay.
@@ -149,6 +156,8 @@ final class AgentTrackingManager {
         s.hasEnded = true
         s.updatedAt = Date()
         sessions[sessionKey] = s
+        // Process is gone — drop any deferred approval alert for it.
+        ApprovalArbiter.shared.clear(sessionKey: sessionKey)
         NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
         scheduleTerminalRevert(sessionKey: sessionKey)
     }
@@ -168,6 +177,7 @@ final class AgentTrackingManager {
             }
             sessions.removeValue(forKey: key)
             revertTokens.removeValue(forKey: key)
+            ApprovalArbiter.shared.clear(sessionKey: key)
             changed = true
         }
         if changed { NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil) }
@@ -268,14 +278,38 @@ final class AgentTrackingManager {
         let isQuitInitiatedEnd = normalized.phase == .sessionEnd
             && !normalized.agent.isIDEAgent
             && !PIDLiveness.isAlive(pid_t(env.pid))
-        let shouldNotify = NotificationPolicy.isNotifiable(phase: normalized.phase)
+        let shouldNotify = AgentNotificationStore.prefs(for: normalized.agent).shouldNotify(normalized)
             && !isQuitInitiatedEnd
         logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
+
+        // Monotonic sequence for arbiter "later-than" correlation.
+        ingestSeq += 1
+        let seq = ingestSeq
+
+        // Let the arbiter cancel any deferred approval alert that turns out to
+        // have been auto-approved (a tool ran / the session ended after the
+        // request). No-op when nothing is pending for this session.
+        ApprovalArbiter.shared.noteEvidence(sessionKey: sessionKey, seq: seq, phase: normalized.phase)
+
         if shouldNotify {
-            NotificationDispatcher.shared.dispatch(.init(
+            let dispatchEvent = NotificationDispatcher.Event(
                 sessionKey: sessionKey, agent: normalized.agent,
                 event: normalized.rawEvent, phase: normalized.phase
-            ))
+            )
+            // Pre-decision agents fire permission hooks BEFORE their own
+            // auto-approve decision runs, so defer the alert and let the
+            // arbiter cancel it if the action turns out to run on its own.
+            // Reliable agents (and all non-permission events) dispatch instantly.
+            if normalized.phase == .permissionNeeded,
+               normalized.agent.permissionHookReliability == .preDecision {
+                ApprovalArbiter.shared.scheduleDeferred(
+                    sessionKey: sessionKey, agent: normalized.agent, seq: seq
+                ) {
+                    NotificationDispatcher.shared.dispatch(dispatchEvent)
+                }
+            } else {
+                NotificationDispatcher.shared.dispatch(dispatchEvent)
+            }
         }
 
         // Register PID watcher for instant crash/exit detection (live sessions only).

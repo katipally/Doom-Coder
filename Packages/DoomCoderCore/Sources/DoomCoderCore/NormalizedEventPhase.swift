@@ -15,6 +15,14 @@ public enum NormalizedEventPhase: String, Codable, Sendable, CaseIterable {
     case subagentEnd
     case error
     case other
+    // Opt-in coverage phases (default OFF in the gate). Added so events that
+    // were previously dropped to `.other` can become notifiable. New cases
+    // MUST be mirrored byte-identically in the Mac-side enum
+    // (DoomCoder/AgentTracking/AgentEventNormalizer.swift).
+    case fileEdit
+    case compaction
+    case thinking
+    case housekeeping
 
     /// iOS interruption-level mapping (used by NSE to set
     /// `UNNotificationContent.interruptionLevel`).
@@ -25,7 +33,8 @@ public enum NormalizedEventPhase: String, Codable, Sendable, CaseIterable {
         case .sessionEnd:
             return .active
         case .sessionStart, .subagentStart, .subagentEnd,
-             .toolStart, .toolEnd, .agentResponse, .userPrompt, .other:
+             .toolStart, .toolEnd, .agentResponse, .userPrompt, .other,
+             .fileEdit, .compaction, .thinking, .housekeeping:
             return .passive
         }
     }

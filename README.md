@@ -110,7 +110,13 @@ Events are still recorded in the local log even when an agent is paused or disab
 
 ---
 
-## Notification channels
+## Connections
+
+The **Connections** tab (Configure window) is where notifications get delivered and where you see the devices connected to this Mac.
+
+### Connected devices
+
+Each iPhone or iPad running the DoomCoder Companion publishes a periodic presence heartbeat to your private iCloud container. The Mac shows each device as **Connected** when seen within the last 10 minutes, or **Last seen X ago** otherwise — symmetric to how the companion shows your Mac's status. When nothing has checked in, a **Set up iPhone or iPad** button links to the App Store.
 
 ### macOS notifications
 
@@ -122,21 +128,23 @@ Requires the free **DoomCoder Companion** iOS app. Notifications mirror to your 
 
 ### Notification event preferences
 
-Choose exactly which events trigger a notification under **Configure > Notification Channels > Notify me when...**:
+Each agent's detail pane has a **"What you'll be notified about"** card. Tap **Edit** to choose exactly which events alert you, grouped for clarity:
 
-| Event | Default |
-|---|---|
-| Session completed | On |
-| Errors | On |
-| Permission requests | On |
-| Agent responses | Off |
-| Session started | Off |
-| Sub-agent activity | Off |
-| Tool usage | Off |
+| Group | Categories | Default |
+|---|---|---|
+| **Important** | Completed, Failed, Waiting for approval, Waiting for input | On |
+| **Activity** | Session started, Tool calls, Sub-agent activity, File edits, Thinking, Prompt sent | Off |
+| **Housekeeping** | Context compaction, Background tasks | Off |
 
-### Per-agent channel overrides
+Only the categories an agent actually emits are shown, so you never see a toggle that can't fire. Permission/approval categories expand to a per-tool palette so you can, for example, be alerted before shell commands but not before file reads.
 
-Each agent can override the global channel settings. For example, send Claude Code completions to your iPhone but skip VS Code Copilot. Enable **Use custom channels** in the agent's detail pane.
+### No more auto-accept spam
+
+Copilot CLI, Cursor, and Windsurf emit a *permission* hook **before** their own allowlist decides to auto-approve an action — so a naive watcher would alert you for tools that were never actually blocked. DoomCoder waits a short **approval debounce window** (default 0.8s, adjustable 0.5-3s under **Configure > Settings**) for proof the tool ran; only genuinely-blocking requests produce an alert. Live status in the menu bar and Dynamic Island is unaffected and always instant. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately with no added latency.
+
+### Connections are global
+
+One global **mac + iPhone** channel setting applies to every agent. (Per-agent channel overrides were removed — they added complexity without clear benefit. Per-agent control now lives in the *categories* card above.)
 
 ---
 

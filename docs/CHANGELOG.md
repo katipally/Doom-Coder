@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added -- Hooks & notifications overhaul
+
+- **Full hook coverage.** Previously-dropped agent events are now notifiable categories: file edits, context compaction, agent thinking, prompt sent, and background/housekeeping tasks. Each is opt-in (default off) and only shown for agents that actually emit it.
+- **Approval debounce ("no more auto-accept spam").** Copilot CLI, Cursor, and Windsurf fire a permission hook *before* their own allowlist auto-approves. A new `ApprovalArbiter` defers the alert by a short window (default 0.8s, adjustable 0.5-3s in Settings) and cancels it if proof arrives that the tool actually ran. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) still alert instantly.
+- **Per-agent reliability policy** -- `PermissionHookReliability` classifies each agent as `reliable` (dispatch immediately) or `preDecision` (route through the arbiter).
+- **Approval debounce window** setting in Configure > Settings.
+
+### Changed -- Configure UI
+
+- Per-agent pane reordered into a clear **Setup -> Notify -> Advanced** flow.
+- "What you'll be notified about" card redesigned with **Important / Activity / Housekeeping** category groups and inline per-tool sub-options for permission categories.
+- Noisy approval kinds (Cursor shell/MCP, Windsurf MCP) now default on for new installs, since the arbiter suppresses auto-approved spam.
+- **"Notification Channels" renamed to "Connections"** and given real, symmetric device presence: each iPhone/iPad companion publishes a `CompanionStatus` heartbeat to iCloud, and the Mac shows each device as Connected / Last seen X ago (10-minute window), mirroring how the companion shows the Mac's status. A **Set up iPhone or iPad** CTA appears when none are connected.
+- **AI is now a section inside Settings** (the standalone "AI" sidebar tab was removed), and the Configure window's titlebar follows the selected section (Agents / Connections / Logs / Settings).
+- Sidebar agent rows no longer show the redundant per-agent health dot; the green "installed" seal is unchanged.
+- The **Advanced** disclosure in the agent pane is now a card-style, full-width interactive header (collapsed by default).
+
+### Removed
+
+- **Per-agent channel overrides.** Channels are now a single global mac + iPhone setting; a one-time migration clears any stored overrides. Per-agent control lives in the categories card instead.
+- Duplicate "DoomCoder for iPhone & iPad" banner in Settings (companion setup now lives only in the Connections tab).
+
+### Migration
+
+- Notification preferences now decode non-destructively (`decodeIfPresent ?? default`), so adding new categories preserves every existing user choice instead of resetting prefs.
+
+---
+
 ## [2.6.1] - 2026-05-31
 
 ### Fixed -- iOS App Store compliance

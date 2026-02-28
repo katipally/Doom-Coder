@@ -167,6 +167,11 @@ final class NotificationDispatcher {
         case .sessionEnd:                   return "\(name) · done"
         case .error, .toolError:            return "\(name) · failed"
         case .permissionNeeded:             return "\(name) · needs you"
+        case .fileEdit:                     return "\(name) · edited a file"
+        case .compaction:                   return "\(name) · compacting context"
+        case .thinking:                     return "\(name) · thinking"
+        case .housekeeping:                 return "\(name) · update"
+        case .userPrompt:                   return "\(name) · prompt sent"
         default:                            return name
         }
     }
@@ -205,6 +210,22 @@ final class NotificationDispatcher {
                 return "Waiting for your approval · \(tool)"
             }
             return "Waiting for your approval"
+
+        case .fileEdit:
+            if let tool = lastTool, !tool.isEmpty { return "Edited \(tool)" }
+            return cwdLabel.map { "Edited a file in \($0)" } ?? "Edited a file"
+
+        case .compaction:
+            return "Compacting the conversation context"
+
+        case .thinking:
+            return cwdLabel.map { "Thinking in \($0)" } ?? "Thinking through the next step"
+
+        case .housekeeping:
+            return cwdLabel.map { "Workspace update in \($0)" } ?? "Workspace update"
+
+        case .userPrompt:
+            return cwdLabel.map { "You sent a prompt in \($0)" } ?? "You sent a prompt"
 
         default:
             return ev.agent.displayName
