@@ -11,10 +11,10 @@
 		13080AA8AC50EB8EC7B7CE3F /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4038EC43DC5D6E9E65F27D /* DoomCoderCore */; };
 		1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */; };
 		21194123A25BC048EAA1FEF6 /* PromptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8522051EBB94D0FAC89D4D85 /* PromptStore.swift */; };
-		792ECF8B658A4A57A504DF38 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2659792A3B488A94954BDB /* ConversationStore.swift */; };
 		2203CEAF31C04E97C2F12EA6 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DEE8563E810CC992559FA8 /* Haptics.swift */; };
 		2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */; };
 		3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A67B01FA77C05717991E37 /* RootTabView.swift */; };
+		4AEDC090C422B825D22DAB9A /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C9DB6533B760A3ED679723 /* ConversationStore.swift */; };
 		4B93311EB1D4E57AD4EFFAE4 /* JSONFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED5A3BFB2B112F342D7F244 /* JSONFileStore.swift */; };
 		530E653C39D0A0103CDD6D9E /* AppGroupCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662F77F68847FCD3D1555C97 /* AppGroupCache.swift */; };
 		55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */; };
@@ -89,9 +89,9 @@
 		75D9CEB3C8428B662C6D8FDA /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		84F0362D4080511605EBD81F /* AgentIconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconFetcher.swift; sourceTree = "<group>"; };
 		8522051EBB94D0FAC89D4D85 /* PromptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptStore.swift; sourceTree = "<group>"; };
-		0C2659792A3B488A94954BDB /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		8F2D99D6FC3BBAEA7BBB4377 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		92946470387A0FC606BDBF2B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		97C9DB6533B760A3ED679723 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		989306766B1ED48EB7EF7A00 /* DemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoView.swift; sourceTree = "<group>"; };
 		9FB9C264096018D7F1530EB0 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		A001013B397C1A86AA65F66F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -221,11 +221,11 @@
 		AAC3F52D36D353A9A05B1384 /* Stores */ = {
 			isa = PBXGroup;
 			children = (
+				97C9DB6533B760A3ED679723 /* ConversationStore.swift */,
 				5ED5A3BFB2B112F342D7F244 /* JSONFileStore.swift */,
 				06502C320EF789295E113F9F /* NoteReminderScheduler.swift */,
 				0ACADDDFB3E8168E10965A22 /* NotesStore.swift */,
 				8522051EBB94D0FAC89D4D85 /* PromptStore.swift */,
-				0C2659792A3B488A94954BDB /* ConversationStore.swift */,
 			);
 			path = Stores;
 			sourceTree = "<group>";
@@ -417,6 +417,7 @@
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
 				2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */,
+				4AEDC090C422B825D22DAB9A /* ConversationStore.swift in Sources */,
 				8791789AFFA7ADEA3856FD3F /* DashboardView.swift in Sources */,
 				5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */,
 				BFFC28F060F2A7CCC2B4A6AC /* EmptyStateView.swift in Sources */,
@@ -429,7 +430,6 @@
 				82C002BB8A77FBCC3C1F21F1 /* NotesStore.swift in Sources */,
 				7FCDC44AB94F26BDBFC10638 /* NotesView.swift in Sources */,
 				21194123A25BC048EAA1FEF6 /* PromptStore.swift in Sources */,
-				792ECF8B658A4A57A504DF38 /* ConversationStore.swift in Sources */,
 				F6299C97BC5B1466FF4F60E0 /* PromptsView.swift in Sources */,
 				3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */,
 				AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */,
@@ -520,7 +520,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -535,7 +535,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.6.0;
+				MARKETING_VERSION = 2.6.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
@@ -602,7 +602,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -623,7 +623,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.6.0;
+				MARKETING_VERSION = 2.6.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
