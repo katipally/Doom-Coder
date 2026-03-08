@@ -21,6 +21,14 @@ Both are pushed with `git push --tags` (or as separate single-tag pushes).
 The user keeps an "exploratory work is local-only" rule, so push the tag
 only when you've explicitly decided to cut the release.
 
+```
+git tag v2.6.2
+git tag push origin v2.6.2
+
+git tag ios-v2.6.2
+git push origin ios-v2.6.2
+```
+
 ---
 
 ## macOS release (existing, unchanged)
