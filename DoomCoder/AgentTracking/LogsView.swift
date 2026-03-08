@@ -12,12 +12,15 @@ struct LogsView: View {
         case windsurf = "Windsurf"
         case codex = "Codex"
         case notifications = "🔔"
+        case sessions = "Sessions"
         var id: String { rawValue }
     }
 
     @State private var filter: Filter = .all
     @State private var events: [EventStore.Row] = []
     @State private var notifications: [EventStore.NotificationRow] = []
+    @State private var sessionHistory: [EventStore.SessionHistoryEntry] = []
+    @State private var selectedSession: EventStore.SessionHistoryEntry? = nil
     @State private var expandedID: Int64? = nil
     @State private var totalCount: Int = 0
     @State private var retentionDays: Int = EventStore.retentionDays
@@ -34,6 +37,8 @@ struct LogsView: View {
             Divider()
             if filter == .notifications {
                 notificationsList
+            } else if filter == .sessions {
+                sessionHistoryList
             } else {
                 eventsList
             }
@@ -206,6 +211,83 @@ struct LogsView: View {
         .padding(.vertical, 6)
     }
 
+    // MARK: - Session History List
+
+    private var sessionHistoryList: some View {
+        Group {
+            if sessionHistory.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.tertiary)
+                    Text("No session history yet")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Text("Completed agent sessions will appear here.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(sessionHistory) { entry in
+                    Button {
+                        selectedSession = entry
+                    } label: {
+                        HStack(spacing: 10) {
+                            agentBadge(entry.agent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(TrackedAgent(rawValue: entry.agent)?.displayName ?? entry.agent)
+                                        .font(.caption.weight(.semibold))
+                                    outcomeBadge(entry.outcome)
+                                }
+                                Text("\(durationString(entry.durationSeconds)) · \(entry.toolCount) tools · started \(entry.startedAt, style: .relative) ago")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(shortDate(entry.endedAt))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 2)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .sheet(item: $selectedSession) { entry in
+                    SessionDetailSheet(entry: entry)
+                }
+            }
+        }
+    }
+
+    private func outcomeBadge(_ outcome: String) -> some View {
+        let color: Color = outcome == "completed" ? .green : outcome == "failed" ? .red : .secondary
+        return Text(outcome)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color.opacity(0.12), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    private func durationString(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m \(s % 60)s" }
+        return "\(s / 3600)h \((s % 3600) / 60)m"
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MM/dd HH:mm"
+        return fmt.string(from: date)
+    }
+
     // MARK: - Footer
 
     private var footerBar: some View {
@@ -306,7 +388,7 @@ struct LogsView: View {
         case .copilot:       return TrackedAgent.copilotCLI.rawValue
         case .windsurf:      return TrackedAgent.windsurf.rawValue
         case .codex:         return TrackedAgent.codexCLI.rawValue
-        case .all, .notifications: return nil
+        case .all, .notifications, .sessions: return nil
         }
     }
 
@@ -314,6 +396,8 @@ struct LogsView: View {
         let key = agentKey(for: filter)
         if filter == .notifications {
             notifications = EventStore.shared.recentNotifications()
+        } else if filter == .sessions {
+            sessionHistory = EventStore.shared.recentSessionHistory(agent: nil)
         } else if let key {
             events = EventStore.shared.recent(agent: key)
         } else {
@@ -340,5 +424,183 @@ struct LogsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             try? csv.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+}
+
+// MARK: - Session detail sheet
+
+private struct SessionDetailSheet: View {
+    let entry: EventStore.SessionHistoryEntry
+    @Environment(\.dismiss) private var dismiss
+    @State private var sessionEvents: [EventStore.Row] = []
+    @State private var expandedEventID: Int64? = nil
+
+    private static let timeFmt: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
+    }()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(TrackedAgent(rawValue: entry.agent)?.displayName ?? entry.agent)
+                            .font(.headline)
+                        outcomePill(entry.outcome)
+                    }
+                    Text("\(Self.timeFmt.string(from: entry.startedAt)) – \(Self.timeFmt.string(from: entry.endedAt))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(summaryStat)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+
+            Divider()
+
+            // Event list
+            if sessionEvents.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "tray")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.tertiary)
+                    Text("No events recorded for this session")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        Text("Events (\(sessionEvents.count))")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                        Divider()
+                        ForEach(sessionEvents) { ev in
+                            eventRow(ev)
+                            Divider().opacity(0.5)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 520, minHeight: 420)
+        .onAppear {
+            sessionEvents = EventStore.shared.events(forSessionKey: entry.sessionKey)
+        }
+    }
+
+    @ViewBuilder
+    private func eventRow(_ ev: EventStore.Row) -> some View {
+        let isExpanded = expandedEventID == ev.id
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(Self.timeFmt.string(from: Date(timeIntervalSince1970: ev.ts)))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 58, alignment: .leading)
+                phaseIcon(ev.state)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ev.event)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                    if let tool = ev.tool {
+                        Text(tool)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if ev.payload != nil {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if ev.payload != nil {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        expandedEventID = isExpanded ? nil : ev.id
+                    }
+                }
+            }
+
+            if isExpanded, let payload = ev.payload {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(prettyJSON(payload) ?? payload)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                }
+                .background(Color.secondary.opacity(0.06))
+            }
+        }
+    }
+
+    private func phaseIcon(_ state: String?) -> some View {
+        let (sym, col): (String, Color) = {
+            switch state {
+            case "running", "toolStart":        return ("play.fill", .green)
+            case "toolEnd":                     return ("checkmark.circle", .secondary)
+            case "toolError", "error":          return ("exclamationmark.triangle", .red)
+            case "permissionNeeded":            return ("hand.raised", .orange)
+            case "sessionStart":                return ("circle", .accentColor)
+            case "sessionEnd", "completed":     return ("checkmark.circle.fill", .green)
+            case "agentResponse", "waitingInput": return ("ellipsis.circle", .yellow)
+            default:                            return ("circle.dotted", .secondary)
+            }
+        }()
+        return Image(systemName: sym)
+            .font(.caption2)
+            .foregroundStyle(col)
+            .frame(width: 14)
+            .accessibilityHidden(true)
+    }
+
+    private func outcomePill(_ outcome: String) -> some View {
+        let color: Color = outcome == "completed" ? .green : outcome == "failed" ? .red : .secondary
+        return Text(outcome)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color.opacity(0.12), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    private var summaryStat: String {
+        var parts: [String] = []
+        let s = Int(entry.durationSeconds)
+        if s < 60 { parts.append("\(s)s") }
+        else if s < 3600 { parts.append("\(s/60)m \(s%60)s") }
+        else { parts.append("\(s/3600)h \((s%3600)/60)m") }
+        if entry.toolCount > 0 { parts.append("\(entry.toolCount) tools") }
+        if entry.permissionCount > 0 { parts.append("\(entry.permissionCount) approvals") }
+        if entry.subagentCount > 0 { parts.append("\(entry.subagentCount) sub-agents") }
+        return parts.joined(separator: " · ")
+    }
+
+    private func prettyJSON(_ raw: String) -> String? {
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: .prettyPrinted)
+        else { return nil }
+        return String(data: pretty, encoding: .utf8)
     }
 }

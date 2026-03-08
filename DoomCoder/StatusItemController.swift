@@ -74,6 +74,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let liveCount = AgentTrackingManager.shared.liveSessions.count
         button.title = liveCount > 0 ? " \(liveCount)" : ""
+        // VoiceOver label: "DoomCoder — 2 agents active" or "DoomCoder — idle"
+        let countLabel = liveCount > 0
+            ? "\(liveCount) agent\(liveCount == 1 ? "" : "s") active"
+            : (master ? "idle" : "suspended")
+        button.toolTip = "DoomCoder — \(countLabel)"
+        button.setAccessibilityLabel("DoomCoder — \(countLabel)")
         // Gently dim the icon when master is off so it's distinguishable at a glance.
         button.alphaValue = master ? 1.0 : 0.55
     }

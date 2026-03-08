@@ -25,6 +25,7 @@ struct PanelRootView: View {
     @State private var measuredSize: CGSize = .zero
     @State private var appeared: Bool = false
     @State private var handleHovered: Bool = false
+    @State private var agentDetailExpanded: Bool = false
 
     // Wider panel to fit bento grid (two cards side by side).
     private let panelWidth: CGFloat = 480
@@ -80,6 +81,13 @@ struct PanelRootView: View {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(1))
                 withAnimation(DCAnim.bouncy) { appeared = true }
+            }
+            // Opening the panel is the moment the user is most likely watching
+            // for a fresh iOS→Mac command or status. Pull immediately instead of
+            // waiting up to a full safety-timer interval.
+            Task { @MainActor in
+                CloudKitPusher.shared.fetchNow()
+                CloudKitPusher.shared.publishMacStatus()
             }
         }
         .background(SizeReporter(size: $measuredSize))
@@ -261,11 +269,7 @@ struct PanelRootView: View {
                     .transition(.opacity)
 
                 case .auto:
-                    VStack(alignment: .leading, spacing: 6) {
-                        sectionLabel("SCREEN", help: "Keep screen on holds the display lit. Allow screen off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces burn-in.")
-                        ModeSegmentedControl(mode: $sleepManager.mode, isActive: sleepManager.isActive)
-                    }
-                    .transition(.opacity)
+                    EmptyView()
                 }
 
                 keepAwakeStatus
@@ -285,11 +289,37 @@ struct PanelRootView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else if sleepManager.keepAwakeMode == .auto {
             let n = sleepManager.activeAgentCount
-            statusPill(icon: n > 0 ? "sparkles" : "powersleep",
-                       text: n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s") working"
-                                   : "Waiting · sleeps when agents finish",
-                       tint: n > 0 ? .accentColor : .secondary)
+            if n > 0 {
+                // Agents are working: show only the count + expandable per-agent
+                // detail. No countdown while work is happening — staleness is
+                // handled silently and the only timer the user ever sees is the
+                // grace countdown below, once everything has finished.
+                VStack(alignment: .leading, spacing: 4) {
+                    DisclosureGroup(isExpanded: $agentDetailExpanded) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(sleepManager.autoStatusLines) { line in
+                                agentStatusRow(line)
+                            }
+                        }
+                        .padding(.top, 4)
+                    } label: {
+                        statusPill(icon: "sparkles",
+                                   text: "\(n) agent\(n == 1 ? "" : "s") working",
+                                   tint: .accentColor)
+                    }
+                    .disclosureGroupStyle(PillDisclosureStyle())
+                }
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if let graceEnd = sleepManager.autoGraceEndsAt, graceEnd > Date() {
+                // Agents finished: the single visible countdown before sleeping.
+                gracePill(endsAt: graceEnd)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else {
+                statusPill(icon: "powersleep",
+                           text: "Idle · sleeps when agents finish",
+                           tint: .secondary)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
         } else if let remaining = sleepManager.sessionTimerRemainingText {
             statusPill(icon: "timer", text: remaining, tint: .secondary)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -359,7 +389,10 @@ struct PanelRootView: View {
         case .on:
             return sleepManager.mode == .screenOff ? "On · display sleeps" : "On · display stays lit"
         case .auto:
-            return sleepManager.isActive ? "Auto · awake for agents" : "Auto · sleeps when idle"
+            let n = sleepManager.activeAgentCount
+            if n > 0 { return "Auto · \(n) agent\(n == 1 ? "" : "s") working" }
+            if sleepManager.autoGraceEndsAt != nil { return "Auto · releasing soon" }
+            return "Auto · sleeps when idle"
         }
     }
 
@@ -473,6 +506,29 @@ struct PanelRootView: View {
         }
     }
 
+    private func agentStatusRow(_ line: SleepManager.AutoAgentLine) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(line.state == "running" ? Color.green
+                      : line.state.hasPrefix("idle") ? Color.secondary.opacity(0.4)
+                      : Color.orange)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(line.agentDisplayName)
+                .font(.caption2.weight(.medium))
+            Spacer()
+            Text(line.state)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(line.agentType)
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Color.secondary.opacity(0.12), in: Capsule())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 9)
+    }
+
     private func statusPill(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.caption2)
@@ -484,6 +540,25 @@ struct PanelRootView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tint.opacity(0.12), in: Capsule())
+    }
+
+    /// Grace-period pill with a live SwiftUI countdown — updates every second
+    /// without a separate Timer because Text(timerInterval:) drives itself.
+    /// This is the ONE countdown the user ever sees in Auto mode.
+    private func gracePill(endsAt: Date) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "powersleep").font(.caption2)
+                .accessibilityHidden(true)
+            Text("Mac sleeps in ")
+                .font(.caption2)
+            Text(timerInterval: Date.now...endsAt, countsDown: true)
+                .font(.caption2.monospacedDigit())
+        }
+        .foregroundStyle(Color.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.12), in: Capsule())
     }
 
     @ViewBuilder
@@ -727,6 +802,37 @@ private struct SizeReporter: View {
             Color.clear
                 .onAppear { size = proxy.size }
                 .onChange(of: proxy.size) { _, newValue in size = newValue }
+        }
+    }
+}
+
+// MARK: - Pill disclosure style
+
+/// A DisclosureGroupStyle that renders the label at full width (like a pill)
+/// with a small chevron on the right, matching the panel's status-pill aesthetic.
+private struct PillDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(DCAnim.smooth) { configuration.isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 0) {
+                    configuration.label
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(configuration.isExpanded ? .degrees(90) : .zero)
+                        .animation(DCAnim.smooth, value: configuration.isExpanded)
+                        .padding(.trailing, 9)
+                        .accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if configuration.isExpanded {
+                configuration.content
+            }
         }
     }
 }

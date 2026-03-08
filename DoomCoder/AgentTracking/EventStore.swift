@@ -76,6 +76,23 @@ final class EventStore {
             );
             CREATE INDEX IF NOT EXISTS idx_notifications_ts ON notifications(ts);
         """)
+        // Session history: one row per completed session
+        exec("""
+            CREATE TABLE IF NOT EXISTS session_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              session_key TEXT NOT NULL,
+              agent TEXT NOT NULL,
+              started_at REAL NOT NULL,
+              ended_at REAL NOT NULL,
+              duration_seconds REAL NOT NULL,
+              outcome TEXT NOT NULL,
+              tool_count INTEGER NOT NULL DEFAULT 0,
+              permission_count INTEGER NOT NULL DEFAULT 0,
+              subagent_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_history_agent ON session_history(agent, ended_at);
+            CREATE INDEX IF NOT EXISTS idx_session_history_ts ON session_history(ended_at);
+        """)
         purgeOld()
     }
 
@@ -188,6 +205,18 @@ final class EventStore {
         return readRows(stmt)
     }
 
+    func events(forSessionKey key: String, limit: Int = 500) -> [Row] {
+        guard let db else { return [] }
+        let sql = "SELECT id,session_key,agent,event,tool,path,state,ts,payload FROM events WHERE session_key=? ORDER BY ts ASC LIMIT ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, key, -1, T)
+        sqlite3_bind_int(stmt, 2, Int32(limit))
+        return readRows(stmt)
+    }
+
     func count(agent: String? = nil) -> Int {
         guard let db else { return 0 }
         if let agent {
@@ -251,6 +280,86 @@ final class EventStore {
         return rows
     }
 
+    // MARK: - Session History Writes
+
+    struct SessionHistoryEntry: Identifiable, Sendable {
+        let id: Int64
+        let sessionKey: String
+        let agent: String
+        let startedAt: Date
+        let endedAt: Date
+        let durationSeconds: TimeInterval
+        let outcome: String   // "completed" | "failed" | "reverted"
+        let toolCount: Int
+        let permissionCount: Int
+        let subagentCount: Int
+    }
+
+    nonisolated func insertSessionHistory(sessionKey: String, agent: String,
+                                          startedAt: Date, endedAt: Date,
+                                          outcome: String, toolCount: Int,
+                                          permissionCount: Int, subagentCount: Int) {
+        let duration = endedAt.timeIntervalSince(startedAt)
+        let sql = """
+            INSERT INTO session_history(session_key,agent,started_at,ended_at,
+            duration_seconds,outcome,tool_count,permission_count,subagent_count)
+            VALUES(?,?,?,?,?,?,?,?,?);
+            """
+        insertQueue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, sessionKey, -1, T)
+            sqlite3_bind_text(stmt, 2, agent, -1, T)
+            sqlite3_bind_double(stmt, 3, startedAt.timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 4, endedAt.timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 5, max(0, duration))
+            sqlite3_bind_text(stmt, 6, outcome, -1, T)
+            sqlite3_bind_int(stmt, 7, Int32(toolCount))
+            sqlite3_bind_int(stmt, 8, Int32(permissionCount))
+            sqlite3_bind_int(stmt, 9, Int32(subagentCount))
+            _ = sqlite3_step(stmt)
+            // FIFO eviction: keep at most 500 rows
+            sqlite3_exec(db,
+                "DELETE FROM session_history WHERE id NOT IN (SELECT id FROM session_history ORDER BY id DESC LIMIT 500);",
+                nil, nil, nil)
+        }
+    }
+
+    // MARK: - Session History Reads
+
+    func recentSessionHistory(agent agentFilter: String? = nil, limit: Int = 100) -> [SessionHistoryEntry] {
+        guard let db else { return [] }
+        let sql = agentFilter != nil
+            ? "SELECT id,session_key,agent,started_at,ended_at,duration_seconds,outcome,tool_count,permission_count,subagent_count FROM session_history WHERE agent=? ORDER BY id DESC LIMIT \(limit);"
+            : "SELECT id,session_key,agent,started_at,ended_at,duration_seconds,outcome,tool_count,permission_count,subagent_count FROM session_history ORDER BY id DESC LIMIT \(limit);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        if let af = agentFilter {
+            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, af, -1, T)
+        }
+        var entries: [SessionHistoryEntry] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            entries.append(SessionHistoryEntry(
+                id: sqlite3_column_int64(stmt, 0),
+                sessionKey: str(stmt, 1) ?? "",
+                agent: str(stmt, 2) ?? "",
+                startedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3)),
+                endedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
+                durationSeconds: sqlite3_column_double(stmt, 5),
+                outcome: str(stmt, 6) ?? "completed",
+                toolCount: Int(sqlite3_column_int(stmt, 7)),
+                permissionCount: Int(sqlite3_column_int(stmt, 8)),
+                subagentCount: Int(sqlite3_column_int(stmt, 9))
+            ))
+        }
+        return entries
+    }
+
     // MARK: - Notification Reads
 
     struct NotificationRow: Identifiable, Sendable {
@@ -294,11 +403,13 @@ final class EventStore {
     func clearAll() {
         exec("DELETE FROM events;")
         exec("DELETE FROM notifications;")
+        exec("DELETE FROM session_history;")
     }
 
     func clearAgent(_ agent: String) {
         let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        for sql in ["DELETE FROM events WHERE agent=?;", "DELETE FROM notifications WHERE agent=?;"] {
+        for sql in ["DELETE FROM events WHERE agent=?;", "DELETE FROM notifications WHERE agent=?;",
+                    "DELETE FROM session_history WHERE agent=?;"] {
             guard let db else { continue }
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
@@ -352,6 +463,7 @@ final class EventStore {
         let cutoff = Date().timeIntervalSince1970 - secs
         exec("DELETE FROM events WHERE ts < \(cutoff);")
         exec("DELETE FROM notifications WHERE ts < \(cutoff);")
+        exec("DELETE FROM session_history WHERE ended_at < \(cutoff);")
     }
 
     // MARK: - Internals

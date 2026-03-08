@@ -75,14 +75,7 @@ struct TrackAgentsView: View {
         let live = manager.liveSessions.first { $0.agent == agent }
         let isInstalled = installed[agent] ?? false
         let isOn = enabled[agent] ?? true
-        // Derive effective display state: live session state, or process-monitor state when idle.
-        let state: AgentSessionState = {
-            if let live { return live.displayState }
-            if manager.processMonitor.isAppRunning[agent] == true {
-                return agent.isIDEAgent ? .open : .running
-            }
-            return .notRunning
-        }()
+        let state = manager.effectiveState(for: agent)
 
         HStack(alignment: .center, spacing: 10) {
             AgentIconView(agent: agent, size: 28)
@@ -152,10 +145,20 @@ struct TrackAgentsView: View {
     // MARK: - Helpers
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live { return live.status }
+        if let live {
+            let state = live.displayState
+            if state == .completed || state == .open {
+                let elapsed = Int(Date().timeIntervalSince(live.updatedAt))
+                let ago = elapsed < 60 ? "just now"
+                        : elapsed < 3600 ? "\(elapsed / 60)m ago"
+                        : "\(elapsed / 3600)h ago"
+                return state == .completed ? "Completed · \(ago)" : "Idle · \(ago)"
+            }
+            return live.status
+        }
         let monitor = AgentTrackingManager.shared.processMonitor
-        if monitor.isAppRunning[agent] == true {
-            return agent.isIDEAgent ? "idle" : "running"
+        if agent.isIDEAgent, monitor.isAppRunning[agent] == true {
+            return "idle"
         }
         return "closed"
     }
@@ -230,13 +233,7 @@ struct TrackAccordion: View {
     @ViewBuilder
     private func compactRow(_ agent: TrackedAgent) -> some View {
         let live = manager.liveSessions.first { $0.agent == agent }
-        let state: AgentSessionState = {
-            if let live { return live.displayState }
-            if manager.processMonitor.isAppRunning[agent] == true {
-                return agent.isIDEAgent ? .open : .running
-            }
-            return .notRunning
-        }()
+        let state = manager.effectiveState(for: agent)
         HStack(alignment: .center, spacing: 10) {
             AgentIconView(agent: agent, size: 20)
 
@@ -282,10 +279,20 @@ struct TrackAccordion: View {
     }
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live { return live.status }
+        if let live {
+            let state = live.displayState
+            if state == .completed || state == .open {
+                let elapsed = Int(Date().timeIntervalSince(live.updatedAt))
+                let ago = elapsed < 60 ? "just now"
+                        : elapsed < 3600 ? "\(elapsed / 60)m ago"
+                        : "\(elapsed / 3600)h ago"
+                return state == .completed ? "Completed · \(ago)" : "Idle · \(ago)"
+            }
+            return live.status
+        }
         let monitor = AgentTrackingManager.shared.processMonitor
-        if monitor.isAppRunning[agent] == true {
-            return agent.isIDEAgent ? "idle" : "running"
+        if agent.isIDEAgent, monitor.isAppRunning[agent] == true {
+            return "idle"
         }
         return "closed"
     }

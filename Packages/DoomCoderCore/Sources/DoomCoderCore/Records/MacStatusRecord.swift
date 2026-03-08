@@ -49,6 +49,16 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     /// that predate remote master control — treated as ON for display.
     public var masterEnabled: Bool?
 
+    // MARK: - Auto mode agent detail (additive, ignored by older clients)
+
+    /// JSON-encoded array of active agent status lines for iOS rendering.
+    /// Each element: {"name","raw","state","type","idleSecs","pidAlive"}.
+    /// Only populated when keepAwakeMode == "auto".
+    public var agentStatusJSON: String?
+    /// The date at which the auto-mode grace period ends. Non-nil only while
+    /// the 5-minute grace is ticking. Used by iOS for a live countdown.
+    public var autoGraceEndsAt: Date?
+
     public init(macId: String,
                 name: String,
                 version: String,
@@ -66,6 +76,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 lastAppliedCommandId: String? = nil,
                 lastAppliedAt: Date? = nil,
                 masterEnabled: Bool? = nil,
+                agentStatusJSON: String? = nil,
+                autoGraceEndsAt: Date? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -84,6 +96,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.lastAppliedCommandId = lastAppliedCommandId
         self.lastAppliedAt = lastAppliedAt
         self.masterEnabled = masterEnabled
+        self.agentStatusJSON = agentStatusJSON
+        self.autoGraceEndsAt = autoGraceEndsAt
         self.schemaVersion = schemaVersion
     }
 }
@@ -124,6 +138,20 @@ extension MacStatusRecord {
         if let c = lastAppliedCommandId { r["lastAppliedCommandId"] = c as CKRecordValue } else { r["lastAppliedCommandId"] = nil }
         if let t = lastAppliedAt { r["lastAppliedAt"] = t as CKRecordValue } else { r["lastAppliedAt"] = nil }
         if let me = masterEnabled { r["masterEnabled"] = (me ? 1 : 0) as CKRecordValue } else { r["masterEnabled"] = nil }
+        // agentStatusJSON / autoGraceEndsAt are new optional fields.
+        // Only nil-clear them if they ALREADY exist in the base record — clearing
+        // a field that has never been written causes CloudKit to reject the save
+        // with a schema error, which silently breaks the MacStatus ack channel.
+        if let j = agentStatusJSON {
+            r["agentStatusJSON"] = j as CKRecordValue
+        } else if r["agentStatusJSON"] != nil {
+            r["agentStatusJSON"] = nil
+        }
+        if let g = autoGraceEndsAt {
+            r["autoGraceEndsAt"] = g as CKRecordValue
+        } else if r["autoGraceEndsAt"] != nil {
+            r["autoGraceEndsAt"] = nil
+        }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -151,6 +179,8 @@ extension MacStatusRecord {
             lastAppliedCommandId: r["lastAppliedCommandId"] as? String,
             lastAppliedAt: r["lastAppliedAt"] as? Date,
             masterEnabled: (r["masterEnabled"] as? Int).map { $0 != 0 },
+            agentStatusJSON: r["agentStatusJSON"] as? String,
+            autoGraceEndsAt: r["autoGraceEndsAt"] as? Date,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

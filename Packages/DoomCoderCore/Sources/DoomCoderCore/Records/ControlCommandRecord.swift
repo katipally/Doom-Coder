@@ -60,10 +60,10 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
         self.command = command
         self.value = value
         self.issuedAt = issuedAt
-        // Default expiry: commands are only meaningful for a short window. If
-        // the Mac doesn't pick it up within 10 minutes, the user's intent is
-        // likely stale — drop it rather than apply a surprising change later.
-        self.expiresAt = expiresAt ?? issuedAt.addingTimeInterval(10 * 60)
+        // Default expiry: 30 minutes from issue time. Gives the Mac enough room
+        // to wake from sleep, reconnect, and fetch before the command expires.
+        // The command-ID dedup ring prevents double-application on re-fetch.
+        self.expiresAt = expiresAt ?? issuedAt.addingTimeInterval(30 * 60)
         self.clientVersion = clientVersion
         self.schemaVersion = schemaVersion
     }
