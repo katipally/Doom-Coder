@@ -76,8 +76,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// Submits the next opportunistic refresh request (no-op if one is queued).
     func scheduleAppRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
-        // Earliest, not exact — iOS coalesces these on its own schedule.
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        // Earliest, not exact — iOS coalesces on its own schedule.
+        // Request 2 min; iOS typically enforces a ~15 min minimum, but shorter
+        // requests give the system more flexibility to wake us when radio is on.
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 60)
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {

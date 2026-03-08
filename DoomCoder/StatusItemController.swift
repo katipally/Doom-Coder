@@ -51,7 +51,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func startObserving() {
         withObservationTracking {
             _ = SleepManager.shared.isActive
-            _ = AgentTrackingManager.shared.liveSessions.count
+            _ = AgentTrackingManager.shared.lastAnyHookAt
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.refreshIcon()
@@ -72,7 +72,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         img?.isTemplate = true
         button.image = img
 
-        let liveCount = AgentTrackingManager.shared.liveSessions.count
+        let liveCount = AgentTrackingManager.shared.hookFreshAgents.count
         button.title = liveCount > 0 ? " \(liveCount)" : ""
         // VoiceOver label: "DoomCoder — 2 agents active" or "DoomCoder — idle"
         let countLabel = liveCount > 0

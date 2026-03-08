@@ -346,7 +346,7 @@ final class CloudKitPusher {
             lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
             masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true,
             agentStatusJSON: agentJSON,
-            autoGraceEndsAt: sm.autoGraceEndsAt
+            autoGraceEndsAt: nil
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
