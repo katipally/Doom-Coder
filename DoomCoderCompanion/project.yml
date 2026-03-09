@@ -15,8 +15,8 @@ settings:
   base:
     DEVELOPMENT_TEAM: A9P2388PHM
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "2.6.2"
-    CURRENT_PROJECT_VERSION: "11"
+    MARKETING_VERSION: "2.7.0"
+    CURRENT_PROJECT_VERSION: "12"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     SWIFT_STRICT_CONCURRENCY: complete
     CODE_SIGN_STYLE: Automatic
@@ -46,6 +46,7 @@ targets:
         CFBundleDisplayName: DoomCoder Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSCameraUsageDescription: DoomCoder uses the camera to scan the QR code shown on your Mac so you can connect your devices.
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIBackgroundModes:

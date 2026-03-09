@@ -25,12 +25,8 @@ public enum CloudKitConstants {
 
     public enum RecordType {
         public static let macStatus         = "MacStatus"
-        public static let settings          = "Settings"
-        public static let session           = "Session"
-        public static let event             = "Event"
         public static let notificationLog   = "NotificationLog"
         public static let controlCommand    = "ControlCommand"
-        public static let wolProfile        = "WoLProfile"
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
         public static let companionStatus   = "CompanionStatus"
