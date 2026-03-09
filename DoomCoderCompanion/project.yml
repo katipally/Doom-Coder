@@ -26,6 +26,8 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     CODE_SIGN_STYLE: Automatic
     OTHER_LDFLAGS: "$(inherited) -ObjC"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
 
 packages:
   DoomCoderCore:

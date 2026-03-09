@@ -38,4 +38,10 @@ enum DCAnim {
     static let accordion: Animation = .interpolatingSpring(
         mass: 1.0, stiffness: 380, damping: 38, initialVelocity: 0
     )
+
+    /// Liquid Glass surface transition (macOS 26). Used for `.glassEffect`
+    /// morphs, glass card enter/exit, and any container-level glass
+    /// transition. Slightly slower than `.smooth` so the glass has time
+    /// to render.
+    static let glass: Animation = .smooth(duration: 0.28, extraBounce: 0.06)
 }

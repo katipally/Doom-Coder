@@ -17,6 +17,12 @@
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
 		DC0000000000002000000052 /* ToolsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000052 /* ToolsWindow.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
+		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
+		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
+		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
+		DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F04 /* SymbolCatalog.swift */; };
+		DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F05 /* WhatsNewHost.swift */; };
+		DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F06 /* RainbowIdleGlow.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
@@ -77,6 +83,12 @@
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000052 /* ToolsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsWindow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F04 /* SymbolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolCatalog.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F05 /* WhatsNewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHost.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F06 /* RainbowIdleGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainbowIdleGlow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
@@ -153,6 +165,12 @@
 			children = (
 				DC0000000000001000000123 /* HelpTip.swift */,
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
+				DC0000000000001000000F01 /* GlassCard.swift */,
+				DC0000000000001000000F02 /* GlassButtonStyle.swift */,
+				DC0000000000001000000F03 /* AppRouter.swift */,
+				DC0000000000001000000F04 /* SymbolCatalog.swift */,
+				DC0000000000001000000F05 /* WhatsNewHost.swift */,
+				DC0000000000001000000F06 /* RainbowIdleGlow.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
 				DC0000000000001000000052 /* ToolsWindow.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
@@ -335,6 +353,12 @@
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
 				DC0000000000002000000052 /* ToolsWindow.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
+				DC0000000000002000000F01 /* GlassCard.swift in Sources */,
+				DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */,
+				DC0000000000002000000F03 /* AppRouter.swift in Sources */,
+				DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */,
+				DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */,
+				DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
 				DC0000000000002000000014 /* ConfigureSettingsPane.swift in Sources */,
 				DC0000000000002000000020 /* HookEnvelope.swift in Sources */,
@@ -516,6 +540,7 @@
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -525,6 +550,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
 			};
 			name = Debug;
@@ -540,6 +566,7 @@
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -549,6 +576,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
 			};
 			name = Release;
