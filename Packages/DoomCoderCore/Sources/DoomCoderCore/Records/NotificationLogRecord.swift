@@ -53,13 +53,13 @@ public struct NotificationLogRecord: Sendable, Codable, Equatable {
 extension NotificationLogRecord {
     public static let recordType = CloudKitConstants.RecordType.notificationLog
 
-    public var recordID: CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        return CKRecord.ID(recordName: "NotificationLog-\(notifId)", zoneID: zone)
+    /// Record ID within a specific zone. The owner Mac passes its own zoneID.
+    public func recordID(in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "NotificationLog-\(notifId)", zoneID: zoneID)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord(in zoneID: CKRecordZone.ID) -> CKRecord {
+        let r = CKRecord(recordType: Self.recordType, recordID: recordID(in: zoneID))
         r["notifId"]    = notifId as CKRecordValue
         r["sessionKey"] = sessionKey as CKRecordValue
         r["macId"]      = macId as CKRecordValue

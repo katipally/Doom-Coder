@@ -27,7 +27,7 @@ struct RootTabView: View {
                 NavigationStack(path: $router.agentPath) {
                     DashboardView()
                         .navigationDestination(for: TrackedAgent.self) { agent in
-                            AgentLogsView(agent: agent)
+                            AgentLogsView(agent: agent, macId: MacStatusStore.shared.primary?.macId)
                         }
                 }
             }

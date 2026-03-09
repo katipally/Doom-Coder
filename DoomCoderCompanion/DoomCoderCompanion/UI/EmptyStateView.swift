@@ -31,7 +31,7 @@ struct EmptyStateView: View {
                     Haptics.tap()
                     showConnect = true
                 } label: {
-                    Label("Connect your Mac", systemImage: "link")
+                    Label("Add Device", systemImage: "plus")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)

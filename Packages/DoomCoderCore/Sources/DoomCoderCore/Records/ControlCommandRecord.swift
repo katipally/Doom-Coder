@@ -95,13 +95,14 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
 extension ControlCommandRecord {
     public static let recordType = CloudKitConstants.RecordType.controlCommand
 
-    public var recordID: CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        return CKRecord.ID(recordName: "ControlCommand-\(commandId)", zoneID: zone)
+    /// Record ID within a specific zone. The iPhone passes the TARGET Mac's
+    /// zoneID (owner = that Mac) so the command lands in that Mac's shared zone.
+    public func recordID(in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "ControlCommand-\(commandId)", zoneID: zoneID)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord(in zoneID: CKRecordZone.ID) -> CKRecord {
+        let r = CKRecord(recordType: Self.recordType, recordID: recordID(in: zoneID))
         r["commandId"]      = commandId as CKRecordValue
         r["targetMacId"]    = targetMacId as CKRecordValue
         r["issuerDeviceId"] = issuerDeviceId as CKRecordValue

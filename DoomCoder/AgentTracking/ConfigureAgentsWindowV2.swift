@@ -31,6 +31,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var hookWarnings: [TrackedAgent: String] = [:]
     // Permission status
     @State private var permStatus: String = "…"
+    @State private var showAddDevice = false
+    @State private var shareCoordinator = MacShareCoordinator.shared
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private static let companionAppStoreURL = "https://apps.apple.com/app/doomcoder-companion/id6772514212"
@@ -556,6 +558,8 @@ struct ConfigureAgentsViewV2: View {
 
                 connectedDevicesSection
 
+                sharedWithSection
+
                 // Permission Status
                 GroupBox {
                     HStack(spacing: 8) {
@@ -670,6 +674,50 @@ struct ConfigureAgentsViewV2: View {
             }
             .padding(20)
         }
+        .task { await shareCoordinator.refresh() }
+    }
+
+    // MARK: - Shared with (CKShare participants — different iCloud accounts)
+
+    @ViewBuilder
+    private var sharedWithSection: some View {
+        if !shareCoordinator.participants.isEmpty {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(shareCoordinator.participants) { p in
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.crop.circle.badge.checkmark")
+                                .foregroundStyle(.tint)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(p.displayName).font(.callout.weight(.medium))
+                                let sub = [p.email, p.acceptanceStatus]
+                                    .compactMap { $0 }.filter { !$0.isEmpty }
+                                    .joined(separator: " · ")
+                                if !sub.isEmpty {
+                                    Text(sub).font(.caption2).foregroundStyle(.tertiary)
+                                }
+                            }
+                            Spacer()
+                            Button(role: .destructive) {
+                                Task { await shareCoordinator.removeParticipant(id: p.id) }
+                            } label: {
+                                Text("Remove")
+                            }
+                            .controlSize(.small)
+                            .help("Revoke this iCloud account's access")
+                        }
+                    }
+                    Text("People on a different iCloud account who accepted your invite. Removing one revokes their access immediately.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Label("Shared With", systemImage: "person.2.badge.gearshape")
+            }
+        }
     }
 
     // MARK: - Connected devices (companion presence)
@@ -727,10 +775,13 @@ struct ConfigureAgentsViewV2: View {
                                     .foregroundStyle(connected ? Color.green : .secondary)
                                     .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(device.name.isEmpty ? "iPhone or iPad" : device.name)
+                                    Text(device.displayName.isEmpty ? "iPhone or iPad" : device.displayName)
                                         .font(.callout.weight(.medium))
-                                    if !device.systemVersion.isEmpty {
-                                        Text(device.systemVersion)
+                                    let detail = [device.model, device.systemVersion]
+                                        .filter { !$0.isEmpty }
+                                        .joined(separator: " · ")
+                                    if !detail.isEmpty {
+                                        Text(detail)
                                             .font(.caption2)
                                             .foregroundStyle(.tertiary)
                                     }
@@ -759,10 +810,25 @@ struct ConfigureAgentsViewV2: View {
                             }
                         }
                     }
+                    Divider().padding(.vertical, 2)
+                    Button {
+                        showAddDevice = true
+                    } label: {
+                        Label("Add Device…", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    Text("Connect an iPhone or iPad — even on a different iCloud account — by scanning a QR code or opening a share link.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } label: {
                 Label("Connected Devices", systemImage: "iphone.gen3")
+            }
+            .sheet(isPresented: $showAddDevice) {
+                AddDeviceSheet()
             }
         }
     }
@@ -1448,5 +1514,91 @@ private final class EnvelopeBox: @unchecked Sendable {
     var received: Bool { lock.lock(); defer { lock.unlock() }; return _received }
     func signal(_ env: HookEnvelope) {
         lock.lock(); _received = true; lock.unlock()
+    }
+}
+
+// MARK: - Add Device (CKShare pairing)
+
+/// Sheet shown from Connections ▸ Add Device. Creates/fetches the Mac's
+/// zone-wide CKShare and presents a QR code + copy-link so an iPhone/iPad — on
+/// the SAME or a DIFFERENT iCloud account — can join. The link is a secret;
+/// participants can be revoked from the Connections list.
+private struct AddDeviceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var coordinator = MacShareCoordinator.shared
+    @State private var copied = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Label("Add Device", systemImage: "qrcode")
+                .font(.title2.bold())
+                .labelStyle(.titleAndIcon)
+
+            if coordinator.isWorking && coordinator.shareURL == nil {
+                ProgressView("Preparing invite…")
+                    .frame(maxWidth: .infinity, minHeight: 220)
+            } else if let url = coordinator.shareURL {
+                if let qr = Self.qrImage(from: url.absoluteString) {
+                    Image(nsImage: qr)
+                        .interpolation(.none)
+                        .resizable()
+                        .frame(width: 220, height: 220)
+                        .accessibilityLabel("Pairing QR code")
+                }
+                Text("On your iPhone or iPad: Dashboard ▸ Add Device ▸ Different iCloud ▸ Scan QR Code. Or send the link below. Works even if the device uses a different iCloud account.")
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Button {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(url.absoluteString, forType: .string)
+                        copied = true
+                    } label: {
+                        Label(copied ? "Link Copied" : "Copy Invite Link",
+                              systemImage: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    ShareLink(item: url) {
+                        Label("Share…", systemImage: "square.and.arrow.up")
+                    }
+                }
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.icloud")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text(coordinator.lastError ?? "Couldn't prepare the invite.")
+                        .font(.callout)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    Button("Try Again") { Task { await coordinator.ensureShare() } }
+                }
+                .frame(maxWidth: .infinity, minHeight: 220)
+            }
+
+            Divider()
+            Button("Done") { dismiss() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(24)
+        .frame(width: 360)
+        .task { await coordinator.ensureShare() }
+    }
+
+    /// Generates a crisp QR code NSImage for `string` using CoreImage.
+    static func qrImage(from string: String) -> NSImage? {
+        let data = Data(string.utf8)
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let output = filter.outputImage else { return nil }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
+        let context = CIContext()
+        guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: scaled.extent.width,
+                                                 height: scaled.extent.height))
     }
 }

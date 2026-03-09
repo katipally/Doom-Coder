@@ -44,7 +44,7 @@ struct AgentListView: View {
                     Section {
                         ForEach(visibleAgents, id: \.rawValue) { agent in
                             NavigationLink {
-                                AgentLogsView(agent: agent)
+                                AgentLogsView(agent: agent, macId: macStore.primary?.macId)
                             } label: {
                                 AgentRow(
                                     agent: agent,

@@ -24,6 +24,8 @@ struct SettingsView: View {
     @State private var appleStatus: AIFailure? = nil
     @State private var appleProbed = false
     @State private var showClearDataConfirm = false
+    @State private var deviceNameInput = ""
+    @FocusState private var deviceNameFocused: Bool
 
     private enum KeyTestState: Equatable {
         case idle, testing, ok(Int), failed(String)
@@ -32,6 +34,7 @@ struct SettingsView: View {
     var body: some View {
         List {
             connectionSection
+            deviceSection
             aiSection
             manageDataSection
             notificationsSection
@@ -75,10 +78,50 @@ struct SettingsView: View {
             Text("This permanently deletes your saved prompt drafts and notes on this device. This can’t be undone.")
         }
         .task {
+            deviceNameInput = AppGroupCache.customDeviceName
             await refreshNotifStatus()
             await probeApple()
             await ai.loadModelsIfNeeded(for: ai.provider)
         }
+    }
+
+    // MARK: - This Device
+
+    private var deviceSection: some View {
+        Section {
+            TextField(DeviceModelName.current, text: $deviceNameInput)
+                .focused($deviceNameFocused)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit { commitDeviceName() }
+            if !deviceNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    deviceNameInput = ""
+                    commitDeviceName()
+                } label: {
+                    Label("Use default name", systemImage: "arrow.uturn.backward")
+                }
+            }
+        } header: {
+            Text("This Device")
+        } footer: {
+            Text("The name your Mac shows for this device. Defaults to “\(DeviceModelName.current)”. iOS no longer shares your real device name with apps, so set a custom one here if you like.")
+        }
+        .onChange(of: deviceNameFocused) { _, focused in
+            if !focused { commitDeviceName() }
+        }
+    }
+
+    /// Persists the device name to the App Group and republishes presence so the
+    /// Mac picks up the change promptly.
+    private func commitDeviceName() {
+        let trimmed = deviceNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != AppGroupCache.customDeviceName else { return }
+        AppGroupCache.customDeviceName = trimmed
+        deviceNameInput = trimmed
+        Haptics.tap()
+        Task { await CompanionSyncEngine.shared.publishCompanionStatus() }
     }
 
     // MARK: - AI (on-device / BYO key)
@@ -303,20 +346,20 @@ struct SettingsView: View {
                     Haptics.tap()
                     showConnect = true
                 } label: {
-                    Label("Switch Mac", systemImage: "arrow.triangle.2.circlepath")
+                    Label("Add Device", systemImage: "plus")
                 }
                 Button(role: .destructive) {
                     Haptics.tap()
                     showDisconnectConfirm = true
                 } label: {
-                    Label("Disconnect", systemImage: "link.badge.minus")
+                    Label("Disconnect \(mac.name)", systemImage: "link.badge.minus")
                 }
             } else {
                 Button {
                     Haptics.tap()
                     showConnect = true
                 } label: {
-                    Label("Connect your Mac", systemImage: "link")
+                    Label("Add Device", systemImage: "plus")
                 }
             }
         } header: {
@@ -345,10 +388,14 @@ struct SettingsView: View {
     }
 
     private func disconnectCurrentMac() {
-        MacStatusStore.shared.clear()
-        AgentListStore.shared.clear()
-        NotificationLogStore.shared.clear()
-        Haptics.success()
+        guard let macId = macStore.primary?.macId else { return }
+        Task {
+            await CompanionSyncEngine.shared.leaveShare(forMacId: macId)
+            // Disconnect only THIS Mac — keep any other connected Macs.
+            MacStatusStore.shared.remove(macId: macId)
+            AgentListStore.shared.clear(macId: macId)
+            Haptics.success()
+        }
     }
 
     // MARK: - Notifications
@@ -402,18 +449,7 @@ struct SettingsView: View {
                 }
             }
 
-            if !macStore.byMacId.isEmpty {
-                ForEach(Array(macStore.byMacId.values), id: \.macId) { mac in
-                    LabeledContent(mac.name) {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(mac.version).font(.caption)
-                            Text(relativeTime(mac.lastSeen))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
+            // (Connected Macs are managed in the Dashboard switcher + Add Device.)
 
             Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
                 Label("Privacy Policy", systemImage: "hand.raised")
@@ -499,16 +535,4 @@ struct SettingsView: View {
         UIApplication.shared.open(url)
     }
 
-    private func relativeTime(_ date: Date) -> String {
-        let interval = Date().timeIntervalSince(date)
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            return "\(Int(interval / 60))m ago"
-        } else if interval < 86400 {
-            return "\(Int(interval / 3600))h ago"
-        } else {
-            return "\(Int(interval / 86400))d ago"
-        }
-    }
 }
