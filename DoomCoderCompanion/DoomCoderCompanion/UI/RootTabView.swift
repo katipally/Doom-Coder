@@ -42,6 +42,14 @@ struct RootTabView: View {
                 showWelcome = false
             }
         }
+        // Audit 2026-06: allow SettingsView to re-trigger the welcome
+        // sheet via `AppRouter.showWelcome()`. We observe the router's
+        // `welcomeRequestCount` and flip `showWelcome` to true. We do
+        // NOT clear the UserDefaults flag here so the user can re-show
+        // it any number of times.
+        .onChange(of: router.welcomeRequestCount) { _, _ in
+            showWelcome = true
+        }
         .task {
             // Cold-launch check: surface a non-blocking hint on Dashboard if the
             // user previously denied notifications. We never re-prompt the iOS

@@ -39,6 +39,7 @@ private struct IconSegmented<Option: Hashable>: View {
     let onSelect: (Option) -> Void
 
     @Namespace private var pill
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -81,11 +82,11 @@ private struct IconSegmented<Option: Hashable>: View {
                     }
                 }
                 // Pill slides only within the segmented control itself.
-                .animation(.snappy(duration: 0.22), value: selected)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: selected)
             )
             .foregroundStyle(selected ? Color.white : Color.secondary)
             // Foreground color crossfade scoped to the label, not the card.
-            .animation(.easeOut(duration: 0.15), value: selected)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: selected)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -162,7 +163,21 @@ struct MacControlCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
+        // Audit 2026-06: adopt the iOS 26 Liquid Glass material so the
+        // card matches the Prompts/Notes "Glass" surfaces. We use
+        // `.glassEffect(.regular)` with the card's outer shape. Older
+        // OS fall back to the previous `secondarySystemGroupedBackground`
+        // automatically (the modifier is iOS 26+).
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else {
+                Color(.secondarySystemGroupedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
@@ -330,6 +345,10 @@ struct MacControlCard: View {
 
 struct MacControlView: View {
     @State private var macStore = MacStatusStore.shared
+    // Audit 2026-06: gate the segmented pill + opacity animations on
+    // Reduce Motion so users who opted out don't see the snappy
+    // 0.15-0.22s transitions.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Optimistic local selections; reconciled against the live MacStatus.
     @State private var masterEnabled: Bool = true
@@ -522,7 +541,7 @@ struct MacControlView: View {
         }
         .disabled(!masterEnabled)
         .opacity(masterEnabled ? 1.0 : 0.5)
-        .animation(.snappy(duration: 0.2), value: mode)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: mode)
     }
 
     // MARK: - Snooze banner (Auto mode override indicator)
