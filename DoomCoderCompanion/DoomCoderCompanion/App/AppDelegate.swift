@@ -16,6 +16,39 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// system decides the cadence; this is opportunistic, not a fixed timer.
     static let refreshTaskId = "com.doomcoder.app.companion.refresh"
 
+    /// Tokens for `NotificationCenter` observers registered in
+    /// `application(_:didFinishLaunchingWithOptions:)`. Stored so they can be
+    /// removed in `deinit`; previously the blocks captured `self` strongly
+    /// and the tokens were never invalidated. The `AppDelegate` is process-
+    /// scoped so a leak here never grows unbounded, but the pattern is
+    /// fragile under refactor.
+    private var observerTokens: [NSObjectProtocol] = []
+
+    deinit {
+        // `deinit` of a `@MainActor` class runs non-isolated. We must NOT
+        // touch `observerTokens` directly from here (the compiler will
+        // reject it for non-Sendable types). Instead, capture the tokens
+        // into a local `nonisolated(unsafe)` constant: the array's
+        // elements (`NSObjectProtocol`) are reference types whose
+        // identity is stable for the process lifetime, so passing them
+        // through a non-isolated boundary is safe.
+        let tokens = Self.nonisolatedTokens
+        Self.nonisolatedTokens.removeAll()
+        if !tokens.isEmpty {
+            DispatchQueue.main.async {
+                for token in tokens {
+                    NotificationCenter.default.removeObserver(token)
+                }
+            }
+        }
+    }
+
+    /// Process-wide mirror of `observerTokens` reachable from non-isolated
+    /// `deinit`. Synchronized with the main-actor property through the
+    /// `@MainActor` of the enclosing class; only read from `deinit`,
+    /// which is the only non-isolated call site.
+    private static nonisolated(unsafe) var nonisolatedTokens: [NSObjectProtocol] = []
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -32,9 +65,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.refreshTaskId, using: .main
         ) { task in
+            // `BGTaskScheduler.register` calls the closure with whatever
+            // concrete subclass of `BGTask` the system hands us. We only
+            // ever submit `BGAppRefreshTaskRequest`s whose runtime class
+            // is `BGAppRefreshTask`, so the cast is safe in practice —
+            // but we use a conditional cast + early-return to keep Swift
+            // 6 strict concurrency happy and to make the failure mode
+            // visible in the field.
+            guard let refresh = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
             MainActor.assumeIsolated {
                 (UIApplication.shared.delegate as? AppDelegate)?
-                    .handleAppRefresh(task as! BGAppRefreshTask)
+                    .handleAppRefresh(refresh)
             }
         }
 
@@ -49,7 +93,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         application.registerForRemoteNotifications()
 
         // Clear the badge when the user comes back so it stays accurate.
-        NotificationCenter.default.addObserver(
+        let activeToken = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
@@ -58,15 +102,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 try? await UNUserNotificationCenter.current().setBadgeCount(0)
             }
         }
+        observerTokens.append(activeToken)
+        Self.nonisolatedTokens.append(activeToken)
 
         // (Re)schedule background refresh whenever we leave the foreground.
-        NotificationCenter.default.addObserver(
+        let bgToken = NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            Task { @MainActor in self.scheduleAppRefresh() }
+        ) { [weak self] _ in
+                Task { @MainActor in self?.scheduleAppRefresh() }
         }
+        observerTokens.append(bgToken)
+        Self.nonisolatedTokens.append(bgToken)
         scheduleAppRefresh()
 
         return true

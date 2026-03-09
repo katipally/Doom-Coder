@@ -256,27 +256,37 @@ final class NotificationDispatcher {
 
     // MARK: - macOS local
     //
-    // Posts are serialised through a single serial DispatchQueue with a tiny
-    // stagger between each. Without this, UNUserNotificationCenter can
-    // reorder bursts of notifications (the banner queue sorts by scheduled
-    // delivery time, which for immediate triggers can collapse to the same
-    // millisecond and produce reversed order). `threadIdentifier` groups
-    // notifications from the same agent session in Notification Center.
-    nonisolated private static let notifyQueue = DispatchQueue(
-        label: "com.doomcoder.notify.serial",
-        qos: .userInitiated
-    )
+    // Posts are serialised through a single serial `actor` (`NotifySerializer`)
+    // with a tiny `Task.sleep` stagger between each. Without this,
+    // UNUserNotificationCenter can reorder bursts of notifications (the
+    // banner queue sorts by scheduled delivery time, which for immediate
+    // triggers can collapse to the same millisecond and produce reversed
+    // order). `threadIdentifier` groups notifications from the same agent
+    // session in Notification Center. Audit 2026-06: replaced the
+    // `DispatchQueue` + `Thread.sleep` pattern with this actor so the
+    // stagger is cooperative and cancellable.
 
-    private func postLocal(title: String, body: String, threadID: String, agent: TrackedAgent? = nil) {
-        let logger = self.logger
-        let iconURL = agent.flatMap { AgentIconProvider.iconFileURL(for: $0) }
-        Self.notifyQueue.async {
+    /// 20 ms stagger between posts so macOS preserves our enqueue order
+    /// even under rapid bursts (session start → tool call → session end
+    /// arriving within the same runloop tick). Audit 2026-06: was
+    /// `Thread.sleep(forTimeInterval: 0.02)` which blocks the worker
+    /// thread inside `notifyQueue`. Now the queue is a serial Swift
+    /// `actor` so the stagger uses `Task.sleep` (cooperative, cancellable)
+    /// and the next post is guaranteed to wait the full interval.
+    private static let notifyStagger: Duration = .milliseconds(20)
+
+    /// Serial actor that owns the macOS notification post ordering.
+    /// Replaces the previous `DispatchQueue`-based `notifyQueue`.
+    /// `post` is the only mutating function; it sleeps for `notifyStagger`
+    /// after submitting the request to `UNUserNotificationCenter`.
+    actor NotifySerializer {
+        func post(title: String, body: String, threadID: String,
+                  iconURL: URL?, logger: Logger) async {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
             content.sound = .default
             content.threadIdentifier = threadID
-            // Attach agent icon as notification thumbnail if available.
             if let iconURL,
                let attachment = try? UNNotificationAttachment(
                    identifier: "agent-icon",
@@ -297,10 +307,21 @@ final class NotificationDispatcher {
                     }
                 }
             }
-            // 20 ms stagger between posts so macOS preserves our enqueue
-            // order even under rapid bursts (session start → tool call →
-            // session end arriving within the same runloop tick).
-            Thread.sleep(forTimeInterval: 0.02)
+            // Cooperative sleep: the next `post` cannot begin until this
+            // task resumes, preserving the stagger across the actor.
+            try? await Task.sleep(for: NotificationDispatcher.notifyStagger)
+        }
+    }
+
+    private static let notifySerializer = NotifySerializer()
+
+    private func postLocal(title: String, body: String, threadID: String, agent: TrackedAgent? = nil) {
+        let iconURL = agent.flatMap { AgentIconProvider.iconFileURL(for: $0) }
+        Task.detached(priority: .userInitiated) { [logger] in
+            await Self.notifySerializer.post(
+                title: title, body: body, threadID: threadID,
+                iconURL: iconURL, logger: logger
+            )
         }
     }
 

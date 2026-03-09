@@ -34,6 +34,43 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
         self.updatedAt = updatedAt
         self.schemaVersion = schemaVersion
     }
+
+    // MARK: - Typed accessor (audit 2026-06)
+
+    /// Decodes the `statuses` JSON blob into a typed `[String: String]`.
+    /// Returns an empty dictionary when the JSON is missing, malformed, or
+    /// `statuses` is empty. The contract for the string is documented on
+    /// the `statuses` property above: writers MUST pass a JSON-encoded
+    /// `[String: String]` (use `agentStatusesJSON(from:)` to encode one).
+    public var agentStatuses: [String: String] {
+        guard !statuses.isEmpty,
+              let data = statuses.data(using: .utf8),
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return [:] }
+        return decoded
+    }
+
+    /// Convenience initializer that takes a typed `[String: String]` and
+    /// JSON-encodes it for storage. Use this instead of constructing the
+    /// record with a literal `statuses: ""` when you have actual status
+    /// data.
+    public init(macId: String,
+                agents: [String],
+                installedAgents: [String] = [],
+                agentStatuses: [String: String] = [:],
+                updatedAt: Date = Date(),
+                schemaVersion: Int = CloudKitConstants.schemaVersion) {
+        let json = (try? JSONSerialization.data(withJSONObject: agentStatuses, options: []))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        self.init(
+            macId: macId,
+            agents: agents,
+            installedAgents: installedAgents,
+            statuses: json,
+            updatedAt: updatedAt,
+            schemaVersion: schemaVersion
+        )
+    }
 }
 
 #if canImport(CloudKit)

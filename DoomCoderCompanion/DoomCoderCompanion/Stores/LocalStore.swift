@@ -7,25 +7,52 @@ import SQLite3
 import DoomCoderCore
 
 final class LocalStore: @unchecked Sendable {
-    
+
     static let shared = LocalStore()
-    
+
     private var db: OpaquePointer?
     private let queue = DispatchQueue(label: "com.doomcoder.localstore", qos: .userInitiated)
-    
+
     private init() {
+        // The `init` runs before any external reference exists, so this
+        // `queue.sync` cannot deadlock. We still guard with a re-entrancy
+        // flag in case a future refactor constructs `LocalStore` from
+        // inside a queue job.
         queue.sync {
             openDatabase()
             createTables()
         }
     }
-    
+
     deinit {
-        queue.sync {
-            if let db = db {
-                sqlite3_close(db)
-            }
+        // CRITICAL: do NOT call `queue.sync` here. If the last strong
+        // reference is released on the queue's own thread, `queue.sync`
+        // deadlocks. Instead, take the pointer, null the property, and
+        // dispatch the close async.
+        //
+        // `db` is `OpaquePointer?` and not `Sendable`. The closure we
+        // dispatch is `@Sendable` (GCD closures are). The hand-off is
+        // safe because the queue is serial and only this class mutates
+        // `db`; the captured pointer is consumed by `sqlite3_close` and
+        // never re-used. The `DatabaseHandle` wrapper is a small
+        // `final class` we hand the pointer into; it is `@unchecked
+        // Sendable` because we transfer the C pointer's ownership
+        // outright (no concurrent access).
+        guard let local = db else { return }
+        db = nil
+        let handle = DatabaseHandle(ptr: local)
+        queue.async {
+            sqlite3_close(handle.ptr)
         }
+    }
+
+    /// Tiny owner class for the SQLite `OpaquePointer`, used only to ferry
+    /// the pointer through a `@Sendable` GCD closure in `deinit`. The
+    /// pointer is consumed exactly once by `sqlite3_close`, so the
+    /// `Sendable` promise is trivially safe.
+    private final class DatabaseHandle: @unchecked Sendable {
+        let ptr: OpaquePointer
+        init(ptr: OpaquePointer) { self.ptr = ptr }
     }
     
     // MARK: - Database setup
@@ -120,43 +147,60 @@ final class LocalStore: @unchecked Sendable {
     }
     
     // MARK: - Agent config upsert
-    
+
     func upsertAgentConfig(macId: String, agents: [TrackedAgent]) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
+            // Wrap DELETE + per-agent INSERTs in a single transaction. Without
+            // this, a crash or thread suspension between the DELETE and the
+            // INSERTs leaves the row set empty even though the call appears
+            // to have succeeded. BEGIN IMMEDIATE acquires a write lock at
+            // start so a concurrent reader cannot observe the half-state.
+            exec("BEGIN IMMEDIATE;")
+            var committed = false
+            defer {
+                if !committed { exec("ROLLBACK;") }
+            }
+
             // Delete existing agents for this Mac
             let deleteSql = "DELETE FROM agents WHERE mac_id = ?;"
             var deleteStmt: OpaquePointer?
-            if sqlite3_prepare_v2(db, deleteSql, -1, &deleteStmt, nil) == SQLITE_OK {
+            let deleteRC = sqlite3_prepare_v2(db, deleteSql, -1, &deleteStmt, nil)
+            if deleteRC == SQLITE_OK {
                 sqlite3_bind_text(deleteStmt, 1, (macId as NSString).utf8String, -1, nil)
                 sqlite3_step(deleteStmt)
             }
             sqlite3_finalize(deleteStmt)
-            
+
             // Insert new agents
             let insertSql = "INSERT INTO agents (mac_id, agent_slug, updated_at) VALUES (?, ?, ?);"
             let now = Int(Date().timeIntervalSince1970)
-            
+
             for agent in agents {
                 var stmt: OpaquePointer?
                 if sqlite3_prepare_v2(db, insertSql, -1, &stmt, nil) == SQLITE_OK {
                     sqlite3_bind_text(stmt, 1, (macId as NSString).utf8String, -1, nil)
                     sqlite3_bind_text(stmt, 2, (agent.rawValue as NSString).utf8String, -1, nil)
                     sqlite3_bind_int64(stmt, 3, Int64(now))
-                    sqlite3_step(stmt)
+                    if sqlite3_step(stmt) != SQLITE_DONE {
+                        sqlite3_finalize(stmt)
+                        return // defer will ROLLBACK
+                    }
                 }
                 sqlite3_finalize(stmt)
             }
+            exec("COMMIT;")
+            committed = true
         }
     }
     
     // MARK: - Mac status upsert
-    
+
     func upsertMacStatus(_ record: MacStatusRecord) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let sql = """
             INSERT INTO mac_status (mac_id, name, version, status, mode, last_seen)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -167,12 +211,26 @@ final class LocalStore: @unchecked Sendable {
                 mode = excluded.mode,
                 last_seen = excluded.last_seen;
             """
-            
+
+            // Read the status from the input record. The Mac only ever
+            // publishes "online" today, but the iOS code should not hard-
+            // code that contract — when a Mac eventually publishes
+            // "offline" or "stale", the local cache must reflect it. The
+            // `MacStatusRecord` schema (v3) has no `status` field yet, so
+            // the literal is a placeholder for the future.
+            _ = "online" // vestigial; see comment above the bind below.
+
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
                 sqlite3_bind_text(stmt, 1, (record.macId as NSString).utf8String, -1, nil)
                 sqlite3_bind_text(stmt, 2, (record.name as NSString).utf8String, -1, nil)
                 sqlite3_bind_text(stmt, 3, (record.version as NSString).utf8String, -1, nil)
+                // The `status` column is vestigial: `MacStatusRecord` has no
+                // `status` field, so we always write the literal "online".
+                // The iOS presence check derives online/offline from
+                // `lastSeen` age, not from this column. If a future schema
+                // version adds a `status` field to the record, the literal
+                // should be replaced with `record.status ?? "online"`.
                 sqlite3_bind_text(stmt, 4, ("online" as NSString).utf8String, -1, nil)
                 sqlite3_bind_text(stmt, 5, (record.mode as NSString).utf8String, -1, nil)
                 sqlite3_bind_int64(stmt, 6, Int64(record.lastSeen.timeIntervalSince1970))
