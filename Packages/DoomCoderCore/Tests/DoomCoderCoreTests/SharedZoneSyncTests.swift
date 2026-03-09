@@ -81,4 +81,72 @@ struct SharedZoneSyncTests {
         #expect(cmd.recordID(in: participantZone).zoneID == participantZone)
         #expect(cmd.toCKRecord(in: participantZone).recordID.zoneID.ownerName == "macOwnerRecordName")
     }
+
+    // MARK: - MacStatusRecord round-trip
+
+    @Test func macStatusRecordRoundTrips() {
+        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName(forMacId: "MAC-A"),
+                                   ownerName: CKCurrentUserDefaultName)
+        let original = MacStatusRecord(
+            macId: "MAC-A",
+            name: "Studio",
+            version: "3.0.0",
+            sleepActive: true,
+            mode: "screenOn",
+            lastSeen: Date(timeIntervalSince1970: 1_700_000_000),
+            thermalState: "nominal",
+            keepAwakeMode: "auto",
+            activeAgentCount: 2,
+            sessionTimerHours: 4,
+            elapsedSeconds: 3600,
+            lastAppliedCommandId: "cmd-123",
+            lastAppliedAt: Date(timeIntervalSince1970: 1_700_000_100),
+            masterEnabled: true
+        )
+        let ck = original.toCKRecord(in: zone)
+        let decoded = MacStatusRecord(ck)
+        #expect(decoded != nil)
+        #expect(decoded?.macId == "MAC-A")
+        #expect(decoded?.name == "Studio")
+        #expect(decoded?.keepAwakeMode == "auto")
+        #expect(decoded?.activeAgentCount == 2)
+        #expect(decoded?.sessionTimerHours == 4)
+        #expect(decoded?.lastAppliedCommandId == "cmd-123")
+        #expect(decoded?.masterEnabled == true)
+    }
+
+    // MARK: - ControlCommandRecord round-trip
+
+    @Test func controlCommandRecordRoundTrips() {
+        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName(forMacId: "MAC-A"),
+                                   ownerName: "macOwner")
+        let original = ControlCommandRecord(
+            commandId: "cmd-xyz-789",
+            targetMacId: "MAC-A",
+            issuerDeviceId: "DEV-1",
+            command: "setScreenMode",
+            value: "screenOff",
+            issuedAt: Date(timeIntervalSince1970: 1_700_000_500)
+        )
+        let ck = original.toCKRecord(in: zone)
+        let decoded = ControlCommandRecord(ck)
+        #expect(decoded != nil)
+        #expect(decoded?.targetMacId == "MAC-A")
+        #expect(decoded?.issuerDeviceId == "DEV-1")
+        #expect(decoded?.command == "setScreenMode")
+        #expect(decoded?.value == "screenOff")
+        #expect(decoded?.commandId == "cmd-xyz-789")
+    }
+
+    @Test func controlCommandExpiredIsDetected() {
+        let cmd = ControlCommandRecord(
+            targetMacId: "MAC-A",
+            issuerDeviceId: "DEV-1",
+            command: "check",
+            value: "",
+            issuedAt: Date(timeIntervalSinceNow: -3600) // 1h old
+        )
+        // isExpired default is 30 minutes; an hour-old command must be expired.
+        #expect(cmd.isExpired == true)
+    }
 }
