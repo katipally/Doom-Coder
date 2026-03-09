@@ -300,12 +300,17 @@ final class NotificationDispatcher {
             // triggers, which UN can collapse to the same delivery slot.
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.01, repeats: false)
             let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(req) { err in
-                if let err {
-                    Task { @MainActor in
-                        logger.error("local notify failed: \(err.localizedDescription, privacy: .public)")
-                    }
-                }
+            // Audit 2026-06: use the async `add(_:)` API instead of the
+            // completion-handler form. The latter triggers a "consider
+            // using asynchronous alternative" warning in Swift 6 and is
+            // unnecessary — the new actor context can await the result
+            // directly. Errors are logged and swallowed (the user
+            // already saw the notification attempt; nothing actionable
+            // for the caller to do).
+            do {
+                try await UNUserNotificationCenter.current().add(req)
+            } catch {
+                logger.error("local notify failed: \(error.localizedDescription, privacy: .public)")
             }
             // Cooperative sleep: the next `post` cannot begin until this
             // task resumes, preserving the stagger across the actor.

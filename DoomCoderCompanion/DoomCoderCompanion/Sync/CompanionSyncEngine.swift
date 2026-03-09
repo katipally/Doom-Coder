@@ -674,11 +674,14 @@ final class CompanionSyncEngine: NSObject {
     /// observe an empty Keychain, both compute a fresh UUID, and both
     /// write a different value — and the device would end up with two
     /// "issuer" identities across its lifetime.
-    /// We protect the read-or-create with an `OSAllocatedUnfairLock`
-    /// (iOS 16+ / macOS 13+, both within our deployment floor). The
-    /// lock wraps a small mutable holder so the function remains
-    /// `static` and synchronous (callers expect a non-async String).
-    nonisolated(unsafe) private static let deviceIdLock = OSAllocatedUnfairLock<DeviceIdState>(
+    ///
+    /// The getter is `@MainActor`-isolated because `UIDevice.current`
+    /// is main-actor-isolated and we need to read it on the resolution
+    /// path. The lock+state helper is a nested class so it does not
+    /// leak past the actor boundary. All existing call sites
+    /// (`sendControlCommand`, `handleAppRefresh`) are already on the
+    /// main actor, so this does not require a behavioral change.
+    @MainActor private static let deviceIdLock = OSAllocatedUnfairLock<DeviceIdState>(
         initialState: DeviceIdState()
     )
 
@@ -687,12 +690,18 @@ final class CompanionSyncEngine: NSObject {
     /// itself only contains a single optional String and is mutated
     /// only inside the lock's `withLock` closure, so `@unchecked
     /// Sendable` is sound.
-    nonisolated(unsafe) private final class DeviceIdState: @unchecked Sendable {
+    private final class DeviceIdState: @unchecked Sendable {
         var cached: String?
     }
 
-    nonisolated(unsafe) static var issuerDeviceId: String {
-        deviceIdLock.withLock { state in
+    @MainActor static var issuerDeviceId: String {
+        // `OSAllocatedUnfairLock.withLock` takes a `@Sendable`
+        // closure, so any main-actor state must be read OUTSIDE the
+        // closure. `UIDevice.current.identifierForVendor` is the only
+        // main-actor-isolated dependency; capture it into a local
+        // before entering the lock body.
+        let vendorId = UIDevice.current.identifierForVendor?.uuidString
+        return deviceIdLock.withLock { state in
             if let cached = state.cached { return cached }
             if let kc = Keychain.get(account: deviceIdAccount, service: deviceIdService),
                !kc.isEmpty {
@@ -701,7 +710,7 @@ final class CompanionSyncEngine: NSObject {
             }
             let legacyKey = "doomcoder.companion.deviceId"
             let resolved = AppGroupCache.defaults.string(forKey: legacyKey)
-                ?? UIDevice.current.identifierForVendor?.uuidString
+                ?? vendorId
                 ?? UUID().uuidString
             Keychain.set(resolved, account: deviceIdAccount, service: deviceIdService)
             AppGroupCache.defaults.set(resolved, forKey: legacyKey)
