@@ -58,6 +58,22 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     /// The date at which the auto-mode grace period ends. Non-nil only while
     /// the 5-minute grace is ticking. Used by iOS for a live countdown.
     public var autoGraceEndsAt: Date?
+    /// Dominant freshness signal: "agents" | "user_active" | "snoozed" | "idle".
+    /// v2.6 (auto-mode redesign): iOS uses this to mirror the Mac's compact
+    /// status pill — "2 agents working" / "You're active" / "Snoozed" / etc.
+    public var autoSignal: String?
+    /// True when the user has been at the keyboard / mouse / trackpad within
+    /// the silence window. Drives the iOS "You're active" pill.
+    public var isUserActive: Bool?
+    /// True while a snooze override is in effect. iOS uses this to show the
+    /// snooze banner on the Mac control card.
+    public var isSnoozed: Bool?
+    /// Snooze end time, or `nil` for an indefinite snooze. iOS renders a
+    /// live countdown based on this.
+    public var snoozeUntil: Date?
+    /// Raw snooze duration string ("15m" | "1h" | "indefinite"). iOS shows
+    /// the human label + countdown using this + `snoozeUntil`.
+    public var snoozeDuration: String?
 
     public init(macId: String,
                 name: String,
@@ -78,6 +94,11 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 masterEnabled: Bool? = nil,
                 agentStatusJSON: String? = nil,
                 autoGraceEndsAt: Date? = nil,
+                autoSignal: String? = nil,
+                isUserActive: Bool? = nil,
+                isSnoozed: Bool? = nil,
+                snoozeUntil: Date? = nil,
+                snoozeDuration: String? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -98,6 +119,11 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.masterEnabled = masterEnabled
         self.agentStatusJSON = agentStatusJSON
         self.autoGraceEndsAt = autoGraceEndsAt
+        self.autoSignal = autoSignal
+        self.isUserActive = isUserActive
+        self.isSnoozed = isSnoozed
+        self.snoozeUntil = snoozeUntil
+        self.snoozeDuration = snoozeDuration
         self.schemaVersion = schemaVersion
     }
 }
@@ -152,6 +178,19 @@ extension MacStatusRecord {
         } else if r["autoGraceEndsAt"] != nil {
             r["autoGraceEndsAt"] = nil
         }
+        // v2.6 (auto-mode redesign) — additive fields. Only nil-clear if they
+        // already exist in the base record (clearing an unwritten field breaks
+        // CloudKit saves with a schema error).
+        if let s = autoSignal { r["autoSignal"] = s as CKRecordValue }
+        else if r["autoSignal"] != nil { r["autoSignal"] = nil }
+        if let u = isUserActive { r["isUserActive"] = (u ? 1 : 0) as CKRecordValue }
+        else if r["isUserActive"] != nil { r["isUserActive"] = nil }
+        if let sn = isSnoozed { r["isSnoozed"] = (sn ? 1 : 0) as CKRecordValue }
+        else if r["isSnoozed"] != nil { r["isSnoozed"] = nil }
+        if let u = snoozeUntil { r["snoozeUntil"] = u as CKRecordValue }
+        else if r["snoozeUntil"] != nil { r["snoozeUntil"] = nil }
+        if let s = snoozeDuration { r["snoozeDuration"] = s as CKRecordValue }
+        else if r["snoozeDuration"] != nil { r["snoozeDuration"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -181,6 +220,11 @@ extension MacStatusRecord {
             masterEnabled: (r["masterEnabled"] as? Int).map { $0 != 0 },
             agentStatusJSON: r["agentStatusJSON"] as? String,
             autoGraceEndsAt: r["autoGraceEndsAt"] as? Date,
+            autoSignal: r["autoSignal"] as? String,
+            isUserActive: (r["isUserActive"] as? Int).map { $0 != 0 },
+            isSnoozed: (r["isSnoozed"] as? Int).map { $0 != 0 },
+            snoozeUntil: r["snoozeUntil"] as? Date,
+            snoozeDuration: r["snoozeDuration"] as? String,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

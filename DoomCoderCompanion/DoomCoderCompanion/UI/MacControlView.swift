@@ -429,9 +429,15 @@ struct MacControlView: View {
 
     private func masterSubtitle(_ mac: MacStatusRecord) -> String {
         if !masterEnabled { return "Suspended — nothing is active" }
+        // Snoozed wins regardless of activity.
+        if mac.isSnoozed == true { return "Snoozed · Mac stays awake" }
         let n = mac.activeAgentCount ?? 0
         if mac.sleepActive, n > 0 { return "Awake · \(n) agent\(n == 1 ? "" : "s") working" }
-        if mac.sleepActive { return "Active · Mac awake" }
+        if mac.sleepActive {
+            return mac.autoSignal == "user_active"
+                ? "Awake · you're active"
+                : "Active · Mac awake"
+        }
         return "Ready"
     }
 
@@ -441,6 +447,15 @@ struct MacControlView: View {
     private func keepAwakeSection(_ mac: MacStatusRecord) -> some View {
         let offline = Date().timeIntervalSince(mac.lastSeen) >= offlineThreshold
         Section {
+            // Snooze banner: shown above the segmented control when the Mac
+            // has a snooze override active. Tapping the cancel button issues
+            // a command. Live countdown driven by the server's snoozeUntil.
+            if let s = currentSnoozeDuration(mac) {
+                snoozeBanner(duration: s, until: mac.snoozeUntil)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 6, trailing: 16))
+            }
+
             IconSegmented(
                 options: KeepAwakeMode.allCases,
                 selection: mode,
@@ -502,6 +517,64 @@ struct MacControlView: View {
         .animation(.snappy(duration: 0.2), value: mode)
     }
 
+    // MARK: - Snooze banner (Auto mode override indicator)
+
+    private func currentSnoozeDuration(_ mac: MacStatusRecord) -> SnoozeDuration? {
+        guard mac.isSnoozed == true else { return nil }
+        if let raw = mac.snoozeDuration, let s = SnoozeDuration(rawValue: raw) { return s }
+        return .indefinite
+    }
+
+    @ViewBuilder
+    private func snoozeBanner(duration: SnoozeDuration, until: Date?) -> some View {
+        let isIndefinite = duration == .indefinite
+        let active = isIndefinite || (until.map { $0 > Date() } ?? true)
+        HStack(spacing: 10) {
+            Image(systemName: "moon.zzz.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Snoozed")
+                    .font(.caption.weight(.semibold))
+                if isIndefinite {
+                    Text("Until you turn it off")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if let until {
+                    HStack(spacing: 4) {
+                        Text("Releases in")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(timerInterval: Date.now...until, countsDown: true)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+            if active {
+                Button("Cancel") {
+                    Haptics.tap()
+                    send(.setSnooze, value: "")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Cancel snooze")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.28), lineWidth: 0.5)
+        )
+    }
+
     @ViewBuilder
     private func statusRow(_ mac: MacStatusRecord, offline: Bool) -> some View {
         if isWaiting {
@@ -539,24 +612,54 @@ struct MacControlView: View {
             .font(.caption).foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
         } else if mode == .auto, mac.sleepActive, let n = mac.activeAgentCount, n > 0 {
-            // Auto mode with active agents: expandable detail
-            DisclosureGroup(isExpanded: $agentDetailExpanded) {
-                if let lines = decodeAgentLines(mac.agentStatusJSON) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(lines) { line in
-                            agentDetailRow(line)
-                        }
-                    }
-                    .padding(.top, 4)
-                }
-            } label: {
+            // Auto mode with active agents: expandable detail.
+            // Prefers the new dominant-signal pill (handles the "you're active"
+            // case) over the old count-based display when both signals fire.
+            if mac.autoSignal == "user_active" {
                 HStack(spacing: 6) {
-                    Image(systemName: "sparkles").foregroundStyle(.green).accessibilityHidden(true)
-                    Text("\(n) agent\(n == 1 ? "" : "s") working")
+                    Image(systemName: "hand.tap.fill").foregroundStyle(.green).accessibilityHidden(true)
+                    Text("You're active · Mac stays awake")
                     Spacer()
                 }
+                .font(.caption).foregroundStyle(.secondary)
+            } else {
+                DisclosureGroup(isExpanded: $agentDetailExpanded) {
+                    if let lines = decodeAgentLines(mac.agentStatusJSON) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(lines) { line in
+                                agentDetailRow(line)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles").foregroundStyle(.green).accessibilityHidden(true)
+                        Text("\(n) agent\(n == 1 ? "" : "s") working")
+                        Spacer()
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+        } else if mode == .auto, mac.sleepActive, mac.autoSignal == "user_active" {
+            // Auto with no agents but the user is at the keyboard.
+            HStack(spacing: 6) {
+                Image(systemName: "hand.tap.fill").foregroundStyle(.green).accessibilityHidden(true)
+                Text("You're active · Mac stays awake")
+                Spacer()
             }
             .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        } else if mode == .auto, mac.sleepActive, mac.autoSignal == "snoozed" {
+            // Auto is holding due to a snooze. The banner above already
+            // shows the countdown — keep the row simple here.
+            HStack(spacing: 6) {
+                Image(systemName: "moon.zzz.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                Text("Snooze holding sleep")
+                Spacer()
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
         } else if mode == .auto, !mac.sleepActive, let graceEnd = mac.autoGraceEndsAt, graceEnd > Date() {
             // Grace period countdown
             HStack(spacing: 6) {
@@ -582,6 +685,8 @@ struct MacControlView: View {
     }
 
     private func statusSymbol(_ mac: MacStatusRecord) -> String {
+        // Snoozed always shows the zzz moon regardless of mode.
+        if mac.isSnoozed == true { return "moon.zzz.fill" }
         switch mode {
         case .off:  return "powersleep"
         case .on:   return mac.sleepActive ? "cup.and.saucer.fill" : "hourglass"
@@ -590,10 +695,18 @@ struct MacControlView: View {
     }
 
     private func statusText(_ mac: MacStatusRecord) -> String {
+        // Snoozed text wins regardless of mode.
+        if mac.isSnoozed == true { return "Snoozed — Mac stays awake" }
         switch mode {
         case .off:  return "Your Mac sleeps normally"
         case .on:   return mac.sleepActive ? "Awake" : "Starting…"
-        case .auto: return mac.sleepActive ? "Awake · agents working" : "Delegated · macOS controls sleep"
+        case .auto:
+            if mac.sleepActive {
+                if mac.autoSignal == "user_active" { return "You're active · Mac stays awake" }
+                if let n = mac.activeAgentCount, n > 0 { return "\(n) agent\(n == 1 ? "" : "s") working" }
+                return "Awake"
+            }
+            return "Delegated · macOS controls sleep"
         }
     }
 
@@ -695,6 +808,12 @@ struct MacControlView: View {
                 showTimeoutError = true
             }
         }
+    }
+
+    /// Convenience for value-less verbs (cancelSnooze, etc.). Empty value
+    /// is the convention for "no payload".
+    private func send(_ verb: ControlCommandRecord.Verb) {
+        send(verb, value: "")
     }
 
     private func sendMaster(_ on: Bool) {
