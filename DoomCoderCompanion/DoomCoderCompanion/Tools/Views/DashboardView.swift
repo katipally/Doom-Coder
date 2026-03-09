@@ -13,6 +13,7 @@ import DoomCoderCore
 struct DashboardView: View {
     @State private var macStore = MacStatusStore.shared
     @State private var agentStore = AgentListStore.shared
+    @State private var router = AppRouter.shared
     @State private var showConnect = false
 
     private let downloadURL = URL(string: "https://github.com/katipally/Doom-Coder/releases")!
@@ -29,6 +30,15 @@ struct DashboardView: View {
         .toolbar {
             if !macStore.byMacId.isEmpty {
                 ToolbarItem(placement: .topBarLeading) { macSwitcher }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Haptics.tap()
+                    showConnect = true
+                } label: {
+                    Label("Add Device", systemImage: "plus")
+                }
+                .accessibilityLabel("Add Device")
             }
         }
         .sheet(isPresented: $showConnect) {
@@ -93,6 +103,13 @@ struct DashboardView: View {
 
     private var connected: some View {
         List {
+            if router.showsNotificationDeniedHint {
+                notificationDeniedBanner
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
             MacControlView()
 
             agentsSection
@@ -101,6 +118,55 @@ struct DashboardView: View {
         .refreshable {
             await CompanionSyncEngine.shared.forceFetchAll()
         }
+    }
+
+    /// Non-blocking banner shown when the user has previously denied
+    /// notifications. Tapping it deep-links to System Settings so they can
+    /// re-enable. Auto-hides when the user returns and the status is now
+    /// authorized (RootTabView watches scenePhase).
+    private var notificationDeniedBanner: some View {
+        Button {
+            Haptics.tap()
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Notifications are off")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("Tap to enable in System Settings so you can be alerted when an agent needs your attention.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.orange.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.30), lineWidth: 0.5)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Notifications are off. Tap to enable in System Settings.")
+        .accessibilityHint("Opens Settings to allow notifications for DoomCoder")
     }
 
     @ViewBuilder

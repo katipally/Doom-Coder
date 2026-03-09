@@ -25,6 +25,12 @@ final class AppRouter {
     /// (it does NOT auto-send — the user can edit first).
     var pendingPromptSeed: String?
 
+    /// Set when the user has previously denied notification permission. The
+    /// Dashboard reads this to show a non-blocking "Notifications are off"
+    /// banner that deep-links to System Settings. Auto-cleared on return if
+    /// the user re-enables notifications there.
+    var showsNotificationDeniedHint: Bool = false
+
     /// Switches to the Prompts tab and seeds the composer with `text`.
     func composePrompt(seededWith text: String) {
         pendingPromptSeed = text

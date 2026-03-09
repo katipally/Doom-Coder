@@ -892,6 +892,22 @@ final class CompanionSyncEngine: NSObject {
     /// doesn't double-post. Bounded ring persisted in the App Group.
     private static let postedNotifKey = "ck.ios.postedNotifIds.v1"
 
+    /// Resolves a per-agent icon URL for a local notification. Order:
+    ///   1. Bundled image (the iOS app target's asset catalog or the NSE
+    ///      target's resources). Works on a fresh install before any
+    ///      CloudKit AgentIcon fetch resolves.
+    ///   2. App Group cache — CloudKit-pulled icons, possibly higher-res.
+    ///   3. nil (no attachment).
+    static func iconURL(for agent: TrackedAgent?, slug: String) -> URL? {
+        if let agent, let url = Bundle.main.url(forResource: agent.bundledAssetName, withExtension: "png") {
+            return url
+        }
+        if let url = AppGroupCache.iconURL(slug: agent?.iconSlug ?? slug) {
+            return url
+        }
+        return nil
+    }
+
     /// Posts a local notification for a freshly-fetched NotificationLog record.
     /// Required because the shared database can't use a CKQuerySubscription, so
     /// the server push is silent (content-available) and the app must render the
@@ -910,16 +926,26 @@ final class CompanionSyncEngine: NSObject {
         let content = UNMutableNotificationContent()
         content.title = r.title.isEmpty ? r.macName : r.title
         content.body = r.body
+        // "On <MacName>" subtitle. Helps users disambiguate when more than one
+        // Mac is paired. Set only when non-empty so the system never renders a
+        // blank subtitle.
+        if !r.macName.isEmpty {
+            content.subtitle = "On \(r.macName)"
+        }
         content.sound = .default
         content.threadIdentifier = r.sessionKey           // group by session
         content.userInfo = ["notifId": r.notifId, "macId": r.macId, "agent": r.agent]
         if r.phase == NormalizedEventPhase.permissionNeeded.rawValue {
             content.interruptionLevel = .timeSensitive
         }
-        // Attach the agent icon if cached in the App Group.
-        let slug = TrackedAgent(rawValue: r.agent)?.iconSlug ?? r.agent
-        if let iconURL = AppGroupCache.iconURL(slug: slug),
-           let attachment = try? UNNotificationAttachment(identifier: slug, url: iconURL) {
+        // Attach the agent icon. Order of preference:
+        //   1. Bundled image in the app's asset catalog — works on a fresh
+        //      install before any CloudKit AgentIcon fetch resolves.
+        //   2. App Group cache — CloudKit-pulled icons, may be higher-res.
+        //   3. Skip (no attachment) if neither exists.
+        let agent = TrackedAgent(rawValue: r.agent)
+        if let iconURL = Self.iconURL(for: agent, slug: r.agent),
+           let attachment = try? UNNotificationAttachment(identifier: "agent-icon", url: iconURL) {
             content.attachments = [attachment]
         }
         let request = UNNotificationRequest(identifier: r.notifId, content: content, trigger: nil)
