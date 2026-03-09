@@ -80,6 +80,14 @@ enum IconDownloader {
 
     // MARK: - Private
 
+    /// Audit 2026-06: disk-quota fallback. The icons cache is small
+    /// (~20 KB per agent x 5 agents = ~100 KB total) so this is
+    /// belt-and-braces, but a future larger cache (e.g. user avatars)
+    /// would want this protection. We check the parent directory's
+    /// available capacity before writing and skip the write — without
+    /// deleting the existing file — when there's less than 1 MB free.
+    private static let minimumFreeBytes: Int64 = 1_048_576 // 1 MB
+
     private static func download(filename: String, to dest: URL) async {
         guard let url = URL(string: "\(cdnBase)/\(filename)") else { return }
         do {
@@ -93,6 +101,14 @@ enum IconDownloader {
                 logger.warning("CDN non-200 or empty for \(filename, privacy: .public)")
                 return
             }
+            // Disk-quota guard: if the parent directory has less than
+            // `minimumFreeBytes` free, skip the write. The next app
+            // launch will retry. SF Symbol fallbacks in the UI ensure
+            // the user never sees a missing icon.
+            if !hasSufficientDiskSpace(for: dest) {
+                logger.warning("insufficient disk space for icon \(filename, privacy: .public); skipping write")
+                return
+            }
             // Data.write(to:options:.atomic) handles temp-file-and-rename internally
             // and works whether or not the destination exists yet.
             try data.write(to: dest, options: .atomic)
@@ -100,6 +116,29 @@ enum IconDownloader {
         } catch {
             logger.warning("icon download failed for \(filename, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Returns true if the directory containing `url` has at least
+    /// `minimumFreeBytes` of free space available. Uses
+    /// `URLResourceKey.volumeAvailableCapacityForImportantUsageKey`
+    /// so the result reflects space the system is willing to allocate
+    /// to non-essential writes (excluding purgeable caches, which
+    /// icon writes technically are not, but we want to be polite).
+    private static func hasSufficientDiskSpace(for url: URL) -> Bool {
+        let dir = url.deletingLastPathComponent()
+        if let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let free = values.volumeAvailableCapacityForImportantUsage {
+            return free >= minimumFreeBytes
+        }
+        // Fall back to .volumeAvailableCapacityKey (the older API).
+        if let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let free = values.volumeAvailableCapacity {
+            return Int64(free) >= minimumFreeBytes
+        }
+        // If we can't determine free space, allow the write — the
+        // write itself will fail and be caught by the caller's
+        // do/catch, leaving the user with the SF Symbol fallback.
+        return true
     }
 }
 

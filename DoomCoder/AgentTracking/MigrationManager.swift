@@ -35,7 +35,18 @@ enum MigrationManager {
     }
 
     /// Run migration: backup old configs, strip legacy entries, install v2 hooks.
+    /// Audit 2026-06: defensive idempotency guard. The `migratedKey`
+    /// flag is normally checked in `checkNeeded`, but if a caller
+    /// invokes `migrate(agents:)` directly (e.g. from the wizard
+    /// "Migrate now" button after a partial run), we must not run
+    /// the migration twice. `defer` sets the flag on the success
+    /// path; an early return on the guard keeps it unset so a
+    /// subsequent call can still attempt the migration.
     static func migrate(agents: [TrackedAgent]) {
+        guard !UserDefaults.standard.bool(forKey: migratedKey) else {
+            logger.info("migrate: already done, skipping")
+            return
+        }
         logger.info("Migrating \(agents.map(\.rawValue).joined(separator: ", "), privacy: .public)")
 
         for agent in agents {

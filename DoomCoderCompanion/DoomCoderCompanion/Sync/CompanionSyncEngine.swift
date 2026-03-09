@@ -11,6 +11,7 @@
 
 import Foundation
 import CloudKit
+import os
 import UIKit
 import UserNotifications
 import DoomCoderCore
@@ -664,21 +665,49 @@ final class CompanionSyncEngine: NSObject {
     ///   1. Existing Keychain value.
     ///   2. Legacy UserDefaults value (migrated in, so this install keeps its id).
     ///   3. `identifierForVendor` (stable per device+vendor), else a fresh UUID.
-    static let deviceIdService = "com.doomcoder.app.companion.identity"
-    static let deviceIdAccount = "doomcoder.companion.deviceId"
+    nonisolated static let deviceIdService = "com.doomcoder.app.companion.identity"
+    nonisolated static let deviceIdAccount = "doomcoder.companion.deviceId"
 
-    static var issuerDeviceId: String {
-        if let kc = Keychain.get(account: deviceIdAccount, service: deviceIdService),
-           !kc.isEmpty {
-            return kc
+    /// Audit 2026-06: the first-launch path of `issuerDeviceId` is racy.
+    /// Two concurrent callers (the @MainActor `sendControlCommand` and
+    /// the BGAppRefreshTask in `AppDelegate.handleAppRefresh`) could both
+    /// observe an empty Keychain, both compute a fresh UUID, and both
+    /// write a different value — and the device would end up with two
+    /// "issuer" identities across its lifetime.
+    /// We protect the read-or-create with an `OSAllocatedUnfairLock`
+    /// (iOS 16+ / macOS 13+, both within our deployment floor). The
+    /// lock wraps a small mutable holder so the function remains
+    /// `static` and synchronous (callers expect a non-async String).
+    nonisolated(unsafe) private static let deviceIdLock = OSAllocatedUnfairLock<DeviceIdState>(
+        initialState: DeviceIdState()
+    )
+
+    /// Holder for the cached device id. `final class` because
+    /// `OSAllocatedUnfairLock` requires a `Sendable` state; the class
+    /// itself only contains a single optional String and is mutated
+    /// only inside the lock's `withLock` closure, so `@unchecked
+    /// Sendable` is sound.
+    nonisolated(unsafe) private final class DeviceIdState: @unchecked Sendable {
+        var cached: String?
+    }
+
+    nonisolated(unsafe) static var issuerDeviceId: String {
+        deviceIdLock.withLock { state in
+            if let cached = state.cached { return cached }
+            if let kc = Keychain.get(account: deviceIdAccount, service: deviceIdService),
+               !kc.isEmpty {
+                state.cached = kc
+                return kc
+            }
+            let legacyKey = "doomcoder.companion.deviceId"
+            let resolved = AppGroupCache.defaults.string(forKey: legacyKey)
+                ?? UIDevice.current.identifierForVendor?.uuidString
+                ?? UUID().uuidString
+            Keychain.set(resolved, account: deviceIdAccount, service: deviceIdService)
+            AppGroupCache.defaults.set(resolved, forKey: legacyKey)
+            state.cached = resolved
+            return resolved
         }
-        let legacyKey = "doomcoder.companion.deviceId"
-        let resolved = AppGroupCache.defaults.string(forKey: legacyKey)
-            ?? UIDevice.current.identifierForVendor?.uuidString
-            ?? UUID().uuidString
-        Keychain.set(resolved, account: deviceIdAccount, service: deviceIdService)
-        AppGroupCache.defaults.set(resolved, forKey: legacyKey)
-        return resolved
     }
 
     private static var clientVersion: String {
@@ -932,11 +961,13 @@ final class CompanionSyncEngine: NSObject {
                 else { return }
                 
                 let slug = TrackedAgent(rawValue: agentStr)?.iconSlug ?? agentStr
+                // Audit 2026-06: AppGroupCache is the canonical icon
+                // store; the redundant LocalStore.upsertAgentIcon call
+                // wrote to a SQLite table that no reader ever queried.
+                // Removing the duplicate write shaves one SQLite round-
+                // trip per fetched AgentIcon record.
                 AppGroupCache.writeIcon(slug: slug, data: data)
-                if let url = AppGroupCache.iconURL(slug: slug) {
-                    LocalStore.shared.upsertAgentIcon(slug: slug, fileURL: url)
-                }
-                
+
             default:
                 break
             }

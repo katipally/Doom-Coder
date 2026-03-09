@@ -123,7 +123,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // MARK: - Background refresh
 
     /// Submits the next opportunistic refresh request (no-op if one is queued).
+    /// Audit 2026-06: this method is called from both
+    /// `didEnterBackgroundNotification` and from `handleAppRefresh`'s
+    /// completion. Multiple in-flight calls are safe because
+    /// `BGTaskScheduler.submit` is documented to coalesce: if a request
+    /// with the same identifier is already queued, the new submit is a
+    /// no-op. We still guard the call with a `scheduled` flag so the
+    /// "noisy" case (every backgrounding re-submits) doesn't spam the
+    /// system log.
+    private var isRefreshScheduled = false
+
     func scheduleAppRefresh() {
+        if isRefreshScheduled { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
         // Earliest, not exact — iOS coalesces on its own schedule.
         // Request 2 min; iOS typically enforces a ~15 min minimum, but shorter
@@ -131,6 +142,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 60)
         do {
             try BGTaskScheduler.shared.submit(request)
+            isRefreshScheduled = true
         } catch {
             print("[AppDelegate] BGAppRefresh submit failed: \(error)")
         }
@@ -139,6 +151,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// Runs a single fetch + presence publish within the system's time budget,
     /// always chaining the next request so the cadence keeps going.
     private func handleAppRefresh(_ task: BGAppRefreshTask) {
+        // Reset the scheduled flag so a fresh scheduleAppRefresh can re-arm
+        // the cadence after this refresh completes.
+        isRefreshScheduled = false
         scheduleAppRefresh()
         let work = Task { @MainActor in
             await CompanionSyncEngine.shared.fetchChanges()
