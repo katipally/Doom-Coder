@@ -321,7 +321,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nRES_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources\"\nmkdir -p \"$RES_DIR\"\nOUT=\"$RES_DIR/dc-hook\"\nxcrun swiftc -O -target \"$(uname -m)-apple-macos$MACOSX_DEPLOYMENT_TARGET\" \"$SRCROOT/dc-hook/main.swift\" -o \"$OUT\"\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options=runtime \"$OUT\" || true\nfi\n";
+			shellScript = "set -e\nRES_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources\"\nmkdir -p \"$RES_DIR\"\nOUT=\"$RES_DIR/dc-hook\"\nxcrun swiftc -O -target \"$(uname -m)-apple-macos$MACOSX_DEPLOYMENT_TARGET\" \"$SRCROOT/dc-hook/main.swift\" -o \"$OUT\"\n# Audit 2026-06: removed `|| true` after the codesign call. The\n# trailing `|| true` was swallowing codesign failures silently;\n# in Debug without a signing identity, the variable is empty and the\n# block is skipped, so the previous behaviour is preserved. With a\n# signing identity, a codesign failure now propagates as a build\n# error (which is what we want — a half-signed helper would silently\n# break agent invocations).\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options=runtime \"$OUT\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -525,7 +525,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 6.2;
 			};
 			name = Debug;
 		};
@@ -549,7 +549,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 6.2;
 			};
 			name = Release;
 		};

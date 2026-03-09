@@ -18,28 +18,20 @@
                 <string>CA92.1</string>
             </array>
         </dict>
-        <dict>
-            <key>NSPrivacyAccessedAPIType</key>
-            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key>
-            <array>
-                <string>C617.1</string>
-            </array>
-        </dict>
+        <!-- Audit 2026-06: removed unused reason declarations.
+             `NSPrivacyAccessedAPICategoryFileTimestamp` (C617.1),
+             `NSPrivacyAccessedAPICategoryDiskSpace` (E174.1), and
+             `NSPrivacyAccessedAPICategorySystemBootTime` (35F9.1)
+             were declared but not exercised by the companion code.
+             Apple flags unused reasons in App Review. The disk-space
+             one is back in v3.x via the new IconDownloader disk-quota
+             check; we re-add E174.1 with a clear purpose. -->
         <dict>
             <key>NSPrivacyAccessedAPIType</key>
             <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
                 <string>E174.1</string>
-            </array>
-        </dict>
-        <dict>
-            <key>NSPrivacyAccessedAPIType</key>
-            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key>
-            <array>
-                <string>35F9.1</string>
             </array>
         </dict>
     </array>

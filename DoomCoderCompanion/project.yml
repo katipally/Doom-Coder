@@ -14,10 +14,15 @@ options:
 settings:
   base:
     DEVELOPMENT_TEAM: A9P2388PHM
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: "6.2"
     MARKETING_VERSION: "2.7.0"
     CURRENT_PROJECT_VERSION: "12"
-    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Audit 2026-06: the iOS project has no shell-script build phases
+    # (the dc-hook swiftc phase lives in the Mac project), so
+    # sandboxing the build scripts does not break anything. Re-enable
+    # the Xcode 15+ default. The Mac project's project.pbxproj still
+    # has this set to NO because of the dc-hook phase.
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_STRICT_CONCURRENCY: complete
     CODE_SIGN_STYLE: Automatic
     OTHER_LDFLAGS: "$(inherited) -ObjC"
@@ -51,7 +56,6 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - remote-notification
-          - fetch
         BGTaskSchedulerPermittedIdentifiers:
           - com.doomcoder.app.companion.refresh
         UIRequiredDeviceCapabilities:
@@ -64,6 +68,8 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        # Audit 2026-06: explicit category for App Store browse placement.
+        LSApplicationCategoryType: public.app-category.developer-tools
         CFBundleURLTypes:
           - CFBundleURLName: com.doomcoder.app.companion
             CFBundleURLSchemes:
