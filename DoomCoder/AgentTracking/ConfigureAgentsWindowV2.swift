@@ -331,6 +331,10 @@ struct ConfigureAgentsViewV2: View {
                 Spacer()
                 Button("Re-scan") { detectAll() }
             }
+            Text("Checks whether \(agent.displayName) is installed on this Mac. This is informational — you can install hooks even if it isn't detected.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } label: {
             Label("Detection", systemImage: "magnifyingglass")
         }
@@ -364,6 +368,10 @@ struct ConfigureAgentsViewV2: View {
                 }
                 Spacer()
             }
+            Text("Shows recent hook activity. “Active” means events arrived in the last hour. If it stays “Quiet” while you're using the agent, run the Connection Doctor below.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } label: {
             Label("Health", systemImage: "heart.text.square")
         }
@@ -424,6 +432,11 @@ struct ConfigureAgentsViewV2: View {
     private func hooksSetupSection(_ agent: TrackedAgent) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
+                Text("Installs hooks so DoomCoder can see when \(agent.displayName) starts, finishes, or needs your approval. Hooks run locally on this Mac — your code and prompts are never sent to DoomCoder.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Text("Config: \(configPathHint(agent))")
                     .font(.callout).foregroundStyle(.secondary)
 
@@ -565,6 +578,8 @@ struct ConfigureAgentsViewV2: View {
                         .foregroundStyle(.secondary)
                 }
 
+                PairingGuideCard()
+
                 connectedDevicesSection
 
                 sharedWithSection
@@ -617,6 +632,10 @@ struct ConfigureAgentsViewV2: View {
                 ) {
                     EmptyView()
                 }
+                Text("Securely syncs agent activity to your connected devices over iCloud, so alerts reach your iPhone even when you're away from this Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -697,6 +716,12 @@ struct ConfigureAgentsViewV2: View {
             symbol: "bell.fill"
         ) {
             VStack(alignment: .leading, spacing: 0) {
+                Text("Where alerts are delivered. Turn on a channel and use “Send test” to confirm it works.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 4)
+
                 channelRow(
                     label: "Mac notifications",
                     symbol: "bell.fill",
@@ -1326,3 +1351,75 @@ struct ConfigureAgentsViewV2: View {
 // - ConnectionDoctorSection.swift
 // - ConnectionsCard.swift
 // - AddDeviceSheet.swift
+
+// MARK: - PairingGuideCard
+//
+// Collapsible "how to connect a device" guide shown near the top of the
+// Connections tab. Collapsed by default so it stays out of the way for
+// returning users, but gives a new user the full picture on demand —
+// both the same-iCloud (automatic) and different-iCloud (QR) paths.
+private struct PairingGuideCard: View {
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 14) {
+                path(
+                    symbol: "person.crop.rectangle.stack.fill",
+                    title: "Same Apple ID — easiest",
+                    steps: [
+                        "Install **DoomCoder** on your iPhone or iPad and sign in to the **same iCloud account** as this Mac.",
+                        "Open the app — it opens on the **Dashboard**.",
+                        "This Mac appears **automatically**. Tap it to connect — no scanning needed."
+                    ]
+                )
+                Divider().opacity(0.4)
+                path(
+                    symbol: "qrcode",
+                    title: "Different Apple ID — e.g. a work device",
+                    steps: [
+                        "Click **Add Device** (top-right) to show a QR code and invite link.",
+                        "On the device: **Dashboard ▸ Add Device ▸ Different iCloud ▸ Scan QR Code**.",
+                        "Or send the invite link and open it on the device."
+                    ]
+                )
+            }
+            .padding(.top, 12)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "questionmark.circle")
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+                Text("How do I connect an iPhone or iPad?")
+                    .font(.callout.weight(.medium))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private func path(symbol: String, title: String, steps: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol)
+                .font(.callout.weight(.semibold))
+            ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(i + 1).")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                    Text(.init(step))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
