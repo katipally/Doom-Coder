@@ -1,0 +1,100 @@
+name: Bug report
+description: Something in Doom Code is broken or behaving wrong
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more detail you give, the faster it gets fixed.
+
+        If this is a security problem, stop here and read [SECURITY.md](https://github.com/katipally/Doom-Code/blob/main/SECURITY.md) instead. Do not post security holes publicly.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong? What did you expect instead?
+      placeholder: I turned on Auto mode but the Mac still went to sleep while Claude Code was running.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Walk through exactly what you did, step by step.
+      placeholder: |
+        1. Open the panel with Option Space
+        2. Set Keep Awake to Auto
+        3. Start a long Claude Code run
+        4. Walk away for 15 minutes
+        5. Come back and the Mac had slept
+    validations:
+      required: true
+
+  - type: dropdown
+    id: which-app
+    attributes:
+      label: Which app
+      description: Where did this happen?
+      options:
+        - Mac app
+        - iPhone / iPad companion
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Doom Code version
+      description: Find it in the About window (Mac) or Settings > About (iPhone).
+      placeholder: "2.7.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: macOS / iOS version
+      placeholder: "macOS 26.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent (if relevant)
+      description: If the bug involves agent tracking, which agent?
+      options:
+        - Not agent related
+        - Claude Code
+        - Cursor
+        - VS Code Copilot
+        - Copilot CLI
+        - Windsurf
+        - Codex CLI
+        - opencode
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: |
+        Anything that helps. On the Mac you can grab logs from Configure > Settings > Diagnostics > Reveal Logs. Drag screenshots straight in.
+      placeholder: Paste logs or drop screenshots here.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am on the latest version, or I have noted my version above.
+          required: true

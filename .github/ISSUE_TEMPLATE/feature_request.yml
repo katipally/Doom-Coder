@@ -1,0 +1,70 @@
+name: Feature request
+description: Suggest an idea or improvement for Doom Code
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea? Love it. Even a rough one is welcome. The best requests start from a real problem you're hitting, not just a solution you imagined.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve
+      description: What's annoying or missing right now? What are you trying to do?
+      placeholder: When I leave my desk I have no idea if my agent is still going or stuck, unless I check my phone constantly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd want
+      description: How would you like it to work? Don't worry about whether it's easy to build.
+      placeholder: A glanceable Live Activity on the lock screen showing the current agent status.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What area is this about
+      options:
+        - Keep awake / sleep
+        - Agent tracking
+        - Notifications
+        - New agent support
+        - iPhone / iPad companion
+        - Prompts / Notes
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you want to build it
+      description: No pressure either way. Just helps me know.
+      options:
+        - "Yes, I'd like to take a crack at it"
+        - "Maybe, with some guidance"
+        - "No, just suggesting the idea"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Mockups, links, examples from other apps, whatever helps.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched existing issues and this is not already requested.
+          required: true

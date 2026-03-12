@@ -1,4 +1,4 @@
-# Doom Code Companion — Privacy Policy
+# Doom Code Companion Privacy Policy
 
 **Last updated: May 2026**
 
@@ -31,7 +31,7 @@ If you pair the iOS app with the Doom Code Mac app, the following data is synced
 - Mac status and availability information
 - Your app settings and prompt library
 
-This data is stored in your **private CloudKit database**. It is scoped to your Apple ID and is never accessible to us or any third party. Apple's own CloudKit privacy and security guarantees apply — data is encrypted in transit and at rest.
+This data is stored in your **private CloudKit database**. It is scoped to your Apple ID and is never accessible to us or any third party. Apple's own CloudKit privacy and security guarantees apply, so data is encrypted in transit and at rest.
 
 ---
 
@@ -56,7 +56,7 @@ The **Enhance** feature can rewrite a prompt using AI. You choose how it works:
 ### On-device (Apple Intelligence)
 Runs entirely on your device using Apple's Foundation Models framework. **No prompt text leaves your device.** Available on supported devices with Apple Intelligence enabled.
 
-### My API key (BYOK — Bring Your Own Key)
+### My API key (BYOK, Bring Your Own Key)
 If you provide your own key from a third-party AI provider (e.g. OpenAI, Anthropic), only the specific text you choose to enhance is sent directly to **that provider**, subject to that provider's own privacy policy. We do not operate or proxy this connection and receive none of its content. Your API key is stored only in this device's Keychain and is never transmitted to us.
 
 Prompts and notes never leave your device unless you explicitly trigger the BYOK Enhance feature on a specific piece of text.
@@ -65,7 +65,7 @@ Prompts and notes never leave your device unless you explicitly trigger the BYOK
 
 ## 5. Push notifications
 
-Notifications are delivered via Apple Push Notification service (APNs) using CloudKit subscriptions. Local note reminders use Apple's UserNotifications framework. When a Mac is paired, alert content is routed exclusively through Apple's infrastructure — we never see the content of your notifications.
+Notifications are delivered via Apple Push Notification service (APNs) using CloudKit subscriptions. Local note reminders use Apple's UserNotifications framework. When a Mac is paired, alert content is routed exclusively through Apple's infrastructure, so we never see the content of your notifications.
 
 ---
 
@@ -73,7 +73,7 @@ Notifications are delivered via Apple Push Notification service (APNs) using Clo
 
 | Permission | Why |
 |---|---|
-| **iCloud** | Sync agent configurations and notifications between your paired Mac and iPhone. Optional — the app is fully usable without pairing. |
+| **iCloud** | Sync agent configurations and notifications between your paired Mac and iPhone. Optional. The app is fully usable without pairing. |
 | **Notifications** | Deliver note reminders you set, and (when a Mac is paired) real-time agent alerts from Doom Code on your Mac. |
 
 We do **not** request access to your location, contacts, photos, microphone, camera, or any other sensitive permission.
@@ -110,11 +110,11 @@ Questions about this policy? Open an issue at [github.com/katipally/Doom-Code](h
 
 The macOS app is intentionally shipped with `com.apple.security.app-sandbox = false`. This is a deliberate, audited choice required for the following features that would otherwise be unavailable or severely degraded under the App Sandbox:
 
-- **Global hotkey (⌥ Space)** — registering a global event tap requires Accessibility permission, which the sandbox restricts.
-- **IOPMAssertion / Power Assertions** — the keep-awake feature uses `IOPMAssertionCreateWithName`, which is callable under the sandbox but is more reliable when the process is not sandboxed. The app reads the assertion status via `pmset` for diagnostics.
-- **Shell-out to `dc-hook`** — the Mac launches a small companion binary (`dc-hook`) into the user's `~/Library/Application Support/DoomCoder/` directory, which is not writable from a sandboxed app.
-- **Editing `~/.claude/settings.json`, `~/.codeium/windsurf/hooks.json`, etc.** — agent hook files live in the user's home directory, which the sandbox forbids without an explicit `com.apple.security.files.user-selected.read-write` entitlement (impractical at scale across six agent CLIs).
-- **Reading the Mac's IOPlatformUUID for the stable Mac ID** — the sandbox replaces the real UUID with a synthetic one that resets on every launch, breaking the iCloud pair key.
+- **Global hotkey (⌥ Space).** Registering a global event tap requires Accessibility permission, which the sandbox restricts.
+- **IOPMAssertion / Power Assertions.** The keep-awake feature uses `IOPMAssertionCreateWithName`, which is callable under the sandbox but is more reliable when the process is not sandboxed. The app reads the assertion status via `pmset` for diagnostics.
+- **Shell-out to `dc-hook`.** The Mac launches a small companion binary (`dc-hook`) into the user's `~/Library/Application Support/DoomCoder/` directory, which is not writable from a sandboxed app.
+- **Editing `~/.claude/settings.json`, `~/.codeium/windsurf/hooks.json`, etc.** Agent hook files live in the user's home directory, which the sandbox forbids without an explicit `com.apple.security.files.user-selected.read-write` entitlement (impractical at scale across seven agent integrations).
+- **Reading the Mac's IOPlatformUUID for the stable Mac ID.** The sandbox replaces the real UUID with a synthetic one that resets on every launch, breaking the iCloud pair key.
 
 The app is signed with an Apple Developer ID, notarized by Apple, and uses only the standard system frameworks (no third-party SDKs that would justify additional hardening). The Mac App Store distribution channel, which mandates sandboxing, is not used; the app is distributed via Sparkle auto-update direct from this website and via a Mac App Store companion (the iOS `Doom Code Companion`, which is fully sandboxed and uses the same iCloud container for sync).
 

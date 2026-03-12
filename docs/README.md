@@ -1,4 +1,4 @@
-# Doom Code — Documentation
+# Doom Code: Documentation
 
 | Document | Description |
 |---|---|
