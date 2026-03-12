@@ -8,12 +8,12 @@
 # everywhere instead.
 
 included:
-  - DoomCode
+  - DoomCoder
   - dc-hook
   - Packages
-  - DoomCodeCompanion/DoomCodeCompanion
-  - DoomCodeCompanion/NotificationService
-  - DoomCodeCompanion/SharedCache
+  - DoomCoderCompanion/DoomCoderCompanion
+  - DoomCoderCompanion/NotificationService
+  - DoomCoderCompanion/SharedCache
 
 excluded:
   - .build

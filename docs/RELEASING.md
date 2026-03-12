@@ -34,7 +34,7 @@ git push origin ios-v2.7.0
 ## macOS release (existing, unchanged)
 
 1. Bump `CFBundleShortVersionString` + `CFBundleVersion` in
-   `DoomCode/Info.plist`. `release.yml` also stamps the tag-derived
+   `DoomCoder/Info.plist`. `release.yml` also stamps the tag-derived
    version into the plist at build time, but committing the bump keeps
    local dev builds in sync with what shipped.
 2. Update `docs/CHANGELOG.md`.
@@ -92,8 +92,8 @@ builds with the same marketing version are typically auto-approved).
 
 ### Cutting an iOS release
 
-1. Bump `MARKETING_VERSION` in `DoomCodeCompanion/project.yml` and run
-   `cd DoomCodeCompanion && xcodegen generate`.
+1. Bump `MARKETING_VERSION` in `DoomCoderCompanion/project.yml` and run
+   `cd DoomCoderCompanion && xcodegen generate`.
 2. Update `docs/CHANGELOG.md` (the same section that documents the matching
    Mac release).
 3. `git tag ios-v2.4.0 && git push origin ios-v2.4.0`.
@@ -120,19 +120,19 @@ builds with the same marketing version are typically auto-approved).
 If you ever need to upload without GitHub Actions, run from a Mac:
 
 ```bash
-cd DoomCodeCompanion
+cd DoomCoderCompanion
 xcodegen generate
-xcodebuild -project DoomCodeCompanion.xcodeproj \
-  -scheme DoomCodeCompanion -configuration Release \
+xcodebuild -project DoomCoderCompanion.xcodeproj \
+  -scheme DoomCoderCompanion -configuration Release \
   -destination 'generic/platform=iOS' \
-  -archivePath build/DoomCodeCompanion.xcarchive \
+  -archivePath build/DoomCoderCompanion.xcarchive \
   archive
 xcodebuild -exportArchive \
-  -archivePath build/DoomCodeCompanion.xcarchive \
+  -archivePath build/DoomCoderCompanion.xcarchive \
   -exportOptionsPlist ExportOptions.plist \
   -exportPath build/export \
   -allowProvisioningUpdates
-xcrun altool --upload-app -f build/export/DoomCodeCompanion.ipa \
+xcrun altool --upload-app -f build/export/DoomCoderCompanion.ipa \
   --type ios \
   --apiKey "$APP_STORE_CONNECT_KEY_ID" \
   --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
@@ -163,8 +163,8 @@ it. The key ID must match.)
 ## Pre-flight checklist (per release)
 
 - [ ] `docs/CHANGELOG.md` updated and dated.
-- [ ] `MARKETING_VERSION` bumped in `DoomCode/Info.plist` and
-      `DoomCodeCompanion/project.yml`. Companion project regenerated
+- [ ] `MARKETING_VERSION` bumped in `DoomCoder/Info.plist` and
+      `DoomCoderCompanion/project.yml`. Companion project regenerated
       with `xcodegen generate`.
 - [ ] `CloudKit Dashboard → Schema → Deploy to Production` if any new
       record types or fields landed in this release. (For 2.4.0 this
@@ -172,8 +172,8 @@ it. The key ID must match.)
       `AgentConfig`.)
 - [ ] App Store Connect screenshots / metadata updated if the iOS UI
       changed visibly.
-- [ ] Mac build runs clean locally (`xcodebuild -scheme DoomCode -configuration Release`).
-- [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCodeCompanion -configuration Release -destination 'generic/platform=iOS'`).
+- [ ] Mac build runs clean locally (`xcodebuild -scheme DoomCoder -configuration Release`).
+- [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCoderCompanion -configuration Release -destination 'generic/platform=iOS'`).
 - [ ] Both tags pushed. CI green on both workflows.
 
 ---
@@ -197,7 +197,7 @@ TestFlight upload. Allow ~60 minutes the first time.
    - **User Access**: Full Access
 3. Apple assigns a numeric **Apple ID** (e.g. `6480000000`). Note it.
    Update `companionAppStoreURL` in
-   `DoomCode/ConfigureSettingsPane.swift` to replace the
+   `DoomCoder/ConfigureSettingsPane.swift` to replace the
    `id0000000000` placeholder.
 
 ### 2. App Store listing metadata
