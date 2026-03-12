@@ -1,4 +1,4 @@
-// NotificationPermissionCenter.swift — DoomCode Companion
+// NotificationPermissionCenter.swift — Doom Coder Companion
 // Single entry point for the iOS notification permission lifecycle.
 //
 // Two responsibilities:

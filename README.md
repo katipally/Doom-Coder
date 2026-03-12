@@ -1,23 +1,29 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Doom Code" width="400" />
+<img src="assets/logo.png" alt="Doom Coder" width="400" />
 
-# Doom Code
+# Doom Coder
 
 **Keep your Mac awake. Watch your AI agents. Get pinged on your iPhone the second they need you.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/Doom-Code?style=flat-square)](https://github.com/katipally/Doom-Code/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-blue?style=flat-square)](#)
-[![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](#)
+[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release)](https://github.com/katipally/Doom-Coder/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads)](https://github.com/katipally/Doom-Coder/releases)
+[![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github)](https://github.com/katipally/Doom-Coder/stargazers)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
+[![iOS 26+](https://img.shields.io/badge/iOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
+[![Swift 6](https://img.shields.io/badge/Swift-6-fa7343?style=flat-square&logo=swift&logoColor=white)](#)
 
 <br/>
 
-[![Download for Mac](https://img.shields.io/badge/Download%20for%20Mac-Latest%20Release-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/katipally/Doom-Code/releases/latest)
-&nbsp;
-[![Download on the App Store](https://img.shields.io/badge/iPhone%20%26%20iPad-App%20Store-0D96F6?style=for-the-badge&logo=appstore&logoColor=white)](https://apps.apple.com/app/doomcoder-companion/id6772514212)
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="52" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/Download_for_macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+&nbsp;&nbsp;
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="52" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
 
-<sub>Mac app is a signed, notarized `.zip` from GitHub Releases. The iPhone and iPad companion is free on the App Store.</sub>
+<br/><br/>
+
+<sub>macOS app is a signed, notarized <code>.zip</code> from GitHub Releases (auto-updates via Sparkle). The iPhone and iPad companion is free on the App Store.</sub>
 
 </div>
 
@@ -34,7 +40,7 @@ I would kick off a long agent run, Claude Code or Codex chewing through a real t
 
 So I was basically stuck babysitting the screen. I couldn't go do other work, couldn't leave the room, couldn't trust the run to survive without me staring at it. Which kind of defeats the point of having an agent do the work in the first place.
 
-Doom Code is the fix. It keeps the Mac awake so runs never die mid-task, and it watches your agents and sends a notification straight to your phone the moment one of them finishes, fails, or needs you to approve something. Now I can actually walk away. My phone buzzes when the agent needs a human, I tab back, unblock it, done.
+Doom Coder is the fix. It keeps the Mac awake so runs never die mid-task, and it watches your agents and sends a notification straight to your phone the moment one of them finishes, fails, or needs you to approve something. Now I can actually walk away. My phone buzzes when the agent needs a human, I tab back, unblock it, done.
 
 The endgame I'm building toward: drive the whole thing from my phone. Send prompts, approve actions, steer the agent, all from my pocket so I don't even need to be at the laptop. We're not all the way there yet, but the foundation is shipping.
 
@@ -50,7 +56,7 @@ Two jobs, done well.
 
 **1. Keeps your Mac awake** while long-running stuff (builds, downloads, agent runs) finishes, without touching a single system setting. Nothing to clean up after.
 
-**2. Watches your coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI, and opencode) and notifies you the instant they finish, fail, or need your attention. On your Mac and on your iPhone, through the free **Doom Code Companion** app.
+**2. Watches your coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI, and opencode) and notifies you the instant they finish, fail, or need your attention. On your Mac and on your iPhone, through the free **Doom Coder Companion** app.
 
 ---
 
@@ -60,7 +66,7 @@ Two jobs, done well.
 
 | Mode | What it does |
 |---|---|
-| **Off** | macOS handles sleep like normal. Doom Code is running but holding nothing. |
+| **Off** | macOS handles sleep like normal. Doom Coder is running but holding nothing. |
 | **On** | Always keeps the Mac awake. Pick **Screen On** (display stays lit) or **Screen Off** (display dims, CPU keeps going). |
 | **Auto** | The smart one, Caffeine style. Stays awake while a tracked agent is actually working **or** while you're at the keyboard. Lets go 10 minutes after both go quiet. You can **Snooze** it (15 min, 1 hour, or until you turn it off) when you want to override that. Honors your per-agent tracking toggles. |
 
@@ -79,7 +85,7 @@ Auto-shutoff after **1, 2, 4, or 8 hours**, or leave it running forever. Tap a d
 
 ### Screen Off re-arm
 
-In Screen Off mode, moving the mouse wakes the display. Doom Code puts it back to sleep automatically after an idle gap you choose (default **10 minutes**). Tune it in **Configure > Settings > Screen Off**.
+In Screen Off mode, moving the mouse wakes the display. Doom Coder puts it back to sleep automatically after an idle gap you choose (default **10 minutes**). Tune it in **Configure > Settings > Screen Off**.
 
 ### Auto mode snooze
 
@@ -95,7 +101,7 @@ While snoozed, the panel shows a countdown and the menu bar icon swaps to a `moo
 
 ## How the sleep blocker works
 
-Doom Code holds an `IOPMAssertion`, the exact same kernel flag that Amphetamine, Lungo, and `caffeinate` use.
+Doom Coder holds an `IOPMAssertion`, the exact same kernel flag that Amphetamine, Lungo, and `caffeinate` use.
 
 - Basically zero CPU and under 10 MB RAM. It's one flag in the kernel, no polling loop.
 - Released automatically on crash, quit, or disable.
@@ -127,9 +133,9 @@ VS Code hooks cover multiple variants at once: VS Code Stable, VS Code Insiders,
 
 ### How the hooks work
 
-Doom Code drops a tiny `dc-hook` binary into each agent's hook config. When an agent fires a hook event, `dc-hook` writes a small JSON envelope to a Unix socket that Doom Code is listening on. The binary lives in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app moves and Xcode rebuilds.
+Doom Coder drops a tiny `dc-hook` binary into each agent's hook config. When an agent fires a hook event, `dc-hook` writes a small JSON envelope to a Unix socket that Doom Coder is listening on. The binary lives in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app moves and Xcode rebuilds.
 
-opencode is the one exception in how it's wired: instead of a hooks JSON file, Doom Code installs a small JavaScript plugin (`doomcoder.js`) that opencode auto-loads. The plugin still calls the same `dc-hook` over the same socket, so it lands in exactly the same place as every other agent.
+opencode is the one exception in how it's wired: instead of a hooks JSON file, Doom Coder installs a small JavaScript plugin (`doomcoder.js`) that opencode auto-loads. The plugin still calls the same `dc-hook` over the same socket, so it lands in exactly the same place as every other agent.
 
 That's the whole trick. No polling, no guessing, no scraping logs. The agent tells you exactly when something happens, and you find out in real time.
 
@@ -141,13 +147,13 @@ That's the whole trick. No polling, no guessing, no scraping logs. The agent tel
 4. Check the prerequisites, then click **Install**.
 5. The green health dot in the sidebar means events are flowing.
 
-Doom Code backs up your config before it writes anything, and it can **Repair** hooks if they ever drift out of sync.
+Doom Coder backs up your config before it writes anything, and it can **Repair** hooks if they ever drift out of sync.
 
 ### Per-agent toggles
 
 Open **Track Agents** from the main panel to:
 - Turn notifications on or off per agent without uninstalling the hooks.
-- **Pause everything** for a bit. The Pause toggle is in-memory only, so it resets when Doom Code quits.
+- **Pause everything** for a bit. The Pause toggle is in-memory only, so it resets when Doom Coder quits.
 
 Events still get logged locally even while an agent is paused or off.
 
@@ -167,7 +173,7 @@ Plain old macOS banners. Grant permission once and they work everywhere.
 
 ### iPhone and iPad (iCloud)
 
-Needs the free **Doom Code Companion** app. Notifications hit your phone in 1 to 5 seconds through your private iCloud container. No third-party server, no tokens.
+Needs the free **Doom Coder Companion** app. Notifications hit your phone in 1 to 5 seconds through your private iCloud container. No third-party server, no tokens.
 
 Pairing is dead simple and works two ways:
 
@@ -188,7 +194,7 @@ You only see toggles for events an agent can actually emit, so nothing on screen
 
 ### No more auto-accept spam
 
-Copilot CLI, Cursor, and Windsurf fire a *permission* hook **before** their own allowlist decides to auto-approve something. A naive watcher would ping you for tools that were never actually blocked. Doom Code waits out a short **approval debounce window** (default 0.8s, adjustable 0.5 to 3s under **Configure > Settings**) for proof the tool actually ran, so only genuinely-blocking requests make a sound. Live status in the menu bar and Dynamic Island is never delayed. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert instantly with zero added lag.
+Copilot CLI, Cursor, and Windsurf fire a *permission* hook **before** their own allowlist decides to auto-approve something. A naive watcher would ping you for tools that were never actually blocked. Doom Coder waits out a short **approval debounce window** (default 0.8s, adjustable 0.5 to 3s under **Configure > Settings**) for proof the tool actually ran, so only genuinely-blocking requests make a sound. Live status in the menu bar and Dynamic Island is never delayed. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert instantly with zero added lag.
 
 ### Connections are global
 
@@ -198,7 +204,7 @@ One **mac + iPhone** channel setting covers every agent. Per-agent channel overr
 
 ## The iPhone and iPad companion
 
-**Doom Code Companion** (iOS 26+) is a real standalone app, not just a notification mirror. Fully usable the second you open it, no setup. No Mac connection, no API key, no account needed.
+**Doom Coder Companion** (iOS 26+) is a real standalone app, not just a notification mirror. Fully usable the second you open it, no setup. No Mac connection, no API key, no account needed.
 
 It has four tabs: **Dashboard**, **Prompts**, **Notes**, and **Settings**. Prompts and Notes work fully on-device with nothing else set up. Dashboard is where your Mac shows up once you pair one.
 
@@ -252,9 +258,9 @@ All of this lives in the **Activity** tab of the Configure window.
 
 ## Install
 
-Grab the latest `.zip` from [Releases](https://github.com/katipally/Doom-Code/releases/latest), unzip it, drag `DoomCode.app` into `/Applications`, and double-click to open.
+Grab the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip it, drag `DoomCode.app` into `/Applications`, and double-click to open.
 
-Doom Code is signed with an Apple Developer ID and notarized by Apple, so there are no Gatekeeper prompts and no Terminal workarounds.
+Doom Coder is signed with an Apple Developer ID and notarized by Apple, so there are no Gatekeeper prompts and no Terminal workarounds.
 
 On first launch, macOS might ask for Accessibility permission. That's only for the **Option Space** global shortcut. Skip it if you don't care about the hotkey.
 
@@ -263,8 +269,8 @@ On first launch, macOS might ask for Accessibility permission. That's only for t
 ## Build from source
 
 ```bash
-git clone https://github.com/katipally/Doom-Code.git
-cd Doom-Code
+git clone https://github.com/katipally/Doom-Coder.git
+cd Doom-Coder
 open DoomCode.xcworkspace
 ```
 
@@ -278,8 +284,8 @@ The iOS companion lives in `DoomCodeCompanion/` and is generated from a spec fil
 
 This is an open-source project and contributions are genuinely welcome, whether that's a bug report, a feature idea, or code.
 
-- **Found a bug?** [Open a bug report.](https://github.com/katipally/Doom-Code/issues/new?template=bug_report.yml)
-- **Have an idea?** [Open a feature request.](https://github.com/katipally/Doom-Code/issues/new?template=feature_request.yml) Adding support for a new agent is always interesting.
+- **Found a bug?** [Open a bug report.](https://github.com/katipally/Doom-Coder/issues/new?template=bug_report.yml)
+- **Have an idea?** [Open a feature request.](https://github.com/katipally/Doom-Coder/issues/new?template=feature_request.yml) Adding support for a new agent is always interesting.
 - **Want to write code?** Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the project layout, and how to open a PR.
 - **Found a security hole?** Don't post it publicly. See [SECURITY.md](SECURITY.md).
 
@@ -289,7 +295,7 @@ Every pull request runs through CI automatically: it builds the Mac app, builds 
 
 ## Privacy
 
-Doom Code collects no analytics, sends nothing to any server, and runs no telemetry. The full policy is in [docs/privacy.md](docs/privacy.md).
+Doom Coder collects no analytics, sends nothing to any server, and runs no telemetry. The full policy is in [docs/privacy.md](docs/privacy.md).
 
 ---
 

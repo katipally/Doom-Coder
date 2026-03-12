@@ -1,4 +1,4 @@
-// CompanionApp.swift — DoomCode Companion
+// CompanionApp.swift — Doom Coder Companion
 // Entry point for the iOS companion app.
 // Boots CompanionSyncEngine and launches RootTabView directly. The app is
 // fully usable on first launch with no Mac / iCloud / notifications — required

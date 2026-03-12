@@ -100,7 +100,7 @@ final class CloudKitPusher {
         if appNapAssertion == nil {
             appNapAssertion = ProcessInfo.processInfo.beginActivity(
                 options: [.userInitiatedAllowingIdleSystemSleep],
-                reason: "DoomCode CloudKit sync responsiveness"
+                reason: "Doom Coder CloudKit sync responsiveness"
             )
         }
 
@@ -222,7 +222,7 @@ final class CloudKitPusher {
     /// database, so deleting its custom zone(s) cascades away every record
     /// (MacStatus, AgentConfig, NotificationLog, AgentIcon, ControlCommand, every
     /// phone's CompanionStatus) AND the zone-wide CKShare. After this, iCloud
-    /// holds no DoomCode data for this account and every paired iPhone goes empty
+    /// holds no Doom Coder data for this account and every paired iPhone goes empty
     /// on its next sync. Best-effort: if offline, the local wipe still proceeds
     /// and the caller relaunches.
     func eraseCloudKitData() async {
@@ -739,7 +739,7 @@ final class MacShareCoordinator {
         let newShare = CKShare(recordZoneID: zoneID)
         newShare.publicPermission = .readWrite
         newShare[CKShare.SystemFieldKey.title] =
-            "Doom Code — \(CloudKitPusher.shared.macName)" as CKRecordValue
+            "Doom Coder — \(CloudKitPusher.shared.macName)" as CKRecordValue
         do {
             let result = try await database.modifyRecords(saving: [newShare], deleting: [])
             for (_, saveResult) in result.saveResults {

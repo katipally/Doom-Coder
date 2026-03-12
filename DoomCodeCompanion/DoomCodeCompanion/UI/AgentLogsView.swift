@@ -1,4 +1,4 @@
-// AgentLogsView.swift — DoomCode Companion
+// AgentLogsView.swift — Doom Coder Companion
 // Per-agent view: capability card at top, full-height notification log below.
 
 import SwiftUI

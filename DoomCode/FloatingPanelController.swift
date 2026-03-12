@@ -127,7 +127,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Recenter panel (invoked from right-click menu "Open Doom Code").
+    /// Recenter panel (invoked from right-click menu "Open Doom Coder").
     func recenter() {
         userMovedPanel = false
         if let panel { positionCentered(panel) }

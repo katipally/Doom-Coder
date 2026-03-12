@@ -1,4 +1,4 @@
-// NotesStore.swift — DoomCode Companion (Tools)
+// NotesStore.swift — Doom Coder Companion (Tools)
 // On-device store for the freeform Notes scratchpad. Local-only.
 
 import Foundation

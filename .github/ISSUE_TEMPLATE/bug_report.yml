@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Doom Code is broken or behaving wrong
+description: Something in Doom Coder is broken or behaving wrong
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time to report this. The more detail you give, the faster it gets fixed.
 
-        If this is a security problem, stop here and read [SECURITY.md](https://github.com/katipally/Doom-Code/blob/main/SECURITY.md) instead. Do not post security holes publicly.
+        If this is a security problem, stop here and read [SECURITY.md](https://github.com/katipally/Doom-Coder/blob/main/SECURITY.md) instead. Do not post security holes publicly.
 
   - type: textarea
     id: what-happened
@@ -48,7 +48,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: Doom Code version
+      label: Doom Coder version
       description: Find it in the About window (Mac) or Settings > About (iPhone).
       placeholder: "2.7.0"
     validations:

@@ -1,6 +1,6 @@
 # Security Policy
 
-Doom Code runs on your machine, edits agent config files in your home directory, and ships unsandboxed on macOS. That means security reports matter. Thanks for helping keep it safe.
+Doom Coder runs on your machine, edits agent config files in your home directory, and ships unsandboxed on macOS. That means security reports matter. Thanks for helping keep it safe.
 
 ## Reporting a vulnerability
 
@@ -8,7 +8,7 @@ Doom Code runs on your machine, edits agent config files in your home directory,
 
 Instead, report it privately one of two ways:
 
-1. **GitHub private advisory (preferred).** Go to the [Security tab](https://github.com/katipally/Doom-Code/security/advisories/new) and open a draft advisory. This keeps the details private until a fix ships.
+1. **GitHub private advisory (preferred).** Go to the [Security tab](https://github.com/katipally/Doom-Coder/security/advisories/new) and open a draft advisory. This keeps the details private until a fix ships.
 2. **Email.** Send the details to yashwanthreddykatipally@gmail.com.
 
 Include as much as you can:
@@ -49,4 +49,4 @@ The Mac app intentionally ships without the App Sandbox. This is a deliberate, d
 
 ## What we collect
 
-Nothing. Doom Code has no servers, no analytics, and no telemetry. Notifications travel only through your own private iCloud container. See the [privacy policy](docs/privacy.md) for the full story.
+Nothing. Doom Coder has no servers, no analytics, and no telemetry. Notifications travel only through your own private iCloud container. See the [privacy policy](docs/privacy.md) for the full story.

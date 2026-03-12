@@ -156,7 +156,7 @@ final class GlobalHotkey {
             &hotKeyRef
         )
         if status != noErr {
-            NSLog("DoomCode: RegisterEventHotKey failed with status \(status)")
+            NSLog("Doom Coder: RegisterEventHotKey failed with status \(status)")
             conflictDetected = true
         } else {
             conflictDetected = false

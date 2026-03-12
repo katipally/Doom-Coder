@@ -66,7 +66,7 @@ struct MacNoteEditor: View {
             Button("Open Settings") { openNotificationSettings() }
             Button("Not now", role: .cancel) {}
         } message: {
-            Text("Enable notifications for DoomCode in System Settings to get note reminders.")
+            Text("Enable notifications for Doom Coder in System Settings to get note reminders.")
         }
     }
 

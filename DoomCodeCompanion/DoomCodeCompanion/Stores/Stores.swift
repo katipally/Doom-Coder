@@ -1,4 +1,4 @@
-// Stores.swift — DoomCode Companion
+// Stores.swift — Doom Coder Companion
 // Observable singleton stores that hold the decoded CloudKit state for the
 // main app. Read-only iOS companion: MacStatusStore, AgentListStore, and
 // NotificationLogStore.

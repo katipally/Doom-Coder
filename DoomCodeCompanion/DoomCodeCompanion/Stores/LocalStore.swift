@@ -1,4 +1,4 @@
-// LocalStore.swift — DoomCode Companion
+// LocalStore.swift — Doom Coder Companion
 // SQLite-backed local persistence for agents, mac_status, and notification logs.
 // Provides fast reads for the UI without CloudKit round-trips.
 //

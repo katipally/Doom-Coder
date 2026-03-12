@@ -1,4 +1,4 @@
-// PromptsView.swift — DoomCode Companion (Tools)
+// PromptsView.swift — Doom Coder Companion (Tools)
 // The Prompt workspace, redesigned as a refine transcript (iMessage-style):
 // the user types a rough request, the AI streams back a refined prompt rendered
 // plain on the background with a Copy button, and follow-up messages refine the

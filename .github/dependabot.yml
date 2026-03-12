@@ -1,0 +1,21 @@
+# Keeps dependencies current so contributors and CI run against fresh versions.
+# Opens small, reviewable PRs on a schedule. Merge or ignore them as you like.
+version: 2
+updates:
+  # GitHub Actions used by the CI, release, and TestFlight workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+
+  # Swift packages declared by the shared DoomCodeCore package.
+  - package-ecosystem: "swift"
+    directory: "/Packages/DoomCodeCore"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"

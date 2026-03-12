@@ -33,7 +33,7 @@ struct ConfigureAgentsViewV2: View {
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private static let companionAppStoreURL = "https://apps.apple.com/app/doomcoder-companion/id6772514212"
-    private static let companionHelpURL = "https://github.com/katipally/Doom-Code#iphone--ipad-companion"
+    private static let companionHelpURL = "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
 
     var body: some View {
         NavigationSplitView {
@@ -101,7 +101,7 @@ struct ConfigureAgentsViewV2: View {
             }
             Button("Skip", role: .cancel) { MigrationManager.markDone() }
         } message: {
-            Text("DoomCode found outdated hook configurations for: \(migrationAgents.map(\.displayName).joined(separator: ", ")). Update to v2 format?")
+            Text("Doom Coder found outdated hook configurations for: \(migrationAgents.map(\.displayName).joined(separator: ", ")). Update to v2 format?")
         }
     }
 
@@ -206,7 +206,7 @@ struct ConfigureAgentsViewV2: View {
             }
             Spacer()
             if hasWarning {
-                HelpTip("DoomCode detected that the installed hook config no longer matches what it wrote — likely edited by the agent or another tool. Select this agent and click Repair to restore it.")
+                HelpTip("Doom Coder detected that the installed hook config no longer matches what it wrote — likely edited by the agent or another tool. Select this agent and click Repair to restore it.")
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                     .font(.caption)
@@ -432,7 +432,7 @@ struct ConfigureAgentsViewV2: View {
     private func hooksSetupSection(_ agent: TrackedAgent) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Installs hooks so DoomCode can see when \(agent.displayName) starts, finishes, or needs your approval. Hooks run locally on this Mac — your code and prompts are never sent to DoomCode.")
+                Text("Installs hooks so Doom Coder can see when \(agent.displayName) starts, finishes, or needs your approval. Hooks run locally on this Mac — your code and prompts are never sent to DoomCode.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -949,7 +949,7 @@ struct ConfigureAgentsViewV2: View {
                     .font(.callout.weight(.medium))
                 Spacer()
             }
-            Text("Install DoomCode on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically. Or pair an existing device with a QR code or invite link.")
+            Text("Install Doom Coder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically. Or pair an existing device with a QR code or invite link.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -977,7 +977,7 @@ struct ConfigureAgentsViewV2: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .help("Open the App Store to download DoomCode on an iPhone or iPad")
+                .help("Open the App Store to download Doom Coder on an iPhone or iPad")
 
                 Button {
                     if let url = URL(string: Self.companionHelpURL) {
@@ -1171,7 +1171,7 @@ struct ConfigureAgentsViewV2: View {
         list.append(Prereq(
             label: "dc-hook binary ready",
             met: dcHookOK,
-            fix: dcHookOK ? nil : "Binary not found — try reinstalling DoomCode"
+            fix: dcHookOK ? nil : "Binary not found — try reinstalling Doom Coder"
         ))
         switch agent {
         case .claude:
@@ -1368,7 +1368,7 @@ private struct PairingGuideCard: View {
                     symbol: "person.crop.rectangle.stack.fill",
                     title: "Same Apple ID — easiest",
                     steps: [
-                        "Install **DoomCode** on your iPhone or iPad and sign in to the **same iCloud account** as this Mac.",
+                        "Install **Doom Coder** on your iPhone or iPad and sign in to the **same iCloud account** as this Mac.",
                         "Open the app — it opens on the **Dashboard**.",
                         "This Mac appears **automatically**. Tap it to connect — no scanning needed."
                     ]

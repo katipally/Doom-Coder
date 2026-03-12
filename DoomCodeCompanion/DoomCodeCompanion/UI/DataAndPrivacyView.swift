@@ -1,4 +1,4 @@
-// DataAndPrivacyView.swift — DoomCode Companion
+// DataAndPrivacyView.swift — Doom Coder Companion
 // Dedicated "Data & Privacy" screen pushed from Settings. Gives the user full
 // control over what stays and what goes: clear individual categories, or erase
 // everything for a fresh-install state. All clearing is LOCAL — iCloud records
@@ -144,9 +144,9 @@ struct DataAndPrivacyView: View {
             Text("This wipes all data on this device and deletes this device's zones from iCloud, then closes the app.\n\nIf a Mac on the same iCloud account is still running, it owns its data and may re-publish it — run Erase All Data on the Mac too for a permanent clean slate.")
         }
         .alert("Data erased", isPresented: $showEraseDone) {
-            Button("Close DoomCode") { exit(0) }
+            Button("Close Doom Coder") { exit(0) }
         } message: {
-            Text("All local and iCloud data for this device has been removed. Reopen DoomCode to start fresh.")
+            Text("All local and iCloud data for this device has been removed. Reopen Doom Coder to start fresh.")
         }
     }
 

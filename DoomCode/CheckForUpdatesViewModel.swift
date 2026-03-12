@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import Sparkle
 
-/// Opts DoomCode's MenuBarExtra into Sparkle's "gentle reminder" update
+/// Opts Doom Coder's MenuBarExtra into Sparkle's "gentle reminder" update
 /// prompting. Without this, Sparkle logs a warning every launch because
 /// background/menu-bar apps otherwise miss update alerts. We keep it dead
 /// simple — tell Sparkle we support gentle reminders and let its standard
