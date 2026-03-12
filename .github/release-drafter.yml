@@ -1,0 +1,56 @@
+# Config for Release Drafter (see .github/workflows/release-drafter.yml).
+#
+# As pull requests merge into main, this keeps a DRAFT GitHub Release updated
+# with a categorized changelog, grouped by the PR's labels. It never publishes
+# anything. The real release is still cut by release.yml when you push a v* tag.
+# Use the draft as a ready-made changelog to paste into docs/CHANGELOG.md and
+# the published release, then delete the draft.
+
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "Features"
+    labels:
+      - "enhancement"
+      - "agent-support"
+  - title: "Bug Fixes"
+    labels:
+      - "bug"
+  - title: "Documentation"
+    labels:
+      - "documentation"
+  - title: "Maintenance"
+    labels:
+      - "ci"
+      - "dependencies"
+      - "github_actions"
+
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - "major"
+  minor:
+    labels:
+      - "enhancement"
+      - "agent-support"
+  patch:
+    labels:
+      - "bug"
+      - "documentation"
+      - "ci"
+      - "dependencies"
+  default: patch
+
+exclude-labels:
+  - "skip-changelog"
+
+template: |
+  ## What's changed
+
+  $CHANGES
+
+  **Full changelog**: https://github.com/katipally/Doom-Coder/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

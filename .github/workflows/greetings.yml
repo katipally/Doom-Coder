@@ -1,0 +1,36 @@
+name: Greetings
+
+# Posts a friendly note the first time someone opens an issue or a pull
+# request. Helps new contributors feel welcome and points them at the docs.
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            Thanks for opening your first issue, and welcome to Doom Coder.
+
+            A quick check that helps us move fast: make sure you are on the
+            latest version and that the title says what is going on in a few
+            words. If this is a security problem, please close this and follow
+            SECURITY.md instead. We will take a look soon.
+          pr-message: |
+            Thanks for your first pull request, and welcome to Doom Coder.
+
+            CI will run automatically (Mac build, iOS build, SwiftLint) and all
+            three need to pass. If anything looks red, open the run to see why.
+            A maintainer will review when they can. If you have not already,
+            skim CONTRIBUTING.md so the review goes quickly.
