@@ -132,15 +132,15 @@ final class EventStore {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)  // SQLITE_TRANSIENT
-            sqlite3_bind_text(stmt, 1, sessionKey, -1, T)
-            sqlite3_bind_text(stmt, 2, agent, -1, T)
-            sqlite3_bind_text(stmt, 3, event, -1, T)
-            if let tool  { sqlite3_bind_text(stmt, 4, tool, -1, T) } else { sqlite3_bind_null(stmt, 4) }
-            if let path  { sqlite3_bind_text(stmt, 5, path, -1, T) } else { sqlite3_bind_null(stmt, 5) }
-            if let state { sqlite3_bind_text(stmt, 6, state, -1, T) } else { sqlite3_bind_null(stmt, 6) }
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)  // SQLITE_TRANSIENT
+            sqlite3_bind_text(stmt, 1, sessionKey, -1, transient)
+            sqlite3_bind_text(stmt, 2, agent, -1, transient)
+            sqlite3_bind_text(stmt, 3, event, -1, transient)
+            if let tool  { sqlite3_bind_text(stmt, 4, tool, -1, transient) } else { sqlite3_bind_null(stmt, 4) }
+            if let path  { sqlite3_bind_text(stmt, 5, path, -1, transient) } else { sqlite3_bind_null(stmt, 5) }
+            if let state { sqlite3_bind_text(stmt, 6, state, -1, transient) } else { sqlite3_bind_null(stmt, 6) }
             sqlite3_bind_double(stmt, 7, ts)
-            if let payload { sqlite3_bind_text(stmt, 8, payload, -1, T) } else { sqlite3_bind_null(stmt, 8) }
+            if let payload { sqlite3_bind_text(stmt, 8, payload, -1, transient) } else { sqlite3_bind_null(stmt, 8) }
             _ = sqlite3_step(stmt)
         }
     }
@@ -156,13 +156,13 @@ final class EventStore {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(stmt, 1, sessionKey, -1, T)
-            sqlite3_bind_text(stmt, 2, agent, -1, T)
-            sqlite3_bind_text(stmt, 3, event, -1, T)
-            sqlite3_bind_text(stmt, 4, title, -1, T)
-            sqlite3_bind_text(stmt, 5, body, -1, T)
-            sqlite3_bind_text(stmt, 6, channel, -1, T)
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, sessionKey, -1, transient)
+            sqlite3_bind_text(stmt, 2, agent, -1, transient)
+            sqlite3_bind_text(stmt, 3, event, -1, transient)
+            sqlite3_bind_text(stmt, 4, title, -1, transient)
+            sqlite3_bind_text(stmt, 5, body, -1, transient)
+            sqlite3_bind_text(stmt, 6, channel, -1, transient)
             sqlite3_bind_int(stmt, 7, success ? 1 : 0)
             sqlite3_bind_double(stmt, 8, ts)
             _ = sqlite3_step(stmt)
@@ -199,8 +199,8 @@ final class EventStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, agent, -1, T)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, agent, -1, transient)
         sqlite3_bind_int(stmt, 2, Int32(limit))
         return readRows(stmt)
     }
@@ -211,8 +211,8 @@ final class EventStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, key, -1, T)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, key, -1, transient)
         sqlite3_bind_int(stmt, 2, Int32(limit))
         return readRows(stmt)
     }
@@ -224,8 +224,8 @@ final class EventStore {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
             defer { sqlite3_finalize(stmt) }
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(stmt, 1, agent, -1, T)
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, agent, -1, transient)
             return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
         } else {
             let sql = "SELECT COUNT(*) FROM events;"
@@ -242,8 +242,8 @@ final class EventStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, agent, -1, T)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, agent, -1, transient)
         let rows = readRows(stmt)
         return rows.first
     }
@@ -256,8 +256,8 @@ final class EventStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
         defer { sqlite3_finalize(stmt) }
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, agent, -1, T)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, agent, -1, transient)
         sqlite3_bind_double(stmt, 2, cutoff)
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
     }
@@ -310,13 +310,13 @@ final class EventStore {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(stmt, 1, sessionKey, -1, T)
-            sqlite3_bind_text(stmt, 2, agent, -1, T)
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, sessionKey, -1, transient)
+            sqlite3_bind_text(stmt, 2, agent, -1, transient)
             sqlite3_bind_double(stmt, 3, startedAt.timeIntervalSince1970)
             sqlite3_bind_double(stmt, 4, endedAt.timeIntervalSince1970)
             sqlite3_bind_double(stmt, 5, max(0, duration))
-            sqlite3_bind_text(stmt, 6, outcome, -1, T)
+            sqlite3_bind_text(stmt, 6, outcome, -1, transient)
             sqlite3_bind_int(stmt, 7, Int32(toolCount))
             sqlite3_bind_int(stmt, 8, Int32(permissionCount))
             sqlite3_bind_int(stmt, 9, Int32(subagentCount))
@@ -339,8 +339,8 @@ final class EventStore {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         if let af = agentFilter {
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(stmt, 1, af, -1, T)
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, af, -1, transient)
         }
         var entries: [SessionHistoryEntry] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -399,8 +399,8 @@ final class EventStore {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         if let af = agentFilter {
-            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(stmt, 1, af, -1, T)
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, af, -1, transient)
         }
         var out: [ReconstructedSession] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -451,8 +451,8 @@ final class EventStore {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, agentFilter, -1, T)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, agentFilter, -1, transient)
         sqlite3_bind_int(stmt, 2, Int32(limit))
         return readNotificationRows(stmt)
     }
@@ -484,13 +484,13 @@ final class EventStore {
     }
 
     func clearAgent(_ agent: String) {
-        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         for sql in ["DELETE FROM events WHERE agent=?;", "DELETE FROM notifications WHERE agent=?;",
                     "DELETE FROM session_history WHERE agent=?;"] {
             guard let db else { continue }
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
-            sqlite3_bind_text(stmt, 1, agent, -1, T)
+            sqlite3_bind_text(stmt, 1, agent, -1, transient)
             _ = sqlite3_step(stmt)
             sqlite3_finalize(stmt)
         }

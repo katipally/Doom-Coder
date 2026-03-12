@@ -147,7 +147,7 @@ struct AddDeviceSheet: View {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(url.absoluteString, forType: .string)
-                    HapticsTap()
+                    hapticsTap()
                     withAnimation(DCAnim.micro) { copied = true }
                     Task {
                         try? await Task.sleep(for: .seconds(2))
@@ -224,6 +224,6 @@ struct AddDeviceSheet: View {
 /// Tiny wrapper for system tap feedback. NSE-only haptics not used here;
 /// we rely on the system sound + button visual change. Kept here as a
 /// private helper scoped to this file.
-private func HapticsTap() {
+private func hapticsTap() {
     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
 }

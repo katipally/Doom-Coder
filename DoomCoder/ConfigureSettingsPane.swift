@@ -80,7 +80,9 @@ struct ConfigureSettingsPane: View {
                 Stepper(value: $deferTenths, in: 5...30, step: 1) {
                     HStack {
                         Text("Approval debounce window")
-                        HelpTip("Some agents (Copilot CLI, Cursor, Windsurf) emit a permission hook before their own allowlist decides to auto-approve. Doom Coder waits this long for proof the tool actually ran before alerting you, eliminating auto-accept spam. Genuine blocks still notify after the window. Live status in the menu/Island is unaffected and always instant.")
+                        HelpTip("Some agents (Copilot CLI, Cursor, Windsurf) emit a permission hook before their own allowlist decides to auto-approve. "
+                                + "Doom Coder waits this long for proof the tool actually ran before alerting you, eliminating auto-accept spam. "
+                                + "Genuine blocks still notify after the window. Live status in the menu/Island is unaffected and always instant.")
                         Spacer()
                         Text(String(format: "%.1fs", Double(deferTenths) / 10))
                             .foregroundStyle(.secondary)
@@ -468,7 +470,8 @@ struct MacDataPrivacyView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This permanently deletes all Doom Coder data from this Mac AND from iCloud — including the agents, notifications and status shown on every connected iPhone. The app will reset to a fresh-install state and relaunch. This can’t be undone.")
+            Text("This permanently deletes all Doom Coder data from this Mac AND from iCloud — including the agents, notifications and status shown on every connected iPhone. "
+                 + "The app will reset to a fresh-install state and relaunch. This can’t be undone.")
         }
     }
 }
