@@ -21,6 +21,8 @@
 		DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F11 /* ConnectionsCard.swift */; };
 		DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F12 /* AddDeviceSheet.swift */; };
 		DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F13 /* ConnectionDoctorSection.swift */; };
+		DC0000000000002000000F20 /* MacNoteEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F20 /* MacNoteEditor.swift */; };
+		DC0000000000002000000F21 /* MacMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F21 /* MacMessageView.swift */; };
 		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
 		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
 		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
@@ -91,6 +93,8 @@
 		DC0000000000001000000F11 /* ConnectionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F12 /* AddDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceSheet.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F13 /* ConnectionDoctorSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDoctorSection.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F20 /* MacNoteEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNoteEditor.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F21 /* MacMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMessageView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
@@ -173,6 +177,8 @@
 			children = (
 				DC0000000000001000000123 /* HelpTip.swift */,
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
+				DC0000000000001000000F20 /* MacNoteEditor.swift */,
+				DC0000000000001000000F21 /* MacMessageView.swift */,
 				DC0000000000001000000F01 /* GlassCard.swift */,
 				DC0000000000001000000F02 /* GlassButtonStyle.swift */,
 				DC0000000000001000000F03 /* AppRouter.swift */,
@@ -369,6 +375,8 @@
 				DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */,
 				DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */,
 				DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */,
+				DC0000000000002000000F20 /* MacNoteEditor.swift in Sources */,
+				DC0000000000002000000F21 /* MacMessageView.swift in Sources */,
 				DC0000000000002000000F01 /* GlassCard.swift in Sources */,
 				DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */,
 				DC0000000000002000000F03 /* AppRouter.swift in Sources */,
