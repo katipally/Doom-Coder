@@ -55,6 +55,27 @@ enum AppGroupCache {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    /// Deletes the entire cached-icon directory (Data & Privacy → clear cached
+    /// agent data). Icons re-download for any still-paired Mac.
+    static func clearIcons() {
+        guard let dir = iconsDir else { return }
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // MARK: - Full erase (Data & Privacy → Erase All Data)
+
+    /// Removes ALL App Group state: every UserDefaults key in the suite plus all
+    /// files in the shared container (SQLite mirror, icons, etc.). Local-only —
+    /// iCloud records are untouched. Call this right before quitting the app.
+    static func eraseEverything() {
+        defaults.removePersistentDomain(forName: suiteName)
+        if let dir = containerURL,
+           let items = try? FileManager.default.contentsOfDirectory(
+               at: dir, includingPropertiesForKeys: nil) {
+            for url in items { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
     // MARK: - NotificationLog mirror key
 
     static let notificationLogKey = "cache.notificationLog"

@@ -467,8 +467,21 @@ final class LocalStore: @unchecked Sendable {
         }
     }
 
+    // MARK: - Wipe everything (Data & Privacy → Clear cached data / Full reset)
+
+    /// Empties every table. The on-disk file is reused (a fresh install would
+    /// recreate it empty anyway), so this is safe to call while the handle is open.
+    func wipeAll() {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            for sql in ["DELETE FROM agents;", "DELETE FROM mac_status;", "DELETE FROM notifications;"] {
+                sqlite3_exec(db, sql, nil, nil, nil)
+            }
+        }
+    }
+
     // MARK: - Helpers
-    
+
     private func getString(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
         guard let cStr = sqlite3_column_text(stmt, index) else { return nil }
         return String(cString: cStr)

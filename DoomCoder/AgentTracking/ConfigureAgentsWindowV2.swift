@@ -51,8 +51,8 @@ struct ConfigureAgentsViewV2: View {
                     }
                 case .channels:
                     channelsDetail
-                case .logs:
-                    LogsView()
+                case .activity:
+                    ActivityView()
                 case .settings:
                     ConfigureSettingsPane(sleepManager: SleepManager.shared)
                 }
@@ -154,15 +154,15 @@ struct ConfigureAgentsViewV2: View {
 
                 Button {
                     withAnimation(DCAnim.fade) {
-                        tab = .logs
+                        tab = .activity
                         selected = nil
                     }
                 } label: {
-                    Label("Logs", systemImage: "list.bullet.rectangle")
+                    Label("Activity", systemImage: "waveform.path.ecg")
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(tab == .logs ? Color.accentColor.opacity(0.15) : Color.clear)
-                .animation(DCAnim.fade, value: tab == .logs)
+                .listRowBackground(tab == .activity ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(DCAnim.fade, value: tab == .activity)
 
                 Button {
                     withAnimation(DCAnim.fade) {
@@ -186,7 +186,7 @@ struct ConfigureAgentsViewV2: View {
         switch tab {
         case .agents:   return selected?.displayName ?? "Agents"
         case .channels: return "Connections"
-        case .logs:     return "Logs"
+        case .activity: return "Activity"
         case .settings: return "Settings"
         }
     }

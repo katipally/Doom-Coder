@@ -880,6 +880,49 @@ final class CompanionSyncEngine: NSObject {
         print("[CompanionSyncEngine] resetLocalSyncState: done")
     }
 
+    /// COMPLETE iCloud teardown from THIS device for "Erase All Data". Stops both
+    /// engines, deletes the silent-push subscriptions, and removes every custom
+    /// zone this device can reach in BOTH databases:
+    ///   • shared DB zones (different-account Macs): leaves the share.
+    ///   • private DB zones (same-account Macs): the user owns these, so they are
+    ///     truly deleted from iCloud — this is what stops the connected Mac and
+    ///     its agents/notifications from re-syncing back after the reset.
+    /// Best-effort: offline failures are ignored and the local wipe still runs.
+    ///
+    /// NOTE: if a same-account Mac app is still running, it will recreate its zone
+    /// and republish — for a permanent clean slate, also run Erase All Data on the
+    /// Mac (the data owner). The Erase dialog surfaces this.
+    func eraseCloudKitData() async {
+        print("[CompanionSyncEngine] eraseCloudKitData: starting")
+        privateEngine = nil
+        sharedEngine = nil
+        subscriptionsReady = false
+        zoneReady = false
+        firstFetchCompleted = false
+
+        guard let status = try? await container.accountStatus(), status == .available else {
+            print("[CompanionSyncEngine] eraseCloudKitData: account unavailable, skipped server ops")
+            return
+        }
+
+        _ = try? await privateDB.deleteSubscription(withID: "companion-private-db-sub-v1")
+        _ = try? await sharedDB.deleteSubscription(withID: "companion-shared-db-sub-v1")
+
+        for db in [privateDB, sharedDB] {
+            guard let zones = try? await db.allRecordZones() else { continue }
+            let ids = zones.map(\.zoneID)
+                .filter { $0.zoneName != CKRecordZone.ID.defaultZoneName }
+            if !ids.isEmpty {
+                _ = try? await db.modifyRecordZones(saving: [], deleting: ids)
+            }
+        }
+
+        macZones.removeAll()
+        macScopes.removeAll()
+        saveMacZones()
+        print("[CompanionSyncEngine] eraseCloudKitData: done")
+    }
+
     // MARK: - Subscriptions
 
     private func ensureSubscriptions() async {
@@ -959,6 +1002,7 @@ final class CompanionSyncEngine: NSObject {
                     agents: agents,
                     installed: installed,
                     statuses: statusMap,
+                    deliverables: r.agentDeliverables,
                     macId: r.macId
                 )
                 
@@ -1007,11 +1051,31 @@ final class CompanionSyncEngine: NSObject {
     /// banner itself. Dedups by notifId and ignores backfilled/old records.
     @MainActor
     private func postLocalNotification(for r: NotificationLogRecord) {
-        // Only surface recent events (avoid a banner storm on first full sync).
-        guard Date().timeIntervalSince(r.ts) < 600 else { return }
+        loadPostedNotifIdsIfNeeded()
+
+        // Suppress the initial backlog drain when the user opens the app.
+        // On a fresh launch/install the first CloudKit fetch returns every
+        // recent NotificationLog record at once; without this gate they all
+        // post as banners (the reported "spam on open"). When this is the
+        // first fetch of the session AND the app is in the foreground (a
+        // user-initiated open, not a silent background push wake), mark these
+        // records as already-seen and skip the banner — they still appear in
+        // the in-app Activity log. Genuine new events arriving after the first
+        // fetch (firstFetchCompleted == true), and background push wakes, post
+        // normally.
+        if !firstFetchCompleted && UIApplication.shared.applicationState != .background {
+            if !postedNotifIds.contains(r.notifId) {
+                postedNotifIds.insert(r.notifId)
+                savePostedNotifIds()
+            }
+            return
+        }
+
+        // Only surface recent events (avoid a banner storm on incremental
+        // re-fetches that replay slightly-stale records).
+        guard Date().timeIntervalSince(r.ts) < 120 else { return }
 
         // O(1) dedup via in-memory Set; persisted to UserDefaults for next launch.
-        loadPostedNotifIdsIfNeeded()
         guard !postedNotifIds.contains(r.notifId) else { return }
         postedNotifIds.insert(r.notifId)
         savePostedNotifIds()
