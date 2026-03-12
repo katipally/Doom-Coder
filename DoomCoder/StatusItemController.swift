@@ -10,7 +10,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     static let shared = StatusItemController()
 
     private var statusItem: NSStatusItem?
-    private var _udObserver: NSObjectProtocol?
 
     private override init() {
         super.init()
@@ -30,18 +29,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         refreshIcon()
         startObserving()
-
-        // Watch masterEnabled toggle (stored in UserDefaults) so the menu-bar
-        // icon swaps between bolt.fill / bolt.slash immediately.
-        // IMPORTANT: Use queue: .main so CloudKit's background UserDefaults
-        // writes don't call this on a non-main thread and crash actor isolation.
-        _udObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshIcon() }
-        }
     }
 
     // MARK: - Observation of @Observable state
@@ -50,7 +37,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// once per access-set, so we refresh the icon and re-arm.
     private func startObserving() {
         withObservationTracking {
+            // Track every property of `SleepManager` that affects the
+            // menu-bar icon so we re-render the moment any of them
+            // changes. `withObservationTracking` re-arms itself in
+            // `onChange`.
             _ = SleepManager.shared.isActive
+            _ = SleepManager.shared.masterEnabled
+            _ = SleepManager.shared.isSnoozed
             _ = AgentTrackingManager.shared.lastAnyHookAt
         } onChange: {
             Task { @MainActor [weak self] in
@@ -68,7 +61,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // assertion. When master is OFF the app is fully idle — bolt.slash.
         // When master is on AND a snooze is active, swap to moon.zzz.fill so
         // the user can spot the override at a glance in the menu bar.
-        let master = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+        let master = SleepManager.shared.masterEnabled
         let snoozed = SleepManager.shared.isSnoozed
         let name: String
         if !master { name = "bolt.slash.fill" }
@@ -91,8 +84,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         button.toolTip = "DoomCoder — \(countLabel)"
         button.setAccessibilityLabel("DoomCoder — \(countLabel)")
-        // Gently dim the icon when master is off so it's distinguishable at a glance.
-        button.alphaValue = master ? 1.0 : 0.55
+        // macOS 26 menu-bar pattern: dim the icon via contentTintColor
+        // (not alphaValue, which would dim the badge title too).
+        button.contentTintColor = master ? nil : .secondaryLabelColor
     }
 
     // MARK: - Click handling

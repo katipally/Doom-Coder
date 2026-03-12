@@ -20,7 +20,13 @@ struct PanelRootView: View {
     @Bindable var tracking: AgentTrackingManager
     var dismiss: () -> Void = {}
 
-    @AppStorage("doomcoder.masterEnabled") private var masterEnabled: Bool = true
+    // Master suspend gate now lives on `SleepManager` (single source of
+    // truth). `StatusItemController` observes the same property via
+    // `withObservationTracking`. The previous `@AppStorage` was
+    // duplicated in two places and could race.
+    private var masterEnabled: Bool {
+        get { sleepManager.masterEnabled }
+    }
 
     @State private var measuredSize: CGSize = .zero
     @State private var appeared: Bool = false
@@ -177,18 +183,15 @@ struct PanelRootView: View {
                 Spacer()
                 HelpTip("Master on/off switch. When turned off, the sleep blocker stops and all agent notifications are suspended. Everything resumes when you turn it back on.")
                 Toggle("", isOn: Binding(
-                    get: { masterEnabled },
+                    get: { sleepManager.masterEnabled },
                     set: { on in
-                        withAnimation(DCAnim.smooth) { masterEnabled = on }
+                        withAnimation(DCAnim.smooth) { sleepManager.masterEnabled = on }
                         // Record the local-change time so a stale remote master
                         // command (issued before this) can be ignored on apply.
                         UserDefaults.standard.set(Date(), forKey: CloudKitPusherDelegate.masterChangedAtKey)
-                        // Master is the app-wide suspend gate. Turning it OFF
-                        // releases any keep-awake assertion. Turning it ON does
-                        // NOT force keep-awake — the Keep Awake card's
-                        // Off/On/Auto selector owns that intent.
-                        if !on { sleepManager.disable() }
-                        // Publish the new master state so iOS mirrors it promptly.
+                        // The `didSet` on `SleepManager.masterEnabled` already
+                        // calls `disable()` when turning off; we only need to
+                        // publish the new state so iOS mirrors it promptly.
                         CloudKitPusher.shared.publishMacStatus()
                     }
                 ))
