@@ -58,6 +58,8 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - remote-notification
+          - fetch          # required for BGAppRefreshTask (background data sync)
+          - processing     # allows a longer BGProcessingTask window if added later
         BGTaskSchedulerPermittedIdentifiers:
           - com.doomcoder.app.companion.refresh
         UIRequiredDeviceCapabilities:
