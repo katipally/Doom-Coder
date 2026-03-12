@@ -1220,7 +1220,22 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             }
 
         case .fetchedRecordZoneChanges(let e):
-            for change in e.modifications {
+            // Process the ack/control records BEFORE the NotificationLog backlog.
+            // A full-history NotificationLog re-fetch (e.g. after a reset-gen wipe
+            // or fresh install) can be hundreds of records, each hopping to the
+            // main actor here — which starves the one record that matters for a
+            // remote command: the Mac's MacStatus ack. If MacStatus lands behind
+            // the backlog the iPhone's 30s "waiting for Mac" timeout fires and the
+            // command UI falsely reverts even though the Mac already applied it
+            // (observed: ControlCommand ack latency up to 29s). Sorting
+            // NotificationLog last lets MacStatus/ControlCommand/AgentConfig apply
+            // first, so `reconcile` clears the waiting state in seconds.
+            let ordered = e.modifications.sorted {
+                let a = $0.record.recordType == CloudKitConstants.RecordType.notificationLog ? 1 : 0
+                let b = $1.record.recordType == CloudKitConstants.RecordType.notificationLog ? 1 : 0
+                return a < b
+            }
+            for change in ordered {
                 let rtype = change.record.recordType
                 SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
                 await MainActor.run {

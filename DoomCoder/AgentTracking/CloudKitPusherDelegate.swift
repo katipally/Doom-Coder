@@ -91,20 +91,46 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             break
 
         case .fetchedRecordZoneChanges(let fetched):
+            // Audit 2026-06: instrument the iOS→Mac receive path. Log how many
+            // records the poll/push actually pulled and the per-type tally so we
+            // can see whether ControlCommands are arriving at all (vs being
+            // dropped by the apply filter, vs the fetch returning nothing).
+            if !fetched.modifications.isEmpty || !fetched.deletions.isEmpty {
+                var tally: [String: Int] = [:]
+                for mod in fetched.modifications { tally[mod.record.recordType, default: 0] += 1 }
+                let summary = tally.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: ",")
+                logger.notice("ckpusher.delegate: fetched \(fetched.modifications.count, privacy: .public) mod / \(fetched.deletions.count, privacy: .public) del [\(summary, privacy: .public)]")
+            }
             var commands: [ControlCommandRecord] = []
+            var commandRecordIDs: [String: CKRecord.ID] = [:]   // commandId → CKRecord.ID
             for mod in fetched.modifications {
                 let record = mod.record
                 await MainActor.run { self.pusher?.serverRecords.store(record) }
                 if record.recordType == ControlCommandRecord.recordType,
                    let cmd = ControlCommandRecord(record) {
                     commands.append(cmd)
+                    commandRecordIDs[cmd.commandId] = record.recordID
                 } else if record.recordType == CompanionStatusRecord.recordType,
                           let status = CompanionStatusRecord(record) {
                     await MainActor.run { CompanionStatusStore.shared.upsert(status) }
                 }
             }
             if !commands.isEmpty {
-                await MainActor.run { self.applyControlCommands(commands) }
+                // applyControlCommands returns the IDs it is DONE with (applied or
+                // expired). Delete those records so the one-shot command queue
+                // can't accumulate / re-process on the next token reset, then
+                // flush the deletes + the MacStatus ack in a single kick.
+                let doneIds = await MainActor.run { self.applyControlCommands(commands) }
+                let idsToDelete = doneIds.compactMap { commandRecordIDs[$0] }
+                if !idsToDelete.isEmpty {
+                    await MainActor.run { self.pusher?.deleteControlCommands(recordIDs: idsToDelete) }
+                }
+                // Never call sendChanges() inline from a delegate callback — defer
+                // a detached kick that flushes both the ack and the deletes.
+                Task { @MainActor [weak pusher] in
+                    try? await Task.sleep(for: Self.engineRecoveryKickDelay)
+                    pusher?.kickEngine()
+                }
             }
             // Honor server-side deletions (e.g. a device forgotten from another
             // Mac) so a removed CompanionStatus record doesn't linger locally.
@@ -119,10 +145,22 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             // banner honest even when no commands were pending.
             await MainActor.run { self.pusher?.touchLastSeen() }
 
+        case .fetchedDatabaseChanges(let db):
+            // Which zones the server reports as changed. If iOS wrote a
+            // ControlCommand into our zone, that zone should appear here on the
+            // next poll; if it never does, the poll/fetch itself isn't seeing it.
+            if !db.modifications.isEmpty {
+                let zones = db.modifications.map(\.zoneID.zoneName).joined(separator: ",")
+                logger.notice("ckpusher.delegate: fetchedDatabaseChanges zones=[\(zones, privacy: .public)]")
+            }
+
+        case .willFetchChanges:
+            logger.debug("ckpusher.delegate: willFetchChanges")
+        case .didFetchChanges:
+            logger.debug("ckpusher.delegate: didFetchChanges")
+
         case .willSendChanges, .didSendChanges,
-             .willFetchChanges, .didFetchChanges,
-             .willFetchRecordZoneChanges, .didFetchRecordZoneChanges,
-             .fetchedDatabaseChanges:
+             .willFetchRecordZoneChanges, .didFetchRecordZoneChanges:
             break
 
         @unknown default:
@@ -152,19 +190,42 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     /// The existing 10-min `isExpired` bound keeps the applied-ID set small.
     /// Commands for other Macs, expired commands, and (when the master suspend
     /// gate is off) all commands are ignored.
+    /// Returns the `commandId`s the Mac is DONE with (applied, expired, or
+    /// already-applied) so the caller can delete those one-shot records from the
+    /// zone. Commands for OTHER Macs are left untouched.
     @MainActor
-    private func applyControlCommands(_ commands: [ControlCommandRecord]) {
-        guard let pusher else { return }
+    private func applyControlCommands(_ commands: [ControlCommandRecord]) -> [String] {
+        guard let pusher else { return [] }
 
         let ud = UserDefaults.standard
         var appliedIds = Self.loadAppliedCommandIds(ud)
         let appliedSet = Set(appliedIds)
 
-        let applicable = commands
-            .filter { $0.targetMacId == pusher.macId && !$0.isExpired && !appliedSet.contains($0.commandId) }
+        // Commands addressed to this Mac that are spent (expired or already
+        // applied on a prior fetch) are consumable now — caller deletes them.
+        let mine = commands.filter { $0.targetMacId == pusher.macId }
+        var doneIds = mine
+            .filter { $0.isExpired || appliedSet.contains($0.commandId) }
+            .map { $0.commandId }
+
+        let applicable = mine
+            .filter { !$0.isExpired && !appliedSet.contains($0.commandId) }
             .sorted { $0.issuedAt < $1.issuedAt }
 
-        guard !applicable.isEmpty else { return }
+        // Audit 2026-06: when commands arrive but apply nothing, log WHY. A silent
+        // `targetMacId` mismatch (iOS paired with a stale/different Mac record),
+        // an expired command (clock skew), or an already-applied id each drops the
+        // command with no trace — the #1 suspect for "Mac didn't respond".
+        if applicable.isEmpty {
+            for cmd in commands {
+                let mismatch = cmd.targetMacId != pusher.macId
+                let expired  = cmd.isExpired
+                let dup      = appliedSet.contains(cmd.commandId)
+                logger.notice("ckpusher.delegate: DROPPED \(cmd.command, privacy: .public) — targetMismatch=\(mismatch, privacy: .public)(cmd=\(cmd.targetMacId, privacy: .public) mac=\(pusher.macId, privacy: .public)) expired=\(expired, privacy: .public) alreadyApplied=\(dup, privacy: .public)")
+            }
+            return doneIds   // expired / already-applied records get cleaned up
+        }
+        logger.notice("ckpusher.delegate: applying \(applicable.count, privacy: .public) of \(commands.count, privacy: .public) fetched command(s)")
 
         let sm = SleepManager.shared
         var changed = false
@@ -177,6 +238,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         // keep-awake commands.
         for cmd in applicable {
             appliedIds.append(cmd.commandId)
+            doneIds.append(cmd.commandId)   // consumed → caller deletes the record
 
             // Connectivity diagnostic — always delivered (even while suspended)
             // and never touches SleepManager. Rings a local notification so the
@@ -247,18 +309,14 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         // Persist the bounded applied-ID ring (keeps the most recent N).
         Self.saveAppliedCommandIds(appliedIds, ud)
 
-        guard changed else { return }
-        ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
-        // Queue a fresh MacStatus with the ack fields.
-        pusher.touchLastSeen(force: true)
-        // Flush the queued record immediately via a new Task — must NOT be
-        // an inline await (calling sendChanges() re-entrantly from a delegate
-        // callback is a CloudKit misuse). The brief delay lets the engine
-        // finish processing the current fetch before we trigger a send.
-        Task { @MainActor [weak pusher] in
-            try? await Task.sleep(for: Self.engineRecoveryKickDelay)
-            pusher?.kickEngine()
+        if changed {
+            ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
+            // Queue a fresh MacStatus carrying the ack fields. The caller flushes
+            // this together with the command-record deletes in one deferred kick
+            // (never call sendChanges() inline from a delegate callback).
+            pusher.touchLastSeen(force: true)
         }
+        return doneIds
     }
 
     /// UserDefaults keys for the app-wide master suspend gate. Shared with
