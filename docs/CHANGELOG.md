@@ -8,6 +8,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — UI/UX refresh
+
+- **macOS 26 / iOS 26 polish pass.** All auxiliary windows (About,
+  Configure, Prompts, Notes, What's New) now use the native
+  `.windowLevel(.floating)` SwiftUI scene modifier so they sit above
+  other apps and full-screen apps — matches the floating panel.
+- **Liquid Glass helpers.** New `GlassCard`, `GlassButtonStyle`,
+  `GlassPill`, and `doomGlassCard` / `doomGlassPill` view modifiers
+  for both apps. Used as the canonical surface for cards, pills, and
+  the message input bar.
+- **AppRouter** on macOS — centralized `@Observable` router replaces
+  the racy `ConfigureAgentsViewV2.pendingTab` static +
+  `dcSelectConfigureTab` notification pattern. The Configure window
+  binds to it directly.
+- **WhatsNew SwiftUI Window scene.** One `Window(id: "whatsNew")`
+  replaces the four legacy `showWhatsNew*` methods in the
+  AppDelegate. `WhatsNewHost` picks the highest-version unseen sheet
+  and advances to the next on dismiss.
+- **MacControlViewModel** (iOS) — extracts the optimistic-UI state
+  container for the Mac controls card.
+- **Add Device inline CTA** in the Configure window's Connections
+  tab. The user's complaint that the toolbar's `+` icon was not
+  discoverable: the empty state now shows a prominent
+  `.borderedProminent` "Add Device" button in the body of the
+  section. When devices ARE connected, the section header shows a
+  small text "Add Device" trailing action. The toolbar item stays
+  for keyboard users.
+- **NotesView zoom transition** (iOS) — tapping a note row zooms
+  into the editor with `.matchedTransitionSource` +
+  `.navigationTransition(.zoom)`. Editor is presented with
+  `.presentationDetents([.medium, .large])` +
+  `.presentationContentInteraction(.automatic)` so the user can
+  swipe between notes without dismissing the sheet.
+- **iPad sidebar tab bar** — `.tabViewStyle(.sidebarAdaptable)` on
+  `RootTabView` so iPad gets the macOS-style sidebar in regular
+  width.
+- **Settings → Form migration** — `ConfigureSettingsPane` now uses
+  `Form { Section { … } }.formStyle(.grouped)` instead of `GroupBox`
+  shells, matching the macOS 26 System Settings look. `LabeledContent`
+  for read-only values, `Picker(.menu)` for AI mode/provider/model.
+
+### Changed
+
+- **Master toggle source of truth** moved to `SleepManager.masterEnabled`
+  (single source of truth). `PanelRootView` binds via `@Bindable`;
+  `StatusItemController` reads from the same `@Observable` property
+  via `withObservationTracking`. Removes the prior
+  UserDefaults-didChange observer and the duplicate `@AppStorage`
+  read.
+- **StatusItemController** dims the menu-bar icon via
+  `button.contentTintColor = .secondaryLabelColor` (macOS 26 pattern)
+  instead of `button.alphaValue = 0.55` (which would dim the badge
+  title).
+- **DoomCoder naming consistency** — Info.plist `CFBundleName`,
+  `NSHumanReadableCopyright`, and `AboutView.swift` title all
+  updated from "Doom Coder" to "DoomCoder".
+- **Other naming** — "macOS Notification" → "Mac notifications",
+  "iPhone / iPad (iCloud)" → "iPhone and iPad (iCloud)", "Mirror to
+  iPhone / iPad" → "Mirror to iPhone and iPad".
+
+### Refactored
+
+- **ConfigureAgentsWindowV2** (1903 lines) split into
+  `LiveEventRow`, `ConnectionsCard`, `AddDeviceSheet`,
+  `ConnectionDoctorSection`. Each is now a standalone file with
+  a focused responsibility.
+- **ToolsWindow.swift** (1518 lines) — `MacNoteEditor` and
+  `MacMessageView` extracted into their own files.
+- **MacPromptsPane** (Mac) and **MacNotesPane** (Mac) are now
+  defined in dedicated files (ToolsWindow.swift is the store
+  + configurator + 2 thin entry points).
+
+### Quality
+
+- **Strict-warnings flag** — `SWIFT_TREAT_WARNINGS_AS_ERRORS = YES`
+  and `GCC_TREAT_WARNINGS_AS_ERRORS = YES` set in both Debug and
+  Release for both apps. The build breaks on any new warning. All
+  4 build configs (mac Debug, mac Release, iOS Debug, iOS Release)
+  pass clean.
+
 ---
 
 ## [2.7.0] - 2026-06-06
