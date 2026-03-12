@@ -21,6 +21,7 @@ enum IconDownloader {
         .copilotCLI: "githubcopilot.png",
         .cursor:     "cursor.png",
         .windsurf:   "windsurf.png",
+        .opencode:   "opencode.png",
     ]
 
     // Maps CLI agents to their xcassets image names bundled in the app.
@@ -29,6 +30,7 @@ enum IconDownloader {
         .claude:     "agent-claude",
         .codexCLI:   "agent-codex",
         .copilotCLI: "agent-copilot-cli",
+        .opencode:   "agent-opencode",
     ]
 
     // MARK: - Public API

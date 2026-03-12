@@ -73,6 +73,10 @@ enum DeepLink {
 
         case .codexCLI:
             openFileInDefaultEditor(AgentInstallerV2.codexHooksPath())
+
+        case .opencode:
+            // opencode integration is a plugin file we own outright; just open it.
+            openFileInDefaultEditor(AgentInstallerV2.opencodePluginPath())
         }
     }
 

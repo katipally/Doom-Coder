@@ -85,6 +85,8 @@ public enum AgentCapabilityCatalog {
             return [completed, failed, waitingInput, sessionStart]
         case .codexCLI:
             return [completed, failed, sessionStart, toolCalls]
+        case .opencode:
+            return [completed, failed, waitingApproval, sessionStart, toolCalls]
         }
     }
 

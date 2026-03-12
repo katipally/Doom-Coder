@@ -71,6 +71,7 @@ enum TrackedAgent: String, CaseIterable, Sendable {
     case copilotCLI = "copilot_cli"
     case windsurf
     case codexCLI = "codex_cli"
+    case opencode
 
     var displayName: String {
         switch self {
@@ -80,6 +81,7 @@ enum TrackedAgent: String, CaseIterable, Sendable {
         case .copilotCLI: return "Copilot CLI"
         case .windsurf:   return "Windsurf"
         case .codexCLI:   return "Codex CLI"
+        case .opencode:   return "opencode"
         }
     }
 
@@ -87,7 +89,7 @@ enum TrackedAgent: String, CaseIterable, Sendable {
     var isIDEAgent: Bool {
         switch self {
         case .cursor, .vscode, .windsurf: return true
-        case .claude, .copilotCLI, .codexCLI: return false
+        case .claude, .copilotCLI, .codexCLI, .opencode: return false
         }
     }
 
@@ -104,7 +106,10 @@ enum TrackedAgent: String, CaseIterable, Sendable {
     ///   cancels it if the action turns out to have run on its own.
     var permissionHookReliability: PermissionHookReliability {
         switch self {
-        case .claude, .vscode, .codexCLI: return .reliable
+        // opencode gates tool execution behind an explicit permission request
+        // (`permission.v2.asked`), which fires only when the agent is genuinely
+        // blocked waiting on the user — same contract as Claude/Codex.
+        case .claude, .vscode, .codexCLI, .opencode: return .reliable
         case .copilotCLI, .cursor, .windsurf: return .preDecision
         }
     }

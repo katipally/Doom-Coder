@@ -21,6 +21,7 @@ enum AgentDetector {
         case .copilotCLI:  return detectCopilotCLI()
         case .windsurf:    return detectWindsurf()
         case .codexCLI:    return detectCodexCLI()
+        case .opencode:    return detectOpenCode()
         }
     }
 
@@ -131,6 +132,25 @@ enum AgentDetector {
                               installed: dirExists || version != nil,
                               version: version,
                               details: dirExists ? codexDir : nil)
+    }
+
+    private static func detectOpenCode() -> AgentDetection {
+        // Probe 1: opencode's global config home. Honors OPENCODE_CONFIG_DIR,
+        // else falls back to the XDG default (~/.config/opencode).
+        let env = ProcessInfo.processInfo.environment
+        let configDir = env["OPENCODE_CONFIG_DIR"]
+            ?? (env["XDG_CONFIG_HOME"].map { $0 + "/opencode" })
+            ?? (NSHomeDirectory() + "/.config/opencode")
+        let dirExists = FileManager.default.fileExists(atPath: configDir)
+        // Probe 2: login-shell PATH lookup for the `opencode` binary.
+        let version = runLoginShell("command -v opencode >/dev/null 2>&1 && opencode --version 2>/dev/null")
+        // Probe 3: the desktop app bundle.
+        let appPaths = ["/Applications/opencode.app", NSHomeDirectory() + "/Applications/opencode.app"]
+        let appPath = appPaths.first { FileManager.default.fileExists(atPath: $0) }
+        return AgentDetection(agent: .opencode,
+                              installed: dirExists || version != nil || appPath != nil,
+                              version: version,
+                              details: appPath ?? (dirExists ? configDir : nil))
     }
 
     // MARK: - Shell helpers

@@ -10,6 +10,7 @@ public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
     case copilotCLI = "copilot_cli"
     case windsurf
     case codexCLI = "codex_cli"
+    case opencode
 
     public var displayName: String {
         switch self {
@@ -19,13 +20,14 @@ public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
         case .copilotCLI: return "Copilot CLI"
         case .windsurf:   return "Windsurf"
         case .codexCLI:   return "Codex CLI"
+        case .opencode:   return "opencode"
         }
     }
 
     public var isIDEAgent: Bool {
         switch self {
         case .cursor, .vscode, .windsurf: return true
-        case .claude, .copilotCLI, .codexCLI: return false
+        case .claude, .copilotCLI, .codexCLI, .opencode: return false
         }
     }
 
@@ -39,6 +41,7 @@ public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
         case .copilotCLI: return "github-copilot"
         case .windsurf:   return "windsurf"
         case .codexCLI:   return "openai"
+        case .opencode:   return "opencode"
         }
     }
 
@@ -54,6 +57,7 @@ public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
         case .copilotCLI: return "agent-copilot-cli"
         case .windsurf:   return "agent-windsurf"
         case .codexCLI:   return "agent-codex"
+        case .opencode:   return "agent-opencode"
         }
     }
 }
