@@ -6,7 +6,7 @@
 set -euo pipefail
 
 CDN="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@1.90.0/light"
-XCASSETS="$(dirname "$0")/../DoomCoder/Assets.xcassets"
+XCASSETS="$(dirname "$0")/../DoomCode/Assets.xcassets"
 
 declare -A ICONS=(
   ["agent-claude"]="claudecode-color.png"
@@ -25,5 +25,5 @@ done
 
 echo ""
 echo "Done! Commit the new PNG files:"
-echo "  git add DoomCoder/Assets.xcassets/agent-*.imageset/"
+echo "  git add DoomCode/Assets.xcassets/agent-*.imageset/"
 echo "  git commit -m 'feat: refresh bundled agent icons from lobehub CDN'"

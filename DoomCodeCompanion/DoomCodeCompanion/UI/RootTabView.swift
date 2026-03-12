@@ -1,4 +1,4 @@
-// RootTabView.swift — DoomCoder Companion
+// RootTabView.swift — DoomCode Companion
 // Four-tab structure (Dashboard / Prompts / Notes / Settings), launching on
 // Dashboard — the app's headline feature (live Mac monitoring + remote control).
 // Prompts and Notes are 100% standalone — they work with no Mac, no account, and
@@ -7,7 +7,7 @@
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct RootTabView: View {
     @State private var router = AppRouter.shared

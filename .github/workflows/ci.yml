@@ -24,14 +24,14 @@ jobs:
       - name: Resolve Swift Packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project DoomCoder.xcodeproj \
-            -scheme DoomCoder
+            -project DoomCode.xcodeproj \
+            -scheme DoomCode
 
       - name: Build
         run: |
           xcodebuild \
-            -project DoomCoder.xcodeproj \
-            -scheme DoomCoder \
+            -project DoomCode.xcodeproj \
+            -scheme DoomCode \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="-" \

@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>DoomCoder Companion</string>
+	<string>Doom Code Companion</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>DoomCoder Companion</string>
+	<string>Doom Code Companion</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -42,7 +42,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>DoomCoder uses the camera to scan the QR code shown on your Mac so you can connect your devices.</string>
+	<string>Doom Code uses the camera to scan the QR code shown on your Mac so you can connect your devices.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

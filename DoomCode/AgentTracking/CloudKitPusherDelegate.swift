@@ -6,7 +6,7 @@ import Foundation
 import CloudKit
 import OSLog
 import Observation
-import DoomCoderCore
+import DoomCodeCore
 
 final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked Sendable {
 
@@ -220,7 +220,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 guard let m = KeepAwakeMode(rawValue: cmd.value) else { continue }
                 sm.keepAwakeMode = m
             case .setScreenMode:
-                guard let s = DoomCoderMode(rawValue: cmd.value) else { continue }
+                guard let s = DoomCodeMode(rawValue: cmd.value) else { continue }
                 sm.mode = s
             case .setSessionTimerHours:
                 guard let raw = Int(cmd.value) else { continue }

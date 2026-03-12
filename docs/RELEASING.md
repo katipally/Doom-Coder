@@ -1,6 +1,6 @@
-# Releasing DoomCoder
+# Releasing Doom Code
 
-DoomCoder ships through **two independent pipelines** because the Mac app
+Doom Code ships through **two independent pipelines** because the Mac app
 and the iPhone companion live in different Apple distribution channels.
 This document explains both, including the one-time setup each requires.
 
@@ -34,7 +34,7 @@ git push origin ios-v2.7.0
 ## macOS release (existing, unchanged)
 
 1. Bump `CFBundleShortVersionString` + `CFBundleVersion` in
-   `DoomCoder/Info.plist`. `release.yml` also stamps the tag-derived
+   `DoomCode/Info.plist`. `release.yml` also stamps the tag-derived
    version into the plist at build time, but committing the bump keeps
    local dev builds in sync with what shipped.
 2. Update `docs/CHANGELOG.md`.
@@ -64,7 +64,7 @@ builds with the same marketing version are typically auto-approved).
 
 1. **App Store Connect → My Apps → +** → New App.
    - Platform: iOS
-   - Name: `DoomCoder Companion`
+   - Name: `Doom Code Companion`
    - Bundle ID: `com.doomcoder.app.companion`
    - SKU: `doomcoder-companion`
 2. **Users and Access → Integrations → App Store Connect API → Generate API Key**.
@@ -92,8 +92,8 @@ builds with the same marketing version are typically auto-approved).
 
 ### Cutting an iOS release
 
-1. Bump `MARKETING_VERSION` in `DoomCoderCompanion/project.yml` and run
-   `cd DoomCoderCompanion && xcodegen generate`.
+1. Bump `MARKETING_VERSION` in `DoomCodeCompanion/project.yml` and run
+   `cd DoomCodeCompanion && xcodegen generate`.
 2. Update `docs/CHANGELOG.md` (the same section that documents the matching
    Mac release).
 3. `git tag ios-v2.4.0 && git push origin ios-v2.4.0`.
@@ -120,19 +120,19 @@ builds with the same marketing version are typically auto-approved).
 If you ever need to upload without GitHub Actions, run from a Mac:
 
 ```bash
-cd DoomCoderCompanion
+cd DoomCodeCompanion
 xcodegen generate
-xcodebuild -project DoomCoderCompanion.xcodeproj \
-  -scheme DoomCoderCompanion -configuration Release \
+xcodebuild -project DoomCodeCompanion.xcodeproj \
+  -scheme DoomCodeCompanion -configuration Release \
   -destination 'generic/platform=iOS' \
-  -archivePath build/DoomCoderCompanion.xcarchive \
+  -archivePath build/DoomCodeCompanion.xcarchive \
   archive
 xcodebuild -exportArchive \
-  -archivePath build/DoomCoderCompanion.xcarchive \
+  -archivePath build/DoomCodeCompanion.xcarchive \
   -exportOptionsPlist ExportOptions.plist \
   -exportPath build/export \
   -allowProvisioningUpdates
-xcrun altool --upload-app -f build/export/DoomCoderCompanion.ipa \
+xcrun altool --upload-app -f build/export/DoomCodeCompanion.ipa \
   --type ios \
   --apiKey "$APP_STORE_CONNECT_KEY_ID" \
   --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
@@ -163,8 +163,8 @@ it. The key ID must match.)
 ## Pre-flight checklist (per release)
 
 - [ ] `docs/CHANGELOG.md` updated and dated.
-- [ ] `MARKETING_VERSION` bumped in `DoomCoder/Info.plist` and
-      `DoomCoderCompanion/project.yml`. Companion project regenerated
+- [ ] `MARKETING_VERSION` bumped in `DoomCode/Info.plist` and
+      `DoomCodeCompanion/project.yml`. Companion project regenerated
       with `xcodegen generate`.
 - [ ] `CloudKit Dashboard → Schema → Deploy to Production` if any new
       record types or fields landed in this release. (For 2.4.0 this
@@ -172,8 +172,8 @@ it. The key ID must match.)
       `AgentConfig`.)
 - [ ] App Store Connect screenshots / metadata updated if the iOS UI
       changed visibly.
-- [ ] Mac build runs clean locally (`xcodebuild -scheme DoomCoder -configuration Release`).
-- [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCoderCompanion -configuration Release -destination 'generic/platform=iOS'`).
+- [ ] Mac build runs clean locally (`xcodebuild -scheme DoomCode -configuration Release`).
+- [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCodeCompanion -configuration Release -destination 'generic/platform=iOS'`).
 - [ ] Both tags pushed. CI green on both workflows.
 
 ---
@@ -189,7 +189,7 @@ TestFlight upload. Allow ~60 minutes the first time.
    → **My Apps** → **+** → **New App**.
 2. Fill in:
    - **Platform**: iOS
-   - **Name**: `DoomCoder Companion`
+   - **Name**: `Doom Code Companion`
    - **Primary Language**: English (U.S.)
    - **Bundle ID**: `com.doomcoder.app.companion` (must already exist
      in the Developer Portal under Identifiers)
@@ -197,7 +197,7 @@ TestFlight upload. Allow ~60 minutes the first time.
    - **User Access**: Full Access
 3. Apple assigns a numeric **Apple ID** (e.g. `6480000000`). Note it.
    Update `companionAppStoreURL` in
-   `DoomCoder/ConfigureSettingsPane.swift` to replace the
+   `DoomCode/ConfigureSettingsPane.swift` to replace the
    `id0000000000` placeholder.
 
 ### 2. App Store listing metadata
@@ -207,15 +207,15 @@ In the app record → **App Store** tab:
 - **Category**: Developer Tools / Productivity
 - **Content rights**: No third-party content
 - **Age rating**: questionnaire (defaults yield 4+)
-- **Privacy policy URL**: link to `docs/privacy.md` on GitHub (`https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`)
-- **Support URL**: `https://github.com/katipally/Doom-Coder`
+- **Privacy policy URL**: link to `docs/privacy.md` on GitHub (`https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md`)
+- **Support URL**: `https://github.com/katipally/Doom-Code`
 - **Marketing URL**: optional
 
 ### 3. Privacy nutrition label
 
 App Store Connect → **App Privacy** → **Get Started**.
 
-DoomCoder Companion collects **nothing**. The correct answers:
+Doom Code Companion collects **nothing**. The correct answers:
 
 - Data collected: **No**
 - Tracking: **No**
@@ -266,7 +266,7 @@ In **Developer Portal → Certificates, Identifiers & Profiles**:
 Used by `xcodebuild -exportArchive` to authenticate uploads non-interactively.
 
 1. App Store Connect → **Users and Access** → **Integrations** → **App Store Connect API**.
-2. **+** → name `DoomCoder CI`, access `App Manager`.
+2. **+** → name `Doom Code CI`, access `App Manager`.
 3. Download the `.p8` (you can only download it **once**).
 4. Note the **Issuer ID** (top of the page) and **Key ID** (next to the key).
 5. Add as GitHub repo secrets:
@@ -303,8 +303,8 @@ Connect. The build appears under **TestFlight** in ~10-20 min.
 
 Review usually takes 24-48 hours. Common rejections to pre-empt:
 
-- Missing privacy policy URL. Ours is at `https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`.
-- Demo account credentials required if the app has a login. DoomCoder
+- Missing privacy policy URL. Ours is at `https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md`.
+- Demo account credentials required if the app has a login. Doom Code
   Companion does not. In the **Notes for Reviewer** field state: "The
   Prompts and Notes tabs work fully without any Mac connection or API
   key. The Dashboard tab is optional and clearly labeled as requiring

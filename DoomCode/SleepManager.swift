@@ -4,11 +4,11 @@ import CoreGraphics
 import AppKit
 import ServiceManagement
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - Types
 
-enum DoomCoderMode: String, CaseIterable {
+enum DoomCodeMode: String, CaseIterable {
     case screenOn  = "screenOn"
     case screenOff = "screenOff"
 
@@ -122,7 +122,7 @@ final class SleepManager {
         }
     }
 
-    var mode: DoomCoderMode {
+    var mode: DoomCodeMode {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "doomcoder.mode")
             handleModeChange()
@@ -217,12 +217,12 @@ final class SleepManager {
         // @AppStorage key in `PanelRootView` used the same default.
         self.masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
 
-        let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.screenOn.rawValue
+        let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCodeMode.screenOn.rawValue
         // v1.8 migration: legacy "full" → "screenOn" (same behaviour, new name).
-        let resolved = (saved == "full") ? .screenOn : (DoomCoderMode(rawValue: saved) ?? .screenOn)
+        let resolved = (saved == "full") ? .screenOn : (DoomCodeMode(rawValue: saved) ?? .screenOn)
         self.mode = resolved
         if saved == "full" {
-            UserDefaults.standard.set(DoomCoderMode.screenOn.rawValue, forKey: "doomcoder.mode")
+            UserDefaults.standard.set(DoomCodeMode.screenOn.rawValue, forKey: "doomcoder.mode")
         }
         self.sessionTimerHours = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer") as? Int ?? 0
         self.screenOffRearmMinutes = UserDefaults.standard.object(forKey: "doomcoder.screenOffRearm") as? Int ?? 10
@@ -370,7 +370,7 @@ final class SleepManager {
         assertionID = id
         activityToken = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled],
-            reason: "DoomCoder session active"
+            reason: "DoomCode session active"
         )
         isActive = true
         activeSince = .now
@@ -612,7 +612,7 @@ final class SleepManager {
         let type: CFString = (mode == .screenOff)
             ? (kIOPMAssertionTypePreventSystemSleep as CFString)
             : (kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString)
-        let reason = "DoomCoder: keeping Mac awake for AI coding session" as CFString
+        let reason = "DoomCode: keeping Mac awake for AI coding session" as CFString
         let result = IOPMAssertionCreateWithName(type, IOPMAssertionLevel(kIOPMAssertionLevelOn), reason, &id)
         return result == kIOReturnSuccess ? id : nil
     }

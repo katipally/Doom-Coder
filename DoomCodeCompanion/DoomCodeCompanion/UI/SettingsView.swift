@@ -1,4 +1,4 @@
-// SettingsView.swift — DoomCoder Companion
+// SettingsView.swift — DoomCode Companion
 // Read-only settings: connection, notifications, about, test push, diagnostics.
 // Sync is consolidated to a single "Force Sync Now" here (pull-to-refresh on the
 // Agents list does the lightweight incremental refresh). Notifications can be
@@ -7,7 +7,7 @@
 import SwiftUI
 import CloudKit
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 struct SettingsView: View {
     @State private var macStore = MacStatusStore.shared
@@ -60,7 +60,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCoder Mac app are not affected. You can reconnect any time.")
+            Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCode Mac app are not affected. You can reconnect any time.")
         }
         .task {
             deviceNameInput = AppGroupCache.customDeviceName
@@ -361,7 +361,7 @@ struct SettingsView: View {
             if macStore.primary != nil {
                 Text("Disconnect if you want to switch iCloud accounts or pair a different Mac. Your data stays in iCloud and the Mac app keeps running.")
             } else {
-                Text("Connect to the DoomCoder Mac app to see live agent status and control keep-awake remotely. The app is fully usable without a Mac.")
+                Text("Connect to the DoomCode Mac app to see live agent status and control keep-awake remotely. The app is fully usable without a Mac.")
             }
         }
     }
@@ -453,7 +453,7 @@ struct SettingsView: View {
                 Label("Show welcome again", systemImage: "hand.wave")
             }
 
-            Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
+            Link(destination: URL(string: "https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md")!) {
                 Label("Privacy Policy", systemImage: "hand.raised")
             }
         }

@@ -1,4 +1,4 @@
-// Keychain.swift — DoomCoderCore
+// Keychain.swift — DoomCodeCore
 // Minimal Keychain wrapper for storing the user's BYO API key securely. The key
 // never leaves the device except as the Authorization header on requests the
 // user explicitly triggers to their chosen provider. Local-only — never synced

@@ -1,6 +1,6 @@
 import SwiftUI
 import AppKit
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - MacNoteEditor
 //
@@ -66,7 +66,7 @@ struct MacNoteEditor: View {
             Button("Open Settings") { openNotificationSettings() }
             Button("Not now", role: .cancel) {}
         } message: {
-            Text("Enable notifications for DoomCoder in System Settings to get note reminders.")
+            Text("Enable notifications for DoomCode in System Settings to get note reminders.")
         }
     }
 

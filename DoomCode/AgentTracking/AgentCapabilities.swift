@@ -1,6 +1,6 @@
-// AgentCapabilities.swift — DoomCoder (Mac)
+// AgentCapabilities.swift — DoomCode (Mac)
 //
-// Mirror of `Packages/DoomCoderCore/.../AgentCapabilities.swift`. The
+// Mirror of `Packages/DoomCodeCore/.../AgentCapabilities.swift`. The
 // Mac app uses its own `TrackedAgent` (defined in `HookEnvelope.swift`)
 // so this catalog can't live in the shared package — keeping the two
 // in sync is a manual exercise (small surface, infrequent changes).

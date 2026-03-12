@@ -1,4 +1,4 @@
-// Conversation.swift — DoomCoderCore
+// Conversation.swift — DoomCodeCore
 // Shared, local-only chat transcript models powering the redesigned Prompt
 // workspace on BOTH the macOS app and the iOS companion. A Conversation is an
 // ordered transcript of the user's rough requests and the AI's refined prompts.

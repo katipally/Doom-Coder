@@ -1,11 +1,11 @@
-// NotesView.swift — DoomCoder Companion (Tools)
+// NotesView.swift — DoomCode Companion (Tools)
 // Rich on-device notes: freeform body + inline checklist + a local reminder +
 // pin + search. Autosaves. "Turn into a prompt" hands a note to the Composer-
 // backed prompt library. Fully on-device; reminders use local notifications and
 // only ask permission the first time one is set.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct NotesView: View {
     @State private var store = NotesStore.shared
@@ -226,7 +226,7 @@ private struct NoteEditorView: View {
                 Button("Open Settings") { openSystemSettings() }
                 Button("Not now", role: .cancel) { }
             } message: {
-                Text("Enable notifications for DoomCoder in Settings to get note reminders.")
+                Text("Enable notifications for DoomCode in Settings to get note reminders.")
             }
         }
     }

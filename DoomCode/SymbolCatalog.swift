@@ -6,7 +6,7 @@ import SwiftUI
 // Helps catch deprecations in one place and keeps spelling consistent
 // (a typo'd `powerSleep` instead of `powersleep` is easy to miss at a
 // call site). iOS has its own copy of the same catalog in
-// `DoomCoderCompanion/UI/SymbolCatalog.swift`.
+// `DoomCodeCompanion/UI/SymbolCatalog.swift`.
 //
 // To add a new symbol:
 //   1. Add it to the appropriate namespace below

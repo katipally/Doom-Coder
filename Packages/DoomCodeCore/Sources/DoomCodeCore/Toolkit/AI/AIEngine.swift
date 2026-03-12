@@ -1,4 +1,4 @@
-// AIEngine.swift — DoomCoderCore
+// AIEngine.swift — DoomCodeCore
 // Core types + protocol for the shared AI engine used by both the macOS app and
 // the iOS companion. Two user-selectable backends:
 //   1. .appleOnDevice — Apple FoundationModels (on-device, offline, free, private)

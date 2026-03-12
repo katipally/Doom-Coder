@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Centralized animation tokens for DoomCoder.
+// Centralized animation tokens for DoomCode.
 //
 // Why: macOS 26 / SwiftUI ships curated curves (`.snappy`, `.smooth`, `.bouncy`)
 // that feel native. Instead of scattered `.spring(duration: 0.3, bounce: 0.12)`

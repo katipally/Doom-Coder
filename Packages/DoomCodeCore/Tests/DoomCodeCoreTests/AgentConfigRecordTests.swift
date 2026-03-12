@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import CloudKit
-@testable import DoomCoderCore
+@testable import DoomCodeCore
 
 @Suite("AgentConfigRecord contract")
 struct AgentConfigRecordTests {

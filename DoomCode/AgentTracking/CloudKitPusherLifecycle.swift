@@ -13,7 +13,7 @@ import CloudKit
 import AppKit
 import CryptoKit
 import OSLog
-import DoomCoderCore
+import DoomCodeCore
 
 @MainActor
 final class CloudKitPusherLifecycle {

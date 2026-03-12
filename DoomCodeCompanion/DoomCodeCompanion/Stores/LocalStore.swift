@@ -1,4 +1,4 @@
-// LocalStore.swift — DoomCoder Companion
+// LocalStore.swift — DoomCode Companion
 // SQLite-backed local persistence for agents, mac_status, and notification logs.
 // Provides fast reads for the UI without CloudKit round-trips.
 //
@@ -15,7 +15,7 @@
 
 import Foundation
 import SQLite3
-import DoomCoderCore
+import DoomCodeCore
 
 final class LocalStore: @unchecked Sendable {
 

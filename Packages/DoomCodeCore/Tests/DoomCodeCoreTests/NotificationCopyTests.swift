@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import DoomCoderCore
+@testable import DoomCodeCore
 
 @Suite("Notification copy parity")
 struct NotificationCopyTests {

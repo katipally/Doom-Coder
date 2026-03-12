@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DC0000000000007000000001"
-               BuildableName = "DoomCoder.app"
-               BlueprintName = "DoomCoder"
-               ReferencedContainer = "container:DoomCoder.xcodeproj">
+               BuildableName = "DoomCode.app"
+               BlueprintName = "DoomCode"
+               ReferencedContainer = "container:DoomCode.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DC0000000000007000000001"
-            BuildableName = "DoomCoder.app"
-            BlueprintName = "DoomCoder"
-            ReferencedContainer = "container:DoomCoder.xcodeproj">
+            BuildableName = "DoomCode.app"
+            BlueprintName = "DoomCode"
+            ReferencedContainer = "container:DoomCode.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DC0000000000007000000001"
-            BuildableName = "DoomCoder.app"
-            BlueprintName = "DoomCoder"
-            ReferencedContainer = "container:DoomCoder.xcodeproj">
+            BuildableName = "DoomCode.app"
+            BlueprintName = "DoomCode"
+            ReferencedContainer = "container:DoomCode.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

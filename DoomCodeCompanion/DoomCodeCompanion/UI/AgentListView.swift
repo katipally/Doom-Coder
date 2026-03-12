@@ -1,8 +1,8 @@
-// AgentListView.swift — DoomCoder Companion
+// AgentListView.swift — DoomCode Companion
 // Main view showing configured agents (read-only, matches Mac TrackAgentsPopover)
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct AgentListView: View {
     @State private var agentStore = AgentListStore.shared

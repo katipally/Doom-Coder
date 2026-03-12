@@ -1,4 +1,4 @@
-// PromptLibrary.swift — DoomCoderCore
+// PromptLibrary.swift — DoomCodeCore
 // A shared, built-in library of genuinely useful, copy-ready prompts for AI
 // coding agents. Used by BOTH the macOS app and the iOS companion so the Tools
 // experience delivers real standalone value with ZERO setup — no AI, no API key,

@@ -1,4 +1,4 @@
-// AgentCapabilities.swift — DoomCoderCore
+// AgentCapabilities.swift — DoomCodeCore
 //
 // Per-agent declaration of which notification categories the agent's hook
 // configuration is able to fire. Surfaced in the Mac Configure Agents
@@ -6,7 +6,7 @@
 // the user knows what to expect before enabling tracking.
 //
 // The matrix below is **descriptive** — it documents what the underlying
-// hook surface area of each agent allows DoomCoder to detect, not what the
+// hook surface area of each agent allows DoomCode to detect, not what the
 // user's settings are. Toggle-level filtering is independent.
 
 import Foundation

@@ -1,6 +1,6 @@
-// RemoteKeyEngine.swift — DoomCoderCore
+// RemoteKeyEngine.swift — DoomCodeCore
 // BYO-key engine. Sends requests device → provider (OpenAI / Anthropic) over
-// HTTPS using the USER's key. DoomCoder runs no server and never sees the key.
+// HTTPS using the USER's key. DoomCode runs no server and never sees the key.
 // Used ONLY when the user explicitly selects "My API key" — never as a silent
 // fallback for on-device content. Actor-isolated for session safety.
 

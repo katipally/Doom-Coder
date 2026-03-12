@@ -1,4 +1,4 @@
-// NotifyAboutCard.swift — DoomCoder (Mac)
+// NotifyAboutCard.swift — DoomCode (Mac)
 //
 // The editable "What you'll be notified about" card shown in
 // Configure → Agents. Read mode mirrors the clean summary the user liked;
