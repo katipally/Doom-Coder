@@ -818,7 +818,12 @@ struct MacControlView: View {
             }
         }
         // Re-sync local selections to the Mac's truth only when nothing pending.
-        if waitingCommandId == nil && desiredMaster == nil {
+        // FRESHNESS GATE: never snap back to a stale (>10s old) MacStatus —
+        // a stale status would clobber the user's just-set optimistic value
+        // while a fresh ack is in flight. The query-sub push in
+        // CompanionSyncEngine will deliver a fresh one within ~1-2s.
+        if waitingCommandId == nil && desiredMaster == nil,
+           Date().timeIntervalSince(mac.lastSeen) < 10 {
             syncFromMac(macStore.primary!)
         }
     }
@@ -868,13 +873,32 @@ struct MacControlView: View {
         startAckPoll()
         waitTimeout?.cancel()
         waitTimeout = Task {
-            // 45s (was 30s): the Mac applies commands within ~1s, but its MacStatus
-            // ack can be delayed behind a large NotificationLog backlog drain on
-            // first sync. A too-tight timeout false-reverts a command the Mac
-            // already applied. Paired with prioritizing the ack over the backlog
-            // in CompanionSyncEngine, acks normally land in a few seconds.
-            try? await Task.sleep(for: .seconds(45))
+            // 90s (was 45s). The Mac applies commands within ~1s, but the
+            // MacStatus ack can be delayed behind a large NotificationLog
+            // backlog drain on first sync, OR the Mac may be briefly asleep
+            // (the command stays in its zone, CloudKit cannot wake a sleeping
+            // Mac — it applies on the next wake). A too-tight timeout
+            // false-reverts a command the Mac would have applied seconds
+            // later. 90s is comfortably inside the command's 30-min
+            // `expiresAt` window and inside the iOS `BGAppRefreshTask`
+            // budget for a sleeping Mac to wake + fetch.
+            try? await Task.sleep(for: .seconds(90))
             guard !Task.isCancelled else { return }
+            // MAC-ALIVE GATE: if the Mac is actively reaching CloudKit
+            // (lastSeen < 120s, the same threshold the Mac uses for the
+            // iPhone's presence), suppress the timeout — the command
+            // probably landed and the ack is just slow. This eliminates
+            // the "revert" in the case where the Mac is awake but the
+            // ack-push is throttled.
+            if let mac = macStore.primary,
+               Date().timeIntervalSince(mac.lastSeen) < 120,
+               macStateMatchesDesired(mac) {
+                // Mac is alive AND its published state already matches our
+                // optimistic selection — treat as success, no revert.
+                showTimeoutError = false
+                clearWaiting()
+                return
+            }
             showTimeoutError = true
             clearWaiting(fromTimeout: true)
         }
@@ -892,14 +916,36 @@ struct MacControlView: View {
         startAckPoll()
         masterTimeout?.cancel()
         masterTimeout = Task {
-            // 45s (was 30s) — see startWaitTimeout: avoid false-reverting a master
-            // toggle the Mac already applied while its ack is delayed behind a
-            // first-sync NotificationLog backlog.
-            try? await Task.sleep(for: .seconds(45))
+            // 90s (was 45s) — see startWaitTimeout for the rationale.
+            try? await Task.sleep(for: .seconds(90))
             guard !Task.isCancelled else { return }
+            // MAC-ALIVE GATE: if the Mac is awake AND its published
+            // `masterEnabled` already matches our optimistic value, the
+            // command landed — no revert. (The "value matches desired"
+            // check is the master-specific version of the
+            // macStateMatchesDesired check used by startWaitTimeout.)
+            if let mac = macStore.primary,
+               Date().timeIntervalSince(mac.lastSeen) < 120,
+               let want = desiredMaster,
+               (mac.masterEnabled ?? true) == want {
+                showTimeoutError = false
+                clearMasterWaiting()
+                return
+            }
             showTimeoutError = true
             clearMasterWaiting(fromTimeout: true)
         }
+    }
+
+    /// True iff the Mac's published `MacStatusRecord` already reflects the
+    /// user's pending optimistic selection (mode, screen, timer). Used to
+    /// suppress the timeout-driven "revert" when the Mac genuinely applied
+    /// the command but the ack notification was throttled.
+    private func macStateMatchesDesired(_ mac: MacStatusRecord) -> Bool {
+        let modeMatches = (mac.keepAwakeMode.flatMap(KeepAwakeMode.init) ?? mode) == mode
+        let screenMatches = (ScreenMode(rawValue: mac.mode) ?? screen) == screen
+        let timerMatches = (mac.sessionTimerHours ?? timerHours) == timerHours
+        return modeMatches && screenMatches && timerMatches
     }
 
     private func clearMasterWaiting(fromTimeout: Bool = false) {
@@ -911,7 +957,7 @@ struct MacControlView: View {
         stopAckPollIfIdle()
     }
 
-    /// Polls CloudKit every 2.5 s while any command ack is pending. `fetchChanges`
+    /// Polls CloudKit every 1.0 s while any command ack is pending. `fetchChanges`
     /// is single-flight (guarded by `fetchInProgress`), so overlapping ticks are
     /// safe. Each fetch runs `reconcile`, which clears the waiting state as soon
     /// as the Mac's ack/value-match lands. Self-terminates when nothing pends.
@@ -921,7 +967,7 @@ struct MacControlView: View {
             while !Task.isCancelled,
                   waitingCommandId != nil || waitingMasterCommandId != nil {
                 await CompanionSyncEngine.shared.fetchChanges()
-                try? await Task.sleep(for: .milliseconds(2500))
+                try? await Task.sleep(for: .milliseconds(1000))
             }
         }
     }
