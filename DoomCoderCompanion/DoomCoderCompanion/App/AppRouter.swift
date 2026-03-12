@@ -16,7 +16,7 @@ final class AppRouter {
     static let shared = AppRouter()
     private init() {}
 
-    var selectedTab: RootTab = .prompts
+    var selectedTab: RootTab = .dashboard
     /// Navigation path for the Dashboard tab's NavigationStack.
     var agentPath: [TrackedAgent] = []
 

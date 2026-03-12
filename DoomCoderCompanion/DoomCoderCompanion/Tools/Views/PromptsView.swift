@@ -52,7 +52,8 @@ struct PromptsView: View {
             .toolbar { toolbarContent }
             .toolbar {
                 // Keyboard dismiss — shows automatically whenever the keyboard opens,
-                // in the native iOS keyboard accessory bar above the keys.
+                // in the native iOS keyboard accessory bar above the keys. Centered
+                // (Spacer on both sides) so it sits clear of the trailing send button.
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button {
@@ -61,6 +62,7 @@ struct PromptsView: View {
                         Image(systemName: "keyboard.chevron.compact.down")
                     }
                     .accessibilityLabel("Dismiss keyboard")
+                    Spacer()
                 }
             }
             .safeAreaInset(edge: .bottom) { inputBar }
