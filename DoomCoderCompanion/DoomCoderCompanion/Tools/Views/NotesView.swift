@@ -35,12 +35,19 @@ struct NotesView: View {
                     Image(systemName: "square.and.pencil")
                 }
                 .accessibilityLabel("New note")
+                .matchedTransitionSource(id: "new-note", in: zoomNamespace)
             }
         }
         .sheet(item: $openNote, onDismiss: { store.pruneEmpty() }) { note in
             NoteEditorView(note: note)
+                .navigationTransition(.zoom(sourceID: note.id, in: zoomNamespace))
+                .presentationDetents([.medium, .large])
+                .presentationContentInteraction(.automatic)
+                .presentationDragIndicator(.visible)
         }
     }
+
+    @Namespace private var zoomNamespace
 
     private var list: some View {
         List {
@@ -50,6 +57,7 @@ struct NotesView: View {
             } else {
                 ForEach(visible) { note in
                     Button { openNote = note } label: { NoteRow(note: note) }
+                        .matchedTransitionSource(id: note.id, in: zoomNamespace)
                         .swipeActions(edge: .leading) {
                             Button {
                                 store.togglePin(note)
