@@ -51,6 +51,22 @@ public struct CompanionStatusRecord: Sendable, Codable, Equatable {
         if !model.isEmpty { return model }
         return name
     }
+
+    /// True when the last heartbeat is within the live-connection window.
+    /// Callers in the app pass `CompanionStatusStore.connectedThreshold`; the
+    /// default (600s) mirrors that constant so DoomCoderCore stays dependency-light.
+    public func isConnected(now: Date = Date(), threshold: TimeInterval = 600) -> Bool {
+        now.timeIntervalSince(lastSeen) < threshold
+    }
+
+    /// Compact "just now" / "5m ago" / "2h ago" / "3d ago" relative timestamp.
+    public func lastSeenRelative(now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(lastSeen))
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
+        if seconds < 86_400 { return "\(Int(seconds / 3600))h ago" }
+        return "\(Int(seconds / 86_400))d ago"
+    }
 }
 
 #if canImport(CloudKit)
