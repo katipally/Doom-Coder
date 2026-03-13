@@ -28,7 +28,7 @@ on:
         default: '2.4.0'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   testflight:
@@ -39,6 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Resolve version
@@ -276,6 +277,36 @@ jobs:
             --file "$IPA_PATH" \
             --apiKey "$ASC_KEY_ID" \
             --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Update README iOS version badge
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          sed -i '' "s|/badge/App%20Store-v[0-9][0-9.]*|/badge/App%20Store-v${VERSION}|g" README.md
+
+          for attempt in 1 2 3 4 5; do
+            echo "--- Push attempt ${attempt} ---"
+            git add README.md
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: bump iOS companion to ios-v${VERSION}"
+            fi
+
+            git fetch origin main
+            if ! git pull --rebase --autostash -X theirs origin main; then
+              git rebase --abort || true
+              git reset --hard origin/main
+              sed -i '' "s|/badge/App%20Store-v[0-9][0-9.]*|/badge/App%20Store-v${VERSION}|g" README.md
+              continue
+            fi
+
+            if git push origin HEAD:main; then
+              echo "Push succeeded on attempt ${attempt}"
+              break
+            fi
+            sleep $((attempt * 2))
+          done
 
       - name: Clean up API key
         if: always()
