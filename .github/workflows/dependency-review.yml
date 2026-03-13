@@ -1,0 +1,36 @@
+name: Dependency Review
+
+# On every PR, diff the dependency manifests (Swift Package.resolved, GitHub
+# Actions versions) and fail if the PR introduces a dependency with a known
+# vulnerability or a license outside our allowlist. This is the supply-chain
+# complement to CodeQL: CodeQL audits *our* code, this audits what we pull in.
+#
+# Free for public repositories (uses GitHub's dependency graph). Only runs on
+# pull_request, so it can never block a release.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Block PRs that add a dependency with a moderate-or-worse advisory.
+          fail-on-severity: moderate
+          # Deny only strong-copyleft licenses that are genuinely incompatible
+          # with shipping a closed-source signed app under MIT. A deny-list
+          # (not an allow-list) avoids false-blocking the many benign permissive
+          # licenses we'd otherwise have to enumerate and keep current.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-2.1, LGPL-3.0
+          comment-summary-in-pr: on-failure
