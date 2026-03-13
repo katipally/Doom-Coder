@@ -48,6 +48,7 @@ guide/README.md
 # Local reference docs (vendor docs, not for public repo)
 Ref
 Examples
+marketing
 
 # Distributable artifacts — these belong on GitHub Releases, not in the repo
 *.dmg
