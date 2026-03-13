@@ -6,7 +6,7 @@
 
 **Keep your Mac awake. Watch your AI agents. Get pinged on your iPhone the second they need you.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases/latest)
+[![Release](https://img.shields.io/badge/release-v2.7.2-blue?style=flat-square&logo=github)](https://github.com/katipally/Doom-Coder/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
 [![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases)
 [![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/stargazers)
@@ -22,7 +22,7 @@
 <td align="center" valign="middle">
 <a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="58" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/⬇%20%20Download%20for%20macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
 <br/>
-<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img alt="Latest macOS version" src="https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=apple&logoColor=white&label=latest&color=111111&cacheSeconds=3600" /></a>
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img alt="Latest macOS version" src="https://img.shields.io/badge/latest-v2.7.2-111111?style=flat-square&logo=apple&logoColor=white" /></a>
 <br/>
 <sub><b>Doom Coder — the Mac app.</b> Signed & notarized <code>.dmg</code> from GitHub Releases (auto-updates via Sparkle).</sub>
 </td>

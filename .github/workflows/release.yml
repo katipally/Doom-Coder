@@ -507,6 +507,13 @@ jobs:
             sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCoder.xcodeproj/project.pbxproj
             sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj
             sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCoderCompanion/project.yml
+            # README macOS version badges are static (no shields.io GitHub-API
+            # dependency, so they never flap on rate limits). The bot rewrites
+            # the literal version here so the README always matches the release
+            # we just published. iOS uses a dynamic App Store badge (separate
+            # pipeline) and is intentionally not touched.
+            sed -i '' "s|/badge/release-v[0-9][0-9.]*|/badge/release-v${{ env.VERSION }}|g" README.md
+            sed -i '' "s|/badge/latest-v[0-9][0-9.]*|/badge/latest-v${{ env.VERSION }}|g" README.md
           }
 
           # The "Update version in project" step already ran sed, but calling
@@ -519,6 +526,7 @@ jobs:
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
             git add appcast.xml \
+              README.md \
               DoomCoder.xcodeproj/project.pbxproj \
               DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj \
               DoomCoderCompanion/project.yml
