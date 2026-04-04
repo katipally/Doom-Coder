@@ -24,32 +24,28 @@ struct MenuBarView: View {
         Divider()
 
         // Mode Picker
-        Text("Mode").font(.caption).foregroundStyle(.tertiary)
-
-        Button {
-            sleepManager.mode = .full
-        } label: {
-            HStack {
-                Text(sleepManager.mode == .full ? "●" : "○")
-                Text("Full Mode")
-                Spacer()
-                if sleepManager.mode == .full { Image(systemName: "checkmark") }
+        Menu("Mode: \(sleepManager.mode.displayName)") {
+            Button {
+                sleepManager.mode = .full
+            } label: {
+                HStack {
+                    Text("⚡ Full Mode — screen stays at full brightness")
+                    if sleepManager.mode == .full { Image(systemName: "checkmark") }
+                }
             }
-        }
 
-        Button {
-            sleepManager.mode = .autoDim
-        } label: {
-            HStack {
-                Text(sleepManager.mode == .autoDim ? "●" : "○")
-                Text("Auto-Dim Mode")
-                Spacer()
-                if sleepManager.mode == .autoDim { Image(systemName: "checkmark") }
+            Button {
+                sleepManager.mode = .autoDim
+            } label: {
+                HStack {
+                    Text("🌙 Auto-Dim — dims screen when idle, restores on activity")
+                    if sleepManager.mode == .autoDim { Image(systemName: "checkmark") }
+                }
             }
         }
 
         if sleepManager.isDimmed {
-            Text("💡 Screen dimmed")
+            Text("💡 Screen dimmed — move mouse to restore")
                 .foregroundStyle(.secondary)
         }
 

@@ -30,6 +30,7 @@ struct AboutView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(28)
-        .frame(width: 320, height: 300)
+        .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
