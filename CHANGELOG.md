@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2026-04-04
+
+### Added
+- **Auto-Dim Mode** — new mode that automatically dims the screen after configurable idle time (2, 5, or 10 minutes) and instantly restores brightness on mouse/keyboard activity. Protects against display burn-in during long unattended sessions.
+- **Configurable dim level** — choose minimum brightness: 5%, 10%, or 20% when auto-dim activates.
+- **Thermal monitoring** — real-time system thermal state displayed in the menu (🟢 Normal / 🟡 Fair / 🟠 Serious / 🔴 Critical). Zero overhead — notification-driven via `ProcessInfo.thermalState`.
+- **Session timer** — optional auto-disable after 1, 2, 4, or 8 hours with countdown display in the menu. Prevents accidentally leaving the Mac awake overnight.
+- **Custom app icon** — Doom Coder now has its own logo (skeleton vibe-coding with headphones).
+- **Mode picker in menu** — switch between Full Mode (screen always on at full brightness) and Auto-Dim Mode.
+- **Settings persist** across app restarts via UserDefaults (mode, idle timeout, dim level, session timer).
+
+### Changed
+- About window now shows the app icon and updated feature description.
+- Menu structure redesigned with mode picker, settings submenus, and thermal/timer displays.
+
 ## [0.1.2] - 2026-04-04
 
 ### Fixed
@@ -34,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
+[0.2.0]: https://github.com/katipally/Doom-Coder/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0

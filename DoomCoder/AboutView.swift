@@ -5,9 +5,10 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 52))
-                .foregroundStyle(.yellow)
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
 
             Text("Doom Coder")
                 .font(.title.bold())
@@ -23,12 +24,12 @@ struct AboutView: View {
 
             Divider()
 
-            Text("Prevents macOS from sleeping so Cursor, Claude Code CLI, and other AI agents can run uninterrupted.")
+            Text("Prevents macOS from sleeping, auto-dims the screen when idle, and monitors system thermals — so Cursor, Claude Code CLI, and other AI agents can run uninterrupted.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
         }
         .padding(28)
-        .frame(width: 300, height: 240)
+        .frame(width: 320, height: 300)
     }
 }
