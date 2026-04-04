@@ -48,24 +48,32 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 
 ---
 
-## ⚠️ Important: This App is Unsigned
+## ⚠️ Important: Gatekeeper Warning on First Launch
 
-Doom Coder is **free and open source** and is distributed **without an Apple Developer certificate** (which costs $99/year). macOS will show a Gatekeeper warning the first time you open it.
+Doom Coder is **ad-hoc signed** but **not notarized** (notarization requires a $99/year Apple Developer account). macOS will block it on first launch. This is normal for free, open-source apps without a paid certificate.
 
-### How to open it (do this once, then it works forever)
+### If you see "app is damaged" or "cannot verify developer"
 
-> **The Right-Click Method** — works 100% of the time
+Both warnings are fixed the same way. Pick one method:
 
-1. Download and unzip `DoomCoder-x.x.x.zip`
-2. Drag `DoomCoder.app` to your `/Applications` folder
-3. **Right-click** (or Control-click) `DoomCoder.app` in Finder
-4. Select **Open** from the context menu
-5. Click **Open** in the security warning dialog
+**Method 1 — Terminal (works on ALL macOS versions, 100% reliable):**
 
-That's it. macOS saves an exception for this app — you'll never see the warning again, even after updates.
+```bash
+xattr -cr /Applications/DoomCoder.app
+open /Applications/DoomCoder.app
+```
 
-> **Why does this work?**
-> macOS Gatekeeper blocks apps that haven't been *notarized* by Apple (a process requiring a paid developer account). The right-click method bypasses this for apps you explicitly choose to trust. The app's source code is fully visible in this repository — you're welcome to build it yourself if you prefer.
+This removes the quarantine flag macOS adds to downloaded files. Run it once and the app opens normally forever after.
+
+**Method 2 — Right-click (works on macOS 12–14):**
+
+1. Drag `DoomCoder.app` to `/Applications`
+2. Right-click (or Control-click) the app icon
+3. Select **Open** from the context menu
+4. Click **Open** again at the security warning
+
+> **Why does this happen?**
+> Apple's Gatekeeper blocks apps that aren't notarized through their paid developer program. The Terminal method removes the "downloaded from internet" quarantine flag so macOS treats it like an app you built yourself. The full source is in this repo — build it yourself if you prefer.
 
 ---
 
@@ -76,7 +84,7 @@ That's it. macOS saves an exception for this app — you'll never see the warnin
 1. Go to [Releases](https://github.com/katipally/Doom-Coder/releases/latest)
 2. Download `DoomCoder-x.x.x.zip`
 3. Unzip and move `DoomCoder.app` to `/Applications`
-4. Right-click → Open (see the [unsigned warning section](#️-important-this-app-is-unsigned) above)
+4. Run the one-time Gatekeeper bypass (see above)
 5. The `⚡` icon appears in your menu bar — you're ready
 
 ### Option 2: Build from Source

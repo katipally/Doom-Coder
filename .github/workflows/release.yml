@@ -51,13 +51,31 @@ jobs:
             archive \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
 
+      - name: Ad-hoc sign app (fixes "damaged" error on macOS 14+)
+        run: |
+          cp -R "build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app" .
+
+          # Remove any quarantine / build-artifact extended attributes
+          xattr -cr DoomCoder.app
+
+          # Ad-hoc sign everything: main app + Sparkle.framework +
+          # all nested XPC services, Autoupdate helper, and Updater.app
+          codesign --force --deep --sign - DoomCoder.app
+
+          # Verify the signature is valid before packaging
+          codesign --verify --deep --strict DoomCoder.app
+          echo "=== Signature info ==="
+          codesign -dv DoomCoder.app 2>&1
+
       - name: Create ZIP
         run: |
-          cp -R build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app .
           zip -r --symlinks "DoomCoder-${{ env.VERSION }}.zip" DoomCoder.app
 
       - name: Download Sparkle tools
@@ -118,10 +136,21 @@ jobs:
 
             1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
             2. Unzip and drag **`DoomCoder.app`** to your `/Applications` folder
-            3. **First launch — bypass Gatekeeper:**
-               > ⚠️ This app is **unsigned** (no Apple Developer account). macOS will warn you.
-               > **Right-click** (or Control-click) `DoomCoder.app` → click **Open** → click **Open** at the security warning.
-               > You only need to do this once. After that, it opens normally forever.
+
+            ### Opening for the first time (macOS Gatekeeper)
+
+            Because this app is **ad-hoc signed but not notarized** (requires a $99/yr Apple Developer account), macOS will block it on first launch. Use **one** of these methods:
+
+            **Method 1 — Terminal (most reliable, works on all macOS versions):**
+            ```bash
+            xattr -cr /Applications/DoomCoder.app
+            open /Applications/DoomCoder.app
+            ```
+
+            **Method 2 — Right-click (works on macOS 12–14):**
+            Right-click `DoomCoder.app` → **Open** → click **Open** at the warning dialog.
+
+            You only need to do this **once**. After that, it opens normally forever.
 
             ## ✅ Verify it's working
 

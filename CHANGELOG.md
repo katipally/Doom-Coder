@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0] - 2025-04-04
+## [0.1.1] - 2026-04-04
+
+### Fixed
+- **"App is damaged" error on macOS 14+** — CI now properly ad-hoc signs the app bundle and all nested Sparkle components (XPCServices, Autoupdate helper, Updater.app) using `codesign --force --deep --sign -`. Previously the build had `CODE_SIGNING_ALLOWED=NO` which produced a completely unsigned binary that macOS 14+ rejects as "damaged".
+- Updated installation instructions in README to include the `xattr -cr` Terminal method (works on all macOS versions) alongside the right-click method.
+
+## [0.1.0] - 2026-04-04
 
 ### Added
 - Initial release 🎉
@@ -20,4 +26,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
+[0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0
