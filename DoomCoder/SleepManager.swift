@@ -57,8 +57,15 @@ final class SleepManager {
     // MARK: Private
 
     private var activeSince: Date?
-    private var savedBrightness: Float?
     private var sessionEndDate: Date?
+
+    // Saved CoreGraphics gamma state for brightness restore
+    private typealias GammaState = (
+        rMin: CGGammaValue, rMax: CGGammaValue, rGamma: CGGammaValue,
+        gMin: CGGammaValue, gMax: CGGammaValue, gGamma: CGGammaValue,
+        bMin: CGGammaValue, bMax: CGGammaValue, bGamma: CGGammaValue
+    )
+    private var savedGamma: GammaState?
 
     @ObservationIgnored nonisolated(unsafe) private var assertionID: IOPMAssertionID = 0
     @ObservationIgnored nonisolated(unsafe) private var _elapsedTimer: Timer?
@@ -74,7 +81,6 @@ final class SleepManager {
         self.idleTimeoutMinutes = UserDefaults.standard.object(forKey: "doomcoder.idleTimeout") as? Int ?? 5
         self.dimBrightnessPercent = UserDefaults.standard.object(forKey: "doomcoder.dimBrightness") as? Int ?? 10
         self.sessionTimerHours = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer") as? Int ?? 0
-
         startThermalMonitoring()
         updateThermalState()
     }
@@ -104,7 +110,7 @@ final class SleepManager {
 
     func disable() {
         guard isActive else { return }
-        restoreBrightness()
+        restoreGamma()
         IOPMAssertionRelease(assertionID)
         assertionID = 0
         isActive = false
@@ -127,7 +133,7 @@ final class SleepManager {
         if mode == .autoDim {
             startIdleMonitoring()
         } else {
-            restoreBrightness()
+            restoreGamma()
             isDimmed = false
             stopIdleMonitoring()
         }
@@ -138,12 +144,13 @@ final class SleepManager {
     private func startElapsedTimer() {
         _elapsedTimer?.invalidate()
         updateElapsedTime()
-        let t = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateElapsedTime()
                 self?.updateSessionTimerRemaining()
             }
         }
+        RunLoop.main.add(t, forMode: .common)
         _elapsedTimer = t
     }
 
@@ -164,15 +171,16 @@ final class SleepManager {
         }
     }
 
-    // MARK: - Auto-Dim (Idle Monitoring + Brightness)
+    // MARK: - Auto-Dim (Idle Monitoring + Gamma Dimming)
 
     private func startIdleMonitoring() {
         stopIdleMonitoring()
-        let t = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.checkIdleState()
             }
         }
+        RunLoop.main.add(t, forMode: .common)
         _idleTimer = t
     }
 
@@ -182,7 +190,7 @@ final class SleepManager {
     }
 
     private func checkIdleState() {
-        // Check all meaningful input event types to avoid false-positive idle
+        // All meaningful input events to avoid false-positive idle detection
         let idleTimes: [CFTimeInterval] = [
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved),
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown),
@@ -196,70 +204,47 @@ final class SleepManager {
         if minIdle >= threshold && !isDimmed {
             dimScreen()
         } else if minIdle < threshold && isDimmed {
-            restoreBrightness()
+            restoreGamma()
             isDimmed = false
         }
     }
 
+    // MARK: - CoreGraphics Gamma Dimming
+    // Uses CGSetDisplayTransferByFormula to reduce display brightness via software gamma.
+    // Works on all Macs including Apple Silicon (IOKit display APIs return 0 services there).
+
     private func dimScreen() {
-        let current = getCurrentBrightness()
-        if current >= 0 { savedBrightness = current }
-        setBrightness(Float(dimBrightnessPercent) / 100.0)
+        let display = CGMainDisplayID()
+        var rMin: CGGammaValue = 0, rMax: CGGammaValue = 0, rGamma: CGGammaValue = 0
+        var gMin: CGGammaValue = 0, gMax: CGGammaValue = 0, gGamma: CGGammaValue = 0
+        var bMin: CGGammaValue = 0, bMax: CGGammaValue = 0, bGamma: CGGammaValue = 0
+        CGGetDisplayTransferByFormula(
+            display,
+            &rMin, &rMax, &rGamma,
+            &gMin, &gMax, &gGamma,
+            &bMin, &bMax, &bGamma
+        )
+        savedGamma = (rMin, rMax, rGamma, gMin, gMax, gGamma, bMin, bMax, bGamma)
+
+        let dim = CGGammaValue(dimBrightnessPercent) / 100.0
+        CGSetDisplayTransferByFormula(
+            display,
+            rMin, dim, rGamma,
+            gMin, dim, gGamma,
+            bMin, dim, bGamma
+        )
         isDimmed = true
     }
 
-    private func restoreBrightness() {
-        guard let saved = savedBrightness else { return }
-        setBrightness(saved)
-        savedBrightness = nil
-    }
-
-    // MARK: - IOKit Brightness Control
-
-    private func getCurrentBrightness() -> Float {
-        var brightness: Float = -1
-        var iterator: io_iterator_t = 0
-        let result = IOServiceGetMatchingServices(
-            kIOMainPortDefault,
-            IOServiceMatching("IODisplayConnect"),
-            &iterator
+    private func restoreGamma() {
+        guard let g = savedGamma else { return }
+        CGSetDisplayTransferByFormula(
+            CGMainDisplayID(),
+            g.rMin, g.rMax, g.rGamma,
+            g.gMin, g.gMax, g.gGamma,
+            g.bMin, g.bMax, g.bGamma
         )
-        guard result == kIOReturnSuccess else { return -1 }
-        defer { IOObjectRelease(iterator) }
-
-        var service = IOIteratorNext(iterator)
-        while service != 0 {
-            var val: Float = 0
-            let r = IODisplayGetFloatParameter(service, 0, kIODisplayBrightnessKey as CFString, &val)
-            if r == kIOReturnSuccess {
-                brightness = val
-                IOObjectRelease(service)
-                break
-            }
-            IOObjectRelease(service)
-            service = IOIteratorNext(iterator)
-        }
-        return brightness
-    }
-
-    private func setBrightness(_ value: Float) {
-        // Only target the first (built-in) display, consistent with getCurrentBrightness
-        var iterator: io_iterator_t = 0
-        let result = IOServiceGetMatchingServices(
-            kIOMainPortDefault,
-            IOServiceMatching("IODisplayConnect"),
-            &iterator
-        )
-        guard result == kIOReturnSuccess else { return }
-        defer { IOObjectRelease(iterator) }
-
-        var service = IOIteratorNext(iterator)
-        while service != 0 {
-            let r = IODisplaySetFloatParameter(service, 0, kIODisplayBrightnessKey as CFString, value)
-            IOObjectRelease(service)
-            if r == kIOReturnSuccess { break }
-            service = IOIteratorNext(iterator)
-        }
+        savedGamma = nil
     }
 
     // MARK: - Thermal Monitoring
@@ -278,9 +263,9 @@ final class SleepManager {
 
     private func updateThermalState() {
         switch ProcessInfo.processInfo.thermalState {
-        case .nominal: thermalStateText = "🟢 Normal"
-        case .fair:    thermalStateText = "🟡 Fair"
-        case .serious: thermalStateText = "🟠 Serious"
+        case .nominal:  thermalStateText = "🟢 Normal"
+        case .fair:     thermalStateText = "🟡 Fair"
+        case .serious:  thermalStateText = "🟠 Serious"
         case .critical: thermalStateText = "🔴 Critical"
         @unknown default: thermalStateText = "⚪ Unknown"
         }
@@ -292,16 +277,15 @@ final class SleepManager {
         stopSessionTimer()
         sessionTimerRemainingText = nil
         sessionEndDate = nil
-
         guard isActive, sessionTimerHours > 0 else { return }
         sessionEndDate = Date.now.addingTimeInterval(Double(sessionTimerHours) * 3600)
         updateSessionTimerRemaining()
-
-        let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.checkSessionTimer()
             }
         }
+        RunLoop.main.add(t, forMode: .common)
         _sessionTimer = t
     }
 
@@ -346,5 +330,9 @@ final class SleepManager {
         if let observer = thermalObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        // Safety net: restore all display gamma tables if app exits/crashes while dimmed.
+        // CGDisplayRestoreColorSyncSettings is safe to call from any thread and is a no-op
+        // if gamma was never modified.
+        CGDisplayRestoreColorSyncSettings()
     }
 }
