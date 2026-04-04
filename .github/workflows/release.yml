@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD=$(echo "$VERSION" | tr -d '.')
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD=${BUILD}" >> $GITHUB_ENV
+          echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Update version in project
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ env.VERSION }}" DoomCoder/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ env.BUILD }}" DoomCoder/Info.plist
+
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder
+
+      - name: Build Release Archive
+        run: |
+          xcodebuild \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder \
+            -configuration Release \
+            -archivePath build/DoomCoder.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="${{ env.VERSION }}" \
+            CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
+
+      - name: Create ZIP
+        run: |
+          cp -R build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app .
+          zip -r --symlinks "DoomCoder-${{ env.VERSION }}.zip" DoomCoder.app
+          echo "ZIP_SIZE=$(stat -f%z DoomCoder-${{ env.VERSION }}.zip)" >> $GITHUB_ENV
+
+      - name: Download Sparkle tools
+        run: |
+          SPARKLE_VER="2.9.1"
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VER}/Sparkle-${SPARKLE_VER}.tar.xz" \
+            -o sparkle.tar.xz
+          mkdir sparkle-tools
+          tar xf sparkle.tar.xz -C sparkle-tools
+          chmod +x sparkle-tools/bin/*
+
+      - name: Sign ZIP with Sparkle EdDSA
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          echo "${SPARKLE_PRIVATE_KEY}" > /tmp/sparkle_key.pem
+          SIG=$(sparkle-tools/bin/sign_update "DoomCoder-${{ env.VERSION }}.zip" -f /tmp/sparkle_key.pem)
+          rm -f /tmp/sparkle_key.pem
+          echo "SPARKLE_SIG=${SIG}" >> $GITHUB_ENV
+
+      - name: Update appcast.xml
+        run: |
+          python3 scripts/update_appcast.py \
+            --version "${{ env.VERSION }}" \
+            --build "${{ env.BUILD }}" \
+            --signature "${{ env.SPARKLE_SIG }}" \
+            --size "${{ env.ZIP_SIZE }}" \
+            --download-url "https://github.com/katipally/DoomCoder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
+
+      - name: Commit updated appcast.xml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          git commit -m "chore: update appcast.xml for ${{ env.TAG }}" || echo "No changes to commit"
+          git push origin HEAD:main
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Doom Coder ${{ env.TAG }}"
+          files: DoomCoder-${{ env.VERSION }}.zip
+          generate_release_notes: true
+          body: |
+            ## 📦 Installation
+
+            1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
+            2. Unzip and drag **`DoomCoder.app`** to your `/Applications` folder
+            3. **First launch — bypass Gatekeeper:**
+               > ⚠️ This app is **unsigned** (no Apple Developer account). macOS will warn you.
+               > **Right-click** (or Control-click) `DoomCoder.app` → click **Open** → click **Open** at the security warning.
+               > You only need to do this once. After that, it opens normally forever.
+
+            ## ✅ Verify it's working
+
+            After enabling Doom Coder, run this in Terminal:
+            ```bash
+            pmset -g assertions | grep DoomCoder
+            ```
+            You should see: `PreventUserIdleDisplaySleep named: "DoomCoder: Preventing sleep for AI coding session"`
+
+            ---
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/DoomCoder/blob/main/CHANGELOG.md)
