@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-04-04
+
+### Fixed
+- **Proper bottom-up code signing** — Replaced deprecated `codesign --deep` with individual component signing in the correct order: XPC services → Sparkle helpers → Sparkle framework → main app. This follows Apple's current best practices and produces valid signatures that macOS Sequoia (15+) and macOS 26 accept correctly.
+- **Hardened runtime flag on all components** — Every binary now includes `--options runtime` for hardened runtime, matching Xcode's default behavior.
+- **Accurate Gatekeeper instructions** — Updated README and release notes with correct macOS Sequoia/26 instructions (System Settings → Privacy & Security → Open Anyway), since Apple removed the right-click bypass in macOS 15.
+
 ## [0.1.1] - 2026-04-04
 
 ### Fixed
@@ -26,5 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
+[0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0
