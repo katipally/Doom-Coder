@@ -5,16 +5,15 @@ import ServiceManagement
 struct DoomCoderApp: App {
     @State private var sleepManager = SleepManager()
     @State private var updaterViewModel = CheckForUpdatesViewModel()
-
-    init() {
-        if SMAppService.mainApp.status == .notRegistered {
-            try? SMAppService.mainApp.register()
-        }
-    }
+    @State private var appDetector = AppDetector()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(sleepManager: sleepManager, updaterViewModel: updaterViewModel)
+            MenuBarView(
+                sleepManager: sleepManager,
+                updaterViewModel: updaterViewModel,
+                appDetector: appDetector
+            )
         } label: {
             Image(systemName: sleepManager.isActive ? "bolt.fill" : "bolt.slash.fill")
                 .symbolRenderingMode(.monochrome)
@@ -26,3 +25,4 @@ struct DoomCoderApp: App {
         .windowResizability(.contentSize)
     }
 }
+

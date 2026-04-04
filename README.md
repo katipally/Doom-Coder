@@ -44,17 +44,26 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 - **Menu bar only** — no Dock icon, no clutter (uses `LSUIElement = YES`)
 - **One-click toggle** — `⚡` when active, `⚡/` when inactive
 - **Elapsed time** — shows "Active for 2h 34m" so you know how long it's been running
-- **Launch at login** — start automatically on system boot (requires app in `/Applications`)
+- **Global hotkey Fn+F1** — toggle without clicking the menu bar (requires Accessibility permission)
 
-### Hardware Protection (v0.2.0)
-- **Two modes** — **Full Mode** keeps the screen on at full brightness; **Auto-Dim Mode** dims the screen after configurable idle time and restores instantly on activity
-- **Auto-Dim settings** — idle timeout (2, 5, or 10 minutes) and dim level (5%, 10%, or 20%)
+### Three Modes (v0.3.0)
+- **Full Mode** — screen stays on at full brightness; prevents idle sleep entirely
+- **Auto-Dim Mode** — dims the screen after configurable idle time and restores instantly on activity; idle timeout (2/5/10 min), dim level (5%/10%/20%)
+- **Screen-Off Mode** — turns the display completely off while keeping the Mac and all running processes fully alive; 5-second countdown before screen off; re-arm after N minutes of idle (configurable: 5/10/15/30 min)
+
+### AI App Detection (v0.3.0)
+- **Installed & running tracker** — automatically detects AI coding tools on your Mac: Cursor, VS Code, Windsurf, Zed, Claude Code CLI, Codex, Aider, and more
+- **Live CPU%** — shows real-time CPU usage for each running tool
+- **Task completion notifications** — when a tracked app goes idle (~2 min of <2% CPU), you get a system notification: "🤖 [App] has gone idle — your task may be complete"
+
+### Hardware Protection
 - **Thermal monitoring** — real-time system thermal state in the menu: 🟢 Normal / 🟡 Fair / 🟠 Serious / 🔴 Critical
 - **Session timer** — optional auto-disable after 1, 2, 4, or 8 hours with countdown display
 
 ### Other
+- **Launch at Login** — toggle to start automatically on system boot
 - **Auto-updates** — powered by [Sparkle](https://sparkle-project.org/), updates delivered silently in the background
-- **Settings persist** — mode, idle timeout, dim level, and session timer are saved across app restarts
+- **Settings persist** — all settings saved across app restarts
 - **Open source** — MIT license, build it yourself
 
 ---
@@ -131,10 +140,14 @@ In Xcode:
 |---|---|
 | **Enable / Disable Doom Coder** | Toggle sleep prevention. Icon changes to `⚡` when active |
 | **Active for Xh Xm** | How long Doom Coder has been running |
-| **Mode: Full / Auto-Dim** | Full keeps screen at full brightness; Auto-Dim dims after idle |
-| **Auto-Dim Settings** | Idle timeout (2/5/10 min) and dim level (5%/10%/20%) — shown in Auto-Dim mode |
+| **Fn+F1 to toggle** | Keyboard shortcut hint (works from any app with Accessibility access) |
+| **Mode: Full / Auto-Dim / Screen-Off** | Switch between the three operating modes |
+| **Auto-Dim Settings** | Idle timeout (2/5/10 min) and dim level (5%/10%/20%) — shown when Auto-Dim mode selected |
+| **Screen-Off Settings** | Re-arm timeout (5/10/15/30 min) — shown when Screen-Off mode selected |
 | **Session Timer** | Auto-disable after 1/2/4/8 hours (optional) with countdown |
-| **System: 🟢 Normal** | Real-time thermal state of your Mac |
+| **Thermal: 🟢 Normal** | Real-time thermal state of your Mac |
+| **Detected Apps** | Shows installed AI tools with running status and live CPU% |
+| **Launch at Login** | Enable/disable automatic startup at login |
 | **Check for Updates...** | Manually trigger a Sparkle update check |
 | **About Doom Coder...** | Version info and description |
 | **Quit Doom Coder** | Disables assertion and exits cleanly |

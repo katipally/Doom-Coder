@@ -14,6 +14,8 @@
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
+		DC0000000000002000000011 /* AppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000011 /* AppDetector.swift */; };
+		DC0000000000002000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000012 /* NotificationManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +28,8 @@
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
+		DC0000000000001000000011 /* AppDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetector.swift; sourceTree = "<group>"; };
+		DC0000000000001000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +60,8 @@
 				DC0000000000001000000004 /* MenuBarView.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
+				DC0000000000001000000011 /* AppDetector.swift */,
+				DC0000000000001000000012 /* NotificationManager.swift */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
@@ -151,6 +157,8 @@
 				DC0000000000002000000004 /* MenuBarView.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
+				DC0000000000002000000011 /* AppDetector.swift in Sources */,
+				DC0000000000002000000012 /* NotificationManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
