@@ -59,7 +59,6 @@ jobs:
         run: |
           cp -R build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app .
           zip -r --symlinks "DoomCoder-${{ env.VERSION }}.zip" DoomCoder.app
-          echo "ZIP_SIZE=$(stat -f%z DoomCoder-${{ env.VERSION }}.zip)" >> $GITHUB_ENV
 
       - name: Download Sparkle tools
         run: |
@@ -74,10 +73,22 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          echo "${SPARKLE_PRIVATE_KEY}" > /tmp/sparkle_key.pem
-          SIG=$(sparkle-tools/bin/sign_update "DoomCoder-${{ env.VERSION }}.zip" -f /tmp/sparkle_key.pem)
-          rm -f /tmp/sparkle_key.pem
-          echo "SPARKLE_SIG=${SIG}" >> $GITHUB_ENV
+          SIG_OUTPUT=$(sparkle-tools/bin/sign_update "DoomCoder-${{ env.VERSION }}.zip")
+          echo "sign_update output: $SIG_OUTPUT"
+
+          # Extract base64 signature — handles both quoted and unquoted output formats
+          SPARKLE_SIG=$(echo "$SIG_OUTPUT" | sed -E 's/.*edSignature="?([A-Za-z0-9+/=]+)"?.*/\1/')
+
+          # Get file size from sign_update output (fallback to stat)
+          ZIP_SIZE=$(echo "$SIG_OUTPUT" | grep -oE 'length=[0-9]+' | cut -d'=' -f2)
+          if [ -z "$ZIP_SIZE" ]; then
+            ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
+          fi
+
+          echo "Extracted signature: $SPARKLE_SIG"
+          echo "Zip size: $ZIP_SIZE"
+          echo "SPARKLE_SIG=${SPARKLE_SIG}" >> $GITHUB_ENV
+          echo "ZIP_SIZE=${ZIP_SIZE}" >> $GITHUB_ENV
 
       - name: Update appcast.xml
         run: |
@@ -86,7 +97,7 @@ jobs:
             --build "${{ env.BUILD }}" \
             --signature "${{ env.SPARKLE_SIG }}" \
             --size "${{ env.ZIP_SIZE }}" \
-            --download-url "https://github.com/katipally/DoomCoder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
+            --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
 
       - name: Commit updated appcast.xml
         run: |
@@ -121,4 +132,4 @@ jobs:
             You should see: `PreventUserIdleDisplaySleep named: "DoomCoder: Preventing sleep for AI coding session"`
 
             ---
-            Full changelog: [CHANGELOG.md](https://github.com/katipally/DoomCoder/blob/main/CHANGELOG.md)
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/CHANGELOG.md)

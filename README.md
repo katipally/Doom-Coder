@@ -4,7 +4,7 @@
 
 **Keep your Mac alive while AI agents do the work.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/DoomCoder?style=flat-square)](https://github.com/katipally/DoomCoder/releases/latest)
+[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square)](https://github.com/katipally/Doom-Coder/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue?style=flat-square)](#)
 [![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](#)
@@ -73,7 +73,7 @@ That's it. macOS saves an exception for this app — you'll never see the warnin
 
 ### Option 1: Download (Recommended)
 
-1. Go to [Releases](https://github.com/katipally/DoomCoder/releases/latest)
+1. Go to [Releases](https://github.com/katipally/Doom-Coder/releases/latest)
 2. Download `DoomCoder-x.x.x.zip`
 3. Unzip and move `DoomCoder.app` to `/Applications`
 4. Right-click → Open (see the [unsigned warning section](#️-important-this-app-is-unsigned) above)
@@ -84,7 +84,7 @@ That's it. macOS saves an exception for this app — you'll never see the warnin
 Requirements: Xcode 15+ (or Xcode 26 for macOS 26 SDK)
 
 ```bash
-git clone https://github.com/katipally/DoomCoder.git
+git clone https://github.com/katipally/Doom-Coder.git
 cd DoomCoder
 open DoomCoder.xcodeproj
 ```
@@ -139,7 +139,7 @@ Doom Coder uses [Sparkle 2](https://sparkle-project.org/) for automatic updates.
 - Updates are checked automatically in the background at launch
 - You can also click **Check for Updates...** in the menu anytime
 - Updates are cryptographically signed with EdDSA — only releases from this repo can be delivered
-- The appcast feed lives at: [`appcast.xml`](https://raw.githubusercontent.com/katipally/DoomCoder/main/appcast.xml)
+- The appcast feed lives at: [`appcast.xml`](https://raw.githubusercontent.com/katipally/Doom-Coder/main/appcast.xml)
 
 ---
 
