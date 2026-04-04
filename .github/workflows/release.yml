@@ -100,8 +100,11 @@ jobs:
           codesign --force --options runtime --sign - "$SPARKLE_FW"
 
           # 4. Sign the main app bundle last (seals everything)
-          echo "Signing: DoomCoder.app"
-          codesign --force --options runtime --sign - "$APP"
+          # Include entitlements to disable library validation — required for
+          # ad-hoc signing with hardened runtime + embedded frameworks
+          echo "Signing: DoomCoder.app (with entitlements)"
+          codesign --force --options runtime --sign - \
+            --entitlements DoomCoder/DoomCoder.entitlements "$APP"
 
           # --- Verify every component ---
           echo ""

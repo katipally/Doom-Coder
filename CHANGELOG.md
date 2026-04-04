@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2] - 2026-04-04
 
 ### Fixed
-- **Proper bottom-up code signing** — Replaced deprecated `codesign --deep` with individual component signing in the correct order: XPC services → Sparkle helpers → Sparkle framework → main app. This follows Apple's current best practices and produces valid signatures that macOS Sequoia (15+) and macOS 26 accept correctly.
-- **Hardened runtime flag on all components** — Every binary now includes `--options runtime` for hardened runtime, matching Xcode's default behavior.
-- **Accurate Gatekeeper instructions** — Updated README and release notes with correct macOS Sequoia/26 instructions (System Settings → Privacy & Security → Open Anyway), since Apple removed the right-click bypass in macOS 15.
+- **App failed to launch (dyld crash)** — Added `com.apple.security.cs.disable-library-validation` entitlement. Hardened runtime's Library Validation requires all loaded code to share the same Team ID, which is impossible with ad-hoc signing. This entitlement allows the embedded Sparkle framework to load correctly.
+- **Proper bottom-up code signing** — Replaced deprecated `codesign --deep` with individual component signing in the correct order: XPC services → Sparkle helpers → Sparkle framework → main app (with entitlements). Each binary includes `--options runtime` for hardened runtime.
+- **Accurate Gatekeeper instructions** — Updated README and release notes with correct macOS Sequoia (15+) / macOS 26 instructions. Right-click bypass no longer works; users must use System Settings → Privacy & Security → Open Anyway.
+- **Synced local project version** — Info.plist now matches the release version (0.1.2).
 
 ## [0.1.1] - 2026-04-04
 
