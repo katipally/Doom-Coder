@@ -75,9 +75,7 @@ final class SleepManager {
 
     // MARK: Launch at Login (via SMAppService)
 
-    var isLaunchAtLoginEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
-    }
+    private(set) var isLaunchAtLoginEnabled: Bool = (SMAppService.mainApp.status == .enabled)
 
     func toggleLaunchAtLogin() {
         do {
@@ -86,8 +84,10 @@ final class SleepManager {
             } else {
                 try SMAppService.mainApp.register()
             }
+            isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
         } catch {
-            // Silently ignore — toggle will reflect actual SMAppService state
+            // Silently ignore — reflect actual SMAppService state
+            isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
         }
     }
 

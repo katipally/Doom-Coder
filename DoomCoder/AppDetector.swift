@@ -101,12 +101,18 @@ final class AppDetector {
     // MARK: - Init / Deinit
 
     init() {
-        NotificationManager.shared.requestAuthorization()
-        scanInstalled()
-        updateRunningGUI()
-        updateRunningCLI()
-        startPolling()
-        subscribeToWorkspaceNotifications()
+        // Defer all heavy work (file system scan, sysctl, notification auth) to the next
+        // run-loop tick so the app launches instantly without blocking the main thread.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.scanInstalled()
+            self.updateRunningGUI()
+            self.updateRunningCLI()
+            self.startPolling()
+            self.subscribeToWorkspaceNotifications()
+            // Request notification authorization once, after app fully launches.
+            NotificationManager.shared.setup()
+        }
     }
 
     deinit {
