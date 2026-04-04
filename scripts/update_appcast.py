@@ -55,6 +55,12 @@ def update_appcast(version: str, build: str, signature: str, size: int, download
     enclosure.set("length", str(size))
     enclosure.set("type", "application/octet-stream")
 
+    # Remove any existing entries with the same version (handles re-releases)
+    for existing_item in channel.findall("item"):
+        enc = existing_item.find("enclosure")
+        if enc is not None and enc.get(s("shortVersionString")) == version:
+            channel.remove(existing_item)
+
     # Insert new item before any existing items (newest first)
     children = list(channel)
     insert_pos = next(
