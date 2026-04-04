@@ -3,6 +3,9 @@ import UserNotifications
 
 // Tracks per-app CPU idle samples and fires a macOS notification when a tracked
 // AI tool appears to have finished its task (CPU < 2% for ~2 continuous minutes).
+//
+// NOTE: requestAuthorization() is NOT called from init() to avoid a startup crash
+// on macOS Sequoia with ad-hoc signed apps. Call setup() after the app fully launches.
 @MainActor
 final class NotificationManager {
 
@@ -12,21 +15,32 @@ final class NotificationManager {
     private let requiredIdleSamples = 12
     private let idleCPUThreshold: Double = 2.0
 
-    private var idleSampleCounts: [String: Int] = [:]  // app.id → consecutive idle samples
-    private var notifiedApps: Set<String> = []          // suppress re-notification until active again
+    private var idleSampleCounts: [String: Int] = [:]
+    private var notifiedApps: Set<String> = []
+    private var isAuthorized = false
+    private var setupCalled = false
 
-    private init() {
-        requestAuthorization()
-    }
+    private init() {}
 
-    func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    // Call once after the app has fully launched (not during init).
+    // Uses the async throwing API to avoid completion-handler threading issues.
+    func setup() {
+        guard !setupCalled else { return }
+        setupCalled = true
+        Task {
+            do {
+                isAuthorized = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound])
+            } catch {
+                // Notifications unavailable (e.g. unsigned app, sandboxing, etc.) — silently skip
+                isAuthorized = false
+            }
+        }
     }
 
     // Called each polling cycle for every running tracked app.
     func record(app: TrackedApp) {
         guard app.isRunning, let cpu = app.cpuPercent else {
-            // App stopped running — reset tracking so next run triggers fresh detection
             idleSampleCounts[app.id] = 0
             notifiedApps.remove(app.id)
             return
@@ -40,13 +54,13 @@ final class NotificationManager {
                 sendIdleNotification(appName: app.displayName)
             }
         } else {
-            // App became active again — reset so we notify again next time it idles
             idleSampleCounts[app.id] = 0
             notifiedApps.remove(app.id)
         }
     }
 
     private func sendIdleNotification(appName: String) {
+        guard isAuthorized else { return }
         let content = UNMutableNotificationContent()
         content.title = "🤖 Task May Be Complete"
         content.body = "\(appName) has gone idle — your task may be complete."
@@ -57,6 +71,6 @@ final class NotificationManager {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(request) { _ in }
     }
 }

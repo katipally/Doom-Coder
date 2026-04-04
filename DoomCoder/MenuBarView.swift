@@ -11,44 +11,36 @@ struct MenuBarView: View {
         Button {
             sleepManager.toggle()
         } label: {
-            HStack {
-                Image(systemName: sleepManager.isActive ? "bolt.fill" : "bolt.slash.fill")
-                Text(sleepManager.isActive ? "Disable Doom Coder" : "Enable Doom Coder")
-            }
+            Label(
+                sleepManager.isActive ? "Disable Doom Coder" : "Enable Doom Coder",
+                systemImage: sleepManager.isActive ? "bolt.fill" : "bolt.slash.fill"
+            )
         }
 
-        // Status lines
+        // ── Status lines ────────────────────────────────────
         if sleepManager.isActive, !sleepManager.elapsedTimeString.isEmpty {
             Text(sleepManager.elapsedTimeString).foregroundStyle(.secondary)
         }
         if let countdown = sleepManager.screenOffCountdown {
-            Text("🌑 Screen turns off in \(countdown)s…").foregroundStyle(.secondary)
+            Text("🌑 Turning off screen in \(countdown)s…").foregroundStyle(.secondary)
         }
         if sleepManager.isScreenOff {
-            Text("🌑 Screen off — move mouse or press any key").foregroundStyle(.secondary)
+            Text("🌑 Screen is off — move mouse to wake").foregroundStyle(.secondary)
         }
         if sleepManager.isDimmed {
             Text("💡 Screen dimmed — move mouse to restore").foregroundStyle(.secondary)
         }
-
-        // Fn+F1 hint
         if sleepManager.hasAccessibilityPermission {
-            Text("Fn+F1 to toggle").foregroundStyle(.tertiary)
+            Text("Tip: Press Fn+F1 to toggle").foregroundStyle(.tertiary)
         }
 
         Divider()
 
-        // ── Mode Picker ─────────────────────────────────────
+        // ── Mode ────────────────────────────────────────────
         Menu("Mode: \(sleepManager.mode.displayName)") {
             ForEach(DoomCoderMode.allCases, id: \.self) { m in
-                Button {
+                Button(modeLabel(m, selected: sleepManager.mode == m)) {
                     sleepManager.mode = m
-                } label: {
-                    HStack {
-                        Text(modeLabel(m))
-                        Spacer()
-                        if sleepManager.mode == m { Image(systemName: "checkmark") }
-                    }
                 }
             }
         }
@@ -58,25 +50,15 @@ struct MenuBarView: View {
             Menu("Auto-Dim Settings") {
                 Section("Idle Timeout") {
                     ForEach([2, 5, 10], id: \.self) { mins in
-                        Button {
+                        Button(checkLabel(sleepManager.idleTimeoutMinutes == mins, "\(mins) minutes")) {
                             sleepManager.idleTimeoutMinutes = mins
-                        } label: {
-                            HStack {
-                                Text("\(mins) minutes")
-                                if sleepManager.idleTimeoutMinutes == mins { Image(systemName: "checkmark") }
-                            }
                         }
                     }
                 }
                 Section("Dim Level") {
                     ForEach([5, 10, 20], id: \.self) { pct in
-                        Button {
+                        Button(checkLabel(sleepManager.dimBrightnessPercent == pct, "\(pct)%")) {
                             sleepManager.dimBrightnessPercent = pct
-                        } label: {
-                            HStack {
-                                Text("\(pct)%")
-                                if sleepManager.dimBrightnessPercent == pct { Image(systemName: "checkmark") }
-                            }
                         }
                     }
                 }
@@ -88,13 +70,8 @@ struct MenuBarView: View {
             Menu("Screen-Off Settings") {
                 Section("Re-arm after idle") {
                     ForEach([5, 10, 15, 30], id: \.self) { mins in
-                        Button {
+                        Button(checkLabel(sleepManager.screenOffRearmMinutes == mins, "\(mins) min idle")) {
                             sleepManager.screenOffRearmMinutes = mins
-                        } label: {
-                            HStack {
-                                Text("\(mins) minutes")
-                                if sleepManager.screenOffRearmMinutes == mins { Image(systemName: "checkmark") }
-                            }
                         }
                     }
                 }
@@ -105,39 +82,28 @@ struct MenuBarView: View {
 
         // ── Session Timer ────────────────────────────────────
         Menu("Session Timer") {
-            Button {
+            Button(checkLabel(sleepManager.sessionTimerHours == 0, "Off")) {
                 sleepManager.sessionTimerHours = 0
-            } label: {
-                HStack {
-                    Text("Off")
-                    if sleepManager.sessionTimerHours == 0 { Image(systemName: "checkmark") }
-                }
             }
             ForEach([1, 2, 4, 8], id: \.self) { hours in
-                Button {
+                Button(checkLabel(sleepManager.sessionTimerHours == hours, "\(hours) hours")) {
                     sleepManager.sessionTimerHours = hours
-                } label: {
-                    HStack {
-                        Text("\(hours)h")
-                        if sleepManager.sessionTimerHours == hours { Image(systemName: "checkmark") }
-                    }
                 }
             }
         }
-
         if let remaining = sleepManager.sessionTimerRemainingText {
             Text(remaining).foregroundStyle(.secondary)
         }
 
         Divider()
 
-        // ── Thermal State ─────────────────────────────────────
-        Text("System: \(sleepManager.thermalStateText)")
+        // ── Thermal ───────────────────────────────────────────
+        Text("Thermal: \(sleepManager.thermalStateText)")
 
-        // ── Detected Apps ────────────────────────────────────
+        // ── Detected AI Apps ─────────────────────────────────
         if !appDetector.detectedApps.isEmpty {
             Divider()
-            Section("Detected Apps") {
+            Section("AI Apps") {
                 ForEach(appDetector.detectedApps) { app in
                     Text(appStatusLine(app))
                         .foregroundStyle(app.isRunning ? .primary : .secondary)
@@ -147,31 +113,23 @@ struct MenuBarView: View {
 
         Divider()
 
-        // ── Settings ──────────────────────────────────────────
-        // Launch at Login toggle
-        Button {
+        // ── Options ───────────────────────────────────────────
+        Button(checkLabel(sleepManager.isLaunchAtLoginEnabled, "Launch at Login")) {
             sleepManager.toggleLaunchAtLogin()
-        } label: {
-            HStack {
-                Text("Launch at Login")
-                Spacer()
-                if sleepManager.isLaunchAtLoginEnabled { Image(systemName: "checkmark") }
-            }
         }
 
-        // Accessibility permission for Fn+F1 hotkey
         if !sleepManager.hasAccessibilityPermission {
-            Button("Grant Accessibility (enable Fn+F1)") {
+            Button("Grant Accessibility (Fn+F1 hotkey)") {
                 sleepManager.requestAccessibilityPermission()
             }
         }
 
-        Button("Check for Updates...") {
+        Button("Check for Updates…") {
             updaterViewModel.checkForUpdates()
         }
         .disabled(!updaterViewModel.canCheckForUpdates)
 
-        Button("About Doom Coder...") {
+        Button("About Doom Coder…") {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "about")
         }
@@ -186,20 +144,26 @@ struct MenuBarView: View {
 
     // MARK: - Helpers
 
-    private func modeLabel(_ mode: DoomCoderMode) -> String {
+    /// Prepends "✓ " to the title when selected — works correctly in both NSMenu and SwiftUI popup styles.
+    private func checkLabel(_ selected: Bool, _ title: String) -> String {
+        selected ? "✓  \(title)" : "    \(title)"
+    }
+
+    private func modeLabel(_ mode: DoomCoderMode, selected: Bool) -> String {
+        let prefix = selected ? "✓  " : "    "
         switch mode {
-        case .full:      return "⚡ Full Mode — screen stays fully on"
-        case .autoDim:   return "🌙 Auto-Dim — dims screen when idle"
-        case .screenOff: return "🌑 Screen Off — turns off display, Mac stays awake"
+        case .full:      return "\(prefix)⚡ Full Mode — screen always on"
+        case .autoDim:   return "\(prefix)🌙 Auto-Dim — dims when idle"
+        case .screenOff: return "\(prefix)🌑 Screen Off — display off, Mac awake"
         }
     }
 
     private func appStatusLine(_ app: TrackedApp) -> String {
         if app.isRunning, let cpu = app.cpuPercent {
             let cpuStr = cpu < 1.0 ? "idle" : String(format: "%.0f%% CPU", cpu)
-            return "✅ \(app.displayName) — \(cpuStr)"
+            return "✅ \(app.displayName)  \(cpuStr)"
         } else if app.isRunning {
-            return "✅ \(app.displayName) — running"
+            return "✅ \(app.displayName)  running"
         } else {
             return "⚫ \(app.displayName)"
         }
