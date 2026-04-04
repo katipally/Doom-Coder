@@ -41,6 +41,9 @@ Pods/
 # Carthage (not used)
 Carthage/Build/
 
+# Personal guides (local only, not for public repo)
+guide/
+
 # Editor
 .vscode/
 *.swp
