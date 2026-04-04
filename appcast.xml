@@ -1,16 +1,16 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
     <channel>
         <title>Doom Coder Changelog</title>
-        <link>https://github.com/katipally/DoomCoder</link>
+        <link>https://github.com/katipally/Doom-Coder</link>
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <item>
             <title>Version 0.1.0</title>
             <pubDate>Sat, 04 Apr 2026 03:32:45 +0000</pubDate>
-            <sparkle:releaseNotesLink>https://github.com/katipally/DoomCoder/releases/tag/v0.1.0</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0</sparkle:releaseNotesLink>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/katipally/DoomCoder/releases/download/v0.1.0/DoomCoder-0.1.0.zip" sparkle:version="010" sparkle:shortVersionString="0.1.0" sparkle:edSignature="sparkle:edSignature=xPsLD2b46n8uRmXPFegxavFffT02to+l0pS3Id1Wzy5aJd5Jskk0XZgvUQewu+nk5EtjB6csZb+n2aeejgJIDA== length=982711" length="982711" type="application/octet-stream" />
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v0.1.0/DoomCoder-0.1.0.zip" sparkle:version="010" sparkle:shortVersionString="0.1.0" sparkle:edSignature="xPsLD2b46n8uRmXPFegxavFffT02to+l0pS3Id1Wzy5aJd5Jskk0XZgvUQewu+nk5EtjB6csZb+n2aeejgJIDA==" length="982711" type="application/octet-stream" />
         </item>
     </channel>
 </rss>

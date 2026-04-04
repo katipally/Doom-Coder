@@ -29,7 +29,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/katipally/DoomCoder/main/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/katipally/Doom-Coder/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>rzl2zIGFYnWE682f8G3wke4hf2CQ6omZbK9z87a+9IE=</string>
 </dict>
