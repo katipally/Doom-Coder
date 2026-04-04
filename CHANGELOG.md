@@ -10,11 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2026-04-04
 
 ### Fixed
-- **Idle detection missed mouse clicks and scrolling** — Auto-Dim now tracks `leftMouseDown`, `rightMouseDown`, and `scrollWheel` events in addition to mouse movement and key presses. Previously, clicking in an editor without moving the mouse would incorrectly trigger screen dimming.
-- **Brightness control affected all displays** — `setBrightness` now only targets the primary (built-in) display, consistent with how brightness is read. Prevents erratic brightness on multi-monitor setups.
-- **Mode picker was confusing** — Replaced bullet-style radio buttons with a clear `Mode` submenu showing descriptions: "⚡ Full Mode — screen stays at full brightness" and "🌙 Auto-Dim — dims screen when idle, restores on activity".
-- **Dim status indicator improved** — Now says "💡 Screen dimmed — move mouse to restore" instead of just "💡 Screen dimmed".
-- **About window could clip text** — Removed fixed height, now sizes dynamically to fit content.
+- **Auto-Dim was completely non-functional on Apple Silicon Macs** — The previous implementation used `IODisplayGetFloatParameter` / `IODisplaySetFloatParameter` (IOKit display API), which returns zero services on Apple Silicon. Replaced with `CGGetDisplayTransferByFormula` / `CGSetDisplayTransferByFormula` (CoreGraphics gamma table API), which works on all Macs. Screen now visibly dims to the selected level after the idle timeout and instantly restores on any mouse or keyboard activity.
+- **Timers didn't fire reliably** — Changed all internal timers (`Timer.scheduledTimer`) to use `RunLoop.main.add(t, forMode: .common)` so they fire in `.common` mode instead of `.default`, ensuring consistent behavior.
+- **Auto-Dim Settings submenu headers were broken** — `Text()` inside a SwiftUI `Menu` renders as a disabled menu item, not a section header. Replaced with proper `Section("Idle Timeout")` and `Section("Dim Level")` for correct macOS menu appearance.
+- **Idle detection missed mouse clicks and scrolling** — Added `leftMouseDown`, `rightMouseDown`, and `scrollWheel` event types to the idle check, preventing false-positive dimming when clicking without moving the mouse.
+- **Mode picker was confusing** — Replaced bullet-character radio buttons with a clear `Mode` submenu with descriptions for each option.
+- **Added gamma safety net** — `CGDisplayRestoreColorSyncSettings()` is now called on app exit/crash via `deinit`, ensuring the display gamma is always restored even if the app exits unexpectedly while screen is dimmed.
 
 ## [0.2.0] - 2026-04-04
 

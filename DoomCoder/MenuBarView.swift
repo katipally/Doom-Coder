@@ -53,31 +53,30 @@ struct MenuBarView: View {
         if sleepManager.mode == .autoDim {
             Divider()
             Menu("Auto-Dim Settings") {
-                Text("Idle Timeout").font(.caption)
-                ForEach([2, 5, 10], id: \.self) { mins in
-                    Button {
-                        sleepManager.idleTimeoutMinutes = mins
-                    } label: {
-                        HStack {
-                            Text("\(mins) minutes")
-                            if sleepManager.idleTimeoutMinutes == mins {
-                                Image(systemName: "checkmark")
+                Section("Idle Timeout") {
+                    ForEach([2, 5, 10], id: \.self) { mins in
+                        Button {
+                            sleepManager.idleTimeoutMinutes = mins
+                        } label: {
+                            HStack {
+                                Text("\(mins) minutes")
+                                if sleepManager.idleTimeoutMinutes == mins {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                     }
                 }
-
-                Divider()
-
-                Text("Dim Level").font(.caption)
-                ForEach([5, 10, 20], id: \.self) { pct in
-                    Button {
-                        sleepManager.dimBrightnessPercent = pct
-                    } label: {
-                        HStack {
-                            Text("\(pct)%")
-                            if sleepManager.dimBrightnessPercent == pct {
-                                Image(systemName: "checkmark")
+                Section("Dim Level") {
+                    ForEach([5, 10, 20], id: \.self) { pct in
+                        Button {
+                            sleepManager.dimBrightnessPercent = pct
+                        } label: {
+                            HStack {
+                                Text("\(pct)%")
+                                if sleepManager.dimBrightnessPercent == pct {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                     }
