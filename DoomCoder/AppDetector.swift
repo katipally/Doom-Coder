@@ -13,8 +13,19 @@ struct TrackedApp: Identifiable {
     var isRunning: Bool
     var pid: pid_t?
     var cpuPercent: Double?
+    var childProcessCount: Int = 0  // live child processes spawned by this process
 
     enum Kind: String { case gui, cli }
+
+    // CLI agents are "working" when they have spawned child processes (shell cmds, git, compilers…)
+    // GUI apps are "working" when CPU is meaningfully elevated above idle.
+    var isWorking: Bool {
+        guard isRunning else { return false }
+        switch kind {
+        case .cli: return childProcessCount > 0
+        case .gui: return (cpuPercent ?? 0) > 2.0
+        }
+    }
 }
 
 // MARK: - AppDetector
@@ -201,48 +212,68 @@ final class AppDetector {
     }
 
     private func updateRunningCLI() {
-        let processList = currentUserProcesses()
+        let allProcs = getAllUserProcesses()
+
+        // name → first matching ProcInfo
+        var byName: [String: ProcInfo] = [:]
+        for p in allProcs { if byName[p.name] == nil { byName[p.name] = p } }
+
+        // ppid → direct child count: detects when an agent has spawned shell commands, git, etc.
+        var childCounts: [pid_t: Int] = [:]
+        for p in allProcs { childCounts[p.ppid, default: 0] += 1 }
+
         for i in detectedApps.indices where detectedApps[i].kind == .cli {
             let name = detectedApps[i].id
-            if let pid = processList[name] {
-                detectedApps[i].isRunning = true
-                detectedApps[i].pid = pid
+            if let info = byName[name] {
+                detectedApps[i].isRunning         = true
+                detectedApps[i].pid               = info.pid
+                detectedApps[i].childProcessCount = childCounts[info.pid] ?? 0
             } else {
-                detectedApps[i].isRunning = false
-                detectedApps[i].pid = nil
-                detectedApps[i].cpuPercent = nil
+                detectedApps[i].isRunning         = false
+                detectedApps[i].pid               = nil
+                detectedApps[i].cpuPercent        = nil
+                detectedApps[i].childProcessCount = 0
             }
         }
     }
 
     // MARK: - sysctl Process Table (CLI detection)
 
-    // Returns processName → pid for all processes owned by the current user.
-    // Uses KERN_PROC_UID to filter by UID — more efficient than KERN_PROC_ALL.
-    private func currentUserProcesses() -> [String: pid_t] {
+    private struct ProcInfo {
+        let name: String
+        let pid:  pid_t
+        let ppid: pid_t
+    }
+
+    // Returns all processes owned by the current user in one sysctl call.
+    // KERN_PROC_UID filters by UID, more efficient than KERN_PROC_ALL.
+    private func getAllUserProcesses() -> [ProcInfo] {
         let uid = Int32(getuid())
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_UID, uid]
         var size = 0
         sysctl(&mib, 4, nil, &size, nil, 0)
 
         let count = size / MemoryLayout<kinfo_proc>.stride
-        guard count > 0 else { return [:] }
+        guard count > 0 else { return [] }
 
         var procs = [kinfo_proc](repeating: kinfo_proc(), count: count)
         var actualSize = size
         sysctl(&mib, 4, &procs, &actualSize, nil, 0)
 
         let actualCount = actualSize / MemoryLayout<kinfo_proc>.stride
-        var result: [String: pid_t] = [:]
+        var result: [ProcInfo] = []
+        result.reserveCapacity(actualCount)
         for i in 0..<actualCount {
-            let proc = procs[i]
-            // p_comm is a 17-byte C char array (MAXCOMLEN=16 + null terminator)
-            let name = withUnsafeBytes(of: proc.kp_proc.p_comm) { bytes -> String in
+            let kp   = procs[i]
+            let pid  = kp.kp_proc.p_pid
+            let ppid = kp.kp_eproc.e_ppid
+            guard pid > 0 else { continue }
+            let name = withUnsafeBytes(of: kp.kp_proc.p_comm) { bytes -> String in
                 guard let base = bytes.baseAddress else { return "" }
                 return String(cString: base.assumingMemoryBound(to: CChar.self))
             }
-            let pid = proc.kp_proc.p_pid
-            if !name.isEmpty && pid > 0 { result[name] = pid }
+            guard !name.isEmpty else { continue }
+            result.append(ProcInfo(name: name, pid: pid, ppid: ppid))
         }
         return result
     }

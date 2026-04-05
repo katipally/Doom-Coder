@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.4.0] - 2026-04-05
+## [0.5.0] - 2026-04-05
+
+### Added
+- **GitHub Copilot CLI agent detection** — `copilot` binary is now tracked and displayed as "GitHub Copilot CLI" in the Active Apps window. Detects the agent started via `copilot` in any terminal.
+- **"Working" state for CLI agents** — CLI tools (Claude Code, Copilot, Codex, Aider, etc.) now show **"working (N tasks)"** in the Status column when they have active child processes (shell commands, git, compilers, file writes, etc.). This is the definitive signal that an agent is executing work — not just sitting at a prompt.
+- **"Working" state for GUI apps** — editor apps (Cursor, VS Code, Windsurf) show **"active"** when CPU is meaningfully elevated above idle (>2%).
+- **Dot color indicator** — green dot = working/active; yellow dot = running but idle; gray dot = not running.
+
+### Changed
+- Status column now shows: `working (N tasks)` → `running` → `idle` → `not running` instead of just active/idle.
+- Status text is green when working, secondary when idle, tertiary when not running.
+- Internal: replaced `currentUserProcesses() → [String: pid_t]` with `getAllUserProcesses() → [ProcInfo]` that also captures `ppid` in one sysctl pass — used to build a child-count map with zero extra syscalls.
+
+---
+
+
 
 ### Added
 - **Active Apps window** — dedicated window (App | Status | CPU%) replacing the old inline menu list. Opens via "Active Apps…" menu item; includes a Scan button and thermal status footer.
