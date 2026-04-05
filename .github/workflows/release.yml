@@ -160,6 +160,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml
           git commit -m "chore: update appcast.xml for ${{ env.TAG }}" || echo "No changes to commit"
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
 
       - name: Create GitHub Release
