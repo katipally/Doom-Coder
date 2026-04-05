@@ -69,7 +69,7 @@ struct ActiveAppsView: View {
             TableColumn("App") { app in
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(app.isRunning ? Color.green : Color.secondary.opacity(0.3))
+                        .fill(dotColor(app))
                         .frame(width: 7, height: 7)
                     Text(app.displayName)
                         .foregroundStyle(app.isRunning ? .primary : .secondary)
@@ -77,10 +77,10 @@ struct ActiveAppsView: View {
             }
             TableColumn("Status") { app in
                 Text(statusLabel(app))
-                    .foregroundStyle(app.isRunning ? .primary : .tertiary)
+                    .foregroundStyle(statusColor(app))
                     .monospacedDigit()
             }
-            .width(min: 60, ideal: 80)
+            .width(min: 80, ideal: 110)
 
             TableColumn("CPU") { app in
                 Text(cpuLabel(app))
@@ -113,10 +113,27 @@ struct ActiveAppsView: View {
 
     // MARK: - Helpers
 
+    private func dotColor(_ app: TrackedApp) -> Color {
+        guard app.isRunning else { return Color.secondary.opacity(0.3) }
+        return app.isWorking ? .green : .yellow
+    }
+
     private func statusLabel(_ app: TrackedApp) -> String {
         guard app.isRunning else { return "not running" }
-        if let cpu = app.cpuPercent { return cpu < 1.0 ? "idle" : "active" }
+        if app.isWorking {
+            if app.kind == .cli {
+                let n = app.childProcessCount
+                return "working (\(n) task\(n == 1 ? "" : "s"))"
+            }
+            return "active"
+        }
+        if let cpu = app.cpuPercent { return cpu < 1.0 ? "idle" : "running" }
         return "running"
+    }
+
+    private func statusColor(_ app: TrackedApp) -> Color {
+        guard app.isRunning else { return Color.secondary.opacity(0.5) }
+        return app.isWorking ? .green : .secondary
     }
 
     private func cpuLabel(_ app: TrackedApp) -> String {
