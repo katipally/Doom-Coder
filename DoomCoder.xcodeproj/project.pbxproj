@@ -16,6 +16,8 @@
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
 		DC0000000000002000000011 /* AppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000011 /* AppDetector.swift */; };
 		DC0000000000002000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000012 /* NotificationManager.swift */; };
+		DC0000000000002000000013 /* ActiveAppsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000013 /* ActiveAppsView.swift */; };
+		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +32,8 @@
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
 		DC0000000000001000000011 /* AppDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000013 /* ActiveAppsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveAppsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +66,8 @@
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
 				DC0000000000001000000011 /* AppDetector.swift */,
 				DC0000000000001000000012 /* NotificationManager.swift */,
+				DC0000000000001000000013 /* ActiveAppsView.swift */,
+				DC0000000000001000000014 /* SettingsView.swift */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
@@ -159,6 +165,8 @@
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
 				DC0000000000002000000011 /* AppDetector.swift in Sources */,
 				DC0000000000002000000012 /* NotificationManager.swift in Sources */,
+				DC0000000000002000000013 /* ActiveAppsView.swift in Sources */,
+				DC0000000000002000000014 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

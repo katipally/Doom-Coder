@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-04-05
+
+### Added
+- **Active Apps window** — dedicated window (App | Status | CPU%) replacing the old inline menu list. Opens via "Active Apps…" menu item; includes a Scan button and thermal status footer.
+- **Settings window** — clean Form-based window with Launch at Login toggle and Accessibility permission status/grant button for the global hotkey.
+- **⌥ Space global hotkey** — replaces the old Fn+F1 shortcut. Toggles Doom Coder on/off from anywhere. Requires Accessibility permission; a "Grant Access" button in Settings opens System Preferences and polls for permission automatically (no relaunch needed).
+- **Smooth screen-off fade** — Screen Off mode now uses `CGDisplayFade` for a 0.8-second cinematic fade to black before sleeping the display (no jarring instant-off).
+- **Dynamic PATH detection** — `AppDetector` now reads `/etc/paths` and `/etc/paths.d/` to discover system-defined binary paths at runtime (Homebrew, npm, etc.) instead of relying on a hardcoded list.
+- **Gemini CLI detection** — added `gemini` to tracked CLI tools.
+
+### Changed
+- **Removed Auto-Dim mode entirely** — two clean modes remain: Full (always on, screen stays on) and Screen Off (Mac stays awake, display fades off). No gamma manipulation, no idle-timeout complexity.
+- **Menu redesign** — no emojis, no inline app list, no thermal in menu. Clean structure: toggle → status → Mode → Session Timer → Active Apps… → Settings… → Updates/About/Quit.
+- **Process scanning efficiency** — `AppDetector` now uses `KERN_PROC_UID` (current user only) instead of `KERN_PROC_ALL`, reducing sysctl overhead.
+
+### Fixed
+- Hotkey would fail silently if Accessibility permission was granted after app launch — permission polling now detects the grant within 2 seconds without requiring a relaunch.
+- Removed incorrect `NSUserNotificationUsageDescription` Info.plist key.
+
+---
+
 ## [0.3.1] - 2026-04-05
 
 ### Fixed

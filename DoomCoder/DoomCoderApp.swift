@@ -19,6 +19,16 @@ struct DoomCoderApp: App {
                 .symbolRenderingMode(.monochrome)
         }
 
+        Window("Active Apps", id: "active-apps") {
+            ActiveAppsView(appDetector: appDetector, sleepManager: sleepManager)
+        }
+        .windowResizability(.contentSize)
+
+        Window("Settings", id: "settings") {
+            SettingsView(sleepManager: sleepManager)
+        }
+        .windowResizability(.contentSize)
+
         Window("About Doom Coder", id: "about") {
             AboutView()
         }

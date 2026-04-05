@@ -8,22 +8,12 @@ import ServiceManagement
 
 enum DoomCoderMode: String, CaseIterable {
     case full      = "full"
-    case autoDim   = "autoDim"
     case screenOff = "screenOff"
 
     var displayName: String {
         switch self {
         case .full:      return "Full Mode"
-        case .autoDim:   return "Auto-Dim"
         case .screenOff: return "Screen Off"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .full:      return "Screen stays fully on"
-        case .autoDim:   return "Dims screen when idle"
-        case .screenOff: return "Turns screen off, Mac stays awake"
         }
     }
 }
@@ -34,32 +24,23 @@ enum DoomCoderMode: String, CaseIterable {
 @MainActor
 final class SleepManager {
 
-    // MARK: Public state
+    // MARK: - Public state
 
     private(set) var isActive = false
     private(set) var elapsedTimeString = ""
-    private(set) var thermalStateText = "🟢 Normal"
+    private(set) var thermalStateText = "Normal"
     private(set) var sessionTimerRemainingText: String?
-    private(set) var isDimmed = false
     private(set) var isScreenOff = false
-    private(set) var screenOffCountdown: Int? = nil  // nil = not counting, N = seconds remaining
+    private(set) var screenOffCountdown: Int? = nil
     private(set) var hasAccessibilityPermission: Bool = false
 
-    // MARK: User settings (persisted to UserDefaults)
+    // MARK: - Persisted settings
 
     var mode: DoomCoderMode {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "doomcoder.mode")
             handleModeChange()
         }
-    }
-
-    var idleTimeoutMinutes: Int {
-        didSet { UserDefaults.standard.set(idleTimeoutMinutes, forKey: "doomcoder.idleTimeout") }
-    }
-
-    var dimBrightnessPercent: Int {
-        didSet { UserDefaults.standard.set(dimBrightnessPercent, forKey: "doomcoder.dimBrightness") }
     }
 
     var sessionTimerHours: Int {
@@ -73,79 +54,91 @@ final class SleepManager {
         didSet { UserDefaults.standard.set(screenOffRearmMinutes, forKey: "doomcoder.screenOffRearm") }
     }
 
-    // MARK: Launch at Login (via SMAppService)
+    // MARK: - Launch at Login
 
     private(set) var isLaunchAtLoginEnabled: Bool = (SMAppService.mainApp.status == .enabled)
 
     func toggleLaunchAtLogin() {
         do {
-            if isLaunchAtLoginEnabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-            isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
-        } catch {
-            // Silently ignore — reflect actual SMAppService state
-            isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
-        }
+            if isLaunchAtLoginEnabled { try SMAppService.mainApp.unregister() }
+            else { try SMAppService.mainApp.register() }
+        } catch {}
+        isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
     }
 
-    // MARK: Accessibility (required for global Fn+F1 hotkey)
+    // MARK: - Accessibility (required for global ⌥Space hotkey)
 
     func requestAccessibilityPermission() {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
-        hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
+        startPermissionPolling()
     }
 
-    // MARK: Private — gamma state
+    private func startPermissionPolling() {
+        _permissionPollTimer?.invalidate()
+        _permissionPollCount = 0
+        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self._permissionPollCount += 1
+                if AXIsProcessTrustedWithOptions(nil) {
+                    self.hasAccessibilityPermission = true
+                    self.setupGlobalHotkey()
+                    self._permissionPollTimer?.invalidate()
+                    self._permissionPollTimer = nil
+                } else if self._permissionPollCount >= 15 {
+                    self._permissionPollTimer?.invalidate()
+                    self._permissionPollTimer = nil
+                }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        _permissionPollTimer = t
+    }
 
-    private typealias GammaState = (
-        rMin: CGGammaValue, rMax: CGGammaValue, rGamma: CGGammaValue,
-        gMin: CGGammaValue, gMax: CGGammaValue, gGamma: CGGammaValue,
-        bMin: CGGammaValue, bMax: CGGammaValue, bGamma: CGGammaValue
-    )
-    private var savedGamma: GammaState?
+    // MARK: - Private state
 
     private var activeSince: Date?
     private var sessionEndDate: Date?
-
-    // MARK: Private — stored nonisolated for deinit access
+    private var _permissionPollCount: Int = 0
 
     @ObservationIgnored nonisolated(unsafe) private var assertionID: IOPMAssertionID = 0
     @ObservationIgnored nonisolated(unsafe) private var _elapsedTimer: Timer?
-    @ObservationIgnored nonisolated(unsafe) private var _idleTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _sessionTimer: Timer?
+    @ObservationIgnored nonisolated(unsafe) private var _permissionPollTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var thermalObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var _screenOffTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var _screenWakeObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var _hotkeyMonitor: Any?
 
-    // MARK: Init
+    // MARK: - Init
 
     init() {
-        let savedMode = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.full.rawValue
-        self.mode            = DoomCoderMode(rawValue: savedMode) ?? .full
-        self.idleTimeoutMinutes  = UserDefaults.standard.object(forKey: "doomcoder.idleTimeout")    as? Int ?? 5
-        self.dimBrightnessPercent = UserDefaults.standard.object(forKey: "doomcoder.dimBrightness") as? Int ?? 10
-        self.sessionTimerHours   = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer")   as? Int ?? 0
+        let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.full.rawValue
+        self.mode = DoomCoderMode(rawValue: saved) ?? .full
+        self.sessionTimerHours = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer") as? Int ?? 0
         self.screenOffRearmMinutes = UserDefaults.standard.object(forKey: "doomcoder.screenOffRearm") as? Int ?? 10
-
         startThermalMonitoring()
         updateThermalState()
         setupGlobalHotkey()
     }
 
-    // MARK: - Global Hotkey (Fn+F1 = keyCode 122)
-    // Requires Accessibility permission. Works when Fn+F1 pressed (not regular F1/brightness key).
+    // MARK: - Global Hotkey (⌥ Space)
+    // Requires Accessibility permission. Prompts via requestAccessibilityPermission(),
+    // then re-installs automatically once permission is detected via polling.
 
     private func setupGlobalHotkey() {
+        if let existing = _hotkeyMonitor {
+            NSEvent.removeMonitor(existing)
+            _hotkeyMonitor = nil
+        }
         hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
         guard hasAccessibilityPermission else { return }
 
         _hotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 122 else { return }
+            guard event.keyCode == 49,
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option
+            else { return }
             Task { @MainActor [weak self] in self?.toggle() }
         }
     }
@@ -160,44 +153,37 @@ final class SleepManager {
         activeSince = .now
         startElapsedTimer()
         resetSessionTimer()
-        switch mode {
-        case .full:      break
-        case .autoDim:   startIdleMonitoring()
-        case .screenOff: startScreenOff()
-        }
+        if mode == .screenOff { startScreenOff() }
     }
 
     func disable() {
         guard isActive else { return }
         stopScreenOff()
-        restoreGamma()
         IOPMAssertionRelease(assertionID)
         assertionID = 0
         isActive = false
         activeSince = nil
         elapsedTimeString = ""
-        isDimmed = false
         isScreenOff = false
         screenOffCountdown = nil
         sessionTimerRemainingText = nil
         sessionEndDate = nil
         stopElapsedTimer()
-        stopIdleMonitoring()
         stopSessionTimer()
     }
 
     func toggle() { isActive ? disable() : enable() }
 
-    // MARK: - Assertion Management
+    // MARK: - IOPMAssertion
 
     private func createAssertion() -> IOPMAssertionID? {
         var id: IOPMAssertionID = 0
-        // Screen-Off mode: prevent system sleep only (display is allowed to sleep)
-        // Other modes: prevent both display and system idle sleep
+        // Screen Off: prevent system sleep only — display is allowed to sleep (we sleep it manually)
+        // Full: prevent both display idle sleep and system sleep
         let type: CFString = (mode == .screenOff)
             ? (kIOPMAssertionTypePreventSystemSleep as CFString)
             : (kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString)
-        let reason = "DoomCoder: Keeping Mac alive for AI coding session" as CFString
+        let reason = "DoomCoder: keeping Mac awake for AI coding session" as CFString
         let result = IOPMAssertionCreateWithName(type, IOPMAssertionLevel(kIOPMAssertionLevelOn), reason, &id)
         return result == kIOReturnSuccess ? id : nil
     }
@@ -206,30 +192,14 @@ final class SleepManager {
 
     private func handleModeChange() {
         guard isActive else { return }
-
-        // Swap the IOPMAssertion for the new mode (different assertion types)
-        if assertionID != 0 {
-            IOPMAssertionRelease(assertionID)
-            assertionID = 0
-        }
+        if assertionID != 0 { IOPMAssertionRelease(assertionID); assertionID = 0 }
         guard let id = createAssertion() else { disable(); return }
         assertionID = id
-
-        // Stop all mode-specific activity
-        restoreGamma()
-        isDimmed = false
-        stopIdleMonitoring()
         stopScreenOff()
-
-        // Start mode-specific activity
-        switch mode {
-        case .full:      break
-        case .autoDim:   startIdleMonitoring()
-        case .screenOff: startScreenOff()
-        }
+        if mode == .screenOff { startScreenOff() }
     }
 
-    // MARK: - Elapsed Time
+    // MARK: - Elapsed Timer
 
     private func startElapsedTimer() {
         _elapsedTimer?.invalidate()
@@ -254,41 +224,57 @@ final class SleepManager {
         let total = Int(Date.now.timeIntervalSince(since))
         let h = total / 3600
         let m = (total % 3600) / 60
-        elapsedTimeString = h > 0
-            ? "Active for \(h)h \(m)m"
-            : "Active for \(m < 1 ? "<1" : "\(m)")m"
+        elapsedTimeString = h > 0 ? "Active for \(h)h \(m)m" : "Active for \(m < 1 ? "<1" : "\(m)")m"
     }
 
-    // MARK: - Screen-Off Mode
-    // Uses pmset displaysleepnow to turn off the display while keeping the Mac fully awake.
-    // System stays awake via kIOPMAssertionTypePreventSystemSleep assertion.
+    // MARK: - Screen Off Mode
+    // Shows a 5-second countdown, then fades the display to black using CGDisplayFade,
+    // then calls pmset displaysleepnow to sleep the display (Mac stays fully awake).
+    // On user activity (any input), macOS wakes the display automatically.
+    // After wake, re-arm timer restarts and sleeps the display again after idle threshold.
 
     private func startScreenOff() {
         screenOffCountdown = 5
         _screenOffTask = Task { @MainActor [weak self] in
-            // 5-second countdown before turning screen off
             for remaining in stride(from: 4, through: 0, by: -1) {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self, !Task.isCancelled, self.isActive, self.mode == .screenOff else { return }
                 self.screenOffCountdown = remaining
             }
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(200))
             guard let self, !Task.isCancelled, self.isActive, self.mode == .screenOff else { return }
             self.screenOffCountdown = nil
-            self.executeScreenOff()
+            await self.executeScreenOff()
         }
     }
 
-    private func executeScreenOff() {
-        // Deregister any previous wake observer before registering a new one
+    // Fades the display to black over 0.8s, then sleeps it via pmset.
+    // Uses CGAcquireDisplayFadeReservation / CGDisplayFade (public CoreGraphics API, macOS 10.0+).
+    private func executeScreenOff() async {
         if let obs = _screenWakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(obs)
             _screenWakeObserver = nil
         }
 
+        // Smooth fade to black before sleeping the display
+        var token: CGDisplayFadeReservationToken = 0
+        let fadeAcquired = CGAcquireDisplayFadeReservation(3.0, &token) == CGError.success
+        if fadeAcquired {
+            // Async (non-blocking) fade from normal → solid black over 0.8 seconds
+            CGDisplayFade(token, 0.8,
+                          CGDisplayBlendFraction(kCGDisplayBlendNormal),
+                          CGDisplayBlendFraction(kCGDisplayBlendSolidColor),
+                          0, 0, 0, boolean_t(0))
+        }
+
+        try? await Task.sleep(for: .milliseconds(850))
+        guard !Task.isCancelled, isActive, mode == .screenOff else {
+            if fadeAcquired { CGReleaseDisplayFadeReservation(token) }
+            return
+        }
+
         isScreenOff = true
 
-        // pmset displaysleepnow: turns off display only, system stays awake
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
         task.arguments = ["displaysleepnow"]
@@ -296,7 +282,9 @@ final class SleepManager {
         task.standardError  = FileHandle.nullDevice
         try? task.run()
 
-        // When display wakes (any user input), macOS fires screensDidWakeNotification
+        if fadeAcquired { CGReleaseDisplayFadeReservation(token) }
+
+        // Watch for display wake from any user input
         _screenWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
             object: nil,
@@ -314,19 +302,19 @@ final class SleepManager {
         }
     }
 
-    // Polls idle state every 30s; re-arms screen-off when user has been idle for screenOffRearmMinutes.
+    // Polls every 30s; re-arms screen-off when user has been idle for screenOffRearmMinutes.
     private func startRearmMonitoring() {
         _screenOffTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard let self, !Task.isCancelled,
                       self.isActive, self.mode == .screenOff, !self.isScreenOff else { break }
-                self.checkRearm()
+                await self.checkAndRearm()
             }
         }
     }
 
-    private func checkRearm() {
+    private func checkAndRearm() async {
         let idleTimes: [CFTimeInterval] = [
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved),
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown),
@@ -335,9 +323,8 @@ final class SleepManager {
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .scrollWheel),
         ]
         let minIdle = idleTimes.min() ?? 0
-        let threshold = Double(screenOffRearmMinutes * 60)
-        if minIdle >= threshold {
-            executeScreenOff()
+        if minIdle >= Double(screenOffRearmMinutes * 60) {
+            await executeScreenOff()
         }
     }
 
@@ -350,66 +337,6 @@ final class SleepManager {
         }
         isScreenOff = false
         screenOffCountdown = nil
-    }
-
-    // MARK: - Auto-Dim (Idle Monitoring + CoreGraphics Gamma Dimming)
-    // Uses CGSetDisplayTransferByFormula (software gamma overlay) — works on all Macs
-    // including Apple Silicon where IODisplaySetFloatParameter returns zero services.
-
-    private func startIdleMonitoring() {
-        stopIdleMonitoring()
-        let t = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkIdleState() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        _idleTimer = t
-    }
-
-    private func stopIdleMonitoring() {
-        _idleTimer?.invalidate()
-        _idleTimer = nil
-    }
-
-    private func checkIdleState() {
-        let idleTimes: [CFTimeInterval] = [
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved),
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown),
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown),
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .rightMouseDown),
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .scrollWheel),
-        ]
-        let minIdle = idleTimes.min() ?? 0
-        let threshold = Double(idleTimeoutMinutes * 60)
-
-        if minIdle >= threshold && !isDimmed {
-            dimScreen()
-        } else if minIdle < threshold && isDimmed {
-            restoreGamma()
-            isDimmed = false
-        }
-    }
-
-    private func dimScreen() {
-        let display = CGMainDisplayID()
-        var rMin: CGGammaValue = 0, rMax: CGGammaValue = 0, rGamma: CGGammaValue = 0
-        var gMin: CGGammaValue = 0, gMax: CGGammaValue = 0, gGamma: CGGammaValue = 0
-        var bMin: CGGammaValue = 0, bMax: CGGammaValue = 0, bGamma: CGGammaValue = 0
-        CGGetDisplayTransferByFormula(display, &rMin, &rMax, &rGamma, &gMin, &gMax, &gGamma, &bMin, &bMax, &bGamma)
-        savedGamma = (rMin, rMax, rGamma, gMin, gMax, gGamma, bMin, bMax, bGamma)
-        let dim = CGGammaValue(dimBrightnessPercent) / 100.0
-        CGSetDisplayTransferByFormula(display, rMin, dim, rGamma, gMin, dim, gGamma, bMin, dim, bGamma)
-        isDimmed = true
-    }
-
-    private func restoreGamma() {
-        guard let g = savedGamma else { return }
-        CGSetDisplayTransferByFormula(
-            CGMainDisplayID(),
-            g.rMin, g.rMax, g.rGamma,
-            g.gMin, g.gMax, g.gGamma,
-            g.bMin, g.bMax, g.bGamma
-        )
-        savedGamma = nil
     }
 
     // MARK: - Thermal Monitoring
@@ -426,11 +353,11 @@ final class SleepManager {
 
     private func updateThermalState() {
         switch ProcessInfo.processInfo.thermalState {
-        case .nominal:  thermalStateText = "🟢 Normal"
-        case .fair:     thermalStateText = "🟡 Fair"
-        case .serious:  thermalStateText = "🟠 Serious"
-        case .critical: thermalStateText = "🔴 Critical"
-        @unknown default: thermalStateText = "⚪ Unknown"
+        case .nominal:  thermalStateText = "Normal"
+        case .fair:     thermalStateText = "Fair"
+        case .serious:  thermalStateText = "Serious"
+        case .critical: thermalStateText = "Critical"
+        @unknown default: thermalStateText = "Unknown"
         }
     }
 
@@ -476,12 +403,10 @@ final class SleepManager {
         _screenOffTask?.cancel()
         if assertionID != 0 { IOPMAssertionRelease(assertionID) }
         _elapsedTimer?.invalidate()
-        _idleTimer?.invalidate()
         _sessionTimer?.invalidate()
+        _permissionPollTimer?.invalidate()
         if let obs = thermalObserver  { NotificationCenter.default.removeObserver(obs) }
         if let obs = _screenWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         if let monitor = _hotkeyMonitor { NSEvent.removeMonitor(monitor) }
-        // Safety net: always restore display gamma on exit/crash
-        CGDisplayRestoreColorSyncSettings()
     }
 }
