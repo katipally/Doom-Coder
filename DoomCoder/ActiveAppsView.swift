@@ -1,10 +1,11 @@
 import SwiftUI
 
-// Separate window showing all detected AI apps with their running status and CPU usage.
-// Opened via "Active Apps…" in the menu bar.
+// Separate window showing all detected AI apps with their running status,
+// working signal, and CPU usage. Opened via "Active Apps…" in the menu bar.
 struct ActiveAppsView: View {
     @Bindable var appDetector: AppDetector
     @Bindable var sleepManager: SleepManager
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,7 +15,7 @@ struct ActiveAppsView: View {
             Divider()
             footer
         }
-        .frame(width: 420, height: 320)
+        .frame(width: 460, height: 340)
     }
 
     // MARK: - Header
@@ -24,6 +25,12 @@ struct ActiveAppsView: View {
             Text("Active Apps")
                 .font(.headline)
             Spacer()
+            Button("Settings…") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                openWindow(id: "settings")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             Button("Scan") { appDetector.refresh() }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
@@ -52,7 +59,7 @@ struct ActiveAppsView: View {
             Text("No AI apps detected")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("Click Scan to search for installed apps and CLI tools")
+            Text("Click Scan to search your device for AI coding tools and CLI agents")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -75,12 +82,21 @@ struct ActiveAppsView: View {
                         .foregroundStyle(app.isRunning ? .primary : .secondary)
                 }
             }
+            .width(min: 120, ideal: 160)
+
+            TableColumn("Signal") { app in
+                Text(signalLabel(app))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .width(min: 60, ideal: 80)
+
             TableColumn("Status") { app in
                 Text(statusLabel(app))
                     .foregroundStyle(statusColor(app))
                     .monospacedDigit()
             }
-            .width(min: 80, ideal: 110)
+            .width(min: 70, ideal: 90)
 
             TableColumn("CPU") { app in
                 Text(cpuLabel(app))
@@ -103,7 +119,9 @@ struct ActiveAppsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(appDetector.detectedApps.count) app\(appDetector.detectedApps.count == 1 ? "" : "s") detected")
+            let running = appDetector.detectedApps.filter { $0.isRunning }.count
+            let working = appDetector.detectedApps.filter { $0.isWorking }.count
+            Text("\(working) working · \(running) running · \(appDetector.detectedApps.count) detected")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -115,17 +133,26 @@ struct ActiveAppsView: View {
 
     private func dotColor(_ app: TrackedApp) -> Color {
         guard app.isRunning else { return Color.secondary.opacity(0.3) }
-        return app.isWorking ? .green : .yellow
+        if app.isWorking { return .green }
+        return .yellow
+    }
+
+    // Shows which signal(s) detected the "working" state
+    private func signalLabel(_ app: TrackedApp) -> String {
+        guard app.isRunning, app.isWorking else { return "" }
+        var signals: [String] = []
+        if app.childProcessCount > 0 { signals.append("procs") }
+        if app.networkIsWorking        { signals.append("net") }
+        if app.fseventsIsWorking       { signals.append("fs") }
+        return signals.joined(separator: "+")
     }
 
     private func statusLabel(_ app: TrackedApp) -> String {
         guard app.isRunning else { return "not running" }
         if app.isWorking {
-            if app.kind == .cli {
-                let n = app.childProcessCount
-                return "working (\(n) task\(n == 1 ? "" : "s"))"
-            }
-            return "active"
+            return app.kind == .cli
+                ? "working (\(app.childProcessCount) child\(app.childProcessCount == 1 ? "" : "ren"))"
+                : "working"
         }
         if let cpu = app.cpuPercent { return cpu < 1.0 ? "idle" : "running" }
         return "running"

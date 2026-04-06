@@ -46,26 +46,27 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 - **Elapsed time** — shows "Active for 2h 34m" so you know how long it's been running
 - **Global hotkey ⌥ Space** — toggle without clicking the menu bar (requires Accessibility permission — grant it in Settings)
 
-### Two Modes (v0.4.0)
+### Two Modes
 - **Full Mode** — screen stays on at full brightness; prevents idle sleep entirely
 - **Screen-Off Mode** — smoothly fades the display off (0.8 second cinematic transition) while keeping the Mac and all running processes fully alive; display wakes on any user input, then re-arms after a few minutes of idle
 
-### Active Apps Window (v0.4.0)
-- Dedicated window showing installed AI coding tools: Cursor, VS Code, Windsurf, Zed, Claude Code CLI, Codex, Aider, Gemini CLI, and more
-- **App | Status | CPU%** table — live refresh every 10 seconds
+### Active Apps Window
+- **Dynamic discovery (v0.6.0)** — scans all `$PATH` dirs, Homebrew, npm, Cargo, bun, nvm, Python bins, `/Applications`, and user-defined paths — no hardcoded list
+- **App | Status | Signal | CPU%** table — live refresh every 10 seconds
+- Three working signals: **procs** (child processes), **net** (network bytes via `proc_pidinfo`), **fs** (FSEvents file writes)
 - **Scan button** — re-scans all installed and running tools on demand
-- **Task completion notifications** — when a tracked app goes idle (~2 min of <2% CPU), you get a system notification
+- **Task completion notifications** — when a tracked tool transitions from working → idle, you get a macOS notification
 
-### Settings Window (v0.4.0)
-- **Launch at Login** — toggle to start automatically at system boot
-- **Accessibility permission** — status display and one-click "Grant Access" button; polls automatically after grant so hotkey works without relaunch
+### Settings Window
+- **General tab** — Launch at Login toggle; Accessibility permission status + one-click "Grant Access" button
+- **Tools tab (v0.6.0)** — add/remove custom CLI binary names and app bundle IDs; changes persist and trigger immediate re-scan
 
 ### Hardware Protection
 - **Thermal monitoring** — real-time system thermal state shown in the Active Apps window footer: Normal / Fair / Serious / Critical
 - **Session timer** — optional auto-disable after 1, 2, 4, or 8 hours with countdown display in the menu
 
 ### Other
-- **Auto-updates** — powered by [Sparkle](https://sparkle-project.org/), updates delivered silently in the background
+- **Auto-updates** — powered by [Sparkle](https://sparkle-project.org/), updates delivered in the background
 - **Settings persist** — all settings saved across app restarts
 - **Open source** — MIT license, build it yourself
 
