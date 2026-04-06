@@ -51,11 +51,11 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 - **Screen-Off Mode** — smoothly fades the display off (0.8 second cinematic transition) while keeping the Mac and all running processes fully alive; display wakes on any user input, then re-arms after a few minutes of idle
 
 ### Active Apps Window
-- **Dynamic discovery (v0.6.0)** — scans all `$PATH` dirs, Homebrew, npm, Cargo, bun, nvm, Python bins, `/Applications`, and user-defined paths — no hardcoded list
+- **Dynamic discovery** — scans all `$PATH` dirs, Homebrew, npm, Cargo, bun, nvm, Python bins, `/Applications`, and user-defined paths — no hardcoded list
 - **App | Status | Signal | CPU%** table — live refresh every 10 seconds
-- Three working signals: **procs** (child processes), **net** (network bytes via `proc_pidinfo`), **fs** (FSEvents file writes)
+- Three working signals: **procs** (≥ 2 child processes), **net** (network byte delta via `proc_pidinfo`), **fs** (FSEvents file writes)
 - **Scan button** — re-scans all installed and running tools on demand
-- **Task completion notifications** — when a tracked tool transitions from working → idle, you get a macOS notification
+- **Per-agent start + done notifications** — get notified when each AI tool starts a task and when it finishes; no false positives from idle keep-alive connections or persistent helper processes
 
 ### Settings Window
 - **General tab** — Launch at Login toggle; Accessibility permission status + one-click "Grant Access" button

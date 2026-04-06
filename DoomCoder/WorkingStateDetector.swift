@@ -89,10 +89,10 @@ final class WorkingStateDetector {
         return false
     }
 
-    // Returns true if the given CLI PID received network data in the last 4 seconds.
+    // Returns true if the given CLI PID received network data in the last 3 seconds.
     func isWorkingViaNetwork(pid: pid_t) -> Bool {
         guard let last = lastNetworkActivity[pid] else { return false }
-        return Date.now.timeIntervalSince(last) < 4.0
+        return Date.now.timeIntervalSince(last) < 3.0
     }
 
     // Processes an FSEvents path event (called from C callback, dispatched to main actor).
@@ -185,10 +185,13 @@ final class WorkingStateDetector {
         var didDetect = false
         for pid in monitoredCLIPids {
             let bytes = networkReceiveBytes(pid: pid)
-            let prev = lastNetworkBytes[pid] ?? 0
+            let prev = lastNetworkBytes[pid] ?? bytes  // on first sample, delta = 0
 
-            // Working if: buffer has data NOW, OR buffer changed since last poll
-            if bytes > 100 || (bytes != prev && bytes > 0) {
+            // Working only if the receive buffer grew by a meaningful amount since last poll.
+            // Using delta (not raw value) avoids false positives from idle keep-alive
+            // connections that always have a small amount of buffered data.
+            let delta = bytes > prev ? bytes - prev : 0
+            if delta > 500 {
                 lastNetworkActivity[pid] = Date.now
                 didDetect = true
             }
