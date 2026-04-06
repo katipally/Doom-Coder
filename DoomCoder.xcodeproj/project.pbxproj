@@ -18,6 +18,8 @@
 		DC0000000000002000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000012 /* NotificationManager.swift */; };
 		DC0000000000002000000013 /* ActiveAppsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000013 /* ActiveAppsView.swift */; };
 		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
+		DC0000000000002000000015 /* DynamicAppDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000015 /* DynamicAppDiscovery.swift */; };
+		DC0000000000002000000016 /* WorkingStateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000016 /* WorkingStateDetector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +36,8 @@
 		DC0000000000001000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000013 /* ActiveAppsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveAppsView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000015 /* DynamicAppDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicAppDiscovery.swift; sourceTree = "<group>"; };
+		DC0000000000001000000016 /* WorkingStateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingStateDetector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +72,8 @@
 				DC0000000000001000000012 /* NotificationManager.swift */,
 				DC0000000000001000000013 /* ActiveAppsView.swift */,
 				DC0000000000001000000014 /* SettingsView.swift */,
+				DC0000000000001000000015 /* DynamicAppDiscovery.swift */,
+				DC0000000000001000000016 /* WorkingStateDetector.swift */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
@@ -167,6 +173,8 @@
 				DC0000000000002000000012 /* NotificationManager.swift in Sources */,
 				DC0000000000002000000013 /* ActiveAppsView.swift in Sources */,
 				DC0000000000002000000014 /* SettingsView.swift in Sources */,
+				DC0000000000002000000015 /* DynamicAppDiscovery.swift in Sources */,
+				DC0000000000002000000016 /* WorkingStateDetector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

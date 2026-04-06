@@ -13,79 +13,39 @@ struct TrackedApp: Identifiable {
     var isRunning: Bool
     var pid: pid_t?
     var cpuPercent: Double?
-    var childProcessCount: Int = 0  // live child processes spawned by this process
+    var childProcessCount: Int = 0    // live child processes spawned by this PID
+    var networkIsWorking: Bool = false // from proc_pidinfo network bytes delta (CLI)
+    var fseventsIsWorking: Bool = false// from FSEvents workspaceStorage burst (GUI)
 
     enum Kind: String { case gui, cli }
 
-    // CLI agents are "working" when they have spawned child processes (shell cmds, git, compilers…)
-    // GUI apps are "working" when CPU is meaningfully elevated above idle.
+    // Aggregated "working" signal — any one of three independent indicators.
     var isWorking: Bool {
         guard isRunning else { return false }
         switch kind {
-        case .cli: return childProcessCount > 0
-        case .gui: return (cpuPercent ?? 0) > 2.0
+        case .cli: return childProcessCount > 0 || networkIsWorking
+        case .gui: return fseventsIsWorking || (cpuPercent ?? 0) > 2.0
         }
     }
 }
 
 // MARK: - AppDetector
 
-// Scans for installed AI coding tools (GUI apps and CLI binaries), tracks which are running,
-// and samples CPU usage every 10 seconds for task-completion detection.
+// Orchestrates AI app detection on this device using three complementary techniques:
+//   1. DynamicAppDiscovery — scans PATH dirs and /Applications at startup; no hardcoded output list.
+//   2. NSWorkspace notifications — instant, zero-poll GUI lifecycle events (launch/quit).
+//   3. sysctl KERN_PROC_UID — efficient user-process table scan every 10s for CLI detection.
 //
-// GUI apps: detected via NSWorkspace notifications (zero polling for lifecycle events).
-// CLI tools: detected via sysctl(KERN_PROC_UID) filtered to the current user every 10 seconds.
+// "Working" state comes from WorkingStateDetector (FSEvents + network bytes) plus child count.
 @Observable
 @MainActor
 final class AppDetector {
 
     private(set) var detectedApps: [TrackedApp] = []
 
-    // MARK: - Known App Catalog
+    // MARK: - Owned Components
 
-    private struct KnownGUIApp {
-        let bundleID: String
-        let displayName: String
-    }
-
-    private struct KnownCLITool {
-        let binaryName: String
-        let displayName: String
-    }
-
-    private let knownGUIApps: [KnownGUIApp] = [
-        .init(bundleID: "com.todesktop.230313mzl4w4u92", displayName: "Cursor"),
-        .init(bundleID: "com.cursor.cursor",             displayName: "Cursor"),
-        .init(bundleID: "com.microsoft.VSCode",          displayName: "VS Code"),
-        .init(bundleID: "com.microsoft.VSCodeInsiders",  displayName: "VS Code Insiders"),
-        .init(bundleID: "com.exafunction.windsurf",      displayName: "Windsurf"),
-        .init(bundleID: "dev.zed.Zed",                  displayName: "Zed"),
-        .init(bundleID: "io.zed.Zed-Preview",           displayName: "Zed Preview"),
-        .init(bundleID: "com.apple.dt.Xcode",           displayName: "Xcode"),
-        .init(bundleID: "com.googlecode.iterm2",         displayName: "iTerm2"),
-        .init(bundleID: "dev.warp.Warp-Stable",          displayName: "Warp"),
-        .init(bundleID: "com.mitchellh.ghostty",         displayName: "Ghostty"),
-        .init(bundleID: "com.apple.Terminal",            displayName: "Terminal"),
-        .init(bundleID: "org.alacritty",                 displayName: "Alacritty"),
-        .init(bundleID: "com.jetbrains.intellij",        displayName: "IntelliJ IDEA"),
-        .init(bundleID: "com.jetbrains.pycharm",         displayName: "PyCharm"),
-        .init(bundleID: "com.jetbrains.webstorm",        displayName: "WebStorm"),
-        .init(bundleID: "com.jetbrains.rider",           displayName: "Rider"),
-    ]
-
-    private let knownCLITools: [KnownCLITool] = [
-        .init(binaryName: "claude",    displayName: "Claude Code"),
-        .init(binaryName: "codex",     displayName: "OpenAI Codex"),
-        .init(binaryName: "aider",     displayName: "Aider"),
-        .init(binaryName: "gemini",    displayName: "Gemini CLI"),
-        .init(binaryName: "copilot",   displayName: "GitHub Copilot CLI"),
-        .init(binaryName: "goose",     displayName: "Goose"),
-        .init(binaryName: "amp",       displayName: "Amp"),
-        .init(binaryName: "cody",      displayName: "Sourcegraph Cody"),
-        .init(binaryName: "continue",  displayName: "Continue"),
-        .init(binaryName: "windsurf",  displayName: "Windsurf CLI"),
-        .init(binaryName: "cursor",    displayName: "Cursor CLI"),
-    ]
+    private let workingStateDetector = WorkingStateDetector()
 
     @ObservationIgnored nonisolated(unsafe) private var _pollTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _workspaceObservers: [NSObjectProtocol] = []
@@ -101,6 +61,9 @@ final class AppDetector {
             self.startPolling()
             self.subscribeToWorkspaceNotifications()
             NotificationManager.shared.setup()
+            self.workingStateDetector.onActivityDetected = { [weak self] in
+                self?.updateWorkingStates()
+            }
         }
     }
 
@@ -111,88 +74,23 @@ final class AppDetector {
         }
     }
 
-    // MARK: - Scan Installed Apps
+    // MARK: - Scan Installed (Dynamic Discovery)
 
-    // Builds the detectedApps list from apps confirmed installed on this device.
+    // Rebuilds detectedApps by scanning the filesystem. Runs synchronously on the main thread.
+    // Called once at startup and when the user presses "Scan" in the Active Apps window.
     private func scanInstalled() {
+        let discovered = DynamicAppDiscovery.scan()
         var apps: [TrackedApp] = []
-        var seenDisplayNames = Set<String>()
-
-        // --- GUI Apps ---
-        // Fast path: NSWorkspace Launch Services lookup by bundle ID
-        for known in knownGUIApps {
-            guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: known.bundleID) != nil else { continue }
-            guard seenDisplayNames.insert(known.displayName).inserted else { continue }
-            apps.append(TrackedApp(id: known.bundleID, displayName: known.displayName,
-                                   kind: .gui, isInstalled: true, isRunning: false))
+        for tool in discovered {
+            apps.append(TrackedApp(
+                id: tool.id,
+                displayName: tool.displayName,
+                kind: tool.kind == .gui ? .gui : .cli,
+                isInstalled: true,
+                isRunning: false
+            ))
         }
-
-        // Fallback: scan /Applications and ~/Applications for bundle IDs not found above
-        let appDirs = ["/Applications",
-                       (("~/Applications") as NSString).expandingTildeInPath]
-        var installedBundleIDs = Set<String>()
-        for dir in appDirs {
-            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
-            for entry in entries where entry.hasSuffix(".app") {
-                let plistPath = "\(dir)/\(entry)/Contents/Info.plist"
-                if let plist = NSDictionary(contentsOfFile: plistPath),
-                   let bundleID = plist["CFBundleIdentifier"] as? String {
-                    installedBundleIDs.insert(bundleID)
-                }
-            }
-        }
-        for known in knownGUIApps {
-            guard installedBundleIDs.contains(known.bundleID) else { continue }
-            guard seenDisplayNames.insert(known.displayName).inserted else { continue }
-            apps.append(TrackedApp(id: known.bundleID, displayName: known.displayName,
-                                   kind: .gui, isInstalled: true, isRunning: false))
-        }
-
-        // --- CLI Tools ---
-        let searchPaths = buildSearchPaths()
-        let fm = FileManager.default
-        for tool in knownCLITools {
-            let isInstalled = searchPaths.contains { fm.fileExists(atPath: "\($0)/\(tool.binaryName)") }
-            guard isInstalled else { continue }
-            apps.append(TrackedApp(id: tool.binaryName, displayName: tool.displayName,
-                                   kind: .cli, isInstalled: true, isRunning: false))
-        }
-
         detectedApps = apps
-    }
-
-    // Builds binary search paths dynamically:
-    // 1. System paths from /etc/paths and /etc/paths.d/ (set by macOS and installers like Homebrew)
-    // 2. Common package manager locations as fallback
-    private func buildSearchPaths() -> [String] {
-        var paths: [String] = []
-
-        if let content = try? String(contentsOfFile: "/etc/paths", encoding: .utf8) {
-            paths += content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        }
-        if let entries = try? FileManager.default.contentsOfDirectory(atPath: "/etc/paths.d") {
-            for entry in entries.sorted() {
-                if let content = try? String(contentsOfFile: "/etc/paths.d/\(entry)", encoding: .utf8) {
-                    paths += content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-                }
-            }
-        }
-
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        paths += [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "\(home)/.local/bin",
-            "\(home)/bin",
-            "\(home)/.bun/bin",
-            "\(home)/.cargo/bin",
-            "\(home)/.npm-packages/bin",
-            "\(home)/.yarn/bin",
-        ]
-
-        // Deduplicate while preserving order
-        var seen = Set<String>()
-        return paths.filter { seen.insert($0).inserted }
     }
 
     // MARK: - Running State
@@ -207,6 +105,7 @@ final class AppDetector {
                 detectedApps[i].isRunning = false
                 detectedApps[i].pid = nil
                 detectedApps[i].cpuPercent = nil
+                detectedApps[i].fseventsIsWorking = false
             }
         }
     }
@@ -214,30 +113,57 @@ final class AppDetector {
     private func updateRunningCLI() {
         let allProcs = getAllUserProcesses()
 
-        // name → first matching ProcInfo
         var byName: [String: ProcInfo] = [:]
         for p in allProcs { if byName[p.name] == nil { byName[p.name] = p } }
 
-        // ppid → direct child count: detects when an agent has spawned shell commands, git, etc.
+        // Count direct children per PID — proxy for "agent has spawned shell tasks"
         var childCounts: [pid_t: Int] = [:]
         for p in allProcs { childCounts[p.ppid, default: 0] += 1 }
 
+        var runningCLIPids: [pid_t] = []
         for i in detectedApps.indices where detectedApps[i].kind == .cli {
             let name = detectedApps[i].id
             if let info = byName[name] {
-                detectedApps[i].isRunning         = true
-                detectedApps[i].pid               = info.pid
+                detectedApps[i].isRunning = true
+                detectedApps[i].pid = info.pid
                 detectedApps[i].childProcessCount = childCounts[info.pid] ?? 0
+                runningCLIPids.append(info.pid)
             } else {
-                detectedApps[i].isRunning         = false
-                detectedApps[i].pid               = nil
-                detectedApps[i].cpuPercent        = nil
+                detectedApps[i].isRunning = false
+                detectedApps[i].pid = nil
+                detectedApps[i].cpuPercent = nil
                 detectedApps[i].childProcessCount = 0
+                detectedApps[i].networkIsWorking = false
             }
+        }
+
+        // Tell WorkingStateDetector which CLI PIDs to monitor for network bytes
+        workingStateDetector.monitoredCLIPids = runningCLIPids
+    }
+
+    // Applies latest FSEvents and network-bytes signals from WorkingStateDetector to detectedApps.
+    // Called by WorkingStateDetector.onActivityDetected (every 2s network poll, and on FSEvents).
+    private func updateWorkingStates() {
+        for i in detectedApps.indices {
+            let app = detectedApps[i]
+            guard app.isRunning else { continue }
+
+            switch app.kind {
+            case .gui:
+                detectedApps[i].fseventsIsWorking = workingStateDetector.isWorkingViaFSEvents(appID: app.id)
+            case .cli:
+                if let pid = app.pid {
+                    detectedApps[i].networkIsWorking = workingStateDetector.isWorkingViaNetwork(pid: pid)
+                }
+            }
+        }
+        // Record transitions for completion notifications
+        for app in detectedApps where app.isRunning {
+            NotificationManager.shared.record(app: app)
         }
     }
 
-    // MARK: - sysctl Process Table (CLI detection)
+    // MARK: - sysctl Process Table
 
     private struct ProcInfo {
         let name: String
@@ -245,8 +171,7 @@ final class AppDetector {
         let ppid: pid_t
     }
 
-    // Returns all processes owned by the current user in one sysctl call.
-    // KERN_PROC_UID filters by UID, more efficient than KERN_PROC_ALL.
+    // Returns all processes owned by the current user in a single sysctl call.
     private func getAllUserProcesses() -> [ProcInfo] {
         let uid = Int32(getuid())
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_UID, uid]
@@ -264,7 +189,7 @@ final class AppDetector {
         var result: [ProcInfo] = []
         result.reserveCapacity(actualCount)
         for i in 0..<actualCount {
-            let kp   = procs[i]
+            let kp = procs[i]
             let pid  = kp.kp_proc.p_pid
             let ppid = kp.kp_eproc.e_ppid
             guard pid > 0 else { continue }
@@ -278,7 +203,7 @@ final class AppDetector {
         return result
     }
 
-    // MARK: - CPU Sampling (async, non-blocking)
+    // MARK: - CPU Sampling (async, non-blocking via ps)
 
     private func sampleCPU() {
         let toSample = detectedApps.filter { $0.isRunning }.compactMap { app -> (id: String, pid: pid_t)? in
@@ -300,13 +225,15 @@ final class AppDetector {
             for (id, cpu) in results {
                 if let idx = detectedApps.firstIndex(where: { $0.id == id }) {
                     detectedApps[idx].cpuPercent = cpu
-                    NotificationManager.shared.record(app: detectedApps[idx])
                 }
+            }
+            // Record after CPU update
+            for app in detectedApps where app.isRunning {
+                NotificationManager.shared.record(app: app)
             }
         }
     }
 
-    // Measures CPU% for a PID using ps. Runs on the cooperative thread pool via terminationHandler.
     nonisolated static func measureCPU(pid: pid_t) async -> Double {
         await withCheckedContinuation { continuation in
             let process = Process()
@@ -328,12 +255,13 @@ final class AppDetector {
         }
     }
 
-    // MARK: - Polling (CLI + CPU every 10s)
+    // MARK: - Polling (CLI detection + CPU every 10s)
 
     private func startPolling() {
         let t = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateRunningCLI()
+                self?.updateRunningGUI()
                 self?.sampleCPU()
             }
         }
@@ -356,11 +284,12 @@ final class AppDetector {
         _workspaceObservers = [launchObs, quitObs]
     }
 
-    // MARK: - Public Refresh (e.g., Scan button in Active Apps window)
+    // MARK: - Public Refresh (called by "Scan" button in Active Apps window)
 
     func refresh() {
         scanInstalled()
         updateRunningGUI()
         updateRunningCLI()
+        sampleCPU()
     }
 }

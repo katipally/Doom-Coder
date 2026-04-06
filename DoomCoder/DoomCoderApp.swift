@@ -25,7 +25,7 @@ struct DoomCoderApp: App {
         .windowResizability(.contentSize)
 
         Window("Settings", id: "settings") {
-            SettingsView(sleepManager: sleepManager)
+            SettingsView(sleepManager: sleepManager, appDetector: appDetector)
         }
         .windowResizability(.contentSize)
 
