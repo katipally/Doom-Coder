@@ -158,7 +158,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add appcast.xml
+          # Stage ALL modified tracked files (Info.plist, appcast.xml, Package.resolved, etc.)
+          # so there are zero unstaged changes before the rebase
+          git add -A
           git commit -m "chore: update appcast.xml for ${{ env.TAG }}" || echo "No changes to commit"
           git fetch origin main
           git rebase origin/main
