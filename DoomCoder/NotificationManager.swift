@@ -1,34 +1,33 @@
 import Foundation
 import UserNotifications
 
-// Fires a macOS notification when a tracked AI app transitions from "working" to "idle",
-// indicating that a long-running task may have completed.
+// Fires a macOS notification when a tracked AI app transitions working state:
+//   - idle → working:  "[App] is working…"  (after app was idle for ≥ 3 polls ≈ 6s)
+//   - working → idle:  "[App] finished"      (after working ≥ 15s and idle for ≥ 12s)
 //
-// Uses the aggregated `isWorking` signal (child processes + FSEvents + network bytes),
-// which is more accurate and faster-responding than CPU sampling alone.
-//
-// Debounce rules:
-//   - App must have been working for at least 15 seconds before a "done" notification fires.
-//   - Once a notification fires for an app, won't fire again until the app starts working again.
+// One notification per agent per session (resets when app goes idle / not running).
+// Uses the aggregated `isWorking` signal (child processes + FSEvents + network bytes).
 @MainActor
 final class NotificationManager {
 
     static let shared = NotificationManager()
 
-    // Number of consecutive "idle" polls before firing notification.
-    // Called from the 2s network timer → 6 polls × 2s ≈ 12s of sustained idle.
+    // Idle polls required before a "done" notification fires (2s poll → 6 × 2s = 12s).
     private let requiredIdleSamples = 6
 
-    // Minimum working duration (in polls) before we consider a "done" notification meaningful.
-    // 8 polls × 2s ≈ 16s minimum working session.
+    // Minimum working polls before a "done" notification is meaningful (8 × 2s = 16s).
     private let minWorkingPollsBeforeNotify = 8
 
-    private var idleSampleCounts: [String: Int] = [:]
-    private var workingSampleCounts: [String: Int] = [:]
-    private var wasWorking: [String: Bool] = [:]
-    private var notifiedApps: Set<String> = []
+    // Idle polls required before a "start" notification fires (3 × 2s = 6s idle → then starts).
+    private let requiredIdleBeforeStart = 3
+
+    private var idleSampleCounts:    [String: Int]  = [:]
+    private var workingSampleCounts: [String: Int]  = [:]
+    private var wasWorking:          [String: Bool] = [:]
+    private var notifiedDone:        Set<String>    = []   // reset when working resumes
+    private var notifiedStart:       Set<String>    = []   // reset when app goes idle
     private var isAuthorized = false
-    private var setupCalled = false
+    private var setupCalled  = false
 
     private init() {}
 
@@ -47,51 +46,72 @@ final class NotificationManager {
     }
 
     // Called each poll cycle for every running tracked app.
-    // Uses the aggregated isWorking signal to track working → idle transitions.
     func record(app: TrackedApp) {
         guard app.isRunning else {
-            idleSampleCounts[app.id] = 0
+            // App not running — reset all state
+            idleSampleCounts[app.id]    = 0
             workingSampleCounts[app.id] = 0
-            wasWorking[app.id] = false
-            notifiedApps.remove(app.id)
+            wasWorking[app.id]          = false
+            notifiedDone.remove(app.id)
+            notifiedStart.remove(app.id)
             return
         }
 
+        let prevWorking = wasWorking[app.id] ?? false
+
         if app.isWorking {
-            // Accumulate working time; reset idle counter and "notified" flag
             workingSampleCounts[app.id, default: 0] += 1
+            let idleCount = idleSampleCounts[app.id] ?? 0
             idleSampleCounts[app.id] = 0
-            notifiedApps.remove(app.id)
+            notifiedDone.remove(app.id)  // ready to notify again next idle transition
+
+            // idle → working: fire "started" notification if app was idle long enough
+            if !prevWorking && !notifiedStart.contains(app.id) && idleCount >= requiredIdleBeforeStart {
+                notifiedStart.insert(app.id)
+                sendStartNotification(appName: app.displayName)
+            }
         } else {
-            // App is idle — increment idle counter
             let idleCount = (idleSampleCounts[app.id] ?? 0) + 1
             idleSampleCounts[app.id] = idleCount
+            notifiedStart.remove(app.id)  // reset so next working session re-notifies
 
-            let prevWorking = wasWorking[app.id] ?? false
             let hadEnoughWorkTime = (workingSampleCounts[app.id] ?? 0) >= minWorkingPollsBeforeNotify
 
-            // Fire when: was working → now idle for requiredIdleSamples, AND worked long enough
+            // working → idle: fire "done" notification after sustained idle
             if prevWorking && hadEnoughWorkTime &&
                idleCount == requiredIdleSamples &&
-               !notifiedApps.contains(app.id) {
-                notifiedApps.insert(app.id)
+               !notifiedDone.contains(app.id) {
+                notifiedDone.insert(app.id)
                 workingSampleCounts[app.id] = 0
-                sendIdleNotification(appName: app.displayName)
+                sendDoneNotification(appName: app.displayName)
             }
         }
 
         wasWorking[app.id] = app.isWorking
     }
 
-    private func sendIdleNotification(appName: String) {
+    private func sendStartNotification(appName: String) {
         guard isAuthorized else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Task Complete"
-        content.body = "\(appName) has gone idle — your task may be done."
+        content.title = "\(appName) is working…"
+        content.body  = "A task has started. Doom Coder will notify you when it finishes."
         content.sound = .default
-
         let request = UNNotificationRequest(
-            identifier: "doomcoder.idle.\(appName).\(Int(Date().timeIntervalSince1970))",
+            identifier: "doomcoder.start.\(appName).\(Int(Date().timeIntervalSince1970))",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { _ in }
+    }
+
+    private func sendDoneNotification(appName: String) {
+        guard isAuthorized else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "\(appName) finished"
+        content.body  = "The task appears to be complete — your agent has gone idle."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "doomcoder.done.\(appName).\(Int(Date().timeIntervalSince1970))",
             content: content,
             trigger: nil
         )

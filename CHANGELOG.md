@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-04-06
+
+### Fixed
+- **CLI agents stuck in "working" state** — Two independent false-positive sources eliminated:
+  - *Network false positive:* `WorkingStateDetector` now uses **receive-buffer delta only** (bytes received since last 2s poll must exceed 500 bytes). Previously it fired if the buffer had any data > 100 bytes, which idle keep-alive TCP connections satisfy permanently.
+  - *Child process false positive:* `TrackedApp.isWorking` for CLI tools now requires **≥ 2 direct child processes** instead of > 0. Most CLI agents (Copilot CLI, Claude Code) keep exactly 1 persistent helper subprocess alive at the idle prompt; requiring 2+ avoids this false trigger while still detecting real task execution.
+- **Network activity window** tightened from 4 s → 3 s (matching 1.5 poll cycles) to clear stale "working" state faster.
+
+### Added
+- **"Task started" notification** — When a tracked AI tool transitions from idle → working (after being idle for at least 6 s), a notification fires: **"[App] is working…"**. Pairs with the existing "finished" notification to bracket each task session.
+- **Per-agent notifications** — each agent sends its own start/done notification independently. No batching or summary messages.
+
+---
+
 ## [0.6.0] - 2026-04-06
 
 ### Added

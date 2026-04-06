@@ -23,7 +23,11 @@ struct TrackedApp: Identifiable {
     var isWorking: Bool {
         guard isRunning else { return false }
         switch kind {
-        case .cli: return childProcessCount > 0 || networkIsWorking
+        case .cli:
+            // Require >= 2 direct child processes to avoid false positives from
+            // persistent helper subprocesses (e.g. Node.js watchers) that CLI agents
+            // always keep alive at the idle prompt.
+            return childProcessCount >= 2 || networkIsWorking
         case .gui: return fseventsIsWorking || (cpuPercent ?? 0) > 2.0
         }
     }
