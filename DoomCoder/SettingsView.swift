@@ -1,9 +1,12 @@
 import SwiftUI
 
-// Settings window with two tabs: General (launch/hotkey) and Tools (custom tool configuration).
+// Settings window tabs: General, Tools, Agent Bridge, iPhone.
 struct SettingsView: View {
     @Bindable var sleepManager: SleepManager
     var appDetector: AppDetector
+    @Bindable var agentStatus: AgentStatusManager
+    var socketServer: SocketServer
+    @Bindable var iPhoneRelay: IPhoneRelay
     @State private var selectedTab = 0
 
     var body: some View {
@@ -15,8 +18,16 @@ struct SettingsView: View {
             ToolsTab(appDetector: appDetector)
                 .tabItem { Label("Tools", systemImage: "terminal") }
                 .tag(1)
+
+            AgentBridgeSettingsView(agentStatus: agentStatus, socketServer: socketServer)
+                .tabItem { Label("Agent Bridge", systemImage: "antenna.radiowaves.left.and.right") }
+                .tag(2)
+
+            IPhoneSetupView(relay: iPhoneRelay)
+                .tabItem { Label("iPhone", systemImage: "iphone") }
+                .tag(3)
         }
-        .frame(width: 420)
+        .frame(width: 560)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.bottom, 8)
     }

@@ -29,6 +29,11 @@ final class NotificationManager {
     private var isAuthorized = false
     private var setupCalled  = false
 
+    // Tier-3 demotion: when the Agent Bridge has a live session (hook/MCP), the
+    // heuristic path is silenced so we don't double-fire. Wired from DoomCoderApp.
+    // Returning `true` means "skip heuristic notifications for this app".
+    var shouldSuppressHeuristic: () -> Bool = { false }
+
     private init() {}
 
     // Call once after the app has fully launched (not during init).
@@ -68,7 +73,9 @@ final class NotificationManager {
             // idle → working: fire "started" notification if app was idle long enough
             if !prevWorking && !notifiedStart.contains(app.id) && idleCount >= requiredIdleBeforeStart {
                 notifiedStart.insert(app.id)
-                sendStartNotification(appName: app.displayName)
+                if !shouldSuppressHeuristic() {
+                    sendStartNotification(appName: app.displayName)
+                }
             }
         } else {
             let idleCount = (idleSampleCounts[app.id] ?? 0) + 1
@@ -83,7 +90,9 @@ final class NotificationManager {
                !notifiedDone.contains(app.id) {
                 notifiedDone.insert(app.id)
                 workingSampleCounts[app.id] = 0
-                sendDoneNotification(appName: app.displayName)
+                if !shouldSuppressHeuristic() {
+                    sendDoneNotification(appName: app.displayName)
+                }
             }
         }
 
@@ -116,5 +125,43 @@ final class NotificationManager {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request) { _ in }
+    }
+
+    // MARK: - Agent-event path (Tier 1 / Tier 2)
+    //
+    // Called from AgentStatusManager whenever a hook or MCP event updates a
+    // session. Unlike the heuristic path above, these events are deterministic
+    // — the agent itself told us what happened — so we fire a banner
+    // immediately for attention events (wait/error/done) and stay quiet for
+    // start/info events (those drive Live Activity updates in Phase D).
+    func fire(event: AgentEvent, session: AgentSession) {
+        // Lazily ask for notification permission the first time an agent event
+        // actually warrants a banner, so we don't prompt the user on launch.
+        if !setupCalled { setup() }
+        guard event.status.isAttention else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "\(session.displayName) • \(event.status.displayName)"
+        if let repo = session.repoName, !repo.isEmpty {
+            content.subtitle = repo
+        }
+        content.body = event.message ?? defaultBody(for: event.status, session: session)
+        content.sound = .default
+
+        let id = "doomcoder.agent.\(session.id).\(event.status.rawValue).\(Int(Date().timeIntervalSince1970))"
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+
+        // Always try to deliver even if we haven't confirmed authorization yet.
+        // UNUserNotificationCenter drops silently if permission was denied.
+        UNUserNotificationCenter.current().add(request) { _ in }
+    }
+
+    private func defaultBody(for status: AgentEvent.Status, session: AgentSession) -> String {
+        switch status {
+        case .wait:  return "Your agent is waiting for input."
+        case .error: return "Your agent hit an error and paused."
+        case .done:  return "Session finished after \(session.elapsedText)."
+        case .start, .info: return ""
+        }
     }
 }

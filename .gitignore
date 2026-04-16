@@ -42,7 +42,8 @@ Pods/
 Carthage/Build/
 
 # Personal guides (local only, not for public repo)
-guide/
+guide/0[0-9]-*.md
+guide/README.md
 
 # Original wide logo (cropped version logo.png is tracked)
 logo-doomcoder.png
