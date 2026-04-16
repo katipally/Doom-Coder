@@ -7,11 +7,16 @@
         <language>en</language>
         <item>
             <title>Version 0.8.0</title>
+            <pubDate>Thu, 16 Apr 2026 23:08:07 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v0.8.0</sparkle:releaseNotesLink>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v0.8.0/DoomCoder-0.8.0.zip" sparkle:version="080" sparkle:shortVersionString="0.8.0" sparkle:edSignature="akxET7OhF6jKZXOOYRPVbV3g4SBRmUDvwL3a7CMdCfJhZRQdCGP8MiA+PYbGA5bzgis4TFGes9fDH5hrbpJdBw==" length="5251175" type="application/octet-stream" />
+        </item>
+        <item>
+            <title>Version 0.8.0</title>
             <pubDate>Thu, 16 Apr 2026 23:00:00 +0000</pubDate>
             <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v0.8.0</sparkle:releaseNotesLink>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <!-- Release asset and ed signature are filled in by scripts/release.sh at build time. -->
-            <!-- <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v0.8.0/DoomCoder-0.8.0.zip" sparkle:version="080" sparkle:shortVersionString="0.8.0" sparkle:edSignature="" length="0" type="application/octet-stream" /> -->
         </item>
         <item>
             <title>Version 0.7.0</title>
