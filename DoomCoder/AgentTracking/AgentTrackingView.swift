@@ -8,6 +8,7 @@ import SwiftUI
 enum AgentTrackingSelection: Hashable {
     case liveSession(String)              // AgentSession.id
     case agent(String)                    // AgentCatalog.Info.id
+    case installAnywhere
     case channel(ChannelKind)
     case system(SystemKind)
 
@@ -90,6 +91,8 @@ struct AgentTrackingView: View {
                         agentStatus: agentStatus,
                         openSetup: { agentSetupSheet = id }
                     )
+                case .installAnywhere:
+                    InstallAnywherePane(agentStatus: agentStatus)
                 case .channel(let kind):
                     ChannelDetailPane(
                         kind: kind,

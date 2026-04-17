@@ -24,6 +24,7 @@
 		DC0000000000002000000022 /* HookRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* HookRuntime.swift */; };
 DC0000000000002000000099 /* HookRoundTripTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000099 /* HookRoundTripTest.swift */; };
 DC0000000000002000000100 /* RunningAgentScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* RunningAgentScanner.swift */; };
+DC0000000000002000000101 /* InstallAnywherePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* InstallAnywherePane.swift */; };
 		DC0000000000002000000024 /* MCPRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* MCPRuntime.swift */; };
 		DC0000000000002000000025 /* MCPInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* MCPInstaller.swift */; };
 		DC0000000000002000000026 /* IPhoneRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000026 /* IPhoneRelay.swift */; };
@@ -55,6 +56,7 @@ DC0000000000002000000100 /* RunningAgentScanner.swift in Sources */ = {isa = PBX
 		DC0000000000001000000022 /* HookRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRuntime.swift; sourceTree = "<group>"; };
 DC0000000000001000000099 /* HookRoundTripTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRoundTripTest.swift; sourceTree = "<group>"; };
 DC0000000000001000000100 /* RunningAgentScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningAgentScanner.swift; sourceTree = "<group>"; };
+DC0000000000001000000101 /* InstallAnywherePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallAnywherePane.swift; sourceTree = "<group>"; };
 		DC0000000000001000000024 /* MCPRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRuntime.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* MCPInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPInstaller.swift; sourceTree = "<group>"; };
 		DC0000000000001000000026 /* IPhoneRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneRelay.swift; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@ DC0000000000001000000100 /* RunningAgentScanner.swift */,
 				DC0000000000001000000032 /* AgentTrackingSidebar.swift */,
 				DC0000000000001000000033 /* DetailPanes.swift */,
 				DC0000000000001000000034 /* SetupSheets.swift */,
+				DC0000000000001000000101 /* InstallAnywherePane.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -251,6 +254,7 @@ DC0000000000002000000100 /* RunningAgentScanner.swift in Sources */,
 				DC0000000000002000000032 /* AgentTrackingSidebar.swift in Sources */,
 				DC0000000000002000000033 /* DetailPanes.swift in Sources */,
 				DC0000000000002000000034 /* SetupSheets.swift in Sources */,
+				DC0000000000002000000101 /* InstallAnywherePane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

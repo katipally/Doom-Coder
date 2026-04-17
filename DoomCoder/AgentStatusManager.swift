@@ -90,9 +90,21 @@ final class AgentStatusManager {
         // We intercept it before session tracking so a phantom "mcp-hello"
         // row never appears in the sidebar. The `tool` field carries the
         // install-id the MCP server was invoked with.
-        if event.src == .mcp, (event.message ?? "") == "mcp-hello" {
+        if event.src == .mcp, (event.message ?? "").hasPrefix("mcp-hello") {
             ingestHello(agent: event.agent, installId: event.tool)
             MCPInstaller.recordHello(agent: event.agent, installId: event.tool ?? "")
+            // mcp.py v4 embeds the client's self-reported name in either the
+            // message suffix ("mcp-hello:Cursor") or the cwd field. Persist it
+            // so Install Anywhere verify can show which IDE loaded the config.
+            let msg = event.message ?? ""
+            var clientName = ""
+            if let colon = msg.firstIndex(of: ":") {
+                clientName = String(msg[msg.index(after: colon)...])
+            }
+            if clientName.isEmpty, let c = event.cwd { clientName = c }
+            if !clientName.isEmpty {
+                MCPInstaller.recordClientName(agent: event.agent, clientName: clientName)
+            }
             return
         }
 
