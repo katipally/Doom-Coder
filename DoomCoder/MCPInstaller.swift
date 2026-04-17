@@ -108,6 +108,172 @@ enum MCPInstaller {
     enum InstallError: Error {
         case writeFailed(URL, underlying: Error)
         case malformedConfig(URL)
+        case preflightFailed([String])
+    }
+
+    // MARK: - Preflight
+    //
+    // A dry run before install so UI can refuse with a clear list of failures
+    // instead of throwing deep in the writer. Each check is cheap and
+    // independent; we collect all failures so the user sees every issue at
+    // once rather than fixing one, retrying, and hitting the next.
+
+    struct PreflightIssue: Identifiable, Hashable {
+        let id: String     // stable key for the UI
+        let severity: Severity
+        let summary: String
+        let detail: String
+
+        enum Severity { case warning, blocker }
+    }
+
+    static func preflight(_ agent: Agent) -> [PreflightIssue] {
+        var issues: [PreflightIssue] = []
+        let fm = FileManager.default
+
+        // 1) python3 availability — we invoke /usr/bin/python3 directly so
+        //    the system stub must be present. On fresh macOS boxes without
+        //    CLT installed it prompts instead of running; warn the user.
+        if !fm.isExecutableFile(atPath: "/usr/bin/python3") {
+            issues.append(PreflightIssue(
+                id: "python3",
+                severity: .blocker,
+                summary: "/usr/bin/python3 not executable",
+                detail: "Install Command Line Tools with `xcode-select --install` and retry."
+            ))
+        }
+
+        // 2) Parent directory writable. We createDirectory later, but if the
+        //    user's home is read-only (e.g. managed device) we want to say so.
+        let parent = agent.configPath.deletingLastPathComponent()
+        if fm.fileExists(atPath: parent.path) && !fm.isWritableFile(atPath: parent.path) {
+            issues.append(PreflightIssue(
+                id: "writable",
+                severity: .blocker,
+                summary: "Cannot write to \(parent.path)",
+                detail: "Check folder permissions — DoomCoder must write the MCP config there."
+            ))
+        }
+
+        // 3) Existing config must parse cleanly if it's there. Malformed JSON
+        //    from a prior hand-edit would be silently blown away otherwise.
+        if fm.fileExists(atPath: agent.configPath.path),
+           let data = try? Data(contentsOf: agent.configPath),
+           !data.isEmpty {
+            if agent.isTOML {
+                if String(data: data, encoding: .utf8) == nil {
+                    issues.append(PreflightIssue(
+                        id: "config-encoding",
+                        severity: .blocker,
+                        summary: "Existing config is not valid UTF-8",
+                        detail: agent.configPath.path
+                    ))
+                }
+            } else {
+                if (try? JSONSerialization.jsonObject(with: data)) == nil {
+                    issues.append(PreflightIssue(
+                        id: "config-json",
+                        severity: .blocker,
+                        summary: "Existing config is not valid JSON",
+                        detail: "Fix or delete \(agent.configPath.path) and retry."
+                    ))
+                }
+            }
+        }
+
+        // 4) Cursor-specific: warn about project-level shadows that would
+        //    override the global install silently (see detectCursorProjectShadows).
+        if agent == .cursor {
+            let shadows = detectCursorProjectShadows()
+            if !shadows.isEmpty {
+                issues.append(PreflightIssue(
+                    id: "cursor-shadow",
+                    severity: .warning,
+                    summary: "Project-level Cursor MCP configs detected (\(shadows.count))",
+                    detail: "These silently override ~/.cursor/mcp.json. Consider installing in each project or merging the global server entry into them:\n" +
+                        shadows.prefix(5).map { "• \($0.path)" }.joined(separator: "\n")
+                ))
+            }
+        }
+
+        // 5) mcp.py must be deployable. Bail if ~/.doomcoder is a stray file.
+        let dcDir = MCPRuntime.directory
+        if fm.fileExists(atPath: dcDir.path) {
+            var isDir: ObjCBool = false
+            fm.fileExists(atPath: dcDir.path, isDirectory: &isDir)
+            if !isDir.boolValue {
+                issues.append(PreflightIssue(
+                    id: "dcdir",
+                    severity: .blocker,
+                    summary: "~/.doomcoder exists but is not a directory",
+                    detail: "Remove it and retry; DoomCoder keeps its scripts there."
+                ))
+            }
+        }
+
+        return issues
+    }
+
+    // MARK: - Cursor project-shadow scan
+    //
+    // Cursor's MCP config resolution is project-scoped: if `.cursor/mcp.json`
+    // exists in the workspace root, it *replaces* (not merges) the global
+    // `~/.cursor/mcp.json` for that workspace. This is the "installed but
+    // nothing happens" failure we've been seeing — the user installs the
+    // global config, opens Cursor in a project with an existing shadow, and
+    // the doomcoder entry is never loaded.
+    //
+    // We scan a small set of likely locations (recent Finder, Xcode, and
+    // common dev roots) rather than walking the whole home directory, which
+    // would be both slow and scary on big trees.
+
+    static func detectCursorProjectShadows() -> [URL] {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser
+
+        // Where developers typically keep repos. We never descend deeper than
+        // 3 levels — a typical `~/Code/Work/my-app/.cursor/mcp.json` fits.
+        let roots: [URL] = [
+            home.appendingPathComponent("Desktop"),
+            home.appendingPathComponent("Documents"),
+            home.appendingPathComponent("Developer"),
+            home.appendingPathComponent("Projects"),
+            home.appendingPathComponent("Code"),
+            home.appendingPathComponent("Workspace"),
+            home.appendingPathComponent("src"),
+        ].filter { fm.fileExists(atPath: $0.path) }
+
+        var hits: [URL] = []
+        for root in roots {
+            hits.append(contentsOf: scanForCursorShadows(root: root, depth: 0, maxDepth: 3))
+            if hits.count > 50 { break } // hard cap
+        }
+        return hits
+    }
+
+    private static func scanForCursorShadows(root: URL, depth: Int, maxDepth: Int) -> [URL] {
+        let fm = FileManager.default
+        let shadow = root.appendingPathComponent(".cursor/mcp.json")
+        var hits: [URL] = []
+        if fm.fileExists(atPath: shadow.path) {
+            hits.append(shadow)
+        }
+        guard depth < maxDepth else { return hits }
+        guard let children = try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return hits }
+        for child in children {
+            let isDir = (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            guard isDir else { continue }
+            // Skip obvious non-repo clutter to keep scans fast.
+            let name = child.lastPathComponent
+            if name == "node_modules" || name == ".git" || name == "Library"
+                || name == "DerivedData" || name.hasPrefix(".") { continue }
+            hits.append(contentsOf: scanForCursorShadows(root: child, depth: depth + 1, maxDepth: maxDepth))
+        }
+        return hits
     }
 
     // MARK: - Install id
@@ -179,6 +345,14 @@ enum MCPInstaller {
 
     @discardableResult
     static func install(_ agent: Agent) throws -> URL? {
+        // Run preflight first so we refuse cleanly on known-bad state
+        // instead of corrupting files mid-write or crashing deeper in JSON
+        // serialization. Warnings don't block install — only blockers do.
+        let issues = preflight(agent).filter { $0.severity == .blocker }
+        if !issues.isEmpty {
+            throw InstallError.preflightFailed(issues.map { "\($0.summary): \($0.detail)" })
+        }
+
         let fm = FileManager.default
         try fm.createDirectory(at: agent.configPath.deletingLastPathComponent(),
                                withIntermediateDirectories: true)
