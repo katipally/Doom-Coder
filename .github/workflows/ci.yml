@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (Debug)
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            build
