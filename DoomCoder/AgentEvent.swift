@@ -104,11 +104,22 @@ struct AgentEvent: Codable, Sendable {
         self.timestamp = (try? c.decode(Double.self, forKey: .timestamp)) ?? Date.now.timeIntervalSince1970
     }
 
-    // Canonical session key. Prefer explicit session id, fall back to pid, then to
-    // agent name (so unknown-id events still group per agent rather than per message).
+    // Canonical session key. Prefer explicit session id, fall back to pid,
+    // then to a hash of cwd so different projects/tabs with the same agent
+    // don't collapse into one session. Final fallback is the agent name.
     var sessionKey: String {
         if let sid = sessionId, !sid.isEmpty { return "\(agent):\(sid)" }
         if let p = pid { return "\(agent):pid:\(p)" }
+        if let c = cwd, !c.isEmpty {
+            // Simple stable 32-bit FNV-1a hash — no Foundation dep, no collisions
+            // in practice at the small cardinality of open projects per user.
+            var h: UInt32 = 0x811c9dc5
+            for byte in c.utf8 {
+                h ^= UInt32(byte)
+                h = h &* 0x01000193
+            }
+            return "\(agent):cwd:\(String(h, radix: 16))"
+        }
         return "\(agent):default"
     }
 }

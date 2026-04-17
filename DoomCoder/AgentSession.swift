@@ -73,7 +73,6 @@ enum AgentCatalog {
         Info(id: "windsurf",    displayName: "Windsurf",     tier: .mcp),
         Info(id: "gemini-cli",  displayName: "Gemini CLI",   tier: .mcp),
         Info(id: "codex",       displayName: "Codex",        tier: .mcp),
-        Info(id: "aider",       displayName: "Aider",        tier: .mcp),
         Info(id: "vscode-mcp",  displayName: "VS Code (MCP)", tier: .mcp),
     ]
 

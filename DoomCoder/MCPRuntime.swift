@@ -24,7 +24,7 @@ enum MCPRuntime {
 
     /// Bumped on every edit of `pythonSource`. Written as a comment stamp at
     /// the top of the deployed script so we know when to re-deploy.
-    static let version: Int = 2
+    static let version: Int = 3
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -35,11 +35,18 @@ enum MCPRuntime {
         directory.appendingPathComponent("mcp.py")
     }
 
-    /// The shell command every MCP config will point at. `python3` is
-    /// resolved via the user's PATH, which on every modern macOS is
-    /// `/usr/bin/python3`.
+    /// The shell command every MCP config will point at. Per-agent invocations
+    /// append `--agent <id>` and `--install-id <uuid>` so the script can emit
+    /// a synthetic mcp-hello event on initialize — the only way for DoomCoder
+    /// to know the agent actually loaded its config (as opposed to the config
+    /// merely being written to disk).
     static var invocation: (command: String, args: [String]) {
         ("/usr/bin/python3", [scriptURL.path])
+    }
+
+    /// Per-agent invocation including the mcp-hello arguments.
+    static func invocation(agent: String, installId: String) -> (command: String, args: [String]) {
+        ("/usr/bin/python3", [scriptURL.path, "--agent", agent, "--install-id", installId])
     }
 
     /// Deploys (or refreshes) ~/.doomcoder/mcp.py. No-ops if the on-disk
@@ -80,9 +87,23 @@ enum MCPRuntime {
     #
     # Speaks MCP (Model Context Protocol) over stdio, exposing a single tool
     # named `dc` that forwards an AgentEvent onto ~/.doomcoder/dc.sock.
+    # v3 adds --agent / --install-id args and emits a synthetic "mcp-hello"
+    # event on the `initialize` RPC so DoomCoder can tell the difference
+    # between "config on disk" and "agent actually loaded the config".
     import json, os, socket, sys, time
 
     SOCK = os.path.expanduser("~/.doomcoder/dc.sock")
+
+    # Parse --agent <id> / --install-id <uuid> without argparse to keep the
+    # script zero-dep. Unknown args are ignored so future additions don't break.
+    _AGENT = "unknown"
+    _INSTALL_ID = ""
+    _it = iter(sys.argv[1:])
+    for _a in _it:
+        if _a == "--agent":
+            _AGENT = next(_it, "unknown")
+        elif _a == "--install-id":
+            _INSTALL_ID = next(_it, "")
 
     def _send(obj):
         sys.stdout.write(json.dumps(obj, separators=(",",":")) + "\\n")
@@ -96,25 +117,45 @@ enum MCPRuntime {
             msg["result"] = result
         _send(msg)
 
-    def _forward(args):
-        evt = {
-            "agent":  str(args.get("agent", "unknown"))[:64],
-            "status": str(args.get("status", "i"))[:1],
-            "source": "mcp",
-            "ts":     int(time.time()),
-        }
-        for k in ("message", "tool", "cwd", "sessionKey", "repo"):
-            if args.get(k) is not None:
-                evt[k] = str(args[k])[:512]
+    def _socket_write(evt):
+        # AgentEvent wire format uses abbreviated keys: src / s / sid / t / m.
+        # Anything else is silently dropped by the lenient decoder.
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(0.5)
             s.connect(SOCK)
-            s.sendall((json.dumps(evt) + "\\n").encode("utf-8"))
+            s.sendall((json.dumps(evt, separators=(",",":")) + "\\n").encode("utf-8"))
             s.close()
             return True, ""
         except OSError as e:
             return False, str(e)
+
+    def _forward(args):
+        evt = {
+            "src":   "mcp",
+            "agent": str(args.get("agent", _AGENT))[:64],
+            "s":     str(args.get("status", "i"))[:1],
+            "t":     int(time.time()),
+        }
+        if args.get("message"):    evt["m"]     = str(args["message"])[:512]
+        if args.get("tool"):       evt["tool"]  = str(args["tool"])[:128]
+        if args.get("cwd"):        evt["cwd"]   = str(args["cwd"])[:512]
+        if args.get("sessionKey"): evt["sid"]   = str(args["sessionKey"])[:128]
+        if args.get("repo"):       evt["event"] = str(args["repo"])[:128]
+        return _socket_write(evt)
+
+    def _emit_hello():
+        # Fire once on initialize — proves to DoomCoder that the agent picked
+        # up the config on disk. UI surfaces this as the "Live" chip.
+        _socket_write({
+            "src":   "mcp",
+            "agent": _AGENT,
+            "s":     "i",
+            "m":     "mcp-hello",
+            "event": "mcp-hello",
+            "tool":  _INSTALL_ID or "",
+            "t":     int(time.time()),
+        })
 
     _TOOLS = [{
         "name": "dc",
@@ -144,6 +185,7 @@ enum MCPRuntime {
         method = msg.get("method")
         rid = msg.get("id")
         if method == "initialize":
+            _emit_hello()
             _reply(rid, result={
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": False}},

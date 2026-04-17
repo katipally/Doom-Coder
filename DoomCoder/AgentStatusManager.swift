@@ -25,10 +25,14 @@ final class AgentStatusManager {
     // MARK: - Config
 
     // Sessions with no events for this long are force-finalised to `.done`.
-    let staleTimeout: TimeInterval = 10 * 60
+    // Raised from 10 → 30 min in v1.3: real Claude sessions routinely idle
+    // much longer between prompts, and the previous timeout was prematurely
+    // marking live work as stale.
+    let staleTimeout: TimeInterval = 30 * 60
 
-    // Duplicate attention events within this window (per session, per status) are
-    // dropped. Protects against hooks + MCP both firing for the same event.
+    // Duplicate attention events within this window (per session / status /
+    // tool triple) are dropped. Keying by tool too (v1.3) lets back-to-back
+    // permission prompts for different tools through without collapsing.
     let dedupWindow: TimeInterval = 10.0
 
     // MARK: - Downstream sinks (wired up in DoomCoderApp)
@@ -43,7 +47,12 @@ final class AgentStatusManager {
     // MARK: - Private state
 
     @ObservationIgnored private var sessionsById: [String: Int] = [:]   // id → index into sessions
-    @ObservationIgnored private var lastDelivered: [String: (status: AgentEvent.Status, at: Date)] = [:]
+    // Dedup keyed by (sessionId, status.rawValue, tool ?? "") so two distinct
+    // tool permission prompts in quick succession don't collapse.
+    @ObservationIgnored private var lastDelivered: [String: (at: Date, status: AgentEvent.Status, tool: String)] = [:]
+    // Most recent MCP-hello timestamps keyed by agent id. Populated by
+    // `ingestHello(agent:installId:)` and surfaced to the UI as "Live".
+    @ObservationIgnored private var mcpHelloAt: [String: Date] = [:]
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
     // MARK: - Init / Deinit
@@ -60,6 +69,16 @@ final class AgentStatusManager {
 
     func ingest(_ event: AgentEvent) {
         lastEventAt = Date.now
+
+        // MCP-hello is a side-channel handshake, not a real session event.
+        // We intercept it before session tracking so a phantom "mcp-hello"
+        // row never appears in the sidebar. The `tool` field carries the
+        // install-id the MCP server was invoked with.
+        if event.src == .mcp, (event.message ?? "") == "mcp-hello" {
+            ingestHello(agent: event.agent, installId: event.tool)
+            MCPInstaller.recordHello(agent: event.agent, installId: event.tool ?? "")
+            return
+        }
 
         let key = event.sessionKey
         let now = Date.now
@@ -116,12 +135,15 @@ final class AgentStatusManager {
     private func deliver(_ session: AgentSession, event: AgentEvent, now: Date) {
         // Dedup window guard for attention events. Non-attention events always pass.
         if event.status.isAttention {
-            if let last = lastDelivered[session.id],
+            let tool = event.tool ?? ""
+            let key = "\(session.id)|\(event.status.rawValue)|\(tool)"
+            if let last = lastDelivered[key],
                last.status == event.status,
+               last.tool == tool,
                now.timeIntervalSince(last.at) < dedupWindow {
                 return
             }
-            lastDelivered[session.id] = (event.status, now)
+            lastDelivered[key] = (now, event.status, tool)
         }
         onSessionUpdated?(session, event)
     }
@@ -182,17 +204,60 @@ final class AgentStatusManager {
         }
     }
 
+    // MARK: - MCP handshake
+    //
+    // The MCP server script calls `dc` with a synthetic "mcp-hello" message on
+    // its `initialize` RPC, so we know the agent loaded the config. We track
+    // the latest hello per agent id and expose it to the UI as a "Live" pill.
+
+    func ingestHello(agent: String, installId: String?) {
+        mcpHelloAt[agent] = Date.now
+        if let installId, !installId.isEmpty {
+            // Stash the hello timestamp in UserDefaults keyed by (agent, install-id)
+            // so the UI can confirm "this specific install is live" across launches.
+            UserDefaults.standard.set(Date.now.timeIntervalSince1970,
+                                      forKey: "dc.mcp.hello.\(agent).\(installId)")
+        }
+    }
+
+    /// Returns the timestamp of the most recent MCP hello for the given
+    /// agent, or nil if none has been seen. Used by MCPInstaller.liveStatus.
+    func lastHello(for agent: String) -> Date? {
+        mcpHelloAt[agent]
+    }
+
     // MARK: - Test/Manual helpers
 
     // Injects a fake event as if it came from a hook. Used by Settings "Send Test".
+    // In v1.3 this fires a 3-stage sequence (start → wait → done) so the test
+    // session doesn't zombie in the sidebar.
     func injectTest(agent: String, status: AgentEvent.Status, message: String? = nil) {
+        let sid = "test-\(UUID().uuidString.prefix(8))"
+        let label = message ?? "Test from DoomCoder"
+
+        // Stage 1: start immediately.
         ingest(AgentEvent(
-            src: .manual,
-            agent: agent,
-            status: status,
-            sessionId: "test-\(UUID().uuidString.prefix(8))",
-            message: message ?? "Test from DoomCoder"
+            src: .manual, agent: agent, status: .start,
+            sessionId: String(sid),
+            message: label
         ))
+
+        // Stage 2: transition to the requested status after 1.5s (usually .wait).
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            self?.ingest(AgentEvent(
+                src: .manual, agent: agent, status: status,
+                sessionId: String(sid),
+                message: label
+            ))
+            // Stage 3: close it out 3s later so the row doesn't linger forever.
+            try? await Task.sleep(for: .milliseconds(3000))
+            self?.ingest(AgentEvent(
+                src: .manual, agent: agent, status: .done,
+                sessionId: String(sid),
+                message: "Test complete"
+            ))
+        }
     }
 
     // Wipes all state (for tests and for the "Reset" button).
@@ -200,6 +265,7 @@ final class AgentStatusManager {
         sessions.removeAll()
         sessionsById.removeAll()
         lastDelivered.removeAll()
+        mcpHelloAt.removeAll()
         recomputeActivity()
     }
 }

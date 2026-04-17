@@ -14,7 +14,7 @@ import Foundation
 @MainActor
 enum HookRuntime {
 
-    static let scriptVersion = "2"
+    static let scriptVersion = "3"
 
     // MARK: - Paths
 
@@ -101,21 +101,41 @@ dc_field() {
 
 DC_SID=$(dc_field "session_id" "$DC_PAYLOAD")
 [ -z "$DC_SID" ] && DC_SID=$(dc_field "sessionId" "$DC_PAYLOAD")
+# Copilot CLI and some shims do not surface a session id. Fall back to
+# COPILOT_CLI_SESSION_ID if present, else $PPID so each terminal tab keys
+# to a distinct session (instead of collapsing into agent:default).
+if [ -z "$DC_SID" ]; then
+    if [ -n "$COPILOT_CLI_SESSION_ID" ]; then
+        DC_SID="$COPILOT_CLI_SESSION_ID"
+    elif [ -n "$PPID" ]; then
+        DC_SID="ppid-$PPID"
+    fi
+fi
 DC_CWD=$(dc_field "cwd" "$DC_PAYLOAD")
 [ -z "$DC_CWD" ] && DC_CWD="$PWD"
 DC_TOOL=$(dc_field "tool_name" "$DC_PAYLOAD")
 [ -z "$DC_TOOL" ] && DC_TOOL=$(dc_field "tool" "$DC_PAYLOAD")
+# Forward the Notification "message" (Claude Code) / "reason" field when
+# present — turns a generic "needs input" push into "Bash: rm -rf node_modules".
+DC_MSG=$(dc_field "message" "$DC_PAYLOAD")
+[ -z "$DC_MSG" ] && DC_MSG=$(dc_field "reason" "$DC_PAYLOAD")
 
-# Map hook event → single-char status code.
-# Claude Code event names: SessionStart, SessionEnd, PreToolUse, PostToolUse,
-# Notification, UserPromptSubmit, Stop, SubagentStop. Copilot CLI uses similar
-# names passed as $2 from the extension shim.
+# Map hook event → single-char status code. v3 mapping (DC_HOOK_VERSION=3):
+#   SessionStart                           → s  (started)
+#   UserPromptSubmit, Pre/PostToolUse      → i  (progress, not attention)
+#   Notification, PermissionRequest, Stop, SubagentStop → w  (needs input)
+#   SessionEnd                             → d  (done)
+#   Error                                  → e
+# The previous v2 mapping sent UserPromptSubmit as "w" (wrong — that's
+# progress) and Stop/SubagentStop as "d" (wrong — Claude's agent loop fires
+# Stop between turns while still running). v3 matches real semantics.
 case "$DC_EVENT" in
-    SessionStart|sessionStart|session_start)                  DC_STATUS="s" ;;
-    Stop|SessionEnd|sessionEnd|session_end|SubagentStop)      DC_STATUS="d" ;;
-    Notification|notification|UserPromptSubmit|PermissionRequest) DC_STATUS="w" ;;
-    Error|error)                                              DC_STATUS="e" ;;
-    *)                                                        DC_STATUS="i" ;;
+    SessionStart|sessionStart|session_start)                               DC_STATUS="s" ;;
+    SessionEnd|sessionEnd|session_end)                                     DC_STATUS="d" ;;
+    Notification|notification|PermissionRequest|Stop|SubagentStop)         DC_STATUS="w" ;;
+    UserPromptSubmit|userPromptSubmit|PreToolUse|PostToolUse)              DC_STATUS="i" ;;
+    Error|error)                                                           DC_STATUS="e" ;;
+    *)                                                                     DC_STATUS="i" ;;
 esac
 
 DC_TS=$(date +%s)
@@ -130,8 +150,9 @@ DC_SID_J=$(dc_escape "$DC_SID")
 DC_CWD_J=$(dc_escape "$DC_CWD")
 DC_TOOL_J=$(dc_escape "$DC_TOOL")
 DC_EVENT_J=$(dc_escape "$DC_EVENT")
+DC_MSG_J=$(dc_escape "$DC_MSG")
 
-DC_LINE='{"src":"hook","agent":"'"$DC_AGENT"'","s":"'"$DC_STATUS"'","sid":"'"$DC_SID_J"'","cwd":"'"$DC_CWD_J"'","tool":"'"$DC_TOOL_J"'","event":"'"$DC_EVENT_J"'","t":'"$DC_TS"'}'
+DC_LINE='{"src":"hook","agent":"'"$DC_AGENT"'","s":"'"$DC_STATUS"'","sid":"'"$DC_SID_J"'","cwd":"'"$DC_CWD_J"'","tool":"'"$DC_TOOL_J"'","event":"'"$DC_EVENT_J"'","m":"'"$DC_MSG_J"'","t":'"$DC_TS"'}'
 
 # Try nc (BSD netcat ships with macOS).
 if command -v nc >/dev/null 2>&1; then

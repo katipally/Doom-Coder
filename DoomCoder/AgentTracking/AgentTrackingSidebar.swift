@@ -126,7 +126,8 @@ private struct AgentRow: View {
         } else {
             if let mcp = Self.mcpAgent(for: info.id) {
                 switch MCPInstaller.status(for: mcp) {
-                case .installed:               return StatusBadge(.ready)
+                case .live:                    return StatusBadge(.ready)
+                case .configWritten:           return StatusBadge(.warn)
                 case .modified:                return StatusBadge(.warn)
                 case .notInstalled:            return StatusBadge(.off)
                 case .missingConfig:           return StatusBadge(.error)

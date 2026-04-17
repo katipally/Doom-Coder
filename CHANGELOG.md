@@ -7,7 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.2.0] - 2026-04-17
+## [1.3.0] - 2026-04-17
+
+Reliability pass: honest hook statuses, a real MCP handshake so "installed"
+means the agent actually loaded the config, and per-tab session identity so
+two Cursor chats don't collapse into one row.
+
+### Fixed
+- **Hook event mapping (v3).** `UserPromptSubmit` / `PreToolUse` / `PostToolUse`
+  now correctly map to `info` (progress), not `wait`. `Stop` / `SubagentStop`
+  map to `wait` (end of turn, expecting next prompt), not `done`. Only
+  `SessionEnd` closes a session. Bumps `DC_HOOK_VERSION=3` so every install
+  auto-refreshes the shim on next launch.
+- **Hook payload now includes `message`.** Claude Code's `Notification` event
+  carries the permission-request text ("Bash: `rm -rf node_modules`"); we
+  forward it to ntfy so the push shows *why* the agent is waiting.
+- **Session key falls back to a cwd hash** when neither `session_id` nor
+  `pid` is available. Two Copilot CLI tabs or two Cursor chats in different
+  projects no longer collapse into one row.
+- **`injectTest` is now a staged sequence.** Verify/test events fire
+  `start → wait → done` over ~4.5s instead of a permanent `wait` zombie in
+  the sidebar.
+- **TOML writer escapes backslashes** in addition to quotes.
+
+### Added
+- **MCP live handshake.** The server script now takes `--agent` /
+  `--install-id` args and emits a synthetic `mcp-hello` on its `initialize`
+  RPC. `MCPInstaller.Status` grows a 5-state enum (`notInstalled /
+  configWritten / live / modified / missingConfig`); only `.live` turns the
+  sidebar chip green. Setup sheet polls for 10 s after install and prompts
+  the user to restart the agent if no handshake arrives.
+- **Per-agent install-id.** Every install generates a fresh UUID that
+  correlates "the install we wrote" with "the process that came alive."
+  Hello timestamps are persisted per (agent, install-id) so relaunches don't
+  lose the live state.
+- **Dedup triple key.** Collapse key is now
+  `(sessionId, status, tool)`, so back-to-back permission prompts for
+  different tools aren't silently merged.
+
+### Changed
+- Stale-session timeout raised from 10 → 30 minutes. Real Claude sessions
+  routinely idle longer between prompts.
+- `actions/checkout@v4` → `@v5` across CI (silences the Node 20 deprecation
+  warning).
+- MCP wire format uses AgentEvent abbreviated keys (`src`/`s`/`t`) so MCP
+  events can no longer be silently decoded as hook events.
+
+### Removed
+- **Aider** from AgentCatalog. No installer backed the row — it was a
+  dead-end placeholder.
+
+
 
 Calendar channel removed; ntfy is now the sole built-in delivery method.
 Delivery is now **single-channel with an explicit active-method picker** so
