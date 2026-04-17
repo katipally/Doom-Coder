@@ -41,7 +41,7 @@ struct DoomCoderApp: App {
             }
         }
 
-        Window("Agent Tracking", id: "agent-tracking") {
+        Window("Agents & Channels", id: "configure") {
             AgentTrackingView(
                 agentStatus: agentStatus,
                 iPhoneRelay: iPhoneRelay,

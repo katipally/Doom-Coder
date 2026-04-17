@@ -1,6 +1,24 @@
 import Foundation
 import Observation
 
+// MARK: - WatchTarget
+//
+// v1.5: replaces the old `watchedSessionKey: String` model with a small
+// explicit enum so the menubar's Track submenu can represent three
+// mutually-exclusive states cleanly:
+//   • .none           — silent; no notifications fire at all
+//   • .all            — every *configured* agent fires (default)
+//   • .agentType(id)  — only sessions whose agent id matches fire
+//
+// Per-instance (`.session(id)`) tracking was removed in v1.5 — instances
+// were unstable between launches and users found them confusing.
+
+enum WatchTarget: Codable, Hashable, Sendable {
+    case none
+    case all
+    case agentType(String)
+}
+
 // MARK: - AgentStatusManager
 //
 // Central state machine that consumes events from SocketServer (hooks + MCP) and
@@ -52,7 +70,13 @@ final class AgentStatusManager {
     @ObservationIgnored private var lastDelivered: [String: (at: Date, status: AgentEvent.Status, tool: String)] = [:]
     // Most recent MCP-hello timestamps keyed by agent id. Populated by
     // `ingestHello(agent:installId:)` and surfaced to the UI as "Live".
-    @ObservationIgnored private var mcpHelloAt: [String: Date] = [:]
+    // Persisted across launches under `dc.mcpHelloAt` so an MCP agent stays
+    // "Configured" even after a restart (the user did the work once).
+    @ObservationIgnored private(set) var mcpHelloAt: [String: Date] = [:]
+    // Set to `true` per agent id when HookRoundTripTest reports success.
+    // Persisted across launches under `dc.didRoundTrip` so a hook agent
+    // stays "Configured" between restarts.
+    @ObservationIgnored private(set) var didRoundTrip: [String: Bool] = [:]
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
     // Round-trip test continuations keyed by nonce. A nonce is set by
@@ -64,8 +88,30 @@ final class AgentStatusManager {
     // MARK: - Init / Deinit
 
     init() {
-        // Restore watch target from last launch. Empty string = watch all.
-        self.watchedSessionKey = UserDefaults.standard.string(forKey: "dc.watchedSessionKey") ?? ""
+        // v1.5: restore the new WatchTarget model. We also honour the legacy
+        // `dc.watchedSessionKey` key one last time — empty → .all, anything
+        // else → .all too (the old session ids were unstable across launches
+        // so carrying them forward is worse than starting clean).
+        let ud = UserDefaults.standard
+        if let data = ud.data(forKey: "dc.watchTarget"),
+           let decoded = try? JSONDecoder().decode(WatchTarget.self, from: data) {
+            self.watchTarget = decoded
+        } else if let legacy = ud.string(forKey: "dc.watchedSessionKey") {
+            self.watchTarget = legacy.isEmpty ? .all : .all
+            ud.removeObject(forKey: "dc.watchedSessionKey")
+        } else {
+            self.watchTarget = .all
+        }
+
+        // Restore the per-agent "configured" flags. Any missing entry means
+        // the agent has never been verified → not configured yet.
+        if let raw = ud.dictionary(forKey: "dc.didRoundTrip") as? [String: Bool] {
+            self.didRoundTrip = raw
+        }
+        if let raw = ud.dictionary(forKey: "dc.mcpHelloAt") as? [String: Double] {
+            self.mcpHelloAt = raw.mapValues { Date(timeIntervalSince1970: $0) }
+        }
+
         startReaperTimer()
     }
 
@@ -151,17 +197,51 @@ final class AgentStatusManager {
 
     // MARK: - Public config
 
-    // v1.4: when non-empty, only the matching session fires notifications.
-    // The whole sidebar still shows every session for visibility, but the
-    // downstream pipeline (onSessionUpdated → NotificationManager → iPhone)
-    // is gated strictly. Empty string means "watch all" (legacy behavior).
-    var watchedSessionKey: String = "" {
+    // v1.5: tri-state target for which agents fire notifications.
+    //   • .none            — silent
+    //   • .all             — every configured agent (default)
+    //   • .agentType(id)   — only sessions from this agent id
+    // `isWatched(_:)` below applies the gate. The menubar's Track submenu
+    // and the Configure window's per-agent "Track" button both write here.
+    var watchTarget: WatchTarget = .all {
         didSet {
-            // Persist the choice across launches. @AppStorage in the menubar
-            // view mirrors this value; we store the key here for the manager
-            // to consult without pulling in SwiftUI.
-            UserDefaults.standard.set(watchedSessionKey, forKey: "dc.watchedSessionKey")
+            if let data = try? JSONEncoder().encode(watchTarget) {
+                UserDefaults.standard.set(data, forKey: "dc.watchTarget")
+            }
         }
+    }
+
+    // MARK: - Configured-agent helpers
+
+    // An agent counts as "configured" once the user has proven their wiring
+    // end-to-end: a hook agent needs a successful round-trip, an MCP agent
+    // needs a hello handshake. Both facts are persisted.
+    func isAgentConfigured(_ id: String) -> Bool {
+        if let hook = HookInstaller.Agent(rawValue: id) {
+            // Hook-tier: require an installed hook AND a verified round-trip.
+            return HookInstaller.status(for: hook).isInstalled
+                && (didRoundTrip[id] ?? false)
+        }
+        if let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == id }) {
+            let status = MCPInstaller.status(for: mcp)
+            let hasConfig = (status == .live || status == .configWritten || status == .modified)
+            return hasConfig && (mcpHelloAt[id] != nil)
+        }
+        return false
+    }
+
+    // The full ordered list of agents the user has configured. The menubar
+    // Track submenu renders exactly this list; the Configure window's Track
+    // buttons use the same predicate for enablement.
+    func configuredAgents() -> [AgentCatalog.Info] {
+        AgentCatalog.all.filter { isAgentConfigured($0.id) }
+    }
+
+    // Called by HookRoundTripTest on success. Persists the flag so a future
+    // launch still considers the agent configured without re-running the test.
+    func markRoundTripSuccess(agentId: String) {
+        didRoundTrip[agentId] = true
+        UserDefaults.standard.set(didRoundTrip, forKey: "dc.didRoundTrip")
     }
 
     // MARK: - Helpers
@@ -176,11 +256,19 @@ final class AgentStatusManager {
     }
 
     // Returns true if the session should feed the downstream notification
-    // pipeline. When `watchedSessionKey` is empty we allow everything (legacy
-    // behavior / fresh install). Otherwise, only the exact key fires.
+    // pipeline. The gate honours the user's WatchTarget:
+    //   • .none            — never fire
+    //   • .all             — fire only for agents that are already configured
+    //   • .agentType(id)   — fire only if the session's agent id matches
     func isWatched(_ session: AgentSession) -> Bool {
-        if watchedSessionKey.isEmpty { return true }
-        return session.id == watchedSessionKey
+        switch watchTarget {
+        case .none:
+            return false
+        case .all:
+            return isAgentConfigured(session.agent)
+        case .agentType(let id):
+            return session.agent == id
+        }
     }
 
     private func deliver(_ session: AgentSession, event: AgentEvent, now: Date) {
@@ -269,6 +357,10 @@ final class AgentStatusManager {
 
     func ingestHello(agent: String, installId: String?) {
         mcpHelloAt[agent] = Date.now
+        // Persist the whole dict so the agent keeps counting as "configured"
+        // after an app restart (v1.5).
+        let snapshot: [String: Double] = mcpHelloAt.mapValues { $0.timeIntervalSince1970 }
+        UserDefaults.standard.set(snapshot, forKey: "dc.mcpHelloAt")
         if let installId, !installId.isEmpty {
             // Stash the hello timestamp in UserDefaults keyed by (agent, install-id)
             // so the UI can confirm "this specific install is live" across launches.
@@ -340,11 +432,13 @@ final class AgentStatusManager {
     }
 
     // Wipes all state (for tests and for the "Reset" button).
+    // NOTE: persisted "configured" flags (didRoundTrip, mcpHelloAt) are
+    // intentionally preserved — the user did the setup work, we shouldn't
+    // invalidate that just because the session list got cleared.
     func reset() {
         sessions.removeAll()
         sessionsById.removeAll()
         lastDelivered.removeAll()
-        mcpHelloAt.removeAll()
         recomputeActivity()
     }
 }

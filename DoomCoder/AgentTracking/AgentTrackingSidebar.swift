@@ -13,22 +13,11 @@ struct AgentTrackingSidebar: View {
 
     var body: some View {
         List(selection: $selection) {
-            // LIVE SESSIONS ----------------------------------------------
-            if !agentStatus.sessions.isEmpty {
-                Section("Live Sessions") {
-                    ForEach(agentStatus.sessions.sorted(by: { $0.lastEventAt > $1.lastEventAt })) { s in
-                        NavigationLink(value: AgentTrackingSelection.liveSession(s.id)) {
-                            LiveSessionRow(session: s)
-                        }
-                    }
-                }
-            }
-
             // AGENTS -----------------------------------------------------
             Section("Agents") {
                 ForEach(AgentCatalog.all, id: \.id) { info in
                     NavigationLink(value: AgentTrackingSelection.agent(info.id)) {
-                        AgentRow(info: info)
+                        AgentRow(info: info, agentStatus: agentStatus)
                     }
                 }
                 NavigationLink(value: AgentTrackingSelection.installAnywhere) {
@@ -49,8 +38,8 @@ struct AgentTrackingSidebar: View {
                 }
             }
 
-            // iPHONE CHANNELS --------------------------------------------
-            Section("iPhone Channels") {
+            // CHANNELS ---------------------------------------------------
+            Section("Channels") {
                 ForEach(AgentTrackingSelection.ChannelKind.allCases, id: \.self) { kind in
                     NavigationLink(value: AgentTrackingSelection.channel(kind)) {
                         ChannelRow(kind: kind, relay: iPhoneRelay)
@@ -58,8 +47,8 @@ struct AgentTrackingSidebar: View {
                 }
             }
 
-            // SYSTEM -----------------------------------------------------
-            Section("System") {
+            // DIAGNOSTICS ------------------------------------------------
+            Section("Diagnostics") {
                 ForEach(AgentTrackingSelection.SystemKind.allCases, id: \.self) { kind in
                     NavigationLink(value: AgentTrackingSelection.system(kind)) {
                         SystemRow(kind: kind, iPhoneRelay: iPhoneRelay)
@@ -73,50 +62,41 @@ struct AgentTrackingSidebar: View {
 
 // MARK: - Rows
 
-private struct LiveSessionRow: View {
-    let session: AgentSession
-
-    var body: some View {
-        HStack(spacing: 10) {
-            badge
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.displayName).font(.body)
-                Text(rowSubtitle).font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var badge: StatusBadge {
-        switch session.state {
-        case .active:   return StatusBadge(.live)
-        case .waiting:  return StatusBadge(.warn)
-        case .errored:  return StatusBadge(.error)
-        case .done:     return StatusBadge(.ready)
-        }
-    }
-
-    private var rowSubtitle: String {
-        let repo = session.repoName.map { "\($0) · " } ?? ""
-        let state: String
-        switch session.state {
-        case .active:   state = "Working"
-        case .waiting:  state = "Needs input"
-        case .errored:  state = "Error"
-        case .done:     state = "Done"
-        }
-        return "\(repo)\(state) · \(session.elapsedText)"
-    }
-}
-
 private struct AgentRow: View {
     let info: AgentCatalog.Info
+    @Bindable var agentStatus: AgentStatusManager
 
     var body: some View {
         HStack(spacing: 10) {
             installBadge
             Text(info.displayName)
             Spacer()
+            // v1.5: one-click "Track" button on Ready rows. Disabled (and
+            // dimmed) for unconfigured agents so the affordance is still
+            // visible but clearly not yet usable.
+            let configured = agentStatus.isAgentConfigured(info.id)
+            let isTracked: Bool = {
+                if case .agentType(let id) = agentStatus.watchTarget { return id == info.id }
+                return false
+            }()
+            Button {
+                agentStatus.watchTarget = isTracked ? .all : .agentType(info.id)
+            } label: {
+                Label(isTracked ? "Tracking" : "Track",
+                      systemImage: isTracked ? "eye.fill" : "eye")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.mini)
+            .disabled(!configured)
+            .opacity(configured ? 1.0 : 0.35)
+            .help(configured
+                  ? (isTracked
+                     ? "Currently tracking this agent. Click to revert to Track all."
+                     : "Notify only for \(info.displayName).")
+                  : "Complete setup first — this agent hasn't been verified yet.")
+
             Text(info.tier == .hook ? "Hook" : "MCP")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

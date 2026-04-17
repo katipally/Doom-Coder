@@ -238,9 +238,9 @@ private struct OpenAgentTrackingButton: View {
 
     var body: some View {
         Button {
-            openWindow(id: "agent-tracking")
+            openWindow(id: "configure")
         } label: {
-            Label("Open Agent Tracking…", systemImage: "rectangle.stack.badge.play")
+            Label("Open Agents & Channels…", systemImage: "rectangle.stack.badge.play")
         }
     }
 }

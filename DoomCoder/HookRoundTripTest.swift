@@ -86,6 +86,9 @@ enum HookRoundTripTest {
             return .failure(.timeout)
         }
         let ms = Int((Date.now.timeIntervalSince(start)) * 1000)
+        // v1.5: persist the success flag so the agent is recognised as
+        // "configured" in the menubar Track submenu without needing to re-run.
+        statusManager.markRoundTripSuccess(agentId: agent.rawValue)
         return .success(Success(millis: ms, event: ev))
     }
 }
