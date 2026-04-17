@@ -75,6 +75,10 @@ final class IPhoneRelay {
     }
 
     private func runAllChannels(title: String, body: String) async {
+        // Best-effort housekeeping before we drop a new reminder on the user's
+        // phone: auto-complete any DoomCoder-tagged reminders older than an
+        // hour so the list doesn't grow unbounded.
+        await reminder.cleanupDeliveredReminders()
         let snapshots: [(String, any IPhoneChannel)] = [
             ("Reminder", reminder),
             ("iMessage", imessage),
@@ -158,14 +162,26 @@ protocol IPhoneChannel: Sendable {
 
 // MARK: - Reminder channel (EventKit)
 //
-// Writes a completed reminder into the user's default Reminders list. Because
-// Reminders sync via iCloud, the item shows up on any iPhone signed into the
-// same Apple ID within seconds. Using a "completed" reminder avoids polluting
-// the user's actual task list while still showing up in Today/Notifications.
+// Writes an **uncompleted** reminder with an immediate alarm into the user's
+// default Reminders list. Because Reminders sync via iCloud, the item shows
+// up — and *notifies* — on any iPhone signed into the same Apple ID within
+// seconds.
+//
+// IMPORTANT: Earlier iterations used `isCompleted = true`, which *did* sync
+// but was silently filed under "Completed" on iPhone with no notification.
+// That's why v1.0.0 users reported "the iPhone side is broken" — it wasn't
+// broken, just silent. Real deliveries now use an alarm at `Date.now` so the
+// iPhone fires a banner / lock-screen notification immediately. We tag every
+// DoomCoder reminder with a sentinel note prefix so a background cleanup
+// pass can auto-complete stale ones and keep the user's list tidy.
 
 @Observable
 final class ReminderChannel: IPhoneChannel, @unchecked Sendable {
     private let store = EKEventStore()
+
+    // Sentinel prefix embedded in the reminder notes so cleanup can recognize
+    // reminders we wrote without affecting the user's own entries.
+    static let sentinel = "[dc-reminder/v1]"
 
     var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: IPhoneRelay.Keys.reminderEnabled) }
@@ -173,42 +189,92 @@ final class ReminderChannel: IPhoneChannel, @unchecked Sendable {
     }
 
     var isReady: Bool {
-        if #available(macOS 14.0, *) {
-            return EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
-        }
-        // Pre-14 fall-through: EKAuthorizationStatus.authorized exists there.
-        return EKEventStore.authorizationStatus(for: .reminder).rawValue == 3
+        EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
     }
 
     func requestAccess() async -> Bool {
-        if #available(macOS 14.0, *) {
-            do { return try await store.requestFullAccessToReminders() }
-            catch { return false }
-        } else {
-            return await withCheckedContinuation { cont in
-                store.requestAccess(to: .reminder) { granted, _ in cont.resume(returning: granted) }
-            }
-        }
+        do { return try await store.requestFullAccessToReminders() }
+        catch { return false }
     }
 
     func deliver(title: String, body: String) async -> DeliveryResult {
         guard self.isEnabled else { return .failure(reason: "Disabled") }
-        guard self.isReady else { return .failure(reason: "Reminders access not granted") }
-        guard let list = self.store.defaultCalendarForNewReminders() else {
-            return .failure(reason: "No default Reminders list")
+        guard self.isReady else {
+            return .failure(reason: "Reminders access not granted. Open Agent Tracking → Reminders → Request Permission.")
         }
+        guard let list = self.store.defaultCalendarForNewReminders() else {
+            return .failure(reason: "No default Reminders list — open Reminders.app once to create one.")
+        }
+
         let reminder = EKReminder(eventStore: self.store)
         reminder.title = title
-        reminder.notes = body
+        // Tag notes with a sentinel on its own line so cleanup can match it
+        // precisely without affecting lines the user might edit.
+        reminder.notes = "\(body)\n\n\(Self.sentinel)"
         reminder.calendar = list
-        reminder.isCompleted = true
-        reminder.completionDate = .now
+        reminder.isCompleted = false
+        reminder.priority = 1  // High priority — iPhone surfaces it faster.
+
+        // An uncompleted reminder only fires a notification on iPhone when it
+        // has both a `dueDateComponents` (so Reminders.app treats it as a
+        // scheduled task) and an `EKAlarm` (the actual trigger). We set both
+        // to "now" so the phone lights up within a few seconds of iCloud
+        // propagation.
+        let due = Date.now
+        reminder.dueDateComponents = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second, .timeZone],
+            from: due
+        )
+        reminder.addAlarm(EKAlarm(absoluteDate: due))
+
         do {
             try self.store.save(reminder, commit: true)
-            return .success(detail: "Saved to \(list.title)")
+            return .success(detail: "Notified via \(list.title)")
         } catch {
             return .failure(reason: error.localizedDescription)
         }
+    }
+
+    // MARK: - Cleanup
+    //
+    // Uncompleted reminders we wrote will stick around on the user's Mac +
+    // iPhone forever otherwise. Called opportunistically (app launch, before
+    // each new delivery) to mark DoomCoder reminders older than `age` as
+    // completed, which moves them into the Completed section on iPhone and
+    // stops them from re-firing. Best-effort: any failure is ignored.
+
+    func cleanupDeliveredReminders(olderThan age: TimeInterval = 60 * 60) async {
+        guard self.isReady else { return }
+        guard let list = self.store.defaultCalendarForNewReminders() else { return }
+        let cutoff = Date.now.addingTimeInterval(-age)
+        let store = self.store
+        let pred = store.predicateForReminders(in: [list])
+
+        // Pull titles/ids out on EventKit's thread so no non-Sendable EKReminder
+        // crosses a concurrency boundary.
+        let matchIds: [String] = await withCheckedContinuation { (cont: CheckedContinuation<[String], Never>) in
+            store.fetchReminders(matching: pred) { items in
+                let ids = (items ?? [])
+                    .filter {
+                        ($0.notes ?? "").contains(Self.sentinel) &&
+                        !$0.isCompleted &&
+                        ($0.creationDate ?? .distantFuture) < cutoff
+                    }
+                    .map { $0.calendarItemIdentifier }
+                cont.resume(returning: ids)
+            }
+        }
+
+        for id in matchIds {
+            if let reminder = store.calendarItems(withExternalIdentifier: id).first as? EKReminder
+                ?? (store.calendarItem(withIdentifier: id) as? EKReminder)
+            {
+                reminder.isCompleted = true
+                reminder.completionDate = .now
+                try? store.save(reminder, commit: false)
+            }
+        }
+        try? store.commit()
     }
 
     // MARK: - iCloud round-trip test
@@ -246,6 +312,9 @@ final class ReminderChannel: IPhoneChannel, @unchecked Sendable {
 
         let reminder = EKReminder(eventStore: self.store)
         reminder.title = title
+        // Intentionally omits the sentinel — this is a sync probe, not a
+        // user-visible delivery, so cleanup should ignore it. We mark it
+        // completed immediately so iPhone Reminders won't notify.
         reminder.notes = "DoomCoder iCloud round-trip probe. Safe to delete."
         reminder.calendar = list
         reminder.isCompleted = true
@@ -317,21 +386,60 @@ final class IMessageChannel: IPhoneChannel, @unchecked Sendable {
     /// requested lazily on first delivery; macOS shows the permission prompt
     /// automatically the first time we dispatch an Apple Event.
     var isReady: Bool {
-        !handle.trimmingCharacters(in: .whitespaces).isEmpty
+        !Self.normalizeHandle(handle).isEmpty
+    }
+
+    /// Normalizes a user-entered handle for AppleScript lookup:
+    ///   • strips whitespace, dashes, parentheses, spaces, dots
+    ///   • if the result is all-digits (optionally with a leading +), ensures
+    ///     a leading + (Messages requires E.164 form for phone numbers)
+    ///   • leaves email addresses untouched aside from trimming
+    static func normalizeHandle(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("@") { return trimmed }
+        let digits = trimmed.unicodeScalars
+            .filter { CharacterSet(charactersIn: "0123456789+").contains($0) }
+            .map { Character($0) }
+        let compact = String(digits)
+        if compact.isEmpty { return "" }
+        if compact.hasPrefix("+") { return compact }
+        return "+\(compact)"
+    }
+
+    /// Triggers a harmless Apple Event so macOS surfaces its Automation
+    /// permission prompt for Messages.app. Called from the Channel Setup
+    /// Sheet before the real test so the user sees the system prompt in a
+    /// context where they expect it. Returns whether permission was granted.
+    nonisolated func primeAutomationPermission() async -> DeliveryResult {
+        let script = """
+        tell application "Messages"
+            return (count of services)
+        end tell
+        """
+        return await Task.detached { () -> DeliveryResult in
+            var error: NSDictionary?
+            _ = NSAppleScript(source: script)?.executeAndReturnError(&error)
+            if let error { return Self.decodeAppleScriptError(error) }
+            return .success(detail: "Automation permission granted")
+        }.value
     }
 
     nonisolated func deliver(title: String, body: String) async -> DeliveryResult {
         let isEnabled = self.isEnabled
-        let handle    = self.handle.trimmingCharacters(in: .whitespaces)
+        let handle    = Self.normalizeHandle(self.handle)
         guard isEnabled else { return .failure(reason: "Disabled") }
         guard !handle.isEmpty else { return .failure(reason: "No handle configured") }
 
-        let message = "\(title)\n\(body)"
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        let escapedHandle = handle.replacingOccurrences(of: "\"", with: "\\\"")
+        let message = Self.escapeForAppleScript("\(title)\n\(body)")
+        let escapedHandle = Self.escapeForAppleScript(handle)
 
-        let script = """
+        // Primary form: `buddy X of targetService`. This is the canonical
+        // AppleScript dialect for Messages.app and resolves for any handle
+        // iMessage has seen — including yourself, as long as you're signed
+        // into iMessage on this Mac. If that fails we fall back to the
+        // `participant` form in case buddy resolution is flaky on a given
+        // macOS build.
+        let primary = """
         tell application "Messages"
             set targetService to 1st service whose service type = iMessage
             set targetBuddy to buddy "\(escapedHandle)" of targetService
@@ -339,15 +447,57 @@ final class IMessageChannel: IPhoneChannel, @unchecked Sendable {
         end tell
         """
 
+        let fallback = """
+        tell application "Messages"
+            set targetService to 1st service whose service type = iMessage
+            send "\(message)" to participant "\(escapedHandle)" of targetService
+        end tell
+        """
+
         return await Task.detached { () -> DeliveryResult in
             var error: NSDictionary?
-            let appleScript = NSAppleScript(source: script)
-            _ = appleScript?.executeAndReturnError(&error)
-            if let error, let msg = error[NSAppleScript.errorMessage] as? String {
-                return .failure(reason: msg)
+            _ = NSAppleScript(source: primary)?.executeAndReturnError(&error)
+            if error == nil {
+                return .success(detail: "Sent to \(handle)")
             }
-            return .success(detail: "Sent to \(handle)")
+            // Retry with the `participant` form.
+            var fallbackError: NSDictionary?
+            _ = NSAppleScript(source: fallback)?.executeAndReturnError(&fallbackError)
+            if fallbackError == nil {
+                return .success(detail: "Sent to \(handle)")
+            }
+            // Both forms failed: surface the most specific error we got.
+            return Self.decodeAppleScriptError(fallbackError ?? error ?? [:])
         }.value
+    }
+
+    /// Turn a raw AppleScript error dictionary into a user-actionable
+    /// DeliveryResult. macOS returns a small zoo of error numbers for
+    /// Messages automation; the common ones:
+    ///   -1743  errAEEventNotPermitted — Automation denied in System Settings
+    ///   -1728  errAENoSuchObject      — buddy / participant not resolvable
+    ///   -600   procNotFound           — Messages.app isn't running
+    ///    -25   errOSASystemError      — generic
+    static func decodeAppleScriptError(_ dict: NSDictionary) -> DeliveryResult {
+        let code = (dict[NSAppleScript.errorNumber] as? Int) ?? 0
+        let msg  = (dict[NSAppleScript.errorMessage] as? String) ?? "Unknown AppleScript error"
+        switch code {
+        case -1743:
+            return .failure(reason: "Automation permission denied. Open System Settings → Privacy & Security → Automation → DoomCoder and enable Messages.")
+        case -1728:
+            return .failure(reason: "Messages couldn't find that handle. Make sure you've signed into iMessage with that number/email on this Mac (Messages → Settings → iMessage).")
+        case -600:
+            return .failure(reason: "Messages.app isn't running. Launch it once, sign in, then try again.")
+        default:
+            return .failure(reason: "\(msg) (code \(code))")
+        }
+    }
+
+    /// Escape backslashes and double-quotes so a Swift string can be embedded
+    /// safely into an AppleScript string literal.
+    static func escapeForAppleScript(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\")
+         .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 

@@ -126,15 +126,24 @@ struct AgentTrackingView: View {
         }
         .navigationTitle("Agent Tracking")
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
-                    Image(systemName: agentStatus.isAnyAgentActive ? "bolt.circle.fill" : "bolt.slash.circle")
+                    Image(systemName: agentStatus.isAnyAgentActive
+                          ? "bolt.circle.fill"
+                          : "moon.zzz.fill")
                         .foregroundStyle(agentStatus.isAnyAgentActive ? .green : .secondary)
+                        .symbolEffect(.pulse, options: .repeating, isActive: agentStatus.isAnyAgentActive)
                     Text(agentStatus.isAnyAgentActive
-                         ? "\(agentStatus.sessions.count) live"
-                         : "Idle")
-                        .font(.headline)
+                         ? "\(agentStatus.sessions.count) live session\(agentStatus.sessions.count == 1 ? "" : "s")"
+                         : "Idle — waiting for agent activity")
+                        .font(.subheadline)
+                        .foregroundStyle(agentStatus.isAnyAgentActive ? .primary : .secondary)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(.regularMaterial)
+                )
             }
         }
         .sheet(item: Binding(

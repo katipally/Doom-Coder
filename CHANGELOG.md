@@ -7,7 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0] - 2026-04-16
+## [1.0.1] - 2026-04-16
+
+Hotfix for iPhone delivery channels shipped in 1.0.0.
+
+### Fixed
+- **Reminders now actually push to iPhone.** 1.0.0 wrote completed reminders
+  which iCloud synced silently into the Completed section — no notification
+  ever fired. 1.0.1 writes an **uncompleted** reminder with a due-date alarm
+  set to `now`, which is what the Reminders app consumes to trigger an
+  iPhone notification. A sentinel tag (`[dc-reminder/v1]`) in the note field
+  lets DoomCoder auto-complete its own reminders older than an hour so the
+  list stays tidy. Cleanup runs opportunistically on app launch and before
+  each delivery.
+- **iMessage delivery is far more resilient.** Handles are now normalized to
+  E.164 (whitespace/parens/dashes stripped, leading `+` enforced for numeric
+  handles, emails preserved). Delivery tries the canonical `buddy` form
+  first, falls back to the more permissive `participant` form on buddy-lookup
+  failure. AppleScript errors are decoded to actionable messages: `-1743`
+  → "Automation permission denied", `-1728` → "Handle not registered with
+  iMessage", `-600` → "Messages.app not running".
+- **Permission priming inline in Agent Tracking.** The iPhone-channel detail
+  pane now has a "Request Permission" (Reminders) and "Prime Automation"
+  (iMessage) button that triggers the TCC prompt on demand instead of
+  requiring users to send a test notification first.
+- **Test notifications from a session now deliver.** SessionDetailPane's
+  Test button used `.info` status which the relay's `isAttention` guard
+  silently dropped. Now uses `.wait` so the test actually fires.
+- **Sparkle gentle-reminders warning silenced.** DoomCoder now advertises
+  `supportsGentleScheduledUpdateReminders = true` via its Sparkle user
+  driver delegate — required for menu-bar background apps to surface
+  scheduled update alerts correctly.
+- **Idle toolbar indicator refreshed.** The Agent Tracking toolbar shows a
+  pulsing bolt + "N live sessions" when active, or a dimmed moon + "Idle"
+  when waiting, centered in a translucent capsule instead of the cramped
+  leading position.
+- Silenced benign `AccentColor not present` warning by removing the stale
+  asset-catalog reference.
+
+### Technical notes
+- `EKReminder` isn't `Sendable` under Swift 6 strict checking. Cleanup code
+  extracts the reminders' `calendarItemIdentifier` strings inside the
+  EventKit callback before crossing actor boundaries, then re-fetches each
+  reminder by id on the main store to mutate it.
+- TCC permissions may invalidate on ad-hoc debug rebuilds because each build
+  gets a fresh ad-hoc code signature. Release builds signed with the
+  Developer ID certificate don't have this problem. No code fix is
+  possible; this is a macOS security-model constraint.
+
+---
+
+
 
 **The Agent Tracking release.** v1.0 is a full rewrite of the primary UX
 around the Agent Bridge. Every line of heuristic detection code is gone,
