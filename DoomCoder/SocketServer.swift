@@ -33,7 +33,7 @@ final class SocketServer {
     @ObservationIgnored nonisolated(unsafe) private var acceptSource: DispatchSourceRead?
 
     // Concurrent queue for handling connections (small number in practice).
-    private let clientQueue = DispatchQueue(
+    nonisolated private static let clientQueue = DispatchQueue(
         label: "com.doomcoder.socketserver.clients",
         qos: .userInitiated,
         attributes: .concurrent
@@ -112,6 +112,10 @@ final class SocketServer {
 
             src.setEventHandler { [weak self] in
                 guard let self else { return }
+                // The accept event handler runs on `acceptQueue`. Calling a
+                // @MainActor method from here would trap. We pull events off
+                // the FD here (non-blocking), then fan out client work to
+                // the concurrent client queue as a nonisolated static helper.
                 while true {
                     var clientAddr = sockaddr_un()
                     var clientLen  = socklen_t(MemoryLayout<sockaddr_un>.size)
@@ -125,7 +129,11 @@ final class SocketServer {
                         if errno == EAGAIN || errno == EWOULDBLOCK { return }
                         return
                     }
-                    self.handleClient(fd: client)
+                    // Hop to the concurrent client queue. The static helper
+                    // captures a weak @MainActor reference to self purely for
+                    // the final onEvent delivery — nothing else touches self
+                    // off the main actor.
+                    SocketServer.handleClient(fd: client, owner: self)
                 }
             }
 
@@ -156,13 +164,17 @@ final class SocketServer {
 
     // MARK: - Client handling
     //
-    // Runs on the clientQueue. Reads until EOF or 64 KiB, parses as many
-    // line-delimited JSON events as possible, then hops back to main actor
-    // to deliver them.
-    private func handleClient(fd: Int32) {
-        clientQueue.async { [weak self] in
+    // Runs on the static clientQueue — completely off the main actor so it
+    // cannot deadlock or trap the accept loop. Reads until EOF or 64 KiB,
+    // parses as many line-delimited JSON events as possible, then hops back
+    // to the main actor to deliver them via `owner.onEvent`.
+    //
+    // `owner` is @MainActor-isolated; we only dereference it inside a
+    // `Task { @MainActor in … }` block. The static nature plus explicit
+    // queue hop is what fixes the com.doomcoder.socketserver.accept crash.
+    nonisolated private static func handleClient(fd: Int32, owner: SocketServer) {
+        clientQueue.async { [weak owner] in
             defer { close(fd) }
-            guard let self else { return }
 
             var buffer = Data()
             let chunkSize = 4096
@@ -182,14 +194,16 @@ final class SocketServer {
                 break                                                // other error — bail
             }
 
+            // Cap at 64 KiB — anything longer is truncated, not crashed.
+            if buffer.count > maxBytes { buffer = buffer.prefix(maxBytes) }
             // Ensure buffer ends with newline so any final object parses.
             if !buffer.isEmpty && buffer.last != 0x0A { buffer.append(0x0A) }
             let events = AgentEventCodec.decode(buffer: &buffer)
             guard !events.isEmpty else { return }
 
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                for ev in events { self.onEvent?(ev) }
+            Task { @MainActor [weak owner] in
+                guard let owner else { return }
+                for ev in events { owner.onEvent?(ev) }
             }
         }
     }

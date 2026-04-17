@@ -56,11 +56,14 @@ struct AgentEvent: Codable, Sendable {
     let message: String?        // optional short human-readable string
     let pid: Int32?             // agent process id (MCP)
     let event: String?          // raw hook event name (SessionStart, Stop, etc.)
+    let tty: String?            // controlling terminal (e.g. "/dev/ttys003") — for multi-tab CLIs
+    let nonce: String?          // set by round-trip hook test; passthrough only
     let timestamp: Double       // seconds since 1970; set by hook/mcp client
 
     enum CodingKeys: String, CodingKey {
         case src, agent, status = "s", sessionId = "sid"
-        case cwd, tool, message = "m", pid, event, timestamp = "t"
+        case cwd, tool, message = "m", pid, event, tty, nonce
+        case timestamp = "t"
     }
 
     init(src: Source,
@@ -72,6 +75,8 @@ struct AgentEvent: Codable, Sendable {
          message: String? = nil,
          pid: Int32? = nil,
          event: String? = nil,
+         tty: String? = nil,
+         nonce: String? = nil,
          timestamp: Double = Date.now.timeIntervalSince1970)
     {
         self.src = src
@@ -83,6 +88,8 @@ struct AgentEvent: Codable, Sendable {
         self.message = message
         self.pid = pid
         self.event = event
+        self.tty = tty
+        self.nonce = nonce
         self.timestamp = timestamp
     }
 
@@ -101,41 +108,67 @@ struct AgentEvent: Codable, Sendable {
         self.message   = try? c.decode(String.self, forKey: .message)
         self.pid       = try? c.decode(Int32.self,  forKey: .pid)
         self.event     = try? c.decode(String.self, forKey: .event)
+        self.tty       = try? c.decode(String.self, forKey: .tty)
+        self.nonce     = try? c.decode(String.self, forKey: .nonce)
         self.timestamp = (try? c.decode(Double.self, forKey: .timestamp)) ?? Date.now.timeIntervalSince1970
     }
 
-    // Canonical session key. Prefer explicit session id, fall back to pid,
-    // then to a hash of cwd so different projects/tabs with the same agent
-    // don't collapse into one session. Final fallback is the agent name.
+    // Canonical session key. Prefer explicit session id, then pid, then
+    // (tty, cwd) for multi-tab CLIs, then cwd-hash, then agent name.
+    //
+    // The tty fallback is what distinguishes two Copilot CLI tabs in the same
+    // login shell tree: tabs always have distinct ttys even when $PPID collides.
     var sessionKey: String {
         if let sid = sessionId, !sid.isEmpty { return "\(agent):\(sid)" }
         if let p = pid { return "\(agent):pid:\(p)" }
-        if let c = cwd, !c.isEmpty {
-            // Simple stable 32-bit FNV-1a hash — no Foundation dep, no collisions
-            // in practice at the small cardinality of open projects per user.
-            var h: UInt32 = 0x811c9dc5
-            for byte in c.utf8 {
-                h ^= UInt32(byte)
-                h = h &* 0x01000193
+        if let t = tty, !t.isEmpty {
+            // Include cwd hash when available so the same tty in two shells
+            // (e.g. after `ssh` session swap) doesn't collapse.
+            let last = t.split(separator: "/").last.map(String.init) ?? t
+            if let c = cwd, !c.isEmpty {
+                return "\(agent):tty:\(last):\(fnv1a32(c))"
             }
-            return "\(agent):cwd:\(String(h, radix: 16))"
+            return "\(agent):tty:\(last)"
+        }
+        if let c = cwd, !c.isEmpty {
+            return "\(agent):cwd:\(fnv1a32(c))"
         }
         return "\(agent):default"
+    }
+
+    // Simple 32-bit FNV-1a hash — no Foundation dep.
+    private func fnv1a32(_ s: String) -> String {
+        var h: UInt32 = 0x811c9dc5
+        for byte in s.utf8 {
+            h ^= UInt32(byte)
+            h = h &* 0x01000193
+        }
+        return String(h, radix: 16)
     }
 }
 
 // MARK: - JSON line framing
 
 enum AgentEventCodec {
+    // Hard limits: any single line over this is dropped.
+    static let maxLineBytes = 32 * 1024
+
     // Parses one or more newline-delimited JSON objects from a raw byte buffer.
     // Returns parsed events plus any remainder (incomplete trailing line) to carry over.
+    // Guarantees: never crashes on malformed input, non-UTF8 bytes, oversized
+    // lines, or non-JSON content. Silently drops invalid lines.
     static func decode(buffer: inout Data) -> [AgentEvent] {
         var events: [AgentEvent] = []
+        let decoder = JSONDecoder()
         while let newline = buffer.firstIndex(of: 0x0A /* \n */) {
             let line = buffer[buffer.startIndex..<newline]
             buffer.removeSubrange(buffer.startIndex...newline)
-            guard !line.isEmpty else { continue }
-            if let ev = try? JSONDecoder().decode(AgentEvent.self, from: line) {
+            guard !line.isEmpty, line.count <= maxLineBytes else { continue }
+            // Line must be valid UTF-8 and start with `{` (JSON object). Any
+            // other first byte (e.g. garbage from a crashed child) is dropped.
+            guard line.first == 0x7B /* { */ else { continue }
+            guard String(data: Data(line), encoding: .utf8) != nil else { continue }
+            if let ev = try? decoder.decode(AgentEvent.self, from: line) {
                 events.append(ev)
             }
         }

@@ -47,12 +47,14 @@ private struct StepDots: View {
 struct AgentSetupSheet: View {
     let agentId: String
     let onDone: () -> Void
+    var agentStatus: AgentStatusManager? = nil
 
     @State private var step: SetupStep = .explain
     @State private var installLog: String = ""
     @State private var installing = false
     @State private var installError: String?
     @State private var verifyOutput: String = ""
+    @State private var verifying = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -154,13 +156,18 @@ struct AgentSetupSheet: View {
 
     private var verifyView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Fire a synthetic agent event through the real pipeline.")
+            Text("Fire a real round-trip event: DoomCoder will run hook.sh as a subprocess and wait for the event to arrive on the Unix socket. Typical round-trip is 10–40 ms.")
             Button {
                 fireVerify()
             } label: {
-                Label("Send Test Notification", systemImage: "bell.badge.fill")
+                if verifying {
+                    Label("Running…", systemImage: "hourglass")
+                } else {
+                    Label("Run Round-Trip Test", systemImage: "bolt.horizontal.circle.fill")
+                }
             }
             .buttonStyle(.borderedProminent)
+            .disabled(verifying)
             if !verifyOutput.isEmpty {
                 Text(verifyOutput)
                     .font(.system(.caption, design: .monospaced))
@@ -291,9 +298,27 @@ struct AgentSetupSheet: View {
 
     private func fireVerify() {
         guard let info else { return }
-        // Inject a synthetic event through AgentStatusManager — the app
-        // wires this to NotificationManager + IPhoneRelay, so this is the
-        // real pipeline.
+        // If this is a hook agent and we have a status manager, run the real
+        // round-trip test (subprocess → socket → AgentStatusManager). It is
+        // the ground truth for whether hook.sh is actually wired up.
+        if info.tier == .hook,
+           let hook = HookInstaller.Agent(rawValue: info.id),
+           let sm = agentStatus {
+            verifying = true
+            verifyOutput = "Running round-trip test… (spawning hook.sh and waiting for the echo on dc.sock)"
+            Task {
+                defer { verifying = false }
+                let res = await HookRoundTripTest.run(agent: hook, statusManager: sm)
+                switch res {
+                case .success(let s):
+                    verifyOutput = "✓ Round-trip \(s.millis) ms.\nhook.sh → dc.sock → DoomCoder is wired correctly. The real agent will reuse this exact path."
+                case .failure(let f):
+                    verifyOutput = "✗ \(f.errorDescription ?? "round-trip failed")"
+                }
+            }
+            return
+        }
+        // Non-hook (MCP-only) agents: fall back to the synthetic inject.
         NotificationCenter.default.post(
             name: .dcVerifySetup,
             object: nil,
