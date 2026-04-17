@@ -196,9 +196,10 @@ struct AgentDetailPane: View {
         if let info, info.tier == .mcp,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             switch MCPInstaller.status(for: mcp) {
-            case .installed: return .ready
-            case .modified:  return .warn
-            case .notInstalled: return .off
+            case .live:          return .ready
+            case .configWritten: return .warn
+            case .modified:      return .warn
+            case .notInstalled:  return .off
             case .missingConfig: return .error
             }
         }
@@ -212,7 +213,13 @@ struct AgentDetailPane: View {
         }
         if let info, info.tier == .mcp,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
-            return MCPInstaller.status(for: mcp).rawValue
+            switch MCPInstaller.status(for: mcp) {
+            case .live:          return "live"
+            case .configWritten: return "config written · restart agent"
+            case .modified:      return "modified (user-authored)"
+            case .notInstalled:  return "not installed"
+            case .missingConfig: return "config unreadable"
+            }
         }
         return "unknown"
     }
@@ -285,7 +292,8 @@ struct AgentDetailPane: View {
         }
         if let info, info.tier == .mcp,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
-            return MCPInstaller.status(for: mcp) == .installed
+            let s = MCPInstaller.status(for: mcp)
+            return s == .configWritten || s == .live
         }
         return false
     }

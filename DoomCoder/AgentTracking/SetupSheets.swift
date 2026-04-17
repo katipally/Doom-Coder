@@ -253,6 +253,25 @@ struct AgentSetupSheet: View {
                     append("• Writing \(mcp.configPath.path)")
                     _ = try MCPInstaller.install(mcp)
                     append("• Installed MCP server for \(mcp.displayName)")
+                    append("• Restart \(mcp.displayName) so it picks up the new config.")
+                    append("  Waiting up to 10s for a handshake…")
+                    // Poll MCPInstaller.status for up to 10 s — if the agent
+                    // was already running and re-reads its config (VS Code),
+                    // we'll see a `.live` immediately. Otherwise the user
+                    // needs to restart, and we just note it.
+                    var gotLive = false
+                    for _ in 0..<20 {
+                        try? await Task.sleep(for: .milliseconds(500))
+                        if MCPInstaller.status(for: mcp) == .live {
+                            gotLive = true
+                            break
+                        }
+                    }
+                    if gotLive {
+                        append("✓ \(mcp.displayName) is live (handshake received).")
+                    } else {
+                        append("⚠︎ No handshake yet. Restart \(mcp.displayName); the badge will flip to 🟢 Live.")
+                    }
                 } else {
                     throw NSError(domain: "DoomCoder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported agent"])
                 }
