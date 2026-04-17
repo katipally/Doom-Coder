@@ -8,10 +8,10 @@ struct DoomCoderApp: App {
     @State private var agentStatus = AgentStatusManager()
     @State private var socketServer = SocketServer()
     @State private var iPhoneRelay = IPhoneRelay()
-    @State private var focusManager = FocusFilterManager()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // One-shot cleanup of v0.x UserDefaults keys that no longer exist.
+        // One-shot cleanup of v0.x + v1.0.x UserDefaults keys that no longer exist.
         LegacyDefaults.migrate()
         // Eagerly deploy both the hook runner AND the MCP server so they're
         // always up to date before any agent touches them. Silent on failure —
@@ -43,9 +43,15 @@ struct DoomCoderApp: App {
             AgentTrackingView(
                 agentStatus: agentStatus,
                 iPhoneRelay: iPhoneRelay,
-                focusManager: focusManager,
                 socketServer: socketServer
             )
+            .onChange(of: scenePhase) { _, new in
+                if new == .active {
+                    Task.detached { [iPhoneRelay] in
+                        await iPhoneRelay.calendar.cleanupOldEvents()
+                    }
+                }
+            }
         }
         .defaultSize(width: 960, height: 640)
 
@@ -65,11 +71,6 @@ struct DoomCoderApp: App {
         .windowResizability(.contentSize)
     }
 
-    // MARK: - Agent bridge wiring
-    //
-    // Runs exactly once on first MenuBarExtra render. We start the Unix-socket
-    // listener, forward every parsed event to AgentStatusManager, and fan
-    // meaningful state changes out to NotificationManager + IPhoneRelay.
     private func wireAgentBridge() {
         guard !socketServer.isRunning else { return }
 
@@ -80,10 +81,6 @@ struct DoomCoderApp: App {
         agentStatus.onSessionUpdated = { session, event in
             NotificationManager.shared.fire(event: event, session: session)
             iPhoneRelay.fire(event: event, session: session)
-        }
-
-        agentStatus.onActivityChanged = { active in
-            focusManager.reflect(active: active)
         }
 
         // Wire the synthetic "verify setup" action fired by AgentSetupSheet
@@ -101,10 +98,9 @@ struct DoomCoderApp: App {
 
         _ = socketServer.start()
 
-        // Opportunistic cleanup of old DoomCoder reminders on each launch.
-        // Best-effort: silent on permission denial.
+        // Opportunistic cleanup of stale DoomCoder calendar events on launch.
         Task.detached { [iPhoneRelay] in
-            await iPhoneRelay.reminder.cleanupDeliveredReminders()
+            await iPhoneRelay.calendar.cleanupOldEvents()
         }
     }
 }
