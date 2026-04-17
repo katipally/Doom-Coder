@@ -123,6 +123,11 @@ struct MenuBarView: View {
         }
         .disabled(!updaterViewModel.canCheckForUpdates)
 
+        Button("DoomCoder Doctor…") {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openWindow(id: "doomcoder-doctor")
+        }
+
         Button("About Doom Coder…") {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "about")
