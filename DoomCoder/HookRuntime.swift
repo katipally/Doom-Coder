@@ -14,7 +14,7 @@ import Foundation
 @MainActor
 enum HookRuntime {
 
-    static let scriptVersion = "1"
+    static let scriptVersion = "2"
 
     // MARK: - Paths
 
