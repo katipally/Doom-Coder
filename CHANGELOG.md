@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.3.0] - 2026-04-17
+## [1.4.0] - 2026-04-17
+
+Hook/MCP reliability + menubar **Watch this agent** flow. Fixes an install-
+time crash, rewrites Copilot CLI hooks to the April 2026 native `hooks.json`
+format, adds per-tab identity so two tabs never collide, ships real
+round-trip hook tests, and introduces a diagnostics panel.
+
+### Added
+- **Watch this agent** menubar submenu — lists every running Copilot CLI /
+  Claude Code / Cursor / Windsurf / Codex / VS Code / Zed process with
+  per-instance details (folder, tty, elapsed) and one-click pinning. Only
+  pinned sessions appear in the sidebar and fire notifications.
+- **Install Anywhere** pane — marketplace-style page with a copy-pastable
+  DoomCoder MCP snippet, per-client instructions (Cursor, Windsurf, Codex,
+  Claude Desktop, VS Code, Zed, Custom), and a Verify button that waits up
+  to 2 min for any MCP client to hand-shake.
+- **Real round-trip hook test** — spawns `~/.doomcoder/hook.sh`, times how
+  long the event takes to reach our socket, reports `✓ 12 ms` or a
+  diagnostic (`socket not listening`, `script missing`, `silent`). Replaces
+  the animated 4.5 s staged test.
+- **DoomCoder Doctor** (menubar → *DoomCoder Doctor…*) — one-click probes
+  for every agent's hook script / MCP sentinel / live hello TTL plus system
+  checks (socket listening, python3, Accessibility, notifications, ntfy,
+  `~/.doomcoder`, macOS version). Includes a **Copy report** button.
+
+### Changed
+- **Copilot CLI hooks** rewritten to the April 2026 native format —
+  `~/.copilot/hooks/hooks.json` covering `sessionStart`, `sessionEnd`,
+  `preToolUse`, `postToolUse`, `userPromptSubmitted`, `errorOccurred`. The
+  legacy `extensions/doomcoder/hook.sh` install path is removed.
+- **Session identity** now walks the process tree to the real `copilot`
+  pid and always captures `tty`, so two Copilot CLI tabs that share a
+  login shell ancestry never collide. Rows now show `agent · folder ·
+  tty`.
+- **MCP hello** now forwards `clientInfo.name` from the `initialize`
+  request so Install Anywhere can show *which* client loaded the config
+  (e.g. Cursor vs Windsurf).
+
+### Fixed
+- **Install-time crash on `com.doomcoder.socketserver.accept`.** Audited
+  every force-unwrap in `SocketServer.swift` and the event decoder;
+  partial writes, oversized lines, non-UTF8 bytes, and unknown JSON
+  schemas are all logged and dropped instead of crashing.
+- **Cursor project-shadow configs.** When installing, DoomCoder now warns
+  about any `.cursor/mcp.json` in recent-workspaces that would silently
+  shadow the global install.
+- **Codex TOML CRLF** handling — replaced regex-based merge with a
+  line-based parser; writes LF only.
+- **`aider` agent** removed from the catalog — there was no installer
+  path behind it.
+
+
 
 Reliability pass: honest hook statuses, a real MCP handshake so "installed"
 means the agent actually loaded the config, and per-tab session identity so
