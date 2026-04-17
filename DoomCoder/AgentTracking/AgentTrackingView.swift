@@ -139,9 +139,9 @@ struct AgentTrackingView: View {
             get: { agentSetupSheet.map { AgentSheetID(id: $0) } },
             set: { agentSetupSheet = $0?.id }
         )) { wrapper in
-            AgentSetupSheet(agentId: wrapper.id) {
+            AgentSetupSheet(agentId: wrapper.id, onDone: {
                 agentSetupSheet = nil
-            }
+            }, agentStatus: agentStatus)
         }
         .sheet(item: $channelSetupSheet) { kind in
             ChannelSetupSheet(kind: kind, relay: iPhoneRelay) {

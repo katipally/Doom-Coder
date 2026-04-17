@@ -334,6 +334,28 @@ struct AgentDetailPane: View {
     }
 
     private func sendTest() {
+        // For hook agents, run the real round-trip test — it's the ground
+        // truth for whether hook.sh actually reaches DoomCoder. For
+        // non-hook agents (MCP-only), fall back to the synthetic inject.
+        if let info, info.tier == .hook,
+           let hook = HookInstaller.Agent(rawValue: info.id) {
+            busy = true
+            lastActionOutput = "Running round-trip test…"
+            Task {
+                defer { busy = false }
+                let res = await HookRoundTripTest.run(
+                    agent: hook,
+                    statusManager: agentStatus
+                )
+                switch res {
+                case .success(let s):
+                    lastActionOutput = "✓ Round-trip \(s.millis) ms — hook → DoomCoder pipe is live."
+                case .failure(let f):
+                    lastActionOutput = "✗ \(f.errorDescription ?? "round-trip failed")"
+                }
+            }
+            return
+        }
         agentStatus.injectTest(
             agent: agentId,
             status: .wait,
