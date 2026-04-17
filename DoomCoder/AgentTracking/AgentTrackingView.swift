@@ -6,7 +6,6 @@ import SwiftUI
 // sidebar so selection is always in sync with what's showing.
 
 enum AgentTrackingSelection: Hashable {
-    case liveSession(String)              // AgentSession.id
     case agent(String)                    // AgentCatalog.Info.id
     case installAnywhere
     case channel(ChannelKind)
@@ -47,12 +46,13 @@ enum AgentTrackingSelection: Hashable {
 
 // MARK: - AgentTrackingView
 //
-// The primary v1.0 surface. A three-pane NavigationSplitView that shows:
-//   • Live sessions (top) — what's happening right now
+// The primary v1.5 Configure surface. A two-pane NavigationSplitView focused
+// strictly on setup:
 //   • Agents — every supported agent with install status + setup launcher
-//   • iPhone channels — Reminders / iMessage / ntfy with setup + test
-//   • System — Focus filter, iCloud round-trip, delivery log
-// The detail pane is driven by a single selection enum.
+//   • Channels — ntfy.sh setup & test
+//   • Diagnostics — Delivery Log
+// Live session rows were removed in v1.5 — live status is surfaced through
+// the menubar Track submenu, not duplicated in this window.
 
 struct AgentTrackingView: View {
     @Bindable var agentStatus: AgentStatusManager
@@ -74,16 +74,6 @@ struct AgentTrackingView: View {
         } detail: {
             Group {
                 switch selection {
-                case .liveSession(let id):
-                    if let session = agentStatus.sessions.first(where: { $0.id == id }) {
-                        SessionDetailPane(session: session, iPhoneRelay: iPhoneRelay)
-                    } else {
-                        EmptyDetailPane(
-                            icon: "bolt.slash",
-                            title: "Session ended",
-                            message: "This session has finished. Select another row from the sidebar."
-                        )
-                    }
                 case .agent(let id):
                     AgentDetailPane(
                         agentId: id,
@@ -109,14 +99,14 @@ struct AgentTrackingView: View {
                     EmptyDetailPane(
                         icon: "sidebar.left",
                         title: "Select something from the sidebar",
-                        message: "Live sessions show up at the top as they start. Agents, iPhone channels, and system diagnostics are below."
+                        message: "Configure agents and channels here. Live status is available from the menubar's Track submenu."
                     )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .navigationTitle("Agent Tracking")
+        .navigationTitle("Agents & Channels")
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {

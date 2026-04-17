@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-04-17
+
+**Configure vs. Track — clean separation of setup and live selection.**
+The old "Agent Tracking" window was doing too much (install, live status,
+channels, tests) and the "Watch this agent" submenu listed every random
+running IDE/CLI DoomCoder couldn't actually talk to. v1.5 splits them:
+the window is **setup only**, and the menubar submenu shows **only
+agents the user has verified** end-to-end.
+
+### Changed
+- **Window renamed: "Agent Tracking" → "Agents & Channels".** New scene
+  id `configure`. Title, toolbar, and all open-window call sites updated.
+- **Menubar submenu renamed: "Watch this agent" → "Track".** Entries
+  are drawn strictly from agents the user has configured — a hook agent
+  qualifies after a successful round-trip, an MCP agent after a hello
+  handshake. Both facts are now persisted across launches.
+- **Track is agent-type-level, not per-instance.** Selecting "Copilot
+  CLI" watches every Copilot CLI session. Per-session ids were removed
+  — they were unstable between launches and confused the UX.
+- Sidebar section labels cleaned up: "iPhone Channels" → "Channels",
+  "System" → "Diagnostics".
+- Per-agent **Track** button added to each Ready row in the Configure
+  window — one-click alternative to the menubar submenu. Disabled and
+  dimmed when the agent isn't configured yet.
+
+### Added
+- `WatchTarget` enum (`.none` / `.all` / `.agentType(id)`) replacing
+  the legacy `watchedSessionKey: String`. "Track none (silent)" is now
+  an explicit menu row for muting all notifications without disabling
+  DoomCoder.
+- `AgentStatusManager.isAgentConfigured(_:)` and `configuredAgents()`
+  helpers, feeding the Track submenu and the new Track buttons from
+  one source of truth.
+- Persisted `didRoundTrip[agentId]` — set on any successful
+  `HookRoundTripTest`. Agents stay "Configured" after a restart.
+- Persisted `mcpHelloAt[agentId]` — promoted from in-memory to
+  UserDefaults so MCP agents survive the same restart gate.
+
+### Removed
+- **Live Sessions sidebar section** in the Configure window. Live
+  status belongs in the menubar Track submenu; the window is for setup.
+- `RunningAgentScanner` and its associated menubar "Rescan" button.
+  The scanner's guesswork (processes that *might* be agents but had no
+  verified wiring) was the root cause of users seeing ghost entries in
+  the submenu. Gone entirely — the Track list is now exact.
+- `AgentTrackingSelection.liveSession` case and the `SessionDetailPane`
+  call site (pane file kept for reference, no longer reachable).
+
+### Migration
+One-shot on first launch: legacy `dc.watchedSessionKey` is read and
+discarded — empty or non-empty alike both become `WatchTarget.all`
+(old session ids weren't safe to carry forward). No user action needed.
+
+---
+
 ## [1.4.1] - 2026-04-17
 
 ### Fixed
