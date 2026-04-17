@@ -7,7 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.1] - 2026-04-16
+## [1.1.0] - 2026-04-16
+
+Major reliability release — replaces broken iPhone delivery channels with a
+mechanism Apple actually supports end-to-end, removes two features that
+couldn't be made reliable, and rebuilds the ntfy onboarding UX so it works
+without needing QR-to-Safari workarounds.
+
+### Added
+- **Calendar channel (primary iPhone delivery).** DoomCoder now creates a short
+  `EKEvent` with a 3-second `EKAlarm` on a dedicated **DoomCoder** calendar
+  stored in iCloud. The alarm fires locally on every device signed into the
+  same iCloud account — iPhone, iPad, Apple Watch — within seconds, regardless
+  of Focus mode, and without ever landing in Recently Deleted. Old DoomCoder
+  events auto-clean after 15 minutes so the calendar stays empty.
+- **Real iCloud round-trip test for Calendar.** The Verify step and the
+  SYSTEM → iCloud pane both run a deterministic round-trip: write a probe
+  event with no alarm, poll a fresh `EKEventStore` every 500ms, delete on
+  match, report the latency. Propagation timeouts surface an actionable error.
+- **ntfy subscribe flow rebuilt from scratch.** The Install step now offers
+  three paths: **Share…** (native share sheet pushes the `ntfy://subscribe?topic=…`
+  deep link straight to your iPhone via AirDrop/Messages), **Copy Deep Link**,
+  and **Copy Web URL**. The QR is still there as a fallback but is now
+  collapsed and explicitly labeled ("camera will open Safari — that's fine").
+
+### Removed
+- **Reminders channel.** On macOS 26 iCloud-synced reminders with due-date
+  alarms are marked completed before the alarm fires, landing them in
+  Recently Deleted without a notification. No workaround was reliable.
+  Existing users migrate to Calendar automatically (if Reminders was enabled,
+  Calendar gets enabled).
+- **iMessage channel.** Apple permanently blocks iMessage-to-self delivery
+  when the same Apple ID is signed in on both ends — the delivery framework
+  returns "Not Delivered" silently. Cannot be worked around; removed.
+- **Focus Filter integration.** Too many users never mapped a Focus to the
+  filter and the feature added surface area without reliable benefit. Dropped
+  to keep v1.1 tight.
+- `NSRemindersUsageDescription`, `NSFocusStatusUsageDescription`,
+  `NSContactsUsageDescription` removed from Info.plist.
+
+### Migration
+- `doomcoder.iphone.reminder.enabled` → `doomcoder.iphone.calendar.enabled`
+  (carries your opt-in forward).
+- `doomcoder.iphone.imessage.enabled` forced to `false`.
+- `doomcoder.focus.*` wiped.
+- Runs once on first 1.1 launch, logged as `LegacyDefaults v1.1: migrated N keys`.
+
+### Changed
+- Agent Tracking SYSTEM section is now **iCloud Round-Trip** + **Delivery Log**
+  only (Focus Filter row removed).
+- Info.plist now requests `NSCalendarsFullAccessUsageDescription` /
+  `NSCalendarsUsageDescription`.
+- Version bumped to **1.1.0 / 110**.
+
+
 
 Hotfix for iPhone delivery channels shipped in 1.0.0.
 

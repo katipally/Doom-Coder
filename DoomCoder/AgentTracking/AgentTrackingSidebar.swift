@@ -9,7 +9,6 @@ import SwiftUI
 struct AgentTrackingSidebar: View {
     @Bindable var agentStatus: AgentStatusManager
     @Bindable var iPhoneRelay: IPhoneRelay
-    @Bindable var focusManager: FocusFilterManager
     @Binding var selection: AgentTrackingSelection?
 
     var body: some View {
@@ -47,7 +46,7 @@ struct AgentTrackingSidebar: View {
             Section("System") {
                 ForEach(AgentTrackingSelection.SystemKind.allCases, id: \.self) { kind in
                     NavigationLink(value: AgentTrackingSelection.system(kind)) {
-                        SystemRow(kind: kind, focusManager: focusManager, iPhoneRelay: iPhoneRelay)
+                        SystemRow(kind: kind, iPhoneRelay: iPhoneRelay)
                     }
                 }
             }
@@ -157,8 +156,7 @@ private struct ChannelRow: View {
 
     private var badge: StatusBadge {
         switch kind {
-        case .reminder: return relay.reminder.isEnabled && relay.reminder.isReady ? StatusBadge(.ready) : StatusBadge(.off)
-        case .imessage: return relay.imessage.isEnabled && relay.imessage.isReady ? StatusBadge(.ready) : StatusBadge(.off)
+        case .calendar: return relay.calendar.isEnabled && relay.calendar.isReady ? StatusBadge(.ready) : StatusBadge(.off)
         case .ntfy:     return relay.ntfy.isEnabled && relay.ntfy.isReady ? StatusBadge(.ready) : StatusBadge(.off)
         }
     }
@@ -166,7 +164,6 @@ private struct ChannelRow: View {
 
 private struct SystemRow: View {
     let kind: AgentTrackingSelection.SystemKind
-    let focusManager: FocusFilterManager
     let iPhoneRelay: IPhoneRelay
 
     var body: some View {
@@ -180,8 +177,7 @@ private struct SystemRow: View {
 
     private var badge: StatusBadge {
         switch kind {
-        case .focus:       return focusManager.isEnabled ? StatusBadge(.ready) : StatusBadge(.off)
-        case .icloud:      return iPhoneRelay.reminder.isReady ? StatusBadge(.ready) : StatusBadge(.off)
+        case .icloud:      return iPhoneRelay.calendar.isReady ? StatusBadge(.ready) : StatusBadge(.off)
         case .deliveryLog: return iPhoneRelay.deliveryLog.isEmpty ? StatusBadge(.off) : StatusBadge(.ready, "\(iPhoneRelay.deliveryLog.count)")
         }
     }

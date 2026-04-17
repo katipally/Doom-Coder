@@ -1,6 +1,6 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
-@preconcurrency import Contacts
+import AppKit
 
 // MARK: - SetupStep
 
@@ -344,20 +344,18 @@ struct ChannelSetupSheet: View {
 
     private var explainBody: String {
         switch kind {
-        case .reminder:
-            return "DoomCoder writes a completed reminder to your default iCloud Reminders list whenever an agent needs attention. Reminders sync through iCloud — so your iPhone gets a notification within seconds. Nothing else changes."
-        case .imessage:
-            return "DoomCoder sends an iMessage to the handle you configure (usually your own phone number or iCloud email). Fastest delivery — push usually lands in 1-2 seconds. Requires Automation permission for Messages.app the first time."
+        case .calendar:
+            return "DoomCoder creates a short event with a 3-second alarm on a dedicated DoomCoder calendar stored in iCloud. Every Apple device signed into your iCloud account — iPhone, iPad, Apple Watch — plays the alarm locally. This is the most reliable delivery mechanism Apple exposes: the alarm fires even if Focus is on, and never lands in Recently Deleted."
         case .ntfy:
-            return "DoomCoder posts each notification to a private ntfy.sh topic. Install the ntfy iOS app and subscribe via the QR code below. Works even when you're not on the Apple ecosystem. Free."
+            return "DoomCoder posts each notification to a private ntfy.sh topic. Install the ntfy iOS app and subscribe to your topic. Works even when you're not on the Apple ecosystem. Free."
         }
     }
 
     private var explainView: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(explainBody)
-            if kind == .reminder {
-                Label("Uses EventKit + iCloud sync. Ensure Settings → [Your Name] → iCloud → Reminders is On on both devices.", systemImage: "icloud")
+            if kind == .calendar {
+                Label("Uses EventKit + iCloud calendar sync. Ensure Settings → [Your Name] → iCloud → Calendars is ON on both devices.", systemImage: "icloud")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
@@ -366,25 +364,11 @@ struct ChannelSetupSheet: View {
     private var installView: some View {
         VStack(alignment: .leading, spacing: 12) {
             switch kind {
-            case .reminder:
-                Text("Click **Continue** to request Reminders access. macOS will prompt once.")
-                Toggle("Enable Reminders channel", isOn: Binding(
-                    get: { relay.reminder.isEnabled },
-                    set: { relay.reminder.isEnabled = $0 }
-                ))
-            case .imessage:
-                Text("Your iMessage handle (phone number or iCloud email):")
-                HStack {
-                    TextField("+15551234567 or you@icloud.com", text: Binding(
-                        get: { relay.imessage.handle },
-                        set: { relay.imessage.handle = $0 }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    Button("Use Me Card") { fillFromContacts() }
-                }
-                Toggle("Enable iMessage channel", isOn: Binding(
-                    get: { relay.imessage.isEnabled },
-                    set: { relay.imessage.isEnabled = $0 }
+            case .calendar:
+                Text("Click **Continue** to request Calendars access. macOS will prompt once. DoomCoder creates a 'DoomCoder' calendar on iCloud and uses it exclusively.")
+                Toggle("Enable Calendar channel", isOn: Binding(
+                    get: { relay.calendar.isEnabled },
+                    set: { relay.calendar.isEnabled = $0 }
                 ))
             case .ntfy:
                 Text("Your private topic (random by default — keep it secret):")
@@ -400,23 +384,73 @@ struct ChannelSetupSheet: View {
                     get: { relay.ntfy.isEnabled },
                     set: { relay.ntfy.isEnabled = $0 }
                 ))
-                if let url = relay.ntfy.subscriptionURL, let img = Self.qrImage(url.absoluteString) {
-                    VStack(spacing: 6) {
-                        Image(nsImage: img)
-                            .interpolation(.none)
-                            .resizable()
-                            .frame(width: 140, height: 140)
-                        Text(url.absoluteString).font(.caption).textSelection(.enabled)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(10)
-                    .background { RoundedRectangle(cornerRadius: 8).fill(.regularMaterial) }
+
+                if let deepLink = relay.ntfy.deepLinkURL,
+                   let subURL = relay.ntfy.subscriptionURL {
+                    ntfyShareBox(deepLink: deepLink, subURL: subURL)
                 }
             }
             if !statusLine.isEmpty {
                 Text(statusLine).font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    @ViewBuilder
+    private func ntfyShareBox(deepLink: URL, subURL: URL) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Subscribe on your iPhone")
+                .font(.headline)
+            Text("Install **ntfy** from the App Store, then use one of these to open the subscription directly:")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button {
+                    let picker = NSSharingServicePicker(items: [deepLink])
+                    if let win = NSApp.keyWindow, let contentView = win.contentView {
+                        picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+                    }
+                } label: {
+                    Label("Share…", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(deepLink.absoluteString, forType: .string)
+                    statusLine = "Deep link copied — paste into Messages/Notes to yourself and tap on iPhone."
+                } label: {
+                    Label("Copy Deep Link", systemImage: "doc.on.doc")
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(subURL.absoluteString, forType: .string)
+                    statusLine = "Web URL copied — paste into Safari on iPhone, ntfy app will handle it."
+                } label: {
+                    Label("Copy Web URL", systemImage: "link")
+                }
+            }
+
+            DisclosureGroup("Use QR (camera will open Safari — that's fine)") {
+                if let img = Self.qrImage(subURL.absoluteString) {
+                    VStack(spacing: 6) {
+                        Image(nsImage: img)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 160, height: 160)
+                        Text(subURL.absoluteString).font(.caption).textSelection(.enabled)
+                        Text("Safari will open ntfy.sh — tap the Subscribe button there, or open the deep link from Share…/Copy for a direct hand-off.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                }
+            }
+            .padding(10)
+            .background { RoundedRectangle(cornerRadius: 8).fill(.regularMaterial) }
+        }
+        .padding(12)
+        .background { RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)) }
     }
 
     private var verifyView: some View {
@@ -457,20 +491,18 @@ struct ChannelSetupSheet: View {
     private func advance() {
         switch step {
         case .explain:
-            if kind == .reminder {
+            if kind == .calendar {
                 busy = true
                 statusLine = "Requesting access…"
                 Task {
-                    let ok = await relay.reminder.requestAccess()
-                    statusLine = ok ? "✓ Reminders access granted" : "✗ Access denied. Open System Settings → Privacy → Reminders."
-                    if ok { relay.reminder.isEnabled = true }
+                    let ok = await relay.calendar.requestAccess()
+                    statusLine = ok ? "✓ Calendar access granted — DoomCoder calendar ready." : "✗ Access denied. Open System Settings → Privacy & Security → Calendars."
+                    if ok { relay.calendar.isEnabled = true }
                     busy = false
                     step = .install
                 }
-            } else if kind == .ntfy {
-                relay.ntfy.generateTopicIfNeeded()
-                step = .install
             } else {
+                relay.ntfy.generateTopicIfNeeded()
                 step = .install
             }
         case .install:
@@ -487,21 +519,14 @@ struct ChannelSetupSheet: View {
         verifyOutput = "Sending…"
         Task {
             switch kind {
-            case .reminder:
-                let r = await relay.reminder.runICloudRoundTripTest()
+            case .calendar:
+                let r = await relay.calendar.runICloudRoundTripTest()
                 switch r {
                 case .success(let latency):
-                    verifyOutput = String(format: "✓ iCloud round-trip: %.2fs. Check your iPhone's Reminders app.", latency)
+                    verifyOutput = String(format: "✓ iCloud round-trip: %.2fs. In 3s your iPhone's alarm will fire.", latency)
+                    relay.sendTest(channel: "Calendar")
                 case .failure(let err):
                     verifyOutput = "✗ \(err.localizedDescription)"
-                }
-            case .imessage:
-                relay.sendTest(channel: "iMessage")
-                try? await Task.sleep(for: .seconds(2))
-                if let d = relay.deliveryLog.first(where: { $0.channel == "iMessage" }) {
-                    verifyOutput = d.success ? "✓ \(d.detail)" : "✗ \(d.detail)"
-                } else {
-                    verifyOutput = "Dispatched — check your Messages app."
                 }
             case .ntfy:
                 relay.sendTest(channel: "ntfy")
@@ -513,36 +538,6 @@ struct ChannelSetupSheet: View {
                 }
             }
             busy = false
-        }
-    }
-
-    private func fillFromContacts() {
-        let store = CNContactStore()
-        store.requestAccess(for: .contacts) { granted, _ in
-            guard granted else {
-                DispatchQueue.main.async {
-                    statusLine = "Contacts access denied — you can still paste your handle manually."
-                }
-                return
-            }
-            let keys: [CNKeyDescriptor] = [
-                CNContactPhoneNumbersKey as CNKeyDescriptor,
-                CNContactEmailAddressesKey as CNKeyDescriptor
-            ]
-            do {
-                let me = try store.unifiedMeContactWithKeys(toFetch: keys)
-                let phone = me.phoneNumbers.first?.value.stringValue
-                let email = me.emailAddresses.first?.value as String?
-                DispatchQueue.main.async {
-                    if let phone { relay.imessage.handle = phone }
-                    else if let email { relay.imessage.handle = email }
-                    else { statusLine = "No phone or email on your Me card." }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    statusLine = "No Me card found. Paste your handle manually."
-                }
-            }
         }
     }
 

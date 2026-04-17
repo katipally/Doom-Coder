@@ -12,31 +12,28 @@ enum AgentTrackingSelection: Hashable {
     case system(SystemKind)
 
     enum ChannelKind: String, Hashable, CaseIterable {
-        case reminder, imessage, ntfy
+        case calendar, ntfy
 
         var displayName: String {
             switch self {
-            case .reminder: return "Reminders (iCloud)"
-            case .imessage: return "iMessage"
+            case .calendar: return "Calendar (iCloud)"
             case .ntfy:     return "ntfy.sh"
             }
         }
 
         var icon: String {
             switch self {
-            case .reminder: return "checklist"
-            case .imessage: return "message.fill"
+            case .calendar: return "calendar.badge.clock"
             case .ntfy:     return "bell.badge.fill"
             }
         }
     }
 
     enum SystemKind: String, Hashable, CaseIterable {
-        case focus, icloud, deliveryLog
+        case icloud, deliveryLog
 
         var displayName: String {
             switch self {
-            case .focus:        return "Focus Filter"
             case .icloud:       return "iCloud Round-Trip"
             case .deliveryLog:  return "Delivery Log"
             }
@@ -44,7 +41,6 @@ enum AgentTrackingSelection: Hashable {
 
         var icon: String {
             switch self {
-            case .focus:       return "moon.circle.fill"
             case .icloud:      return "icloud.fill"
             case .deliveryLog: return "tray.full.fill"
             }
@@ -64,7 +60,6 @@ enum AgentTrackingSelection: Hashable {
 struct AgentTrackingView: View {
     @Bindable var agentStatus: AgentStatusManager
     @Bindable var iPhoneRelay: IPhoneRelay
-    @Bindable var focusManager: FocusFilterManager
     var socketServer: SocketServer
 
     @State private var selection: AgentTrackingSelection? = .system(.deliveryLog)
@@ -76,7 +71,6 @@ struct AgentTrackingView: View {
             AgentTrackingSidebar(
                 agentStatus: agentStatus,
                 iPhoneRelay: iPhoneRelay,
-                focusManager: focusManager,
                 selection: $selection
             )
             .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 340)
@@ -110,7 +104,6 @@ struct AgentTrackingView: View {
                     SystemDetailPane(
                         kind: kind,
                         iPhoneRelay: iPhoneRelay,
-                        focusManager: focusManager,
                         socketServer: socketServer
                     )
                 case .none:
