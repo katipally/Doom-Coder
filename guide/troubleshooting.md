@@ -1,12 +1,12 @@
 # Troubleshooting
 
-Common issues with DoomCoder 0.7 and how to fix them.
+Common issues with DoomCoder 1.8 and how to fix them.
 
 ---
 
-## Agent Bridge
+## Agent tracking
 
-### "Bridge offline" in Settings → Agent Bridge
+### "Bridge offline" in Configure Agents
 
 DoomCoder couldn't open the Unix socket at `~/.doomcoder/dc.sock`.
 
@@ -16,44 +16,31 @@ DoomCoder couldn't open the Unix socket at `~/.doomcoder/dc.sock`.
 
 If it still fails, check the error message under the "Bridge offline" badge — it's usually a filesystem permission problem on `~/.doomcoder/`.
 
-### Claude Code set up, but status stays "Not set up"
+### An agent is set up, but status stays "Not set up"
 
-The status flips only when Claude Code actually sends its first event. Launch a `claude` session in a terminal and type anything; the badge should flip within a second.
+The status flips only after two gates:
 
-If it still doesn't:
+1. `mcp-hello` arrives (proves the agent loaded the `doomcoder` MCP server).
+2. A real `dc(...)` tool call arrives (proves the rules were honored).
 
-1. Reveal the settings file in Finder (the disclosure group has a button for it).
-2. Confirm the `hooks` section contains entries with `"doomcoder_managed": true`.
-3. Confirm `~/.doomcoder/hook.sh` exists and is executable: `ls -l ~/.doomcoder/hook.sh`.
-4. Test the pipeline manually: `echo '{"status":"w"}' | /bin/sh ~/.doomcoder/hook.sh claude-code w` — this should show up in Live sessions.
+Fully quit and relaunch the agent after pressing Set Up — MCP configs are loaded once at process start.
 
-### MCP agent says "dc tool not found"
+### "dc tool not found" inside the agent
 
 - Did you restart the agent after clicking Set Up? MCP servers are loaded only on agent startup.
 - Check that `~/.doomcoder/mcp.py` exists and is executable.
-- For Cursor/Windsurf/VS Code, verify the `.mcp.json` file contains a `doomcoder` server entry. Re-click Set Up to overwrite it.
+- For Cursor/Windsurf/VS Code, verify the `mcp.json` file contains a `doomcoder` server entry. Re-click Set Up to overwrite it.
 - For Codex, check `~/.codex/config.toml` for a `[mcp_servers.doomcoder]` section.
+
+### Cursor only calls `dc` when I mention DoomCoder by name
+
+Cursor's per-workspace `.cursor/rules/doomcoder.mdc` only auto-attaches when a workspace is rooted at your home folder. The fix is to paste DoomCoder's snippet into **Cursor → Settings → Rules → User Rules** — it then applies to every project.
+
+The Setup → Install step for Cursor has a **Copy snippet** button plus **Open Cursor** deep-link for exactly this.
 
 ---
 
-## iPhone notifications
-
-### Reminders channel says "Permission needed"
-
-Click **Grant Access**. If the system popup doesn't appear:
-
-1. Open **System Settings → Privacy & Security → Reminders**.
-2. Ensure **DoomCoder** is in the list and toggled on.
-3. Return to DoomCoder → iPhone tab → click **Refresh** (the arrow button).
-
-### iMessage says "Send failed"
-
-Most common causes:
-
-- **Not signed in to iMessage on your Mac.** Open Messages.app and sign in with your Apple ID.
-- **Handle format wrong.** Use the exact format iMessage shows in a conversation header — e.g. `+14155551234` for phone, or `you@icloud.com` for Apple ID email. No spaces, no parentheses.
-- **AppleEvents permission denied.** Open **System Settings → Privacy & Security → Automation → DoomCoder** and ensure **Messages** is toggled on.
-- **Receiving iPhone is offline.** iMessage queues but delivery can stall. Try texting yourself first to verify the pipeline.
+## iPhone notifications (ntfy)
 
 ### ntfy notifications don't arrive on my phone
 
@@ -61,35 +48,26 @@ Most common causes:
 2. Tap **Subscribe to topic** in the app.
 3. Copy the URL from DoomCoder → iPhone → ntfy section. It looks like `https://ntfy.sh/doom-<random>`.
 4. Paste the topic name (the part after `ntfy.sh/`) into the app.
-5. Send a test from DoomCoder. If nothing arrives, check the delivery log in DoomCoder for the HTTP status.
+5. Send a test from DoomCoder. If nothing arrives, check the delivery log for the HTTP status.
 
 ### Delivery log shows "Channel disabled"
 
-You hit Send Test on a channel whose toggle is off. Turn it on first.
+You hit Send Test while the ntfy toggle was off. Turn it on first.
 
 ---
 
-## False positives / false negatives
+## Tracking notifications
 
-### Banner never fires for an AI task
+### Banner never fires for an agent task
 
-- First, confirm the app is connected via the bridge (Agent Bridge tab → Connected badge). If it is, the heuristic is suppressed — the bridge path should fire instead.
-- Check that your notification banner isn't being blocked by Do Not Disturb / Focus.
+- Open the menu bar → **Track** submenu and confirm the agent is checked. Only tracked agents fire notifications.
+- Confirm the agent is configured (Configure Agents → green badge).
+- Confirm your notification banner isn't blocked by Do Not Disturb / Focus.
 - Open **System Settings → Notifications → DoomCoder** and confirm alerts are enabled.
 
-### Too many banners for one task
+### Too many banners
 
-v0.8 added a 10-second de-dup window per session per status. If you still get duplicates:
-
-- Check if the agent is installed via both a hook **and** an MCP server (rare — we warn in Settings). Uninstall one.
-- Each iPhone channel fires independently. Disable the channels you don't need.
-
-### Heuristic still fires banners when bridge is active
-
-This shouldn't happen in v0.8 (Tier-3 demotion). If it does:
-
-- Quit and relaunch DoomCoder to reset the suppression wiring.
-- Report it: the `shouldSuppressHeuristic` closure didn't trigger, which is a bug.
+Each iPhone channel fires independently. Disable the channels you don't need in Settings → iPhone.
 
 ---
 
@@ -104,7 +82,7 @@ DoomCoder doesn't write logs to disk by default. To inspect what's happening:
 To dump the current socket state manually:
 
 ```sh
-echo '{"src":"manual","agent":"claude-code","status":"w","sid":"test-1","msg":"hello"}' \
+echo '{"src":"manual","agent":"cursor","status":"w","sid":"test-1","msg":"hello"}' \
   | nc -U ~/.doomcoder/dc.sock
 ```
 
@@ -119,5 +97,5 @@ Open an issue at https://github.com/katipally/Doom-Coder/issues/new and include:
 1. macOS version.
 2. DoomCoder version (About window).
 3. Which agent(s) you're using.
-4. What you see in Settings → Agent Bridge.
+4. What you see in Configure Agents.
 5. Any relevant entries from the delivery log.
