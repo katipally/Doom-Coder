@@ -3,7 +3,6 @@ import SwiftUI
 struct MenuBarView: View {
     @Bindable var sleepManager: SleepManager
     var updaterViewModel: CheckForUpdatesViewModel
-    @Bindable var appDetector: AppDetector
     @Bindable var agentStatus: AgentStatusManager
     @Environment(\.openWindow) private var openWindow
 
@@ -62,10 +61,9 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        Divider()
-
         // ── Active Agent Sessions ────────────────────────────────────────────
         if !agentStatus.sessions.isEmpty {
+            Divider()
             Menu("Agents: \(agentStatus.sessions.count) live") {
                 ForEach(agentStatus.sessions) { s in
                     let label = "\(s.displayName) — \(agentStateText(s.state))\(s.repoName.map { " · \($0)" } ?? "")"
@@ -75,12 +73,6 @@ struct MenuBarView: View {
                     }
                 }
             }
-        }
-
-        // ── Active Apps ───────────────────────────────────────────────────────
-        Button("Active Apps…") {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "active-apps")
         }
 
         Divider()
@@ -157,4 +149,3 @@ struct MenuBarView: View {
         NSWorkspace.shared.open(url)
     }
 }
-

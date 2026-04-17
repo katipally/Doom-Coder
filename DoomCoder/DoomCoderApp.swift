@@ -5,15 +5,16 @@ import ServiceManagement
 struct DoomCoderApp: App {
     @State private var sleepManager = SleepManager()
     @State private var updaterViewModel = CheckForUpdatesViewModel()
-    @State private var appDetector = AppDetector()
     @State private var agentStatus = AgentStatusManager()
     @State private var socketServer = SocketServer()
     @State private var iPhoneRelay = IPhoneRelay()
 
     init() {
+        // One-shot cleanup of v0.x UserDefaults keys that no longer exist.
+        LegacyDefaults.migrate()
         // Eagerly deploy both the hook runner AND the MCP server so they're
         // always up to date before any agent touches them. Silent on failure —
-        // the Settings UI surfaces any problem via per-agent status badges.
+        // Agent Tracking surfaces any problem via per-agent status badges.
         try? HookRuntime.deploy()
         try? MCPRuntime.deploy()
     }
@@ -23,7 +24,6 @@ struct DoomCoderApp: App {
             MenuBarView(
                 sleepManager: sleepManager,
                 updaterViewModel: updaterViewModel,
-                appDetector: appDetector,
                 agentStatus: agentStatus
             )
             .task { wireAgentBridge() }
@@ -38,15 +38,9 @@ struct DoomCoderApp: App {
             }
         }
 
-        Window("Active Apps", id: "active-apps") {
-            ActiveAppsView(appDetector: appDetector, sleepManager: sleepManager)
-        }
-        .windowResizability(.contentSize)
-
         Window("Settings", id: "settings") {
             SettingsView(
                 sleepManager: sleepManager,
-                appDetector: appDetector,
                 agentStatus: agentStatus,
                 socketServer: socketServer,
                 iPhoneRelay: iPhoneRelay
@@ -64,7 +58,7 @@ struct DoomCoderApp: App {
     //
     // Runs exactly once on first MenuBarExtra render. We start the Unix-socket
     // listener, forward every parsed event to AgentStatusManager, and fan
-    // meaningful state changes out to NotificationManager for macOS banners.
+    // meaningful state changes out to NotificationManager + IPhoneRelay.
     private func wireAgentBridge() {
         guard !socketServer.isRunning else { return }
 
@@ -77,15 +71,6 @@ struct DoomCoderApp: App {
             iPhoneRelay.fire(event: event, session: session)
         }
 
-        // Tier-3 demotion: silence the heuristic notifier whenever the Agent
-        // Bridge has a live, authoritative session running. The bridge path
-        // already fires richer, deterministic banners via NotificationManager.fire.
-        NotificationManager.shared.shouldSuppressHeuristic = {
-            agentStatus.isAnyAgentActive
-        }
-
         _ = socketServer.start()
     }
 }
-
-

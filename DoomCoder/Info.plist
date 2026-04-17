@@ -15,17 +15,21 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.8.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>080</string>
+	<string>100</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Doom Coder uses Messages to send an iMessage to yourself when your AI agent needs attention. This only runs if you enable the iMessage channel in Settings.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Doom Coder reads your Contacts "Me" card to auto-fill your iMessage handle during iPhone setup so you don't have to type it.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>Doom Coder toggles the Doom Coder Focus filter when an AI agent is actively working so other apps can silence notifications automatically.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025 Doom Coder. All rights reserved.</string>
+	<string>Copyright © 2026 Doom Coder. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSRemindersUsageDescription</key>
