@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-04-17
+
+**Single-letter protocol + always-on auto-invoke.**
+The MCP pipeline has been green end-to-end since v1.6, but two UX papercuts
+remained: agents were sending verbose custom `message` strings to the
+server, and most agents only called `dc` when the user explicitly said
+"use doomcoder mcp". v1.7 closes both gaps by locking the protocol to a
+single letter and planting rules in the documented *global* instruction
+files for every supported host.
+
+### Changed
+- **Canonical notification bodies.** DoomCoder no longer forwards the
+  agent's `message` field into ntfy or the mac banner. The body is now
+  derived deterministically from the status letter:
+  - `s` → *"Agent started working"* (silent — attention=false)
+  - `w` → *"Needs your input"*
+  - `e` → *"Hit an error"*
+  - `d` → *"Task complete"*
+  Every delivery reads the same regardless of which model or prompt
+  produced it.
+- **MCP tool schema lock-down.** `dc` now accepts a single parameter:
+  `status` (enum `s|w|e|d`). `message`, `tool`, `cwd`, `sessionKey`, and
+  `repo` have been removed from `inputSchema`. Agents that still send a
+  `message` field because of cached older rules get it silently dropped
+  and a `[mcp-fwd] ignored-message-len=N` line written to stderr so you
+  can monitor compliance in Console.app. `MCPRuntime.version` bumped
+  `6 → 7` so every existing install rewrites `~/.doomcoder/mcp.py` on
+  next launch.
+- **Rules snippet v3 (imperative).** `snippetVersion 2 → 3`. The wording
+  is now explicitly *non-optional, system-level* and tells the agent to
+  "Never require the user to ask for it" — fixing the v1.6 regression
+  where most models would only invoke the protocol after an explicit
+  prompt. Old `v2` blocks are rewritten in place on next install (the
+  sentinel regex already matched any version).
+- **Copilot CLI: dual global rules paths.** DoomCoder now writes the
+  snippet to both `~/.copilot/AGENTS.md` (the file DoomCoder used in
+  v1.4–1.6; kept for backward compat) *and* `~/.copilot/copilot-instructions.md`
+  (Copilot CLI's documented global instructions file). No migration, no
+  deletion — both files get the sentinel block, uninstall strips both,
+  status reports installed if the v3 block is present in either.
+- **Cursor setup note.** Cursor's per-user rules live in Settings → Rules
+  → User Rules and are not writable from outside the app as of April
+  2026. The setup console now surfaces a copy-paste blurb telling the
+  user to paste the snippet there once for every-project auto-invoke.
+
+### Internals
+- `AgentEvent.Status.canonicalBody` — single source of truth for
+  body copy. `IPhoneRelay.fire` and `NotificationManager.fire` both
+  call it; `sendTest` keeps its hand-rolled body.
+- `RulesInstaller.Agent.rulesPaths: [URL]` replaces the old scalar
+  `rulesPath: URL` (kept as a computed back-compat alias returning the
+  primary path). `install` / `uninstall` / `status` / `backupIfPresent`
+  all iterate. Per-path backup filenames include the basename to avoid
+  collision in a shared `backupDir`.
+
+---
+
 ## [1.5.0] - 2026-04-17
 
 **Configure vs. Track — clean separation of setup and live selection.**

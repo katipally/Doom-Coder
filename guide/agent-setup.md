@@ -1,81 +1,49 @@
 # Agent Setup
 
-DoomCoder 0.7 connects to your AI coding agents through **direct lifecycle events** instead of guessing from CPU and file writes. Each supported agent takes 5 seconds to set up.
+DoomCoder tracks your AI coding agents through **deterministic lifecycle events** — no CPU polling, no heuristics. As of v0.8 every supported agent uses the **Model Context Protocol (MCP)**, except for Claude Code which keeps a shell-hook installer for backwards compatibility while its MCP path is adopted.
 
-Open **DoomCoder → Settings → Agent Bridge**. You'll see one card per agent.
-
----
-
-## Tier 1: Shell hooks (Claude Code, Copilot CLI)
-
-These are CLI agents that expose a hook mechanism.
-
-### Claude Code
-
-1. Install Claude Code (if you haven't): `npm install -g @anthropic-ai/claude-code`
-2. In DoomCoder → Agent Bridge → **Claude Code** → click **Set Up**.
-3. DoomCoder writes eight managed hook entries into `~/.claude/settings.json` (`SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Notification`, `UserPromptSubmit`, `Stop`, `SubagentStop`). Your existing hooks are preserved and a timestamped backup is saved next to the file.
-4. The status badge flips to **Connected** the next time you launch `claude`. No relaunch of Claude is required if it isn't already running.
-
-### Copilot CLI
-
-1. Install Copilot CLI (if you haven't): `gh extension install github/gh-copilot` or use the standalone `copilot` binary.
-2. In DoomCoder → Agent Bridge → **Copilot CLI** → click **Set Up**.
-3. DoomCoder installs `~/.copilot/extensions/doomcoder/hook.sh`. This shim forwards lifecycle signals to the bridge and never calls Copilot APIs or touches your token budget.
-
-### What the hooks do
-
-Each hook runs a one-line shell command — `/bin/sh ~/.doomcoder/hook.sh` — that reads the event JSON from stdin, packages it into a 30-byte message, and ships it to the local Unix socket at `~/.doomcoder/dc.sock`. If DoomCoder isn't running or the socket is unavailable, the hook exits 0 immediately so your agent is never blocked.
+Open **DoomCoder → Agents** and pick an agent. Setup is a three-step sheet: Explain → Install → Verify.
 
 ---
 
-## Tier 2: MCP server (Cursor, Windsurf, VS Code, Gemini CLI, Codex)
+## The three-part MCP contract
 
-These agents speak the [Model Context Protocol](https://modelcontextprotocol.io). DoomCoder installs itself as a tiny Python MCP server and exposes a single `dc` tool with a one-character `s` parameter.
+For every MCP agent, DoomCoder installs **three** things and will not flip to "Connected" until all three are confirmed:
 
-Supported:
-- **Cursor** — writes to `~/.cursor/mcp.json`
-- **Windsurf** — writes to `~/.codeium/windsurf/mcp_config.json`
-- **VS Code (MCP)** — writes to `~/Library/Application Support/Code/User/mcp.json`
-- **Gemini CLI** — writes to `~/.gemini/settings.json`
-- **Codex** — writes to `~/.codex/config.toml`
+1. **MCP config entry** — a `doomcoder` server block in the agent's config file (`~/.cursor/mcp.json`, `~/.claude.json`, `~/.copilot/mcp-config.json`, etc.).
+2. **Rules snippet** — a short block added to the agent's rules file (`CLAUDE.md`, `~/.cursor/rules/doomcoder.mdc`, `AGENTS.md`, `GEMINI.md`, …) that tells the agent *when* to call DoomCoder's `dc` tool. Without this step, the MCP server sits idle.
+3. **Two-gate verification** — Setup only turns green after:
+   - `mcp-hello` arrives on `~/.doomcoder/dc.sock` (proves the config was loaded), **and**
+   - a real `dc(...)` tool call arrives (proves the rules were read and honored).
 
-For each: click **Set Up**, then restart the agent. The status badge flips to **Connected** the first time the agent calls the `dc` tool.
+All writes are sentinel-bracketed (`<!-- doomcoder-managed:rules v1 BEGIN ... -->`) and a timestamped backup is kept next to every file DoomCoder touches. Uninstall strips the block and restores the rest unchanged.
 
-### Token cost
+## Supported agents
 
-Because the tool uses a one-character status code (`s/w/i/e/d`), the full call payload is under 140 tokens per state transition. For a 30-minute session with ~50 state changes, that's ≈ 7,000 tokens of overhead — pocket change compared to the agent's actual work.
+| Agent | MCP config | Rules file |
+|---|---|---|
+| Cursor | `~/.cursor/mcp.json` | `~/.cursor/rules/doomcoder.mdc` (standalone) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `~/.codeium/windsurf/memories/global_rules.md` |
+| VS Code (MCP) | `~/Library/Application Support/Code/User/mcp.json` | (user-global instructions) |
+| Claude Code | `~/.claude.json` (+ legacy hook install) | `~/.claude/CLAUDE.md` |
+| Copilot CLI | `~/.copilot/mcp-config.json` | `~/.copilot/AGENTS.md` |
+| Gemini CLI | `~/.gemini/settings.json` | `~/.gemini/GEMINI.md` |
+| Codex | `~/.codex/config.toml` | `~/.codex/AGENTS.md` |
 
-### Prompting the agent to use it
+Anything not in this list: use the **Install Anywhere** tab for a generic MCP snippet.
 
-Most MCP-aware agents notice new tools automatically. If yours doesn't, paste this system prompt fragment:
+## Token cost
 
-> You have a `dc` tool from the `doomcoder` MCP server. Call it at session start, whenever you're waiting on the user, whenever you hit an error, and at session end. The `s` argument is a single character: `s`=start, `i`=info, `w`=wait, `e`=error, `d`=done.
+The `dc` tool uses a single-character status (`s`=start, `w`=wait, `e`=err, `d`=done) plus an optional ≤60-char message. The rules snippet is under 150 tokens. A 30-minute session with ~20 state transitions costs **under 5k tokens of overhead** — negligible.
 
----
+## Verifying
 
-## Tier 3: Heuristic fallback
-
-For any agent without hooks or MCP (Aider, Cline, generic shells), DoomCoder still falls back to the heuristic detector:
-
-- Child-process count (≥ 2)
-- Network receive-buffer delta (> 500 bytes over 2 s)
-- FSEvents bursts in workspace storage (IDEs)
-
-These still fire banners, but **only** when no Tier-1 or Tier-2 session is active. This prevents double-firing when an agent is connected through the bridge.
-
----
+Each agent card exposes a **Send Test** button. For MCP agents this runs a real self-test (DoomCoder spawns its own copy of `mcp.py` and drives the MCP `initialize` handshake) plus shows the timestamp of the last real handshake and last `dc` call observed from the actual agent. No synthetic events.
 
 ## Uninstalling
 
-Each card has an **Uninstall** button that removes DoomCoder's managed entries only — every other hook or MCP server you installed yourself is left untouched. A backup is always kept; click **Restore Backup** to roll back.
+The **Uninstall** button strips only DoomCoder's managed blocks from config + rules files. Backups are kept. Your own rules and MCP servers are never touched.
 
----
+## Troubleshooting
 
-## Verifying it works
-
-1. Open Settings → Agent Bridge.
-2. Look for the **Live sessions** card at the top. When you start a `claude` or `cursor` session, you should see a row appear within a second or two.
-3. Click **Send Test Notification** on any card to inject a synthetic `waiting` event. A macOS banner + iPhone relay should fire immediately.
-
-If nothing appears, see [troubleshooting.md](troubleshooting.md).
+See [troubleshooting.md](troubleshooting.md). Most common issue: an agent that was already running when you pressed Set Up. Fully quit (Cmd+Q for GUI apps, `exit` for CLIs) and start it fresh — MCP configs are read at process start.

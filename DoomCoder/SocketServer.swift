@@ -260,6 +260,15 @@ private final class SocketCore: @unchecked Sendable {
             if buffer.count > maxBytes { buffer = buffer.prefix(maxBytes) }
             if !buffer.isEmpty && buffer.last != 0x0A { buffer.append(0x0A) }
 
+            // [bridge-rx] raw-line log BEFORE parse. If we silently dropped an
+            // event because of a codec bug, this is the only place we can
+            // prove the bytes actually made it across the socket. Truncate
+            // to 512 bytes so oversized payloads don't spam Console.app.
+            if !buffer.isEmpty,
+               let raw = String(data: buffer.prefix(512), encoding: .utf8) {
+                Log.bridgeRx.debug("raw=\(raw.trimmingCharacters(in: .whitespacesAndNewlines), privacy: .public)")
+            }
+
             let events = AgentEventCodec.decode(buffer: &buffer)
             guard !events.isEmpty else { return }
             forward(events)
