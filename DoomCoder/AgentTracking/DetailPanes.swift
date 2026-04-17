@@ -108,10 +108,13 @@ struct SessionDetailPane: View {
     private var actionsCard: some View {
         HStack {
             Button {
+                // Fire a `.wait` event so it clears the `isAttention` guard in
+                // IPhoneRelay.fire; `.info` events are intentionally dropped
+                // because real info-level progress isn't worth a push.
                 let synthetic = AgentEvent(
                     src: .manual,
                     agent: session.agent,
-                    status: .info,
+                    status: .wait,
                     sessionId: session.id,
                     cwd: session.cwd,
                     message: "Test from DoomCoder — this session's settings."
@@ -339,6 +342,9 @@ struct ChannelDetailPane: View {
     @Bindable var iPhoneRelay: IPhoneRelay
     let openSetup: () -> Void
 
+    @State private var permissionMessage: String? = nil
+    @State private var requestingPermission = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -357,7 +363,29 @@ struct ChannelDetailPane: View {
                     }
                     .disabled(!isEnabled)
 
+                    if showsPermissionButton {
+                        Button {
+                            Task { await requestPermission() }
+                        } label: {
+                            if requestingPermission {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label(permissionButtonLabel, systemImage: "hand.raised.fill")
+                            }
+                        }
+                        .disabled(requestingPermission)
+                    }
+
                     Spacer()
+                }
+                if let permissionMessage {
+                    Text(permissionMessage)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial))
                 }
                 if !recentDeliveries.isEmpty {
                     DeliveryLogList(deliveries: recentDeliveries)
@@ -365,6 +393,44 @@ struct ChannelDetailPane: View {
                 Spacer(minLength: 0)
             }
             .padding(20)
+        }
+    }
+
+    private var showsPermissionButton: Bool {
+        switch kind {
+        case .reminder: return !iPhoneRelay.reminder.isReady
+        case .imessage: return iPhoneRelay.imessage.isReady  // has handle; still may need automation
+        case .ntfy:     return false
+        }
+    }
+
+    private var permissionButtonLabel: String {
+        switch kind {
+        case .reminder: return "Request Permission"
+        case .imessage: return "Prime Automation"
+        case .ntfy:     return ""
+        }
+    }
+
+    private func requestPermission() async {
+        requestingPermission = true
+        defer { requestingPermission = false }
+        switch kind {
+        case .reminder:
+            let granted = await iPhoneRelay.reminder.requestAccess()
+            permissionMessage = granted
+                ? "Reminders access granted."
+                : "Reminders access denied. Enable it in System Settings → Privacy & Security → Reminders → DoomCoder."
+        case .imessage:
+            let result = await iPhoneRelay.imessage.primeAutomationPermission()
+            switch result {
+            case .success:
+                permissionMessage = "Automation permission granted for Messages.app. You can now Send Test."
+            case .failure(let reason):
+                permissionMessage = reason
+            }
+        case .ntfy:
+            break
         }
     }
 
