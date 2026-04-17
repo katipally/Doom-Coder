@@ -1,28 +1,10 @@
 import Foundation
 import Observation
 
-// MARK: - WatchTarget
-//
-// v1.5: replaces the old `watchedSessionKey: String` model with a small
-// explicit enum so the menubar's Track submenu can represent three
-// mutually-exclusive states cleanly:
-//   • .none           — silent; no notifications fire at all
-//   • .all            — every *configured* agent fires (default)
-//   • .agentType(id)  — only sessions whose agent id matches fire
-//
-// Per-instance (`.session(id)`) tracking was removed in v1.5 — instances
-// were unstable between launches and users found them confusing.
-
-enum WatchTarget: Codable, Hashable, Sendable {
-    case none
-    case all
-    case agentType(String)
-}
-
 // MARK: - AgentStatusManager
 //
-// Central state machine that consumes events from SocketServer (hooks + MCP) and
-// keeps a list of live sessions. Drives every downstream effect:
+// Central state machine that consumes events from SocketServer (MCP + legacy hook
+// wire format) and keeps a list of live sessions. Drives every downstream effect:
 //   • SleepManager — any active (non-done) session extends the wake assertion
 //   • NotificationManager — attention events (wait/error/done) produce banners
 //   • IPhoneRelay (Phase C) — same attention events produce iPhone notifications
@@ -78,10 +60,6 @@ final class AgentStatusManager {
     // the config AND read the rules snippet — the two-gate setup contract.
     // Persisted under `dc.mcpLastToolCallAt`.
     @ObservationIgnored private(set) var mcpLastToolCallAt: [String: Date] = [:]
-    // Set to `true` per agent id when HookRoundTripTest reports success.
-    // Persisted across launches under `dc.didRoundTrip` so a hook agent
-    // stays "Configured" between restarts.
-    @ObservationIgnored private(set) var didRoundTrip: [String: Bool] = [:]
     // Sticky "this agent finished setup successfully at least once" flag.
     // Persisted under `dc.configuredAgentIds`. Only cleared on explicit
     // Uninstall. Decouples the Track UI from live handshake state so a
@@ -89,35 +67,27 @@ final class AgentStatusManager {
     @ObservationIgnored private(set) var configuredAgentIds: Set<String> = []
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
-    // Round-trip test continuations keyed by nonce. A nonce is set by
-    // HookRoundTripTest via the DC_TEST_NONCE env var; when hook.sh echoes it
-    // back in an event, we resume the continuation and consume the event
-    // without creating a session row.
+    // Round-trip test continuations keyed by nonce. Reserved for future MCP
+    // round-trip tests; currently unused (MCPRoundTripTest polls mcpHelloAt
+    // directly rather than via continuations).
     @ObservationIgnored private var roundTripWaiters: [String: CheckedContinuation<AgentEvent, Never>] = [:]
 
     // MARK: - Init / Deinit
 
     init() {
-        // v1.5: restore the new WatchTarget model. We also honour the legacy
-        // `dc.watchedSessionKey` key one last time — empty → .all, anything
-        // else → .all too (the old session ids were unstable across launches
-        // so carrying them forward is worse than starting clean).
+        // v1.8: replaced WatchTarget (.none/.all/.agentType) with a
+        // per-agent Set<String>. Migration from the old Data-encoded key
+        // lives in LegacyDefaults.migrate(); by the time we get here, only
+        // the new key should exist.
         let ud = UserDefaults.standard
-        if let data = ud.data(forKey: "dc.watchTarget"),
-           let decoded = try? JSONDecoder().decode(WatchTarget.self, from: data) {
-            self.watchTarget = decoded
-        } else if let legacy = ud.string(forKey: "dc.watchedSessionKey") {
-            self.watchTarget = legacy.isEmpty ? .all : .all
-            ud.removeObject(forKey: "dc.watchedSessionKey")
+        if let arr = ud.array(forKey: "dc.watchedAgentIds") as? [String] {
+            self.watchedAgentIds = Set(arr)
         } else {
-            self.watchTarget = .all
+            self.watchedAgentIds = []
         }
 
         // Restore the per-agent "configured" flags. Any missing entry means
         // the agent has never been verified → not configured yet.
-        if let raw = ud.dictionary(forKey: "dc.didRoundTrip") as? [String: Bool] {
-            self.didRoundTrip = raw
-        }
         if let raw = ud.dictionary(forKey: "dc.mcpHelloAt") as? [String: Double] {
             self.mcpHelloAt = raw.mapValues { Date(timeIntervalSince1970: $0) }
         }
@@ -269,43 +239,35 @@ final class AgentStatusManager {
 
     // MARK: - Public config
 
-    // v1.5: tri-state target for which agents fire notifications.
-    //   • .none            — silent
-    //   • .all             — every configured agent (default)
-    //   • .agentType(id)   — only sessions from this agent id
-    // `isWatched(_:)` below applies the gate. The menubar's Track submenu
-    // and the Configure window's per-agent "Track" button both write here.
-    var watchTarget: WatchTarget = .all {
+    // v1.8: per-agent tracking toggles. An agent fires notifications only if
+    //   • it's in watchedAgentIds, AND
+    //   • it's configured (see isAgentConfigured).
+    // The menubar and the Configure sidebar both present these as per-agent
+    // toggles bound directly to this set.
+    var watchedAgentIds: Set<String> = [] {
         didSet {
-            if let data = try? JSONEncoder().encode(watchTarget) {
-                UserDefaults.standard.set(data, forKey: "dc.watchTarget")
-            }
+            UserDefaults.standard.set(Array(watchedAgentIds),
+                                      forKey: "dc.watchedAgentIds")
         }
     }
 
     // MARK: - Configured-agent helpers
 
     // An agent counts as "configured" once the user has proven their wiring
-    // end-to-end during Setup — for MCP that means the mcp.py handshake was
-    // received (config loaded); for Hook that means the round-trip test
-    // succeeded. Both facts are persisted under `dc.configuredAgentIds` and
-    // only cleared on explicit Uninstall. This decouples Track-UI enablement
-    // from live handshake timing so a previously-verified agent stays
-    // tickable across restarts and idle periods.
+    // end-to-end during Setup — the mcp.py handshake was received (config
+    // loaded) at least once. Persisted under `dc.configuredAgentIds` and
+    // only cleared on explicit Uninstall. This decouples Track-UI
+    // enablement from live handshake timing so a previously-verified agent
+    // stays tickable across restarts and idle periods.
     func isAgentConfigured(_ id: String) -> Bool {
         if configuredAgentIds.contains(id) { return true }
         // Backwards-compat: an older build may have verified the agent
-        // without writing the sticky flag. If its live dicts show both
-        // gates, treat as configured and upgrade the flag lazily.
+        // without writing the sticky flag. If its live dicts show the
+        // handshake, treat as configured.
         if let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == id }) {
             let status = MCPInstaller.status(for: mcp)
             let hasConfig = (status == .live || status == .configWritten || status == .modified)
             if hasConfig && mcpHelloAt[id] != nil {
-                return true
-            }
-        }
-        if let hook = HookInstaller.Agent(rawValue: id) {
-            if HookInstaller.status(for: hook).isInstalled && (didRoundTrip[id] ?? false) {
                 return true
             }
         }
@@ -336,11 +298,12 @@ final class AgentStatusManager {
         AgentCatalog.all.filter { isAgentConfigured($0.id) }
     }
 
-    // Called by HookRoundTripTest on success. Persists the flag so a future
-    // launch still considers the agent configured without re-running the test.
+    // Called by HookRoundTripTest on success (legacy path, removed in v1.8).
+    // Retained as a no-op stub only if any dead call site remains; otherwise
+    // this method is unused.
     func markRoundTripSuccess(agentId: String) {
-        didRoundTrip[agentId] = true
-        UserDefaults.standard.set(didRoundTrip, forKey: "dc.didRoundTrip")
+        // v1.8: hooks removed; MCP path calls markConfigured directly.
+        markConfigured(agentId)
     }
 
     // MARK: - Helpers
@@ -355,19 +318,13 @@ final class AgentStatusManager {
     }
 
     // Returns true if the session should feed the downstream notification
-    // pipeline. The gate honours the user's WatchTarget:
-    //   • .none            — never fire
-    //   • .all             — fire only for agents that are already configured
-    //   • .agentType(id)   — fire only if the session's agent id matches
+    // pipeline. v1.8: per-agent gate — the agent must be in watchedAgentIds
+    // AND configured. "Configured but not watched" is explicitly silent
+    // (user turned it off); "watched but not configured" is guarded so a
+    // stale toggle from before Uninstall doesn't leak through.
     func isWatched(_ session: AgentSession) -> Bool {
-        switch watchTarget {
-        case .none:
-            return false
-        case .all:
-            return isAgentConfigured(session.agent)
-        case .agentType(let id):
-            return session.agent == id
-        }
+        guard watchedAgentIds.contains(session.agent) else { return false }
+        return isAgentConfigured(session.agent)
     }
 
     private func deliver(_ session: AgentSession, event: AgentEvent, now: Date) {
@@ -376,7 +333,7 @@ final class AgentStatusManager {
         // the sidebar is honest about what's happening), but no banner,
         // iPhone push, or sleep-extend fires for unwatched sessions.
         guard isWatched(session) else {
-            Log.gate.info("drop reason=not-watched agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) target=\(String(describing: self.watchTarget), privacy: .public)")
+            Log.gate.info("drop reason=not-watched agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) watched=\(self.watchedAgentIds.count, privacy: .public)")
             recordRecent(event, gate: .droppedNotWatched)
             return
         }

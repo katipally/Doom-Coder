@@ -106,7 +106,7 @@ struct AgentTrackingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .navigationTitle("Agents & Channels")
+        .navigationTitle("Configure Agents")
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {

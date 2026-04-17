@@ -71,16 +71,17 @@ private struct AgentRow: View {
             installBadge
             Text(info.displayName)
             Spacer()
-            // v1.5: one-click "Track" button on Ready rows. Disabled (and
-            // dimmed) for unconfigured agents so the affordance is still
-            // visible but clearly not yet usable.
+            // v1.8: per-agent Track toggle bound directly to watchedAgentIds.
+            // Disabled (and dimmed) for unconfigured agents so the
+            // affordance is still visible but clearly not yet usable.
             let configured = agentStatus.isAgentConfigured(info.id)
-            let isTracked: Bool = {
-                if case .agentType(let id) = agentStatus.watchTarget { return id == info.id }
-                return false
-            }()
+            let isTracked  = agentStatus.watchedAgentIds.contains(info.id)
             Button {
-                agentStatus.watchTarget = isTracked ? .all : .agentType(info.id)
+                if isTracked {
+                    agentStatus.watchedAgentIds.remove(info.id)
+                } else {
+                    agentStatus.watchedAgentIds.insert(info.id)
+                }
             } label: {
                 Label(isTracked ? "Tracking" : "Track",
                       systemImage: isTracked ? "eye.fill" : "eye")
@@ -93,11 +94,11 @@ private struct AgentRow: View {
             .opacity(configured ? 1.0 : 0.35)
             .help(configured
                   ? (isTracked
-                     ? "Currently tracking this agent. Click to revert to Track all."
-                     : "Notify only for \(info.displayName).")
+                     ? "Tracking is ON — \(info.displayName) will fire notifications."
+                     : "Tracking is OFF — notifications suppressed for \(info.displayName).")
                   : "Complete setup first — this agent hasn't been verified yet.")
 
-            Text(info.tier == .hook ? "Hook" : "MCP")
+            Text("MCP")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -109,28 +110,16 @@ private struct AgentRow: View {
     }
 
     private var installBadge: StatusBadge {
-        if info.tier == .hook {
-            if let hook = HookInstaller.Agent(rawValue: info.id) {
-                switch HookInstaller.status(for: hook) {
-                case .installed:                return StatusBadge(.ready)
-                case .partial:                  return StatusBadge(.warn)
-                case .notInstalled:             return StatusBadge(.off)
-                case .missingHookScript:        return StatusBadge(.error)
-                }
+        if let mcp = Self.mcpAgent(for: info.id) {
+            switch MCPInstaller.status(for: mcp) {
+            case .live:                    return StatusBadge(.ready)
+            case .configWritten:           return StatusBadge(.warn)
+            case .modified:                return StatusBadge(.warn)
+            case .notInstalled:            return StatusBadge(.off)
+            case .missingConfig:           return StatusBadge(.error)
             }
-            return StatusBadge(.off)
-        } else {
-            if let mcp = Self.mcpAgent(for: info.id) {
-                switch MCPInstaller.status(for: mcp) {
-                case .live:                    return StatusBadge(.ready)
-                case .configWritten:           return StatusBadge(.warn)
-                case .modified:                return StatusBadge(.warn)
-                case .notInstalled:            return StatusBadge(.off)
-                case .missingConfig:           return StatusBadge(.error)
-                }
-            }
-            return StatusBadge(.off)
         }
+        return StatusBadge(.off)
     }
 
     static func mcpAgent(for catalogId: String) -> MCPInstaller.Agent? {

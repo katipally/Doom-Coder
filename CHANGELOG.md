@@ -7,7 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.7.1] - 2026-04-17
+## [1.8.0] - 2026-04-20
+
+**Full UX overhaul — naming, tracking, Cursor, and transport cleanup.**
+DoomCoder v1.8 is the polish release: every window, menu, and setup flow
+has been renamed for clarity; Tracking is now per-agent toggles instead
+of a single radio selection; Cursor has a dedicated paste-to-User-Rules
+workflow so it fires globally instead of only on direct mention; and the
+legacy hook transport has been deleted entirely — every agent now uses
+MCP.
+
+### Renamed
+
+- **"Full" mode → "Screen On"** (display stays on, Mac awake). "Screen Off"
+  mode keeps its name (display sleeps, Mac stays awake). Persisted
+  mode value `"full"` auto-migrates to `"screenOn"`.
+- **"DoomCoder Doctor" window → "Doctor"**.
+- **"Agents & Channels" window → "Configure Agents"**.
+- Menu item copy polished throughout the menubar popover.
+
+### Tracking refactor
+
+- `WatchTarget` (`.none` / `.all` / `.agentType`) is gone. Tracking is
+  now a `Set<String>` of watched agent IDs — one toggle per configured
+  agent in the menubar's Track submenu and in the Configure sidebar.
+- Gate still requires BOTH watched AND configured, so toggling an
+  unconfigured agent is a no-op.
+- Saved `dc.watchTarget` auto-migrates to `dc.watchedAgentIds` on first
+  launch (`.all` → every configured agent, `.agentType(x)` → `{x}`,
+  `.none` → empty).
+
+### Cursor
+
+- Setup sheet now surfaces a prominent **"Cursor requires one extra
+  paste"** callout with a **Copy snippet** button and an **Open Cursor**
+  button that opens Cursor → Settings (via `cursor://settings`).
+- Rationale: `~/.cursor/rules/doomcoder.mdc` only auto-attaches for
+  projects rooted at your home folder. For every-project coverage the
+  snippet has to live in Cursor's User Rules, which Cursor does not
+  expose as a writable file as of April 2026.
+
+### Removed (transport cleanup)
+
+- Deleted `HookInstaller.swift`, `HookRuntime.swift`, `HookRoundTripTest.swift`.
+- Removed every UI branch that tested `info.tier == .hook`. The `tier`
+  field is gone; every agent is MCP.
+- `AgentEvent.Source.hook` enum case is retained for wire-format
+  back-compat (old hook scripts still emit `src:"hook"`), but default
+  decode is now `.mcp`, and no new hook installations are created.
+- `dc.didRoundTrip` UserDefaults dict is cleared on migration.
+- **Upgrade note:** if you previously ran a hook install, the shell
+  config line will still be on disk. Re-run Setup for each agent in the
+  Configure window to switch cleanly to MCP. The old line is inert
+  without the hook runtime script, which v1.8 no longer deploys.
+
+### Assets + docs
+
+- `logo.png` and `logo-doomcoder.png` moved to `assets/`. README
+  references updated; `.gitignore` simplified.
+
+---
+
+
 
 **"End is mandatory" rule hardening.**
 Rules snippet v4 + MCP tool description v8 reframe the protocol as
