@@ -344,8 +344,6 @@ struct ChannelSetupSheet: View {
 
     private var explainBody: String {
         switch kind {
-        case .calendar:
-            return "DoomCoder creates a short event with a 3-second alarm on a dedicated DoomCoder calendar stored in iCloud. Every Apple device signed into your iCloud account — iPhone, iPad, Apple Watch — plays the alarm locally. This is the most reliable delivery mechanism Apple exposes: the alarm fires even if Focus is on, and never lands in Recently Deleted."
         case .ntfy:
             return "DoomCoder posts each notification to a private ntfy.sh topic. Install the ntfy iOS app and subscribe to your topic. Works even when you're not on the Apple ecosystem. Free."
         }
@@ -354,36 +352,22 @@ struct ChannelSetupSheet: View {
     private var explainView: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(explainBody)
-            if kind == .calendar {
-                Label("Uses EventKit + iCloud calendar sync. Ensure Settings → [Your Name] → iCloud → Calendars is ON on both devices.", systemImage: "icloud")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
         }
     }
 
     private var installView: some View {
         VStack(alignment: .leading, spacing: 12) {
             switch kind {
-            case .calendar:
-                Text("Click **Continue** to request Calendars access. macOS will prompt once. DoomCoder creates a 'DoomCoder' calendar on iCloud and uses it exclusively.")
-                Toggle("Enable Calendar channel", isOn: Binding(
-                    get: { relay.calendar.isEnabled },
-                    set: { relay.calendar.isEnabled = $0 }
-                ))
             case .ntfy:
                 Text("Your private topic (random by default — keep it secret):")
                 HStack {
-                    TextField("doom-xxxxxxxxxx", text: Binding(
+                    TextField("dc-xxxxxxxx", text: Binding(
                         get: { relay.ntfy.topic },
                         set: { relay.ntfy.topic = $0 }
                     ))
                     .textFieldStyle(.roundedBorder)
                     Button("Generate") { relay.ntfy.generateTopicIfNeeded() }
                 }
-                Toggle("Enable ntfy channel", isOn: Binding(
-                    get: { relay.ntfy.isEnabled },
-                    set: { relay.ntfy.isEnabled = $0 }
-                ))
 
                 if let deepLink = relay.ntfy.deepLinkURL,
                    let subURL = relay.ntfy.subscriptionURL {
@@ -538,23 +522,21 @@ struct ChannelSetupSheet: View {
     private func advance() {
         switch step {
         case .explain:
-            if kind == .calendar {
-                busy = true
-                statusLine = "Requesting access…"
-                Task {
-                    let ok = await relay.calendar.requestAccess()
-                    statusLine = ok ? "✓ Calendar access granted — DoomCoder calendar ready." : "✗ Access denied. Open System Settings → Privacy & Security → Calendars."
-                    if ok { relay.calendar.isEnabled = true }
-                    busy = false
-                    step = .install
-                }
-            } else {
+            switch kind {
+            case .ntfy:
                 relay.ntfy.generateTopicIfNeeded()
                 step = .install
             }
         case .install:
             step = .verify
         case .verify:
+            // Ensure this channel becomes the active delivery method once
+            // setup is complete, so the very next agent event actually lands.
+            if relay.ntfy.isReady {
+                switch kind {
+                case .ntfy: relay.selectedChannelID = "ntfy"
+                }
+            }
             onDone()
         }
     }
@@ -566,19 +548,10 @@ struct ChannelSetupSheet: View {
         verifyOutput = "Sending…"
         Task {
             switch kind {
-            case .calendar:
-                let r = await relay.calendar.runICloudRoundTripTest()
-                switch r {
-                case .success(let latency):
-                    verifyOutput = String(format: "✓ iCloud round-trip: %.2fs. In 3s your iPhone's alarm will fire.", latency)
-                    relay.sendTest(channel: "Calendar")
-                case .failure(let err):
-                    verifyOutput = "✗ \(err.localizedDescription)"
-                }
             case .ntfy:
-                relay.sendTest(channel: "ntfy")
+                relay.sendTest(channelID: "ntfy")
                 try? await Task.sleep(for: .seconds(2))
-                if let d = relay.deliveryLog.first(where: { $0.channel == "ntfy" }) {
+                if let d = relay.deliveryLog.first(where: { $0.channel == "ntfy.sh" }) {
                     verifyOutput = d.success ? "✓ \(d.detail). Check your ntfy iOS app." : "✗ \(d.detail)"
                 } else {
                     verifyOutput = "Dispatched."
