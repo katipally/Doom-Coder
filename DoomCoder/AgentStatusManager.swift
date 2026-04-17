@@ -64,6 +64,8 @@ final class AgentStatusManager {
     // MARK: - Init / Deinit
 
     init() {
+        // Restore watch target from last launch. Empty string = watch all.
+        self.watchedSessionKey = UserDefaults.standard.string(forKey: "dc.watchedSessionKey") ?? ""
         startReaperTimer()
     }
 
@@ -135,6 +137,21 @@ final class AgentStatusManager {
         if event.status == .done { schedulePrune(sessionId: key, delay: 5) }
     }
 
+    // MARK: - Public config
+
+    // v1.4: when non-empty, only the matching session fires notifications.
+    // The whole sidebar still shows every session for visibility, but the
+    // downstream pipeline (onSessionUpdated → NotificationManager → iPhone)
+    // is gated strictly. Empty string means "watch all" (legacy behavior).
+    var watchedSessionKey: String = "" {
+        didSet {
+            // Persist the choice across launches. @AppStorage in the menubar
+            // view mirrors this value; we store the key here for the manager
+            // to consult without pulling in SwiftUI.
+            UserDefaults.standard.set(watchedSessionKey, forKey: "dc.watchedSessionKey")
+        }
+    }
+
     // MARK: - Helpers
 
     private func stateFor(_ status: AgentEvent.Status) -> AgentSession.State {
@@ -146,7 +163,21 @@ final class AgentStatusManager {
         }
     }
 
+    // Returns true if the session should feed the downstream notification
+    // pipeline. When `watchedSessionKey` is empty we allow everything (legacy
+    // behavior / fresh install). Otherwise, only the exact key fires.
+    func isWatched(_ session: AgentSession) -> Bool {
+        if watchedSessionKey.isEmpty { return true }
+        return session.id == watchedSessionKey
+    }
+
     private func deliver(_ session: AgentSession, event: AgentEvent, now: Date) {
+        // Strict watch filter: drop everything not matching the user's
+        // selection from the menubar. The session row still updates (so
+        // the sidebar is honest about what's happening), but no banner,
+        // iPhone push, or sleep-extend fires for unwatched sessions.
+        guard isWatched(session) else { return }
+
         // Dedup window guard for attention events. Non-attention events always pass.
         if event.status.isAttention {
             let tool = event.tool ?? ""
