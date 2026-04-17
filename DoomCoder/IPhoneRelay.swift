@@ -47,6 +47,8 @@ final class IPhoneRelay {
     private(set) var deliveryLog: [Delivery] = []
     private let maxLog = 50
 
+    func clearDeliveryLog() { deliveryLog.removeAll() }
+
     // MARK: Channels
 
     let reminder = ReminderChannel()
