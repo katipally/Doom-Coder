@@ -7,10 +7,10 @@
         <language>en</language>
         <item>
             <title>Version 1.7.0</title>
-            <pubDate>Fri, 17 Apr 2026 11:09:48 +0000</pubDate>
+            <pubDate>Fri, 17 Apr 2026 11:11:48 +0000</pubDate>
             <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v1.7.0</sparkle:releaseNotesLink>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v1.7.0/DoomCoder-1.7.0.zip" sparkle:version="170" sparkle:shortVersionString="1.7.0" sparkle:edSignature="Fo7dzvhw/BKdm0A13Wjp4RLXL09caPsbOgKDGqY/m10M2AzlU8wp37tT3z4ZejZYQE/NLsxF/u3khb3l543DDw==" length="5602042" type="application/octet-stream" />
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v1.7.0/DoomCoder-1.7.0.zip" sparkle:version="170" sparkle:shortVersionString="1.7.0" sparkle:edSignature="uqCUh1ttLCbn18t9HTL6Apt3/xd6SMPxfITlUZ/sCWOk3j8XMwWwMzBNdm1YxzVVcXaUWWRgtXoiqj8M/pU9DQ==" length="5821310" type="application/octet-stream" />
         </item>
         <item>
             <title>Version 1.5.0</title>
