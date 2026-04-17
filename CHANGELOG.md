@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2026-04-17
+
+**"End is mandatory" rule hardening.**
+Rules snippet v4 + MCP tool description v8 reframe the protocol as
+"your turn is not complete until you call `dc(status='d')`" — including
+trivial chat replies, refusals, and error paths. Agents in 2026 had
+been skipping the final `d` on short-form replies where they didn't
+invoke any other tool; this pass makes the terminal `d` explicitly
+required on EVERY turn with no opt-out.
+
+### Changes
+- `RulesInstaller.snippetVersion` 3 → 4. New wording: "Your turn is NOT
+  complete until you have called `dc(status='d')`. This applies to EVERY
+  user turn without exception — simple chat replies, refusals, and
+  errors included." Existing v3 blocks auto-replace via the sentinel.
+- `MCPRuntime.version` 7 → 8 forces `mcp.py` redeploy. Tool description
+  mirrors the rules wording so agents that ignore global rules still see
+  the "REQUIRED for every turn" text in the tool schema itself.
+- `s` downgraded to optional-for-trivial-turns; `d` stays mandatory.
+
 ## [1.7.0] - 2026-04-17
 
 **Single-letter protocol + always-on auto-invoke.**
