@@ -184,10 +184,12 @@ final class CalendarChannel: IPhoneChannel, @unchecked Sendable {
     /// events without touching anything the user created.
     static let sentinel = "[dc-alarm/v1]"
 
-    /// How far in the future to schedule the alarm. Short enough to feel
-    /// instant, long enough for the event to propagate through iCloud to the
-    /// iPhone before its alarm fires locally.
-    var alarmOffsetSeconds: TimeInterval = 3
+    /// How far in the future to schedule the alarm. Must be long enough for
+    /// the event to propagate from this Mac → iCloud → iPhone *before* the
+    /// iPhone fires the alarm locally. Real-world iCloud CalDAV push latency
+    /// is typically 2-8 s, with occasional 15 s tails; we pick 15 s to stay
+    /// well inside the tail while still feeling prompt.
+    var alarmOffsetSeconds: TimeInterval = 15
 
     var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: IPhoneRelay.Keys.calendarEnabled) }
@@ -265,13 +267,18 @@ final class CalendarChannel: IPhoneChannel, @unchecked Sendable {
         event.startDate = start
         event.endDate   = end
 
-        // Relative offset 0 = fire at startDate. The startDate itself is
-        // already in the near future, so the alarm lands shortly after sync.
+        // Two alarms for redundancy: the main one at startDate, and a second
+        // 5 s earlier as a fallback in case the phone's local alarm evaluator
+        // rounds in the wrong direction. Both are plain display alarms — no
+        // URL, no sound override (some macOS logs warn about URLs on alarms
+        // when the process isn't entitled; we don't need them).
         event.addAlarm(EKAlarm(relativeOffset: 0))
+        event.addAlarm(EKAlarm(relativeOffset: -5))
 
+        let sourceTag = cal.source.sourceType == .calDAV ? "iCloud" : "Local"
         do {
             try store.save(event, span: .thisEvent, commit: true)
-            return .success(detail: "Alarm set on \(cal.title) in \(Int(alarmOffsetSeconds))s")
+            return .success(detail: "\(sourceTag) alarm in \(Int(alarmOffsetSeconds))s (\(cal.title))")
         } catch {
             return .failure(reason: error.localizedDescription)
         }
@@ -389,13 +396,14 @@ final class NtfyChannel: IPhoneChannel, @unchecked Sendable {
         !topic.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Seed a random, unguessable topic so the user can subscribe before they
-    /// ever receive a message. 22 base32-ish chars.
+    /// Seed a short, random, unguessable topic. 8 hex chars ≈ 32 bits of
+    /// entropy — enough for a private topic, short enough to type on a
+    /// phone if the deep link path fails.
     func generateTopicIfNeeded() {
         if topic.trimmingCharacters(in: .whitespaces).isEmpty {
-            let bytes = (0..<14).map { _ in UInt8.random(in: 0...255) }
-            let b32 = bytes.map { String(format: "%02x", $0) }.joined()
-            topic = "doom-\(b32.prefix(22))"
+            let bytes = (0..<4).map { _ in UInt8.random(in: 0...255) }
+            let hex = bytes.map { String(format: "%02x", $0) }.joined()
+            topic = "dc-\(hex)"
         }
     }
 
