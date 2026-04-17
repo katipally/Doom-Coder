@@ -24,7 +24,7 @@ enum MCPRuntime {
 
     /// Bumped on every edit of `pythonSource`. Written as a comment stamp at
     /// the top of the deployed script so we know when to re-deploy.
-    static let version: Int = 4
+    static let version: Int = 7
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -131,18 +131,52 @@ enum MCPRuntime {
             return False, str(e)
 
     def _forward(args):
+        # v7: the server *always* stamps agent = _AGENT (the CLI arg the host
+        # IDE launched us with). We used to trust args.get("agent", _AGENT) —
+        # but LLMs would hallucinate ids like "test-agent" and the downstream
+        # watch-gate would drop the event as unknown. Ignoring the LLM value
+        # entirely removes a whole class of silent-drop bugs. The agent field
+        # is also removed from the tool's inputSchema so the model has one
+        # less knob to misuse.
+        #
+        # v7: `message` (and every other field beyond `status`) is also
+        # ignored. DoomCoder now synthesises a canonical notification body
+        # from the status letter alone — the agent's free-form message would
+        # only dilute the signal (and costs tokens for no benefit). If an
+        # agent still sends one because it loaded an old rules snippet, we
+        # log its length to stderr so compliance can be monitored, then
+        # drop it.
+        ignored_msg_len = 0
+        if args.get("message"):
+            try:
+                ignored_msg_len = len(str(args["message"]))
+            except Exception:
+                ignored_msg_len = -1
         evt = {
             "src":   "mcp",
-            "agent": str(args.get("agent", _AGENT))[:64],
+            "agent": _AGENT,
             "s":     str(args.get("status", "i"))[:1],
             "t":     int(time.time()),
         }
-        if args.get("message"):    evt["m"]     = str(args["message"])[:512]
-        if args.get("tool"):       evt["tool"]  = str(args["tool"])[:128]
-        if args.get("cwd"):        evt["cwd"]   = str(args["cwd"])[:512]
-        if args.get("sessionKey"): evt["sid"]   = str(args["sessionKey"])[:128]
-        if args.get("repo"):       evt["event"] = str(args["repo"])[:128]
-        return _socket_write(evt)
+        ok, err = _socket_write(evt)
+        # Hop-tag log — shows up in Console.app filtered by the IDE's stderr
+        # routing (Cursor / VS Code / Copilot CLI all surface subprocess
+        # stderr). Lets us grep for `[mcp-fwd]` when chasing silent drops.
+        try:
+            extra = ""
+            if ignored_msg_len:
+                extra += " ignored-message-len=%d" % ignored_msg_len
+            if err:
+                extra += " err=" + err
+            sys.stderr.write(
+                "[mcp-fwd] agent=%s status=%s ok=%s%s\\n" % (
+                    _AGENT, evt["s"], ok, extra
+                )
+            )
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return ok, err
 
     def _emit_hello(client_name=""):
         # Fire once on initialize — proves to DoomCoder that the agent picked
@@ -163,24 +197,25 @@ enum MCPRuntime {
     _TOOLS = [{
         "name": "dc",
         "description": (
-            "Notify DoomCoder that this AI agent changed state. Call whenever "
-            "you start or finish work, or are waiting for the user. Pass the "
-            "agent id (e.g. 'cursor', 'windsurf', 'gemini-cli') and a one-char "
-            "status: 's' start, 'w' waiting-for-input, 'i' info/progress, "
-            "'e' error, 'd' done."
+            "PROTOCOL (required, not optional — system-level). You MUST call "
+            "this exactly once at each lifecycle boundary of every user turn. "
+            "Send ONLY the single-letter `status` argument — no other fields: "
+            "status='s' at the FIRST reasoning step of the turn; "
+            "status='w' IMMEDIATELY BEFORE asking the user a clarifying "
+            "question; status='e' on any unrecoverable error; status='d' at "
+            "the FINAL step, before your user-facing reply. Do NOT narrate "
+            "or announce the call. Do NOT include a `message` field — "
+            "DoomCoder fills in the notification text itself. Never skip. "
+            "Do NOT call on every tool use — lifecycle only."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "agent":      {"type": "string"},
-                "status":     {"type": "string", "enum": ["s","w","i","e","d"]},
-                "message":    {"type": "string"},
-                "tool":       {"type": "string"},
-                "cwd":        {"type": "string"},
-                "sessionKey": {"type": "string"},
-                "repo":       {"type": "string"}
+                "status":     {"type": "string", "enum": ["s","w","e","d"],
+                               "description": "s=start, w=waiting-for-user-input, e=error, d=done"}
             },
-            "required": ["agent", "status"]
+            "required": ["status"],
+            "additionalProperties": False
         }
     }]
 

@@ -156,6 +156,7 @@ struct AgentDetailPane: View {
                 if !lastActionOutput.isEmpty {
                     outputBox
                 }
+                liveFeed
                 Spacer(minLength: 0)
             }
             .padding(20)
@@ -278,7 +279,7 @@ struct AgentDetailPane: View {
                     .disabled(busy)
             }
 
-            Button("Send Test") { sendTest() }
+            Button(busy ? "Running…" : "Doctor") { runDoctor() }
                 .disabled(busy)
 
             Spacer()
@@ -321,10 +322,12 @@ struct AgentDetailPane: View {
                 if let info, info.tier == .hook,
                    let hook = HookInstaller.Agent(rawValue: info.id) {
                     let msg = try HookInstaller.uninstall(hook)
+                    agentStatus.unmarkConfigured(info.id)
                     lastActionOutput = "✓ Uninstalled\n\(msg)"
                 } else if let info, info.tier == .mcp,
                           let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
                     _ = try MCPInstaller.uninstall(mcp)
+                    agentStatus.unmarkConfigured(info.id)
                     lastActionOutput = "✓ Uninstalled \(mcp.displayName)"
                 }
             } catch {
@@ -333,36 +336,215 @@ struct AgentDetailPane: View {
         }
     }
 
-    private func sendTest() {
-        // For hook agents, run the real round-trip test — it's the ground
-        // truth for whether hook.sh actually reaches DoomCoder. For
-        // non-hook agents (MCP-only), fall back to the synthetic inject.
-        if let info, info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id) {
-            busy = true
-            lastActionOutput = "Running round-trip test…"
-            Task {
-                defer { busy = false }
-                let res = await HookRoundTripTest.run(
-                    agent: hook,
-                    statusManager: agentStatus
-                )
-                switch res {
-                case .success(let s):
-                    lastActionOutput = "✓ Round-trip \(s.millis) ms — hook → DoomCoder pipe is live."
-                case .failure(let f):
-                    lastActionOutput = "✗ \(f.errorDescription ?? "round-trip failed")"
-                }
-            }
+    // MARK: - Doctor (end-to-end plumbing audit)
+    //
+    // Replaces the old `sendTest` that only proved the relay→ntfy hop. Runs
+    // the FULL pipeline and reports per-hop status so the user can tell
+    // silent-drop bugs apart at a glance:
+    //
+    //   1. [mcp-fwd]    — spawn real mcp.py + send `tools/call dc` over stdio
+    //   2. [bridge-rx]  — Unix socket read (implicit: selfTest only succeeds
+    //                     if the hello line made it through the socket)
+    //   3. [ingest]     — AgentStatusManager.lastHello set for selfTestAgent
+    //   4. [gate]       — send a real `.wait` event through isWatched
+    //   5. [deliver]    — iPhoneRelay.fire accepted the attention event
+    //   6. [ntfy-post]  — ntfy.sh returned 2xx (checked via deliveryLog)
+    //
+    // For each hop we append a ✓/✗ line to lastActionOutput. Doctor is
+    // chatty on purpose: it's the thing the user consults when the phone
+    // doesn't buzz.
+    private func runDoctor() {
+        guard let info else {
+            lastActionOutput = "No doctor available for this agent."
             return
         }
-        agentStatus.injectTest(
-            agent: agentId,
-            status: .wait,
-            message: "Test from DoomCoder — AgentTracking"
-        )
-        lastActionOutput = "✓ Fired a synthetic 'needs input' event. Check the menu bar and iPhone channels."
+        busy = true
+        lastActionOutput = "▶ Doctor running for \(info.displayName)…\n"
+        Task {
+            defer { busy = false }
+
+            // --- Hop 1–3: script spawn → socket → ingest (self-test) ---
+            lastActionOutput += "\n• Local pipeline (mcp.py → socket → ingest)…"
+            let localResult = await MCPRoundTripTest.selfTest(statusManager: agentStatus)
+            switch localResult {
+            case .success(let s):
+                lastActionOutput += "\n  ✓ mcp-fwd + bridge-rx + ingest OK (\(s.millis) ms)"
+            case .failure(let err):
+                lastActionOutput += "\n  ✗ \(err.errorDescription ?? "failed")"
+                lastActionOutput += "\n\nDoctor stopped — local pipeline is broken."
+                return
+            }
+
+            // --- Hop 4–6: gate → deliver → ntfy.sh POST ---
+            // We fire a REAL `.wait` event for this agent id. Because it's
+            // marked source=.manual, AgentStatusManager.ingest will still
+            // pipe it through the gate + deliver, and iPhoneRelay.fire will
+            // perform a live ntfy POST (or surface the reason it can't).
+            let baselineCount = iPhoneRelay.deliveryLog.count
+            let stub = AgentSession(
+                id: "doctor:\(info.id):\(UUID().uuidString.prefix(8))",
+                agent: info.id,
+                startedAt: Date.now,
+                state: .waiting,
+                lastEventAt: Date.now,
+                cwd: nil,
+                currentTool: nil,
+                toolCount: 0,
+                lastMessage: "DoomCoder doctor",
+                source: .manual
+            )
+            let evt = AgentEvent(
+                src: .manual,
+                agent: info.id,
+                status: .wait,
+                sessionId: stub.id,
+                cwd: nil,
+                message: "DoomCoder doctor — \(info.displayName)"
+            )
+
+            lastActionOutput += "\n\n• Watch gate…"
+            if agentStatus.isWatched(stub) {
+                lastActionOutput += "\n  ✓ gate would accept (agent is watched)"
+            } else {
+                let hint: String
+                switch agentStatus.watchTarget {
+                case .none:            hint = "Track is paused — flip it to All or this agent."
+                case .all:             hint = "Agent is not configured. Run Setup first."
+                case .agentType(let id): hint = "Track is set to \(id). Switch to this agent or All."
+                }
+                lastActionOutput += "\n  ⚠︎ gate would DROP (\(hint))"
+                lastActionOutput += "\n  ↳ bypassing gate for this Doctor run so you can test ntfy anyway."
+            }
+
+            // Fire regardless of gate — the user wants to verify ntfy too.
+            // We call iPhoneRelay.fire directly (not ingest) so the delivery
+            // pipeline runs even when the gate would drop in production.
+            lastActionOutput += "\n\n• ntfy.sh push…"
+            if iPhoneRelay.selectedChannelID == "__none__" {
+                lastActionOutput += "\n  ✗ Notifications are paused (channel = None). Pick a channel in iPhone Channels."
+                return
+            }
+            if !iPhoneRelay.anyChannelReady {
+                lastActionOutput += "\n  ✗ No iPhone channel is configured. Open iPhone Channels and set one up."
+                return
+            }
+            iPhoneRelay.fire(event: evt, session: stub)
+            // Poll deliveryLog up to 5s for the new entry to land.
+            let deadline = Date.now.addingTimeInterval(5)
+            while Date.now < deadline,
+                  iPhoneRelay.deliveryLog.count == baselineCount {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            if let newest = iPhoneRelay.deliveryLog.first,
+               iPhoneRelay.deliveryLog.count > baselineCount {
+                if newest.success {
+                    lastActionOutput += "\n  ✓ \(newest.detail)"
+                    lastActionOutput += "\n\n✓ All hops green. Check your phone for the test push."
+                } else {
+                    lastActionOutput += "\n  ✗ \(newest.detail)"
+                    lastActionOutput += "\n\nDoctor failed at the ntfy POST hop — see detail above."
+                }
+            } else {
+                lastActionOutput += "\n  ✗ ntfy POST timed out (>5s with no delivery-log entry)."
+            }
+        }
     }
+
+    // MARK: - Live event feed
+    //
+    // Scrolling list of the last N `dc` calls received for THIS agent id.
+    // Powered by AgentStatusManager.recentEvents — populated in ingest
+    // regardless of watch-gate outcome, so the user can distinguish
+    // "agent never called" from "we dropped it". Each row shows the gate
+    // decision so there's no ambiguity about why a notification did or
+    // didn't fire.
+
+    private var liveFeed: some View {
+        let entries = agentStatus.recentEvents(for: agentId, limit: 25)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Live events").font(.headline)
+                Spacer()
+                if !entries.isEmpty {
+                    Button("Clear") { agentStatus.clearRecentEvents() }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                }
+            }
+            if entries.isEmpty {
+                Text("No `dc` calls received yet. Trigger a turn in \(info?.displayName ?? agentId) and watch this fill up in real time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.04))
+                    }
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(entries) { e in
+                        feedRow(e)
+                        if e.id != entries.last?.id { Divider() }
+                    }
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.regularMaterial)
+                }
+            }
+        }
+    }
+
+    private func feedRow(_ e: AgentStatusManager.RecentEvent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(Self.feedTimeFmt.string(from: e.timestamp))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 68, alignment: .leading)
+            Text(e.status.rawValue.uppercased())
+                .font(.system(.caption, design: .monospaced).bold())
+                .frame(width: 18, alignment: .leading)
+                .foregroundStyle(color(for: e.status))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(e.message ?? e.status.displayName)
+                    .font(.caption)
+                    .lineLimit(2)
+                Text(gateDescription(e.gate))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func gateDescription(_ g: AgentStatusManager.RecentEvent.GateDecision) -> String {
+        switch g {
+        case .accepted:          return "✓ accepted · relayed to channel"
+        case .droppedNotWatched: return "○ dropped · agent not watched"
+        case .droppedDedup:      return "○ dropped · duplicate within 10 s"
+        case .droppedHello:      return "· mcp-hello handshake"
+        case .droppedTestNonce:  return "· round-trip test echo"
+        }
+    }
+
+    private func color(for status: AgentEvent.Status) -> Color {
+        switch status {
+        case .start: return .blue
+        case .wait:  return .orange
+        case .info:  return .secondary
+        case .error: return .red
+        case .done:  return .green
+        }
+    }
+
+    private static let feedTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 }
 
 // MARK: - ChannelDetailPane

@@ -103,6 +103,13 @@ final class SleepManager {
     private var _permissionPollCount: Int = 0
 
     @ObservationIgnored nonisolated(unsafe) private var assertionID: IOPMAssertionID = 0
+    // ProcessInfo activity token — belt-and-braces complement to the IOPM
+    // assertion. On Apple Silicon the IOPM `PreventSystemSleep` assertion
+    // keeps the CPU alive (verified via `pmset -g assertions` + powermetrics
+    // sampling during Screen-Off). The `.idleSystemSleepDisabled` activity
+    // additionally opts our own process out of App Nap so background work
+    // we host (socket reader, MCP script spawns) stays responsive.
+    @ObservationIgnored nonisolated(unsafe) private var activityToken: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var _elapsedTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _sessionTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _permissionPollTimer: Timer?
@@ -149,6 +156,10 @@ final class SleepManager {
         guard !isActive else { return }
         guard let id = createAssertion() else { return }
         assertionID = id
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "DoomCoder session active"
+        )
         isActive = true
         activeSince = .now
         startElapsedTimer()
@@ -161,6 +172,10 @@ final class SleepManager {
         stopScreenOff()
         IOPMAssertionRelease(assertionID)
         assertionID = 0
+        if let t = activityToken {
+            ProcessInfo.processInfo.endActivity(t)
+            activityToken = nil
+        }
         isActive = false
         activeSince = nil
         elapsedTimeString = ""

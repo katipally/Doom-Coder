@@ -25,15 +25,19 @@ enum MCPInstaller {
 
     enum Agent: String, CaseIterable, Identifiable {
         case cursor, windsurf, vscode, gemini, codex
+        case claudeCode = "claude-code"
+        case copilotCLI = "copilot-cli"
         var id: String { rawValue }
 
         var catalogId: String {
             switch self {
-            case .cursor:   return "cursor"
-            case .windsurf: return "windsurf"
-            case .vscode:   return "vscode-mcp"
-            case .gemini:   return "gemini-cli"
-            case .codex:    return "codex"
+            case .cursor:     return "cursor"
+            case .windsurf:   return "windsurf"
+            case .vscode:     return "vscode-mcp"
+            case .gemini:     return "gemini-cli"
+            case .codex:      return "codex"
+            case .claudeCode: return "claude-code"
+            case .copilotCLI: return "copilot-cli"
             }
         }
 
@@ -54,6 +58,10 @@ enum MCPInstaller {
                 return "Adds a \"doomcoder\" MCP server to ~/.gemini/settings.json. Gemini CLI will connect on its next run."
             case .codex:
                 return "Appends an [mcp_servers.doomcoder] section to ~/.codex/config.toml. Codex CLI will pick it up on the next command."
+            case .claudeCode:
+                return "Adds a \"doomcoder\" MCP server to ~/.claude.json. Claude Code connects on next launch and calls the `dc` tool per the rules snippet we install alongside."
+            case .copilotCLI:
+                return "Adds a \"doomcoder\" MCP server to ~/.copilot/mcp-config.json. Copilot CLI connects on next launch; the rules snippet tells it when to call `dc`."
             }
         }
 
@@ -71,6 +79,10 @@ enum MCPInstaller {
                 return home.appendingPathComponent(".gemini/settings.json")
             case .codex:
                 return home.appendingPathComponent(".codex/config.toml")
+            case .claudeCode:
+                return home.appendingPathComponent(".claude.json")
+            case .copilotCLI:
+                return home.appendingPathComponent(".copilot/mcp-config.json")
             }
         }
 

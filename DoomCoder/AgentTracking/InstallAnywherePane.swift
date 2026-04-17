@@ -53,6 +53,21 @@ struct InstallAnywherePane: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Diagnostic readout — the snippet is built from NSHomeDirectory(),
+            // so if a user ever sees someone else's username in the path, it
+            // means this machine's $HOME resolved to an unexpected place
+            // (iCloud folder, shared mount, hand-edited env, …). Surfacing it
+            // here makes the "this looks hardcoded to the maintainer" bug
+            // obvious at a glance.
+            HStack(spacing: 6) {
+                Image(systemName: "house")
+                    .foregroundStyle(.tertiary)
+                Text("Your home: \(NSHomeDirectory())")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            .padding(.top, 2)
         }
     }
 

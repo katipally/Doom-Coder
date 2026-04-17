@@ -45,6 +45,21 @@ struct AgentEvent: Codable, Sendable {
             case .start, .info:        return false
             }
         }
+
+        /// Deterministic, user-facing notification body. We intentionally
+        /// ignore whatever the agent wrote in `message` so every ntfy push
+        /// reads the same regardless of which agent / prompt emitted it —
+        /// agents only have to send the single letter (token-cheap), and
+        /// DoomCoder fills in the copy.
+        var canonicalBody: String {
+            switch self {
+            case .start: return "Agent started working"
+            case .wait:  return "Needs your input"
+            case .info:  return "Working…"
+            case .error: return "Hit an error"
+            case .done:  return "Task complete"
+            }
+        }
     }
 
     let src: Source

@@ -47,7 +47,9 @@ final class NotificationManager {
         if let repo = session.repoName, !repo.isEmpty {
             content.subtitle = repo
         }
-        content.body = event.message ?? defaultBody(for: event.status, session: session)
+        // v1.7: canonical body, ignore agent-supplied message. Keeps mac
+        // banners in lock-step with the iPhone ntfy pushes.
+        content.body = event.status.canonicalBody
         content.sound = .default
 
         let id = "doomcoder.agent.\(session.id).\(event.status.rawValue).\(Int(Date().timeIntervalSince1970))"

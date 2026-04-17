@@ -122,8 +122,11 @@ final class IPhoneRelay {
         }
 
         let title = "\(session.displayName) • \(event.status.displayName)"
-        let body  = event.message
-            ?? "\(session.repoName.map { "\($0) • " } ?? "")\(session.elapsedText)"
+        // v1.7: body is now canonical (derived from status alone). The
+        // agent's free-form `message` is intentionally ignored — it's there
+        // only to satisfy older rules snippets. Every delivery through
+        // every channel reads the same text for a given status letter.
+        let body  = event.status.canonicalBody
 
         let channelName = active.info.displayName
         let ch = active.channel
@@ -253,6 +256,7 @@ final class NtfyChannel: IPhoneChannel, @unchecked Sendable {
         let topic = self.topic.trimmingCharacters(in: .whitespaces)
         guard !topic.isEmpty,
               let url = URL(string: "https://ntfy.sh/\(topic)") else {
+            Log.ntfyPost.error("skip reason=\"no topic configured\"")
             return .failure(reason: "No topic configured")
         }
 
@@ -266,12 +270,17 @@ final class NtfyChannel: IPhoneChannel, @unchecked Sendable {
 
         do {
             let (_, response) = try await URLSession.shared.data(for: req)
-            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
-                return .success(detail: "ntfy.sh/\(topic)")
-            }
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if (200..<300).contains(code) {
+                Log.ntfyPost.info("ok code=\(code) title=\(title, privacy: .public)")
+                return .success(detail: "ntfy.sh/\(topic) · HTTP \(code)")
+            }
+            // Don't log the topic at .error level in case it's considered
+            // semi-private; the title is already tokenised by the caller.
+            Log.ntfyPost.error("fail code=\(code) title=\(title, privacy: .public)")
             return .failure(reason: "HTTP \(code)")
         } catch {
+            Log.ntfyPost.error("fail error=\(error.localizedDescription, privacy: .public)")
             return .failure(reason: error.localizedDescription)
         }
     }

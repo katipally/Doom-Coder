@@ -47,7 +47,7 @@ When enabled, Doom Coder holds an `IOPMAssertion` with type `PreventUserIdleDisp
 - **Live session dashboard** in Settings → Agent Bridge — real-time agent / repo / tool / elapsed per session
 - **Ultra-low token cost on MCP** — single `dc` tool with a one-character `s` param keeps per-event overhead to ≈ 140 tokens
 - **Tier-3 demotion** — when a bridge session is live, the heuristic notifier stays silent so you never get duplicate banners
-- See [guide/agent-setup.md](guide/agent-setup.md) and [guide/hooks-reference.md](guide/hooks-reference.md)
+- See [guide/agent-setup.md](guide/agent-setup.md) and [guide/mcp-reference.md](guide/mcp-reference.md)
 
 ### iPhone notifications — triple-redundant (v0.8)
 - **iCloud Reminders** — completed reminder syncs via Apple's own pipeline; zero network calls from DoomCoder
