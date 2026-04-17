@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square)](https://github.com/katipally/Doom-Coder/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue?style=flat-square)](#)
+[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-blue?style=flat-square)](#)
 [![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](#)
 
 </div>
@@ -115,12 +115,6 @@ open /Applications/DoomCoder.app
 
 If the Terminal method alone still shows the warning, follow the System Settings steps above too.
 
-### macOS 14 (Sonoma) and earlier
-
-1. Right-click (or Control-click) `DoomCoder.app`
-2. Select **Open** from the context menu
-3. Click **Open** again at the security warning
-
 ### Why does this happen?
 
 Apple's Gatekeeper blocks apps that aren't notarized through their paid Developer Program ($99/year). This is the same for _every_ open-source Mac app distributed outside the App Store — apps like [Raycast](https://raycast.com), [Rectangle](https://rectangleapp.com), and [IINA](https://iina.io) all require notarization or face the same warnings.
@@ -141,7 +135,7 @@ The source code is fully open in this repo. If you prefer, you can **build it yo
 
 ### Option 2: Build from Source
 
-Requirements: Xcode 16+ and macOS 14.0+
+Requirements: Xcode 26+ and macOS 26.0+
 
 ```bash
 git clone https://github.com/katipally/Doom-Coder.git

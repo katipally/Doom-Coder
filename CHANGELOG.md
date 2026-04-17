@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0] - 2026-04-16
+
+**The Agent Tracking release.** v1.0 is a full rewrite of the primary UX
+around the Agent Bridge. Every line of heuristic detection code is gone,
+Settings is now a thin shell, and all onboarding + live session tracking
+lives inside a first-class **Agent Tracking** window with guided per-agent
+setup sheets, macOS 26 Focus Filter automation, and a true iCloud
+round-trip test for Reminders delivery.
+
+### Added
+- **Agent Tracking window** — Primary surface of the app. Three-pane
+  `NavigationSplitView` with Live Sessions (sorted by most-recent activity),
+  Agents (all 7 supported tools with install-status badges), iPhone
+  Channels (Reminders / iMessage / ntfy with setup + test), and System
+  (Focus Filter, iCloud sync, Delivery Log). Opens from the menu-bar
+  status header or `Open Agent Tracking…`. Uses macOS 26 refinements and
+  `.glassEffect` styling.
+- **Guided Setup Sheets** — 3-step onboarding (explain → install →
+  verify) for every agent and every iPhone channel. iMessage auto-fills
+  the handle from the Contacts Me-card. ntfy generates a random topic
+  and renders a QR code for iPhone subscription. Reminders step 3 runs
+  the full iCloud round-trip test.
+- **iCloud Round-Trip Test** — `ReminderChannel.runICloudRoundTripTest()`
+  writes a unique marker reminder, polls a fresh `EKEventStore` for
+  propagation, confirms, then cleans up — returning observed latency.
+  The only way to deterministically verify iPhone delivery will work.
+- **DoomCoder Focus Filter** — New `SetFocusFilterIntent` that DoomCoder
+  donates on every `AgentStatusManager.anyWorking` flip. Map it to any
+  Focus mode in System Settings → Focus → [mode] → Focus Filters, and
+  your iPhone will silence other apps while a coding agent is actively
+  working.
+- **Per-session live detail pane** — Last 25 tool calls ring buffer,
+  wait reasons, current tool, elapsed time. Every "Send Test
+  Notification" button fires the real IPhoneRelay pipeline (no mocks).
+- **Delivery log export** — Advanced tab exports the last 50 deliveries
+  as JSON for debugging.
+- **Launch at Login ON by default** for new installs.
+- **New CI workflow** (`ci.yml`) — Runs `xcodebuild build` with
+  `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` on every PR. Blocks merges that
+  reintroduce warnings.
+
+### Changed
+- **macOS minimum bumped to 26.0 (Tahoe).** Every `@available(macOS 15,
+  *)` guard removed.
+- **Version 1.0.0 / build 100.**
+- **Menu bar** pivots to a status header that opens Agent Tracking.
+  The `Agents` submenu (which opened Settings) and the `Active Apps…`
+  item are gone.
+- **Settings** slimmed to 2 tabs: **General** (Launch at Login,
+  accessibility) and **Advanced** (bridge status + restart, runtime
+  versions, redeploy, delivery log export). The Tools, Agent Bridge,
+  and iPhone tabs are removed — all that functionality now lives in
+  Agent Tracking.
+- **Release CI** runs on `macos-26` (Xcode 26). Dropped the
+  `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` workaround.
+- **Sparkle appcast** `minimumSystemVersion` bumped to `26.0`.
+- **Hook runtime v2 / MCP runtime v2** — upgrading installs auto-refresh
+  both on first launch.
+
+### Removed
+- **Heuristic detection stack.** `WorkingStateDetector.swift`,
+  `AppDetector.swift`, `ActiveAppsView.swift`, and
+  `DynamicAppDiscovery.swift` are deleted. If an agent isn't hooked or
+  MCP-connected, DoomCoder doesn't track it — and the Agent Tracking
+  window tells the user exactly how to fix that with one click.
+- **Legacy UserDefaults keys** — `customCLIBinaries`, `customGUIBundles`,
+  `detectedApps.*`. `LegacyDefaults.migrate()` runs once on first v1.0
+  launch to wipe them silently.
+- **`AgentBridgeSettingsView.swift`** and **`IPhoneSetupView.swift`** —
+  replaced by Agent Tracking detail panes and setup sheets.
+
+### Migration
+First v1.0 launch runs `LegacyDefaults.migrate()` once (silent, no
+modal), redeploys the hook + MCP runtimes at v2, and preserves all
+existing agent hook configs. No user action required.
+
+---
+
 ## [0.8.0] - 2026-04-16
 
 **The Agent Bridge release.** Replaces the v0.6 heuristic-only tracking with a deterministic three-tier architecture (shell hooks + MCP server + silent heuristic fallback), adds triple-redundant iPhone notifications, per-agent Settings cards, a live-session dashboard, and an in-app Help menu.
