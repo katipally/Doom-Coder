@@ -24,7 +24,7 @@ enum MCPRuntime {
 
     /// Bumped on every edit of `pythonSource`. Written as a comment stamp at
     /// the top of the deployed script so we know when to re-deploy.
-    static let version: Int = 3
+    static let version: Int = 4
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -144,16 +144,19 @@ enum MCPRuntime {
         if args.get("repo"):       evt["event"] = str(args["repo"])[:128]
         return _socket_write(evt)
 
-    def _emit_hello():
+    def _emit_hello(client_name=""):
         # Fire once on initialize — proves to DoomCoder that the agent picked
         # up the config on disk. UI surfaces this as the "Live" chip.
+        # v4: include the client's self-reported name (e.g. "Cursor", "vscode",
+        # "windsurf") so we can cross-check that the right IDE loaded us.
         _socket_write({
             "src":   "mcp",
             "agent": _AGENT,
             "s":     "i",
-            "m":     "mcp-hello",
+            "m":     ("mcp-hello:" + client_name) if client_name else "mcp-hello",
             "event": "mcp-hello",
             "tool":  _INSTALL_ID or "",
+            "cwd":   client_name[:128] if client_name else "",
             "t":     int(time.time()),
         })
 
@@ -185,7 +188,12 @@ enum MCPRuntime {
         method = msg.get("method")
         rid = msg.get("id")
         if method == "initialize":
-            _emit_hello()
+            # MCP clients send clientInfo = {"name": "...", "version": "..."}
+            # per the 2024-11-05 spec. Capture it so the hello event carries
+            # the IDE's self-identification alongside our --agent hint.
+            _ci = msg.get("params", {}).get("clientInfo", {}) or {}
+            _cname = str(_ci.get("name", ""))[:64]
+            _emit_hello(_cname)
             _reply(rid, result={
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": False}},
