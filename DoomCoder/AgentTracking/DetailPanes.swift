@@ -342,9 +342,6 @@ struct ChannelDetailPane: View {
     @Bindable var iPhoneRelay: IPhoneRelay
     let openSetup: () -> Void
 
-    @State private var permissionMessage: String? = nil
-    @State private var requestingPermission = false
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -359,34 +356,30 @@ struct ChannelDetailPane: View {
                     .buttonStyle(.borderedProminent)
 
                     Button("Send Test") {
-                        iPhoneRelay.sendTest(channel: channelTestKey)
+                        iPhoneRelay.sendTest(channelID: channelID)
                     }
-                    .disabled(!isEnabled)
+                    .disabled(!isReady)
 
-                    if showsPermissionButton {
+                    if isReady && !isActive {
                         Button {
-                            Task { await requestPermission() }
+                            iPhoneRelay.selectedChannelID = channelID
                         } label: {
-                            if requestingPermission {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Label(permissionButtonLabel, systemImage: "hand.raised.fill")
-                            }
+                            Label("Set as Active", systemImage: "checkmark.circle")
                         }
-                        .disabled(requestingPermission)
                     }
 
                     Spacer()
                 }
-                if let permissionMessage {
-                    Text(permissionMessage)
+
+                if isActive {
+                    Text("This is the active delivery method. All agent alerts will be sent through \(kind.displayName).")
                         .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial))
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.blue.opacity(0.08)))
                 }
+
                 if !recentDeliveries.isEmpty {
                     DeliveryLogList(deliveries: recentDeliveries)
                 }
@@ -396,37 +389,9 @@ struct ChannelDetailPane: View {
         }
     }
 
-    private var showsPermissionButton: Bool {
-        switch kind {
-        case .calendar: return !iPhoneRelay.calendar.isReady
-        case .ntfy:     return false
-        }
-    }
-
-    private var permissionButtonLabel: String {
-        switch kind {
-        case .calendar: return "Request Permission"
-        case .ntfy:     return ""
-        }
-    }
-
-    private func requestPermission() async {
-        requestingPermission = true
-        defer { requestingPermission = false }
-        switch kind {
-        case .calendar:
-            let granted = await iPhoneRelay.calendar.requestAccess()
-            permissionMessage = granted
-                ? "Calendar access granted."
-                : "Calendar access denied. Enable it in System Settings → Privacy & Security → Calendars → DoomCoder."
-        case .ntfy:
-            break
-        }
-    }
-
     private var header: some View {
         HStack(spacing: 14) {
-            StatusBadge(isEnabled && isReady ? .ready : .off)
+            StatusBadge(isReady ? .ready : .off)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.displayName).font(.title2).bold()
                 Text(description).font(.callout).foregroundStyle(.secondary)
@@ -437,49 +402,40 @@ struct ChannelDetailPane: View {
 
     private var description: String {
         switch kind {
-        case .calendar: return "Creates a short event with a 3-second alarm on a dedicated DoomCoder iCloud calendar — alarm fires on every Apple device signed in."
-        case .ntfy:     return "HTTPS push via ntfy.sh — works even when you're off the Apple ecosystem."
-        }
-    }
-
-    private var isEnabled: Bool {
-        switch kind {
-        case .calendar: return iPhoneRelay.calendar.isEnabled
-        case .ntfy:     return iPhoneRelay.ntfy.isEnabled
+        case .ntfy: return "HTTPS push via ntfy.sh — subscribe from the ntfy iOS app, no account required."
         }
     }
 
     private var isReady: Bool {
         switch kind {
-        case .calendar: return iPhoneRelay.calendar.isReady
-        case .ntfy:     return iPhoneRelay.ntfy.isReady
+        case .ntfy: return iPhoneRelay.ntfy.isReady
         }
     }
 
-    private var channelTestKey: String {
+    private var channelID: String {
         switch kind {
-        case .calendar: return "Calendar"
-        case .ntfy:     return "ntfy"
+        case .ntfy: return "ntfy"
         }
+    }
+
+    private var isActive: Bool {
+        iPhoneRelay.activeChannel?.info.id == channelID
     }
 
     private var recentDeliveries: [IPhoneRelay.Delivery] {
-        let key = channelTestKey
-        return iPhoneRelay.deliveryLog.filter { $0.channel == key }.prefix(8).map { $0 }
+        let name = kind.displayName
+        return iPhoneRelay.deliveryLog.filter { $0.channel == name }.prefix(8).map { $0 }
     }
 
     private var infoGrid: some View {
         VStack(spacing: 0) {
-            gridRow("Enabled", isEnabled ? "Yes" : "No")
-            Divider()
             gridRow("Ready", isReady ? "Yes" : "No")
+            Divider()
+            gridRow("Active", isActive ? "Yes" : "No")
             switch kind {
             case .ntfy:
                 Divider()
                 gridRow("Topic", iPhoneRelay.ntfy.topic.isEmpty ? "—" : iPhoneRelay.ntfy.topic, monospaced: true)
-            case .calendar:
-                Divider()
-                gridRow("Calendar", CalendarChannel.dedicatedCalendarName)
             }
         }
         .background {
@@ -506,82 +462,16 @@ struct SystemDetailPane: View {
     @Bindable var iPhoneRelay: IPhoneRelay
     let socketServer: SocketServer
 
-    @State private var icloudOutput = ""
-    @State private var icloudBusy = false
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 switch kind {
-                case .icloud:      icloudSection
                 case .deliveryLog: deliverySection
                 }
             }
             .padding(20)
         }
     }
-
-    // MARK: iCloud
-
-    private var icloudSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 14) {
-                StatusBadge(iPhoneRelay.calendar.isReady ? .ready : .off)
-                VStack(alignment: .leading) {
-                    Text("iCloud Round-Trip").font(.title2).bold()
-                    Text("Prove Calendar events propagate through iCloud end to end.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            Text("""
-            Writes an un-alarmed probe event to the DoomCoder calendar, polls a \
-            fresh EKEventStore until the event comes back, then deletes it. On \
-            success the propagation latency is shown. If it times out, your \
-            iPhone isn't receiving from this Mac — usually because Calendars \
-            → iCloud sync is off, or the DoomCoder calendar ended up on Local \
-            instead of iCloud.
-            """)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-
-            HStack {
-                Button {
-                    icloudBusy = true
-                    icloudOutput = "Running — may take up to 15s…"
-                    Task {
-                        let result = await iPhoneRelay.calendar.runICloudRoundTripTest()
-                        switch result {
-                        case .success(let latency):
-                            icloudOutput = String(format: "✓ Propagated in %.2fs. Your iPhone will receive agent alarms.", latency)
-                        case .failure(let err):
-                            icloudOutput = "✗ \(err.localizedDescription)"
-                        }
-                        icloudBusy = false
-                    }
-                } label: {
-                    Label("Run Round-Trip Test", systemImage: "arrow.triangle.2.circlepath.icloud")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(icloudBusy || !iPhoneRelay.calendar.isReady)
-
-                Spacer()
-            }
-
-            if !icloudOutput.isEmpty {
-                Text(icloudOutput)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.04))
-                    }
-            }
-        }
-    }
-
-    // MARK: Delivery log
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -595,6 +485,7 @@ struct SystemDetailPane: View {
                 Spacer()
             }
 
+            activeMethodPicker
             socketStatus
 
             if iPhoneRelay.deliveryLog.isEmpty {
@@ -623,6 +514,66 @@ struct SystemDetailPane: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 6).fill(.regularMaterial)
+        }
+    }
+
+    /// Dropdown to pick which iPhone delivery method is active. Shows only
+    /// channels whose setup is complete (`isReady`), plus a "None" sentinel
+    /// to silence delivery without uninstalling anything. When no channel is
+    /// ready, the picker is disabled and shows a call-to-action.
+    private var activeMethodPicker: some View {
+        let available = iPhoneRelay.availableChannels
+        let activeID = iPhoneRelay.activeChannel?.info.id ?? ""
+        let noneTag = "__none__"
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "bell.and.waves.left.and.right.fill")
+                    .foregroundStyle(.blue)
+                Text("Active delivery method")
+                    .font(.headline)
+                Spacer()
+            }
+
+            if available.isEmpty {
+                HStack {
+                    Text("No channels configured yet. Open an iPhone Channel in the sidebar to set one up.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial))
+            } else {
+                Picker("Send agent alerts via", selection: Binding(
+                    get: {
+                        iPhoneRelay.selectedChannelID == noneTag ? noneTag : activeID
+                    },
+                    set: { newValue in
+                        iPhoneRelay.selectedChannelID = (newValue == noneTag ? noneTag : newValue)
+                    }
+                )) {
+                    ForEach(available) { info in
+                        Label(info.displayName, systemImage: info.icon).tag(info.id)
+                    }
+                    Divider()
+                    Text("None — silence iPhone alerts").tag(noneTag)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: 320, alignment: .leading)
+
+                Text(activeID.isEmpty || iPhoneRelay.selectedChannelID == noneTag
+                     ? "Delivery is paused — no events will reach your iPhone."
+                     : "All agent alerts will be sent through \(iPhoneRelay.activeChannel?.info.displayName ?? "the selected channel").")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.regularMaterial)
         }
     }
 }

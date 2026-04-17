@@ -12,36 +12,32 @@ enum AgentTrackingSelection: Hashable {
     case system(SystemKind)
 
     enum ChannelKind: String, Hashable, CaseIterable {
-        case calendar, ntfy
+        case ntfy
 
         var displayName: String {
             switch self {
-            case .calendar: return "Calendar (iCloud)"
-            case .ntfy:     return "ntfy.sh"
+            case .ntfy: return "ntfy.sh"
             }
         }
 
         var icon: String {
             switch self {
-            case .calendar: return "calendar.badge.clock"
-            case .ntfy:     return "bell.badge.fill"
+            case .ntfy: return "bell.badge.fill"
             }
         }
     }
 
     enum SystemKind: String, Hashable, CaseIterable {
-        case icloud, deliveryLog
+        case deliveryLog
 
         var displayName: String {
             switch self {
-            case .icloud:       return "iCloud Round-Trip"
             case .deliveryLog:  return "Delivery Log"
             }
         }
 
         var icon: String {
             switch self {
-            case .icloud:      return "icloud.fill"
             case .deliveryLog: return "tray.full.fill"
             }
         }
