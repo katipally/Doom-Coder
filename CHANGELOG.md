@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2026-04-17
+
+Patch for the Calendar + ntfy onboarding shipped in 1.1.0.
+
+### Fixed
+- **Calendar alarms now fire on iPhone reliably.** 1.1.0 scheduled the alarm
+  3 seconds in the future — too tight for iCloud CalDAV push to propagate to
+  the phone before the local alarm evaluator fired there. Bumped to **15 s**
+  (well inside real-world iCloud latency tails) and added a second fallback
+  alarm at `-5 s` for redundancy. Delivery log now surfaces whether the event
+  landed on iCloud or a Local source so you can tell at a glance if iCloud
+  Calendars sync is off.
+- **ntfy topic is short and typeable** — `dc-xxxxxxxx` (11 chars, ~32 bits of
+  entropy) instead of `doom-` + 22 base32 chars. Easy to paste or even type on
+  a phone if the share sheet fails.
+- **ntfy setup UI simplified** — replaced the "Share Deep Link / Copy Deep
+  Link / Copy Web URL" trio with two plain **Topic** and **Server** copy
+  rows showing exactly what to enter in the ntfy iOS app's Subscribe dialog.
+  Share sheet + QR are still there as an opt-in disclosure for one-tap
+  flows.
+
+---
+
 ## [1.1.0] - 2026-04-16
 
 Major reliability release — replaces broken iPhone delivery channels with a

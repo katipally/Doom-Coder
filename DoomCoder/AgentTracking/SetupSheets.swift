@@ -398,59 +398,106 @@ struct ChannelSetupSheet: View {
 
     @ViewBuilder
     private func ntfyShareBox(deepLink: URL, subURL: URL) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Subscribe on your iPhone")
                 .font(.headline)
-            Text("Install **ntfy** from the App Store, then use one of these to open the subscription directly:")
+            Text("Install **ntfy** from the App Store. Inside the app, tap **+ Subscribe to topic** and enter:")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            // Topic row
             HStack(spacing: 8) {
-                Button {
-                    let picker = NSSharingServicePicker(items: [deepLink])
-                    if let win = NSApp.keyWindow, let contentView = win.contentView {
-                        picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
-                    }
-                } label: {
-                    Label("Share…", systemImage: "square.and.arrow.up")
-                }
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(deepLink.absoluteString, forType: .string)
-                    statusLine = "Deep link copied — paste into Messages/Notes to yourself and tap on iPhone."
-                } label: {
-                    Label("Copy Deep Link", systemImage: "doc.on.doc")
-                }
+                Text("Topic")
+                    .font(.caption).bold()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 60, alignment: .leading)
+                Text(relay.ntfy.topic)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                Spacer()
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(subURL.absoluteString, forType: .string)
-                    statusLine = "Web URL copied — paste into Safari on iPhone, ntfy app will handle it."
+                    NSPasteboard.general.setString(relay.ntfy.topic, forType: .string)
+                    statusLine = "Topic copied."
                 } label: {
-                    Label("Copy Web URL", systemImage: "link")
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.borderless)
+                .help("Copy topic")
             }
+            .padding(10)
+            .background { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)) }
 
-            DisclosureGroup("Use QR (camera will open Safari — that's fine)") {
-                if let img = Self.qrImage(subURL.absoluteString) {
-                    VStack(spacing: 6) {
+            // Server row
+            HStack(spacing: 8) {
+                Text("Server")
+                    .font(.caption).bold()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 60, alignment: .leading)
+                Text("ntfy.sh")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("ntfy.sh", forType: .string)
+                    statusLine = "Server copied."
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy server")
+            }
+            .padding(10)
+            .background { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)) }
+
+            Text("Leave **Server** as `ntfy.sh` (default) and paste **Topic** exactly. That's it — the next message DoomCoder fires will push to your phone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            DisclosureGroup("Alternate: one-tap share or QR") {
+                VStack(spacing: 8) {
+                    HStack {
+                        Button {
+                            let picker = NSSharingServicePicker(items: [subURL])
+                            if let win = NSApp.keyWindow, let contentView = win.contentView {
+                                picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+                            }
+                        } label: {
+                            Label("Share URL…", systemImage: "square.and.arrow.up")
+                        }
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(subURL.absoluteString, forType: .string)
+                            statusLine = "Web URL copied."
+                        } label: {
+                            Label("Copy URL", systemImage: "link")
+                        }
+                    }
+                    if let img = Self.qrImage(subURL.absoluteString) {
                         Image(nsImage: img)
                             .interpolation(.none)
                             .resizable()
-                            .frame(width: 160, height: 160)
-                        Text(subURL.absoluteString).font(.caption).textSelection(.enabled)
-                        Text("Safari will open ntfy.sh — tap the Subscribe button there, or open the deep link from Share…/Copy for a direct hand-off.")
-                            .font(.caption2).foregroundStyle(.secondary)
+                            .frame(width: 140, height: 140)
+                        Text(subURL.absoluteString)
+                            .font(.caption2)
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                        Text("(Camera app opens this in Safari — tap the Subscribe button on ntfy.sh.)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(10)
                 }
+                .padding(8)
             }
-            .padding(10)
+            .padding(8)
             .background { RoundedRectangle(cornerRadius: 8).fill(.regularMaterial) }
         }
         .padding(12)
-        .background { RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)) }
+        .background { RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.03)) }
     }
 
     private var verifyView: some View {
