@@ -208,6 +208,87 @@ final class ReminderChannel: IPhoneChannel, @unchecked Sendable {
             return .failure(reason: error.localizedDescription)
         }
     }
+
+    // MARK: - iCloud round-trip test
+    //
+    // Writes a unique marker reminder, then polls a *fresh* EKEventStore (so
+    // we read through iCloud, not the local cache) until the marker shows up
+    // or `timeout` elapses. On success we delete the marker and return the
+    // observed round-trip latency. This proves the full write → iCloud →
+    // iPhone propagation loop is wired up.
+    enum RoundTripError: Error, LocalizedError {
+        case notAuthorized
+        case noDefaultList
+        case writeFailed(String)
+        case timeout(TimeInterval)
+
+        var errorDescription: String? {
+            switch self {
+            case .notAuthorized:       return "Reminders access not granted. Allow it in Channel Setup → Reminders first."
+            case .noDefaultList:       return "No default Reminders list. Open Reminders.app once to create one."
+            case .writeFailed(let m):  return "Couldn't save test reminder: \(m)"
+            case .timeout(let s):      return "Reminder didn't propagate through iCloud within \(Int(s))s. Check Settings → Apple ID → iCloud → Reminders is on."
+            }
+        }
+    }
+
+    func runICloudRoundTripTest(timeout: TimeInterval = 15) async -> Result<TimeInterval, RoundTripError> {
+        guard self.isReady else { return .failure(.notAuthorized) }
+        guard let list = self.store.defaultCalendarForNewReminders() else {
+            return .failure(.noDefaultList)
+        }
+
+        let marker = UUID().uuidString
+        let title  = "DC-ROUNDTRIP-\(marker)"
+        let writeStart = Date.now
+
+        let reminder = EKReminder(eventStore: self.store)
+        reminder.title = title
+        reminder.notes = "DoomCoder iCloud round-trip probe. Safe to delete."
+        reminder.calendar = list
+        reminder.isCompleted = true
+        reminder.completionDate = .now
+
+        do {
+            try self.store.save(reminder, commit: true)
+        } catch {
+            return .failure(.writeFailed(error.localizedDescription))
+        }
+
+        // Poll with a fresh store. EventKit caches aggressively on the
+        // handle that wrote the item, so reading back with the SAME store
+        // is a lie — it'd succeed instantly regardless of iCloud. A new
+        // store reloads from the local CoreData mirror which is kept in
+        // sync with iCloud, so this is a true propagation probe on the
+        // device the user is sitting at.
+        let probe = EKEventStore()
+        let deadline = Date.now.addingTimeInterval(timeout)
+        var matched = false
+
+        while Date.now < deadline && !matched {
+            try? await Task.sleep(for: .milliseconds(500))
+            let pred = probe.predicateForReminders(in: [list])
+            // Compare titles inside the EventKit callback so the only value
+            // that crosses the concurrency boundary is a Bool (Sendable).
+            // EKReminder itself isn't Sendable under Swift 6 strict checking.
+            matched = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                probe.fetchReminders(matching: pred) { items in
+                    let hit = (items ?? []).contains { $0.title == title }
+                    cont.resume(returning: hit)
+                }
+            }
+        }
+
+        if matched {
+            let latency = Date.now.timeIntervalSince(writeStart)
+            try? self.store.remove(reminder, commit: true)
+            return .success(latency)
+        }
+
+        // Clean up the marker we wrote so we don't pollute the user's list.
+        try? self.store.remove(reminder, commit: true)
+        return .failure(.timeout(timeout))
+    }
 }
 
 // MARK: - iMessage channel (AppleScript → Messages.app)

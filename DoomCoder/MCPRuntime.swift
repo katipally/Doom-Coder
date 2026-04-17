@@ -24,7 +24,7 @@ enum MCPRuntime {
 
     /// Bumped on every edit of `pythonSource`. Written as a comment stamp at
     /// the top of the deployed script so we know when to re-deploy.
-    static let version: Int = 1
+    static let version: Int = 2
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser

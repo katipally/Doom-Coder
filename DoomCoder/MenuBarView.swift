@@ -61,17 +61,19 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        // ── Active Agent Sessions ────────────────────────────────────────────
+        // ── Agent Tracking header ────────────────────────────────────────────
+        Divider()
+        Button {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openWindow(id: "agent-tracking")
+        } label: {
+            Label(agentStatusHeader, systemImage: agentStatusIcon)
+        }
+
         if !agentStatus.sessions.isEmpty {
-            Divider()
-            Menu("Agents: \(agentStatus.sessions.count) live") {
-                ForEach(agentStatus.sessions) { s in
-                    let label = "\(s.displayName) — \(agentStateText(s.state))\(s.repoName.map { " · \($0)" } ?? "")"
-                    Button(label) {
-                        NSApplication.shared.activate(ignoringOtherApps: true)
-                        openWindow(id: "settings")
-                    }
-                }
+            ForEach(agentStatus.sessions.prefix(3)) { s in
+                Text("  \(s.displayName) — \(agentStateText(s.state))\(s.repoName.map { " · \($0)" } ?? "")")
+                    .foregroundStyle(.secondary)
             }
         }
 
@@ -142,6 +144,17 @@ struct MenuBarView: View {
         case .errored: return "error"
         case .done:    return "done"
         }
+    }
+
+    private var agentStatusHeader: String {
+        if agentStatus.isAnyAgentActive {
+            return "Open Agent Tracking… (\(agentStatus.sessions.count) live)"
+        }
+        return "Open Agent Tracking…"
+    }
+
+    private var agentStatusIcon: String {
+        agentStatus.isAnyAgentActive ? "circle.fill" : "circle"
     }
 
     private func openGuide(_ filename: String) {

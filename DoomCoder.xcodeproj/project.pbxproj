@@ -28,6 +28,12 @@
 		DC0000000000002000000026 /* IPhoneRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000026 /* IPhoneRelay.swift */; };
 		DC0000000000002000000027 /* IPhoneSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* IPhoneSetupView.swift */; };
 		DC0000000000002000000028 /* LegacyDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* LegacyDefaults.swift */; };
+		DC0000000000002000000029 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000029 /* StatusBadge.swift */; };
+		DC0000000000002000000030 /* FocusFilterManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000030 /* FocusFilterManager.swift */; };
+		DC0000000000002000000031 /* AgentTrackingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000031 /* AgentTrackingView.swift */; };
+		DC0000000000002000000032 /* AgentTrackingSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000032 /* AgentTrackingSidebar.swift */; };
+		DC0000000000002000000033 /* DetailPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000033 /* DetailPanes.swift */; };
+		DC0000000000002000000034 /* SetupSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000034 /* SetupSheets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +60,12 @@
 		DC0000000000001000000026 /* IPhoneRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneRelay.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* IPhoneSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneSetupView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000028 /* LegacyDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyDefaults.swift; sourceTree = "<group>"; };
+		DC0000000000001000000029 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		DC0000000000001000000030 /* FocusFilterManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusFilterManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000031 /* AgentTrackingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000032 /* AgentTrackingSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingSidebar.swift; sourceTree = "<group>"; };
+		DC0000000000001000000033 /* DetailPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPanes.swift; sourceTree = "<group>"; };
+		DC0000000000001000000034 /* SetupSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupSheets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +110,9 @@
 				DC0000000000001000000026 /* IPhoneRelay.swift */,
 				DC0000000000001000000027 /* IPhoneSetupView.swift */,
 				DC0000000000003000000004 /* Migration */,
+				DC0000000000003000000005 /* Design */,
+				DC0000000000003000000006 /* Focus */,
+				DC0000000000003000000007 /* AgentTracking */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
@@ -111,6 +126,33 @@
 				DC0000000000001000000028 /* LegacyDefaults.swift */,
 			);
 			path = Migration;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000005 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000029 /* StatusBadge.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000006 /* Focus */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000030 /* FocusFilterManager.swift */,
+			);
+			path = Focus;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000007 /* AgentTracking */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000031 /* AgentTrackingView.swift */,
+				DC0000000000001000000032 /* AgentTrackingSidebar.swift */,
+				DC0000000000001000000033 /* DetailPanes.swift */,
+				DC0000000000001000000034 /* SetupSheets.swift */,
+			);
+			path = AgentTracking;
 			sourceTree = "<group>";
 		};
 		DC0000000000003000000003 /* Products */ = {
@@ -215,6 +257,12 @@
 				DC0000000000002000000026 /* IPhoneRelay.swift in Sources */,
 				DC0000000000002000000027 /* IPhoneSetupView.swift in Sources */,
 				DC0000000000002000000028 /* LegacyDefaults.swift in Sources */,
+				DC0000000000002000000029 /* StatusBadge.swift in Sources */,
+				DC0000000000002000000030 /* FocusFilterManager.swift in Sources */,
+				DC0000000000002000000031 /* AgentTrackingView.swift in Sources */,
+				DC0000000000002000000032 /* AgentTrackingSidebar.swift in Sources */,
+				DC0000000000002000000033 /* DetailPanes.swift in Sources */,
+				DC0000000000002000000034 /* SetupSheets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
