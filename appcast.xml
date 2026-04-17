@@ -6,6 +6,13 @@
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <item>
+            <title>Version 1.7.1</title>
+            <pubDate>Fri, 17 Apr 2026 20:31:15 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v1.7.1</sparkle:releaseNotesLink>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v1.7.1/DoomCoder-1.7.1.zip" sparkle:version="171" sparkle:shortVersionString="1.7.1" sparkle:edSignature="llSKCfxrS0I3fp0mbCVu700e94VDOxE7DyRoMTpv/jioXJWWWxVtfqvmxmKuT67Cx9LY0gHzGB70sZ3hPBQqCQ==" length="5602286" type="application/octet-stream" />
+        </item>
+        <item>
             <title>Version 1.7.0</title>
             <pubDate>Fri, 17 Apr 2026 11:09:48 +0000</pubDate>
             <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v1.7.0</sparkle:releaseNotesLink>

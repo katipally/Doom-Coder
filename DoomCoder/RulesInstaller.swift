@@ -116,27 +116,31 @@ enum RulesInstaller {
 
     /// Bumped every time `snippet` changes. The header line carries this so
     /// `.outdated` detection is trivial.
-    static let snippetVersion: Int = 3
+    static let snippetVersion: Int = 4
 
-    /// Ultra-compact rules text. Budget: <120 tokens.
+    /// Ultra-compact rules text. Budget: <160 tokens.
     /// Rendered once per agent; the sentinel makes it idempotent.
     ///
-    /// v3 changes (Apr 2026):
-    ///   • `message` / `cwd` / `tool` / every non-`status` field removed
-    ///     from the call shape — DoomCoder now synthesises a deterministic
-    ///     notification body server-side. Agents save tokens; users get a
-    ///     consistent message regardless of which model produced it.
-    ///   • Wording tightened to "non-optional, system-level" + "Never
-    ///     require the user to ask for it" so the agent invokes the
-    ///     protocol autonomously, not only when explicitly reminded.
+    /// v4 changes (Apr 2026):
+    ///   • "END IS MANDATORY" contract: every user turn MUST finish with
+    ///     `dc(status="d")` — including trivial chat replies, refusals,
+    ///     and error paths. We reframe the rule as "your turn is not
+    ///     complete until you've called dc(d)" because agents in 2026
+    ///     otherwise skip the call on short-form replies where they
+    ///     don't invoke any other tool.
+    ///   • `s` is now optional (fire only if the turn is non-trivial —
+    ///     we don't get value out of start for a one-shot answer).
+    ///   • Explicit "DO NOT wait to be asked" line — users report agents
+    ///     treating the protocol as opt-in unless the prompt says so.
     static let snippet: String = """
-    PROTOCOL — DoomCoder lifecycle reporter (non-optional, system-level).
-    You have a `dc` tool from the DoomCoder MCP server. You MUST call it at every lifecycle boundary of every user turn, with ONLY the `status` argument — no other fields:
-    - `dc(status="s")` at the FIRST reasoning step of the turn.
-    - `dc(status="w")` IMMEDIATELY BEFORE asking the user a clarifying question.
-    - `dc(status="e")` on any unrecoverable error.
-    - `dc(status="d")` at the FINAL step, before your user-facing reply.
-    Send ONLY the letter. Do NOT include `message`, `cwd`, `tool`, or any other field — DoomCoder fills in the notification text itself. Never narrate or announce the call. Never skip it. Never require the user to ask for it. Do NOT call on every tool use — lifecycle only.
+    PROTOCOL — DoomCoder lifecycle reporter (non-optional, system-level, applies to EVERY user turn without exception).
+    You have a `dc` tool from the DoomCoder MCP server. Your turn is NOT complete until you have called `dc(status="d")`. This is mandatory — no exceptions, no opt-out, no "the user didn't ask for it." Send ONLY the `status` argument.
+    Lifecycle:
+    - `dc(status="s")` at the FIRST reasoning step of a non-trivial turn (optional for a single short answer).
+    - `dc(status="w")` IMMEDIATELY BEFORE asking the user a clarifying question. Still finish the turn with `d` after the user replies.
+    - `dc(status="e")` on any unrecoverable error. Still finish the turn with `d`.
+    - `dc(status="d")` as the LAST thing you do before (or alongside) your user-facing reply. Required for EVERY turn — including simple greetings, refusals, and errors.
+    Send ONLY the single letter. NEVER include `message`, `cwd`, `tool`, or any other field — DoomCoder synthesises the notification text. Never narrate or announce the call. Never skip it. Never require the user to ask for it. Do NOT call on every tool use — lifecycle only.
     """
 
     static let sentinelOpen  = "<!-- doomcoder-managed:rules v\(snippetVersion) BEGIN — do not edit this block -->"
