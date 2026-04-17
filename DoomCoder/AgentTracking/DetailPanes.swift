@@ -515,7 +515,8 @@ struct SystemDetailPane: View {
                 .buttonStyle(.borderedProminent)
 
                 if let last = focusManager.lastDonationAt {
-                    Text("Last donation: \(last.formatted(date: .omitted, time: .standard)) (active=\(focusManager.lastDonationActive))")
+                    let activeStr = focusManager.lastDonationActive ? "true" : "false"
+                    Text("Last donation: \(last.formatted(date: .omitted, time: .standard)) (active=\(activeStr))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
