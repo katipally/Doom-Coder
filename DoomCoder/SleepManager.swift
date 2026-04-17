@@ -7,12 +7,12 @@ import ServiceManagement
 // MARK: - Types
 
 enum DoomCoderMode: String, CaseIterable {
-    case full      = "full"
+    case screenOn  = "screenOn"
     case screenOff = "screenOff"
 
     var displayName: String {
         switch self {
-        case .full:      return "Full Mode"
+        case .screenOn:  return "Screen On"
         case .screenOff: return "Screen Off"
         }
     }
@@ -121,8 +121,13 @@ final class SleepManager {
     // MARK: - Init
 
     init() {
-        let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.full.rawValue
-        self.mode = DoomCoderMode(rawValue: saved) ?? .full
+        let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.screenOn.rawValue
+        // v1.8 migration: legacy "full" → "screenOn" (same behaviour, new name).
+        let resolved = (saved == "full") ? .screenOn : (DoomCoderMode(rawValue: saved) ?? .screenOn)
+        self.mode = resolved
+        if saved == "full" {
+            UserDefaults.standard.set(DoomCoderMode.screenOn.rawValue, forKey: "doomcoder.mode")
+        }
         self.sessionTimerHours = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer") as? Int ?? 0
         self.screenOffRearmMinutes = UserDefaults.standard.object(forKey: "doomcoder.screenOffRearm") as? Int ?? 10
         startThermalMonitoring()

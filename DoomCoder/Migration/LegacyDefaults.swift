@@ -7,6 +7,7 @@ enum LegacyDefaults {
     private static let v10FlagKey = "doomcoder.migration.v1.0"
     private static let v11FlagKey = "doomcoder.migration.v1.1"
     private static let v12FlagKey = "doomcoder.migration.v1.2"
+    private static let v18FlagKey = "doomcoder.migration.v1.8"
 
     private static let legacyKeys: [String] = [
         "doomcoder.customCLIBinaries",
@@ -21,6 +22,7 @@ enum LegacyDefaults {
         migrateV10()
         migrateV11()
         migrateV12()
+        migrateV18()
     }
 
     private static func migrateV10() {
@@ -120,5 +122,55 @@ enum LegacyDefaults {
 
         defaults.set(true, forKey: v12FlagKey)
         FileHandle.standardError.write(Data("LegacyDefaults v1.2: migrated \(migrated) keys\n".utf8))
+    }
+
+    // v1.2 → v1.8:
+    //   - WatchTarget enum (.none/.all/.agentType) replaced with a per-agent
+    //     Set<String> at `dc.watchedAgentIds`. Legacy `.all` → seed every
+    //     currently-configured agent. `.agentType(id)` → just {id}. `.none`
+    //     → empty set.
+    //   - Transport mode `"full"` → `"screenOn"` at `doomcoder.mode`.
+    //   - Legacy hook round-trip flag cleared.
+    private static func migrateV18() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: v18FlagKey) else { return }
+
+        var migrated = 0
+
+        // Mode rename
+        if defaults.string(forKey: "doomcoder.mode") == "full" {
+            defaults.set("screenOn", forKey: "doomcoder.mode")
+            migrated += 1
+        }
+
+        // WatchTarget → watchedAgentIds
+        if defaults.array(forKey: "dc.watchedAgentIds") == nil,
+           let data = defaults.data(forKey: "dc.watchTarget") {
+            // Minimal manual decode — WatchTarget no longer exists as a type.
+            // The encoded JSON looks like {"none":{}} / {"all":{}} /
+            // {"agentType":{"_0":"cursor"}}.
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if obj["all"] != nil {
+                    let configured = (defaults.array(forKey: "dc.configuredAgentIds") as? [String]) ?? []
+                    defaults.set(configured, forKey: "dc.watchedAgentIds")
+                } else if let at = obj["agentType"] as? [String: Any],
+                          let id = at["_0"] as? String {
+                    defaults.set([id], forKey: "dc.watchedAgentIds")
+                } else {
+                    defaults.set([String](), forKey: "dc.watchedAgentIds")
+                }
+                migrated += 1
+            }
+            defaults.removeObject(forKey: "dc.watchTarget")
+        }
+
+        // Drop legacy hook round-trip dict
+        if defaults.object(forKey: "dc.didRoundTrip") != nil {
+            defaults.removeObject(forKey: "dc.didRoundTrip")
+            migrated += 1
+        }
+
+        defaults.set(true, forKey: v18FlagKey)
+        FileHandle.standardError.write(Data("LegacyDefaults v1.8: migrated \(migrated) keys\n".utf8))
     }
 }

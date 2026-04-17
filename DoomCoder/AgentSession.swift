@@ -52,28 +52,24 @@ struct AgentSession: Identifiable, Equatable, Sendable {
 
 // MARK: - AgentCatalog
 //
-// Central place to resolve agent ids to a display name and their installation tier.
-// Adding a new agent only requires one entry here plus an entry in HookInstaller or
-// MCPInstaller.
+// Central place to resolve agent ids to a display name. Adding a new agent
+// requires one entry here plus an entry in MCPInstaller.
 
 enum AgentCatalog {
 
     struct Info: Sendable {
         let id: String
         let displayName: String
-        let tier: Tier
-
-        enum Tier: Sendable { case hook, mcp }
     }
 
     static let all: [Info] = [
-        Info(id: "claude-code", displayName: "Claude Code",  tier: .mcp),
-        Info(id: "copilot-cli", displayName: "Copilot CLI",  tier: .mcp),
-        Info(id: "cursor",      displayName: "Cursor",       tier: .mcp),
-        Info(id: "windsurf",    displayName: "Windsurf",     tier: .mcp),
-        Info(id: "gemini-cli",  displayName: "Gemini CLI",   tier: .mcp),
-        Info(id: "codex",       displayName: "Codex",        tier: .mcp),
-        Info(id: "vscode-mcp",  displayName: "VS Code (MCP)", tier: .mcp),
+        Info(id: "claude-code", displayName: "Claude Code"),
+        Info(id: "copilot-cli", displayName: "Copilot CLI"),
+        Info(id: "cursor",      displayName: "Cursor"),
+        Info(id: "windsurf",    displayName: "Windsurf"),
+        Info(id: "gemini-cli",  displayName: "Gemini CLI"),
+        Info(id: "codex",       displayName: "Codex"),
+        Info(id: "vscode-mcp",  displayName: "VS Code (MCP)"),
     ]
 
     static func info(forId id: String) -> Info? {

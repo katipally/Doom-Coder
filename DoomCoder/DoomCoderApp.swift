@@ -13,12 +13,13 @@ struct DoomCoderApp: App {
     // callback is needed.
 
     init() {
-        // One-shot cleanup of v0.x + v1.0.x UserDefaults keys that no longer exist.
+        // One-shot cleanup of legacy UserDefaults keys that no longer exist
+        // (includes the v1.7→v1.8 watchTarget → watchedAgentIds migration and
+        // the Full Mode → Screen On rename).
         LegacyDefaults.migrate()
-        // Eagerly deploy both the hook runner AND the MCP server so they're
-        // always up to date before any agent touches them. Silent on failure —
-        // Agent Tracking surfaces any problem via per-agent status badges.
-        try? HookRuntime.deploy()
+        // Eagerly deploy the MCP server script so it's always current before
+        // any agent touches it. Silent on failure — Agent Tracking surfaces
+        // problems via per-agent status badges.
         try? MCPRuntime.deploy()
     }
 
@@ -41,7 +42,7 @@ struct DoomCoderApp: App {
             }
         }
 
-        Window("Agents & Channels", id: "configure") {
+        Window("Configure Agents", id: "configure") {
             AgentTrackingView(
                 agentStatus: agentStatus,
                 iPhoneRelay: iPhoneRelay,
@@ -65,7 +66,14 @@ struct DoomCoderApp: App {
         }
         .windowResizability(.contentSize)
 
-        Window("DoomCoder Doctor", id: "doomcoder-doctor") {
+        Window("Welcome to DoomCoder", id: "onboarding") {
+            OnboardingView(sleepManager: sleepManager) {
+                NSApplication.shared.keyWindow?.close()
+            }
+        }
+        .windowResizability(.contentSize)
+
+        Window("Doctor", id: "doomcoder-doctor") {
             DoomCoderDoctor(
                 agentStatus: agentStatus,
                 iPhoneRelay: iPhoneRelay,

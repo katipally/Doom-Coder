@@ -45,8 +45,7 @@ Carthage/Build/
 guide/0[0-9]-*.md
 guide/README.md
 
-# Original wide logo (cropped version logo.png is tracked)
-logo-doomcoder.png
+# Assets tracked in assets/ — nothing here is ignored.
 
 # Editor
 .vscode/

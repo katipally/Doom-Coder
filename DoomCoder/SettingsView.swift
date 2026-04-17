@@ -103,7 +103,7 @@ private struct AdvancedTab: View {
         Form {
             Section("Bridge") {
                 LabeledContent("Socket") {
-                    Text(HookRuntime.socketPath)
+                    Text(socketServer.socketPath)
                         .font(.system(.caption, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -133,11 +133,6 @@ private struct AdvancedTab: View {
             }
 
             Section("Runtimes") {
-                LabeledContent("Hook runtime") {
-                    Text("v\(HookRuntime.scriptVersion)")
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
                 LabeledContent("MCP runtime") {
                     Text("v\(MCPRuntime.version)")
                         .font(.system(.body, design: .monospaced))
@@ -201,7 +196,6 @@ private struct AdvancedTab: View {
         reinstallMessage = nil
         Task {
             do {
-                try HookRuntime.deploy()
                 try MCPRuntime.deploy()
                 reinstallMessage = "Done."
             } catch {
@@ -240,7 +234,7 @@ private struct OpenAgentTrackingButton: View {
         Button {
             openWindow(id: "configure")
         } label: {
-            Label("Open Agents & Channels…", systemImage: "rectangle.stack.badge.play")
+            Label("Open Configure Agents…", systemImage: "rectangle.stack.badge.play")
         }
     }
 }

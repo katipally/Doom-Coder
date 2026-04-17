@@ -5,8 +5,10 @@ struct MenuBarView: View {
     var updaterViewModel: CheckForUpdatesViewModel
     @Bindable var agentStatus: AgentStatusManager
     @Environment(\.openWindow) private var openWindow
+    @State private var didCheckOnboarding = false
 
     var body: some View {
+        let _ = presentOnboardingIfNeeded()
         // ── Toggle ──────────────────────────────────────────────────────────
         Button {
             sleepManager.toggle()
@@ -61,7 +63,7 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        // ── Agents & Channels / Track ────────────────────────────────────────
+        // ── Configure Agents / Track ─────────────────────────────────────────
         Divider()
         Button {
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -70,35 +72,34 @@ struct MenuBarView: View {
             Label(agentStatusHeader, systemImage: agentStatusIcon)
         }
 
-        // Track submenu — v1.5. Lists only agents the user has already
-        // *configured* (hook round-trip passed OR MCP hello seen). Empty
-        // list shows a hint that nudges them into the Configure window.
+        // Track submenu — v1.8. Per-agent toggles (no single-select, no "All").
+        // Lists only agents the user has already *configured*. Empty list
+        // shows a hint that nudges them into the Configure window.
         Menu("Track") {
             let configured = agentStatus.configuredAgents()
             if configured.isEmpty {
                 Text("No configured agents yet")
                     .foregroundStyle(.secondary)
-                Button("Open Agents & Channels…") {
+                Button("Open Configure Agents…") {
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     openWindow(id: "configure")
                 }
             } else {
-                Button(checkLabel(agentStatus.watchTarget == .all,
-                                  "Track all configured")) {
-                    agentStatus.watchTarget = .all
-                }
-                Divider()
                 ForEach(configured, id: \.id) { info in
-                    Button(checkLabel(agentStatus.watchTarget == .agentType(info.id),
+                    Button(checkLabel(agentStatus.watchedAgentIds.contains(info.id),
                                       info.displayName)) {
-                        agentStatus.watchTarget = .agentType(info.id)
+                        if agentStatus.watchedAgentIds.contains(info.id) {
+                            agentStatus.watchedAgentIds.remove(info.id)
+                        } else {
+                            agentStatus.watchedAgentIds.insert(info.id)
+                        }
                     }
                 }
-            }
-            Divider()
-            Button(checkLabel(agentStatus.watchTarget == .none,
-                              "Track none (silent)")) {
-                agentStatus.watchTarget = .none
+                Divider()
+                Button("Turn all off") {
+                    agentStatus.watchedAgentIds.removeAll()
+                }
+                .disabled(agentStatus.watchedAgentIds.isEmpty)
             }
         }
 
@@ -122,7 +123,7 @@ struct MenuBarView: View {
         }
         .disabled(!updaterViewModel.canCheckForUpdates)
 
-        Button("DoomCoder Doctor…") {
+        Button("Doctor…") {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openWindow(id: "doomcoder-doctor")
         }
@@ -140,8 +141,8 @@ struct MenuBarView: View {
             Button("iPhone Notifications Guide") {
                 openGuide("iphone-notifications.md")
             }
-            Button("Hooks Reference") {
-                openGuide("hooks-reference.md")
+            Button("MCP Reference") {
+                openGuide("mcp-reference.md")
             }
             Button("Troubleshooting") {
                 openGuide("troubleshooting.md")
@@ -169,7 +170,7 @@ struct MenuBarView: View {
     private func modeLabel(_ mode: DoomCoderMode, selected: Bool) -> String {
         let prefix = selected ? "✓  " : "    "
         switch mode {
-        case .full:      return "\(prefix)Full Mode — screen stays on"
+        case .screenOn:  return "\(prefix)Screen On — display stays on, Mac awake"
         case .screenOff: return "\(prefix)Screen Off — display sleeps, Mac awake"
         }
     }
@@ -185,9 +186,9 @@ struct MenuBarView: View {
 
     private var agentStatusHeader: String {
         if agentStatus.isAnyAgentActive {
-            return "Agents & Channels… (\(agentStatus.sessions.count) live)"
+            return "Configure Agents… (\(agentStatus.sessions.count) live)"
         }
-        return "Agents & Channels…"
+        return "Configure Agents…"
     }
 
     private var agentStatusIcon: String {
@@ -197,5 +198,16 @@ struct MenuBarView: View {
     private func openGuide(_ filename: String) {
         let url = URL(string: "https://github.com/katipally/Doom-Coder/blob/main/guide/\(filename)")!
         NSWorkspace.shared.open(url)
+    }
+
+    private func presentOnboardingIfNeeded() {
+        guard !didCheckOnboarding else { return }
+        didCheckOnboarding = true
+        let key = "dc.onboardingCompleted"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openWindow(id: "onboarding")
+        }
     }
 }

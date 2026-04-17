@@ -177,24 +177,12 @@ struct AgentDetailPane: View {
     }
 
     private var tierSubtitle: String {
-        guard let info else { return "Unknown agent" }
-        switch info.tier {
-        case .hook: return "Hook integration · deterministic"
-        case .mcp:  return "MCP server integration"
-        }
+        guard info != nil else { return "Unknown agent" }
+        return "MCP server integration"
     }
 
     private var statusTone: StatusBadge.Tone {
-        if let info, info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id) {
-            switch HookInstaller.status(for: hook) {
-            case .installed: return .ready
-            case .partial:   return .warn
-            case .notInstalled: return .off
-            case .missingHookScript: return .error
-            }
-        }
-        if let info, info.tier == .mcp,
+        if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             switch MCPInstaller.status(for: mcp) {
             case .live:          return .ready
@@ -208,11 +196,7 @@ struct AgentDetailPane: View {
     }
 
     private var statusText: String {
-        if let info, info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id) {
-            return HookInstaller.status(for: hook).label
-        }
-        if let info, info.tier == .mcp,
+        if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             switch MCPInstaller.status(for: mcp) {
             case .live:          return "live"
@@ -226,11 +210,7 @@ struct AgentDetailPane: View {
     }
 
     private var configPath: String {
-        if let info, info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id) {
-            return HookInstaller.configPath(for: hook)
-        }
-        if let info, info.tier == .mcp,
+        if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             return mcp.configPath.path
         }
@@ -287,11 +267,7 @@ struct AgentDetailPane: View {
     }
 
     private var isInstalled: Bool {
-        if let info, info.tier == .hook,
-           let hook = HookInstaller.Agent(rawValue: info.id) {
-            if case .installed = HookInstaller.status(for: hook) { return true }
-        }
-        if let info, info.tier == .mcp,
+        if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             let s = MCPInstaller.status(for: mcp)
             return s == .configWritten || s == .live
@@ -319,13 +295,8 @@ struct AgentDetailPane: View {
         Task {
             defer { busy = false }
             do {
-                if let info, info.tier == .hook,
-                   let hook = HookInstaller.Agent(rawValue: info.id) {
-                    let msg = try HookInstaller.uninstall(hook)
-                    agentStatus.unmarkConfigured(info.id)
-                    lastActionOutput = "✓ Uninstalled\n\(msg)"
-                } else if let info, info.tier == .mcp,
-                          let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
+                if let info,
+                   let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
                     _ = try MCPInstaller.uninstall(mcp)
                     agentStatus.unmarkConfigured(info.id)
                     lastActionOutput = "✓ Uninstalled \(mcp.displayName)"
@@ -407,10 +378,12 @@ struct AgentDetailPane: View {
                 lastActionOutput += "\n  ✓ gate would accept (agent is watched)"
             } else {
                 let hint: String
-                switch agentStatus.watchTarget {
-                case .none:            hint = "Track is paused — flip it to All or this agent."
-                case .all:             hint = "Agent is not configured. Run Setup first."
-                case .agentType(let id): hint = "Track is set to \(id). Switch to this agent or All."
+                if !agentStatus.isAgentConfigured(info.id) {
+                    hint = "Agent is not configured. Run Setup first."
+                } else if !agentStatus.watchedAgentIds.contains(info.id) {
+                    hint = "Tracking is OFF for \(info.displayName). Turn it on in the menubar or Configure window."
+                } else {
+                    hint = "Gate refused for an unknown reason — reopen Setup."
                 }
                 lastActionOutput += "\n  ⚠︎ gate would DROP (\(hint))"
                 lastActionOutput += "\n  ↳ bypassing gate for this Doctor run so you can test ntfy anyway."

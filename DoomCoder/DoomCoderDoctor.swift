@@ -111,15 +111,6 @@ struct DoomCoderDoctor: View {
                 : "Socket server is not running — events cannot reach DoomCoder."
         ))
 
-        let hookPath = HookRuntime.hookScriptURL.path
-        let hookExists = FileManager.default.isExecutableFile(atPath: hookPath)
-        r.append(ProbeRow(
-            id: "hook-runtime",
-            label: "Hook runtime script",
-            severity: hookExists ? .ok : .fail,
-            detail: hookExists ? hookPath : "Missing or not executable: \(hookPath)"
-        ))
-
         let mcpPath = MCPRuntime.scriptURL.path
         let mcpExists = FileManager.default.isExecutableFile(atPath: mcpPath)
         r.append(ProbeRow(
@@ -128,34 +119,6 @@ struct DoomCoderDoctor: View {
             severity: mcpExists ? .ok : .fail,
             detail: mcpExists ? "\(mcpPath) (v\(MCPRuntime.version))" : "Missing or not executable: \(mcpPath)"
         ))
-
-        for hook in HookInstaller.Agent.allCases {
-            let status = HookInstaller.status(for: hook)
-            let sev: ProbeSeverity
-            let detail: String
-            switch status {
-            case .installed:
-                let last = agentStatus.sessions.filter { $0.agent == hook.rawValue }.map(\.lastEventAt).max()
-                sev = .ok
-                detail = "Config at \(HookInstaller.configPath(for: hook))"
-                    + (last.map { " · last event \(relative($0))" } ?? "")
-            case .partial:
-                sev = .warn
-                detail = "Config found but incomplete — re-run setup."
-            case .missingHookScript:
-                sev = .fail
-                detail = "Config points at a hook script that is missing."
-            case .notInstalled:
-                sev = .info
-                detail = "Not installed."
-            }
-            r.append(ProbeRow(
-                id: "hook-\(hook.rawValue)",
-                label: "Hook · \(hook.displayName)",
-                severity: sev,
-                detail: detail
-            ))
-        }
 
         for mcp in MCPInstaller.Agent.allCases {
             let status = MCPInstaller.status(for: mcp)

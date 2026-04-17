@@ -21,11 +21,9 @@
 		DC0000000000002000000019 /* SocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000019 /* SocketServer.swift */; };
 		DC0000000000002000000020 /* AgentStatusManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000020 /* AgentStatusManager.swift */; };
 		DC0000000000002000000201 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* Log.swift */; };
-		DC0000000000002000000021 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* HookInstaller.swift */; };
-		DC0000000000002000000022 /* HookRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* HookRuntime.swift */; };
-DC0000000000002000000099 /* HookRoundTripTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000099 /* HookRoundTripTest.swift */; };
 DC0000000000002000000101 /* InstallAnywherePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* InstallAnywherePane.swift */; };
 DC0000000000002000000102 /* DoomCoderDoctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* DoomCoderDoctor.swift */; };
+		DC0000000000002000000203 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000203 /* OnboardingView.swift */; };
 DC0000000000002000000103 /* RulesInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* RulesInstaller.swift */; };
 DC0000000000002000000104 /* MCPRoundTripTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* MCPRoundTripTest.swift */; };
 		DC0000000000002000000024 /* MCPRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* MCPRuntime.swift */; };
@@ -56,11 +54,9 @@ DC0000000000002000000104 /* MCPRoundTripTest.swift in Sources */ = {isa = PBXBui
 		DC0000000000001000000019 /* SocketServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketServer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000020 /* AgentStatusManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000201 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
-		DC0000000000001000000021 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
-		DC0000000000001000000022 /* HookRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRuntime.swift; sourceTree = "<group>"; };
-DC0000000000001000000099 /* HookRoundTripTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookRoundTripTest.swift; sourceTree = "<group>"; };
 DC0000000000001000000101 /* InstallAnywherePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallAnywherePane.swift; sourceTree = "<group>"; };
 DC0000000000001000000102 /* DoomCoderDoctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderDoctor.swift; sourceTree = "<group>"; };
+		DC0000000000001000000203 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 DC0000000000001000000103 /* RulesInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesInstaller.swift; sourceTree = "<group>"; };
 DC0000000000001000000104 /* MCPRoundTripTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRoundTripTest.swift; sourceTree = "<group>"; };
 		DC0000000000001000000024 /* MCPRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPRuntime.swift; sourceTree = "<group>"; };
@@ -109,10 +105,8 @@ DC0000000000001000000104 /* MCPRoundTripTest.swift */ = {isa = PBXFileReference;
 				DC0000000000001000000019 /* SocketServer.swift */,
 				DC0000000000001000000020 /* AgentStatusManager.swift */,
 				DC0000000000001000000201 /* Log.swift */,
-				DC0000000000001000000021 /* HookInstaller.swift */,
-				DC0000000000001000000022 /* HookRuntime.swift */,
-DC0000000000001000000099 /* HookRoundTripTest.swift */,
 				DC0000000000001000000102 /* DoomCoderDoctor.swift */,
+				DC0000000000001000000203 /* OnboardingView.swift */,
 				DC0000000000001000000103 /* RulesInstaller.swift */,
 				DC0000000000001000000104 /* MCPRoundTripTest.swift */,
 				DC0000000000001000000024 /* MCPRuntime.swift */,
@@ -251,10 +245,8 @@ DC0000000000001000000099 /* HookRoundTripTest.swift */,
 				DC0000000000002000000019 /* SocketServer.swift in Sources */,
 				DC0000000000002000000020 /* AgentStatusManager.swift in Sources */,
 				DC0000000000002000000201 /* Log.swift in Sources */,
-				DC0000000000002000000021 /* HookInstaller.swift in Sources */,
-				DC0000000000002000000022 /* HookRuntime.swift in Sources */,
-DC0000000000002000000099 /* HookRoundTripTest.swift in Sources */,
 				DC0000000000002000000102 /* DoomCoderDoctor.swift in Sources */,
+				DC0000000000002000000203 /* OnboardingView.swift in Sources */,
 				DC0000000000002000000103 /* RulesInstaller.swift in Sources */,
 				DC0000000000002000000104 /* MCPRoundTripTest.swift in Sources */,
 				DC0000000000002000000024 /* MCPRuntime.swift in Sources */,
