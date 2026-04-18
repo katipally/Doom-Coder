@@ -35,25 +35,27 @@ import Foundation
 //                    (not file-writable from outside). This path is only
 //                    picked up by projects rooted at `~/`; for every-project
 //                    coverage, users paste the snippet into User Rules.
-//   • Windsurf     — ~/.codeium/windsurf/memories/global_rules.md (append)
-//   • Gemini CLI   — ~/.gemini/GEMINI.md                       (append)
-//   • Codex        — ~/.codex/AGENTS.md                        (append)
 //
-// VS Code is intentionally omitted — its rules story in 2026 is fragmented
-// across settings.json, .github/copilot-instructions.md, and workspace
-// prompts. Users set it up by copy-paste from the Install Anywhere pane.
+// v1.8.3 scope: Claude Code, Copilot CLI, Cursor only. Windsurf / Gemini /
+// Codex / VS Code are handled via the Install Anywhere (custom MCP) pane,
+// which shows the same snippet + MCP config JSON for manual paste. The
+// narrower scope reduced flaky per-agent support: each one evolves its
+// rules-file story independently, which made us promise things we couldn't
+// keep in three places at once.
 
 enum RulesInstaller {
 
     // MARK: - Agent
 
+    // v1.8.3: scope reduced to Cursor, Claude Code, Copilot CLI.
+    // Windsurf / Gemini / Codex cases were removed — they had high support
+    // cost (each one's rules file/MCP config drifted independently) and low
+    // usage. Users on those stacks now follow the generic "Install Anywhere"
+    // (custom MCP) instructions, which let them paste the snippet anywhere.
     enum Agent: String, CaseIterable, Identifiable {
         case claudeCode = "claude-code"
         case copilotCLI = "copilot-cli"
         case cursor
-        case windsurf
-        case gemini     = "gemini-cli"
-        case codex
 
         var id: String { rawValue }
         var catalogId: String { rawValue }
@@ -75,9 +77,6 @@ enum RulesInstaller {
                 home.appendingPathComponent(".copilot/copilot-instructions.md")
             ]
             case .cursor:     return [home.appendingPathComponent(".cursor/rules/doomcoder.mdc")]
-            case .windsurf:   return [home.appendingPathComponent(".codeium/windsurf/memories/global_rules.md")]
-            case .gemini:     return [home.appendingPathComponent(".gemini/GEMINI.md")]
-            case .codex:      return [home.appendingPathComponent(".codex/AGENTS.md")]
             }
         }
 
@@ -121,30 +120,33 @@ enum RulesInstaller {
 
     /// Bumped every time `snippet` changes. The header line carries this so
     /// `.outdated` detection is trivial.
-    static let snippetVersion: Int = 5
+    static let snippetVersion: Int = 6
 
-    /// Ultra-compact rules text. Budget: <80 tokens. One `dc` call per reply.
+    /// Ultra-compact rules text. Budget: ~60 tokens. One `dc` call per reply.
     ///
-    /// v5 changes (Apr 2026):
-    ///   • Dropped `s` (start) and `e` (error) from the instruction set.
-    ///     Agents were firing `dc` multiple times per turn (Cursor notably
-    ///     fires once per tool-result loop, hitting `dc` 2-3× per reply),
-    ///     which was noisy AND token-expensive. We only instruct `d` and
-    ///     `w` now. The wire protocol still accepts `s`/`i`/`e` for
-    ///     back-compat with older snippets; ingestion treats them as noise.
-    ///   • "EXACTLY ONCE" framing — agents tended to treat lifecycle
-    ///     guidance as "fire whenever any of these feel true". We now
-    ///     say one call per reply, hard limit.
-    ///   • Explicit "AFTER your final text is generated" timing, not
-    ///     before tool calls, not between thinking steps.
+    /// v6 changes (Apr 2026):
+    ///   • Single focus: one `dc("d")` at the true end of a reply. Period.
+    ///     v5's "EXACTLY ONCE per reply" framing was still misread by
+    ///     Cursor's tool-result loop as "fire once per loop iteration",
+    ///     producing 2-3 banners per reply. v6 tells the agent flatly:
+    ///     fire only when the reply is complete and no more tool calls or
+    ///     text will follow. Server-side debounce (AgentStatusManager) is
+    ///     a safety net against remaining stragglers.
+    ///   • `dc("w")` kept but de-emphasised; the server now drops duplicate
+    ///     `w` events from the same agent within 15s and drops any `w`
+    ///     while the user is actively typing/clicking, so a noisy agent
+    ///     can't spam the user.
+    ///   • No more "EXACTLY" / "ALWAYS" / "REQUIRED" — the LLM community
+    ///     finding (Apr 2026) is these turn lifecycle guidance into a
+    ///     per-step compulsion. Softer "once, at the end" performs better.
     static let snippet: String = """
-    DoomCoder lifecycle reporter (macOS notification hook). You have a `dc` tool from the DoomCoder MCP server. Send ONLY the `status` argument; DoomCoder writes the notification text itself.
+    DoomCoder lifecycle reporter (macOS notification bridge). You have a `dc` MCP tool. Send ONLY the `status` argument; DoomCoder writes the notification text itself.
 
-    Call `dc(status="d")` EXACTLY ONCE per reply, at the very end, AFTER your final user-facing text is produced and AFTER all tool work is complete. This tells the user their task is finished and fires a single Mac/phone notification.
+    When your reply is fully complete — after all tool calls AND after your final user-facing text — call `dc(status="d")` exactly once, as the very last thing. This fires a single "task done" notification on the user's Mac or phone.
 
-    Call `dc(status="w")` EXACTLY ONCE when you are about to stop and ask the user a clarifying question. Immediately before the question, not after. When the user replies, resume and still finish the turn with one `dc("d")`.
+    If you need to stop mid-turn to ask the user a question, call `dc(status="w")` once right before the question, then finish later with one `dc("d")` after the user replies.
 
-    Hard rules: Never fire more than one `d` per reply. Never fire on every tool use. Never fire from a background/sub-agent. Never include `message`, `cwd`, `tool`, or any field besides `status`. Never narrate, announce, or explain the call. If unsure, skip `w` and just send one `d` at the end — one `d` per reply is the minimum viable protocol.
+    Do not call `dc` during tool loops, between thinking steps, from sub-agents, or more than once per reply. Do not pass any other argument. Do not mention the call. When unsure, skip `w` entirely — one `d` per reply is the whole protocol.
     """
 
     static let sentinelOpen  = "<!-- doomcoder-managed:rules v\(snippetVersion) BEGIN — do not edit this block -->"

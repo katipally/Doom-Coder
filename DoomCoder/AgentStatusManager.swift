@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import CoreGraphics
 
 // MARK: - AgentStatusManager
 //
@@ -51,6 +52,17 @@ final class AgentStatusManager {
     // Dedup keyed by (sessionId, status.rawValue, tool ?? "") so two distinct
     // tool permission prompts in quick succession don't collapse.
     @ObservationIgnored private var lastDelivered: [String: (at: Date, status: AgentEvent.Status, tool: String)] = [:]
+    // v1.8.3: agent-level debounce for `dc(d)` / `dc(w)` MCP calls. The
+    // snippet v6 says "one d per reply" but some agents (Cursor tool loops,
+    // Copilot CLI pre-task-complete) still fire multiple `d` per turn. The
+    // snippet also doesn't prevent `w` spam during planning-heavy flows.
+    // We drop same-agent repeats: `d` within 30s, `w` within 15s or while
+    // the user has been at the keyboard in the last 30s (HID gate).
+    @ObservationIgnored private var mcpLastDoneAt: [String: Date] = [:]
+    @ObservationIgnored private var mcpLastWaitAt: [String: Date] = [:]
+    private let doneDebounce: TimeInterval = 30.0
+    private let waitDebounce: TimeInterval = 15.0
+    private let waitHIDGate: TimeInterval = 30.0
     // Most recent MCP-hello timestamps keyed by agent id. Populated by
     // `ingestHello(agent:installId:)` and surfaced to the UI as "Live".
     // Persisted across launches under `dc.mcpHelloAt` so an MCP agent stays
@@ -348,6 +360,55 @@ final class AgentStatusManager {
             Log.gate.info("drop reason=not-watched agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) watched=\(self.watchedAgentIds.count, privacy: .public)")
             recordRecent(event, gate: .droppedNotWatched)
             return
+        }
+
+        // v1.8.3: agent-level debounce for MCP-sourced d/w events. This is
+        // the safety net for agents that still fire the same lifecycle
+        // signal more than once per real turn (Cursor tool loops fire `d`
+        // per iteration; CLI tools fire `d` then a redundant task_complete;
+        // planning flows spam `w` on every question). The snippet v6 tells
+        // the LLM "one per reply" — this enforces it server-side.
+        //
+        // Legacy `s` / `i` / `e` from v4 snippet installs fall through to
+        // the existing per-session dedup below.
+        if event.src == .mcp {
+            switch event.status {
+            case .done:
+                if let last = mcpLastDoneAt[event.agent],
+                   now.timeIntervalSince(last) < doneDebounce {
+                    Log.gate.info("drop reason=done-debounce agent=\(event.agent, privacy: .public) since=\(Int(now.timeIntervalSince(last)))s")
+                    recordRecent(event, gate: .droppedDedup)
+                    return
+                }
+                mcpLastDoneAt[event.agent] = now
+            case .wait:
+                if let last = mcpLastWaitAt[event.agent],
+                   now.timeIntervalSince(last) < waitDebounce {
+                    Log.gate.info("drop reason=wait-debounce agent=\(event.agent, privacy: .public) since=\(Int(now.timeIntervalSince(last)))s")
+                    recordRecent(event, gate: .droppedDedup)
+                    return
+                }
+                // HID gate: if the user was at the keyboard/mouse in the last
+                // 30s, they're already actively engaged — suppress the
+                // "needs your input" banner (it'd be noise). We probe the
+                // mouse-moved event class as a cheap proxy for "any HID"
+                // since CG exposes per-class idle times, not a combined one.
+                let mouseIdle = CGEventSource.secondsSinceLastEventType(
+                    .combinedSessionState, eventType: .mouseMoved
+                )
+                let keyIdle = CGEventSource.secondsSinceLastEventType(
+                    .combinedSessionState, eventType: .keyDown
+                )
+                let hidIdle = min(mouseIdle, keyIdle)
+                if hidIdle < waitHIDGate {
+                    Log.gate.info("drop reason=wait-hid-gate agent=\(event.agent, privacy: .public) idle=\(Int(hidIdle))s")
+                    recordRecent(event, gate: .droppedDedup)
+                    return
+                }
+                mcpLastWaitAt[event.agent] = now
+            default:
+                break
+            }
         }
 
         // Dedup window guard for attention events. Non-attention events always pass.
