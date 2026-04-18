@@ -15,21 +15,17 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.3</string>
+	<string>1.8.4</string>
 	<key>CFBundleVersion</key>
-	<string>183</string>
+	<string>184</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Doom Coder no longer uses Apple Events for delivery, but macOS may still request this entitlement for other system integrations.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Doom Coder. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>Doom Coder sends a notification when a tracked AI coding tool goes idle, indicating your task may be complete.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
