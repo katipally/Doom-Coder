@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.2] - 2026-04-17
+
+**Trust + polish patch.** Fixes the three biggest sources of confusion after
+v1.8.1 real-world use: the stale ⚠ badge, the paralysing 120 s "waiting for
+handshake" window, and the misleading "zero tokens" claim. Adds a native
+in-Mac alert channel for users who don't want to deal with ntfy.sh, rewrites
+the rules snippet to stop Cursor from spamming `dc` 3×/turn, and redesigns
+the menu bar Track submenu + Doctor.
+
+### Install flow
+- **Install-and-Verify no longer waits 120 s for agent activity.** Now:
+  writes files → self-tests (≤5 s) → shows a clear "Restart your agent"
+  handshake card with **no timeout**. All agent-dependent checks moved to
+  Doctor where they belong.
+- Agent is marked configured (🟢 Live the moment it says hello) right after
+  self-test passes — no more stuck "installed but ⚠" rows.
+- Clear per-agent restart instructions shown inline (quit + reopen vs.
+  `copilot --version` in a new terminal vs. refresh MCP list).
+
+### Rules snippet v5 + back-compat
+- Rewrote the lifecycle contract: call `dc(d)` **exactly once** per real
+  reply (at the very end), and `dc(w)` **once** right before asking the
+  user a question. Dropped `s`/`e` letters entirely.
+- Legacy `s`/`e` events from stale snippets are silently absorbed (no
+  duplicate notifications).
+- Bumped `snippetVersion` 4 → 5 — existing users auto-prompted to reinstall.
+- Full `README.md`, `guide/agent-setup.md`, and in-app onboarding copy
+  updated.
+
+### Tracking banner + badge
+- After setup, if tracking is OFF for the freshly configured agent an amber
+  "Turn on tracking for [Agent]" banner appears in the Configure window
+  until the user acts.
+- Sidebar install badge now **observes** `mcpHelloAt` and flips 🟢 the
+  instant a hello arrives — no more stale ⚠ after a successful handshake.
+- `.configWritten` state returns neutral (·) instead of ⚠ when the sticky
+  configured flag is set.
+
+### New: In-Mac channel
+- Brand-new attention channel: critical-priority banner + looping system
+  sound (5 / 7 / 10 s, stops on click). No phone, no network, no account.
+- Bypasses Focus via `.timeSensitive` interruption level (no entitlement
+  required; `.critical` still available for those with one).
+- Honours system mute — `NSSound` routes through master volume.
+
+### Menu bar + window chrome
+- Track submenu rebuilt with native SwiftUI `Toggle` rows (macOS 14+),
+  replacing the single-select ✓-prefix list.
+- Removed the `moon.zzz.fill` 💤 toolbar chip from Configure Agents;
+  replaced with a neutral "Idle" / "N live sessions" pill.
+- "About Doom Coder…" → "About…". Removed the placeholder icon before
+  "Configure Agents" that some users read as a warning symbol.
+- Row action button renamed from `eye`/`eye.fill` to `bell`/`bell.fill`
+  (matches notification semantics).
+
+### Doctor
+- Each MCP-agent probe row now includes the timestamp of the **last `dc`
+  call** ("last dc 12 m") so you can instantly see whether the agent is
+  actively talking to DoomCoder.
+- Per-agent **Self-test** button inline on each row — runs the mcp.py
+  round-trip and shows pass/fail + duration without waiting on the real
+  agent.
+
+### Honesty
+- Replaced every "zero tokens" claim with "about 50 tokens per `dc` call".
+  MCP tool schemas + call + result are real bytes; we're transparent about
+  it now.
+
+
+---
+
 ## [1.8.1] - 2026-04-17
 
 **v1.8.0 polish — Setup flow, stale-session UX, Doctor dashboard, onboarding explainer.**

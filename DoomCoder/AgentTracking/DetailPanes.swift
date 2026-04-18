@@ -151,6 +151,7 @@ struct AgentDetailPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if showTrackPrompt { trackPromptBanner }
                 infoGrid
                 actions
                 if !lastActionOutput.isEmpty {
@@ -160,6 +161,45 @@ struct AgentDetailPane: View {
                 Spacer(minLength: 0)
             }
             .padding(20)
+        }
+    }
+
+    private var showTrackPrompt: Bool {
+        guard let info else { return false }
+        return agentStatus.isAgentConfigured(info.id)
+            && !agentStatus.watchedAgentIds.contains(info.id)
+    }
+
+    private var trackPromptBanner: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "bell.badge")
+                .foregroundStyle(.orange)
+                .font(.title2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tracking is off for \(info?.displayName ?? "this agent")")
+                    .font(.callout).bold()
+                Text("Turn it on so DoomCoder fires notifications when this agent needs attention.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button("Turn On Tracking") {
+                if let id = info?.id {
+                    agentStatus.watchedAgentIds.insert(id)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
         }
     }
 
@@ -182,11 +222,13 @@ struct AgentDetailPane: View {
     }
 
     private var statusTone: StatusBadge.Tone {
+        _ = agentStatus.mcpHelloAt[agentId]
         if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             switch MCPInstaller.status(for: mcp) {
             case .live:          return .ready
-            case .configWritten: return .warn
+            case .configWritten:
+                return agentStatus.isAgentConfigured(info.id) ? .off : .warn
             case .modified:      return .warn
             case .notInstalled:  return .off
             case .missingConfig: return .error
@@ -196,11 +238,15 @@ struct AgentDetailPane: View {
     }
 
     private var statusText: String {
+        _ = agentStatus.mcpHelloAt[agentId]
         if let info,
            let mcp = MCPInstaller.Agent.allCases.first(where: { $0.catalogId == info.id }) {
             switch MCPInstaller.status(for: mcp) {
             case .live:          return "live"
-            case .configWritten: return "config written · restart agent"
+            case .configWritten:
+                return agentStatus.isAgentConfigured(info.id)
+                    ? "configured · waiting for next restart"
+                    : "config written · restart agent"
             case .modified:      return "modified (user-authored)"
             case .notInstalled:  return "not installed"
             case .missingConfig: return "config unreadable"
@@ -587,19 +633,22 @@ struct ChannelDetailPane: View {
 
     private var description: String {
         switch kind {
-        case .ntfy: return "HTTPS push via ntfy.sh — subscribe from the ntfy iOS app, no account required."
+        case .inMac: return "Local attention banner + looping sound. No phone, no network. Bypasses Focus via time-sensitive interruption level."
+        case .ntfy:  return "HTTPS push via ntfy.sh — subscribe from the ntfy iOS app, no account required."
         }
     }
 
     private var isReady: Bool {
         switch kind {
-        case .ntfy: return iPhoneRelay.ntfy.isReady
+        case .inMac: return iPhoneRelay.inMac.isReady
+        case .ntfy:  return iPhoneRelay.ntfy.isReady
         }
     }
 
     private var channelID: String {
         switch kind {
-        case .ntfy: return "ntfy"
+        case .inMac: return "inmac"
+        case .ntfy:  return "ntfy"
         }
     }
 
@@ -618,6 +667,11 @@ struct ChannelDetailPane: View {
             Divider()
             gridRow("Active", isActive ? "Yes" : "No")
             switch kind {
+            case .inMac:
+                Divider()
+                gridRow("Sound", InMacAlert.shared.soundName, monospaced: true)
+                Divider()
+                gridRow("Duration", "\(InMacAlert.shared.durationSeconds) s")
             case .ntfy:
                 Divider()
                 gridRow("Topic", iPhoneRelay.ntfy.topic.isEmpty ? "—" : iPhoneRelay.ntfy.topic, monospaced: true)

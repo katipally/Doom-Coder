@@ -44,7 +44,16 @@ final class NotificationManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        // v1.8.2: In-Mac attention channel. No custom actions — tapping /
+        // dismissing the banner stops the looping sound, handled in the
+        // delegate's didReceive path.
+        let inMacCategory = UNNotificationCategory(
+            identifier: InMacAlert.categoryID,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category, inMacCategory])
         UNUserNotificationCenter.current().delegate = self
 
         Task {
@@ -122,9 +131,14 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let actionId = response.actionIdentifier
         let userInfo = response.notification.request.content.userInfo
         let sessionId = userInfo["sessionId"] as? String
+        let categoryId = response.notification.request.content.categoryIdentifier
         Task { @MainActor in
             if actionId == Self.endSessionActionID, let sid = sessionId {
                 self.onEndSession?(sid)
+            }
+            // Any interaction with an in-mac banner stops the looping sound.
+            if categoryId == InMacAlert.categoryID {
+                InMacAlert.shared.stop()
             }
         }
         completionHandler()

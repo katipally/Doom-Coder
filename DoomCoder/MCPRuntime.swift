@@ -216,7 +216,7 @@ enum MCPRuntime {
             "type": "object",
             "properties": {
                 "status":     {"type": "string", "enum": ["s","w","e","d"],
-                               "description": "s=start, w=waiting-for-user-input, e=error, d=done"}
+                               "description": "d=done (fire ONCE at end of reply), w=waiting-for-user-input. s/e accepted for back-compat with older rule snippets but ignored in v5+."}
             },
             "required": ["status"],
             "additionalProperties": False

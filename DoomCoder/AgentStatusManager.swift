@@ -55,12 +55,16 @@ final class AgentStatusManager {
     // `ingestHello(agent:installId:)` and surfaced to the UI as "Live".
     // Persisted across launches under `dc.mcpHelloAt` so an MCP agent stays
     // "Configured" even after a restart (the user did the work once).
-    @ObservationIgnored private(set) var mcpHelloAt: [String: Date] = [:]
+    //
+    // v1.8.2: removed @ObservationIgnored so sidebar badges re-render the
+    // moment a hello arrives. Prior behavior was the row stuck on ⚠︎ until
+    // the window was redrawn for an unrelated reason.
+    private(set) var mcpHelloAt: [String: Date] = [:]
     // Per-agent timestamp of the first real `dc` tool call received over MCP
     // (anything not a hello). Presence of this proves the agent both loaded
     // the config AND read the rules snippet — the two-gate setup contract.
     // Persisted under `dc.mcpLastToolCallAt`.
-    @ObservationIgnored private(set) var mcpLastToolCallAt: [String: Date] = [:]
+    private(set) var mcpLastToolCallAt: [String: Date] = [:]
     // Sticky "this agent finished setup successfully at least once" flag.
     // Persisted under `dc.configuredAgentIds`. Only cleared on explicit
     // Uninstall. Decouples the Track UI from live handshake state so a
