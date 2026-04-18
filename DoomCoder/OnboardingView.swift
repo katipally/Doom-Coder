@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// First-run onboarding flow. Shown once, gated by
-/// UserDefaults key `dc.onboardingCompleted`. Three pages:
-///   1. Welcome + pick default Screen On / Screen Off mode.
-///   2. Configure at least one agent (deep-link to Configure window).
-///   3. Optional iPhone push channel.
+/// UserDefaults key `dc.onboardingCompleted`. Four pages:
+///   1. How DoomCoder works — 20-second explainer + Mac↔Socket↔Agent diagram.
+///   2. Welcome + pick default Screen On / Screen Off mode.
+///   3. Configure at least one agent (deep-link to Configure window).
+///   4. Optional iPhone push channel.
 struct OnboardingView: View {
     let sleepManager: SleepManager
     let onFinish: () -> Void
@@ -12,12 +13,15 @@ struct OnboardingView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var page: Int = 0
 
+    private let pageCount = 4
+
     var body: some View {
         VStack(spacing: 0) {
             TabView(selection: $page) {
-                welcomePage.tag(0)
-                agentsPage.tag(1)
-                iphonePage.tag(2)
+                howItWorksPage.tag(0)
+                welcomePage.tag(1)
+                agentsPage.tag(2)
+                iphonePage.tag(3)
             }
             .tabViewStyle(.automatic)
             .frame(minHeight: 360)
@@ -29,9 +33,9 @@ struct OnboardingView: View {
                     Button("Back") { page -= 1 }
                 }
                 Spacer()
-                PageDots(current: page, total: 3)
+                PageDots(current: page, total: pageCount)
                 Spacer()
-                if page < 2 {
+                if page < pageCount - 1 {
                     Button("Next") { page += 1 }
                         .keyboardShortcut(.defaultAction)
                 } else {
@@ -45,7 +49,77 @@ struct OnboardingView: View {
             }
             .padding(20)
         }
-        .frame(width: 560, height: 440)
+        .frame(width: 560, height: 460)
+    }
+
+    // MARK: Page 0 — How it works
+
+    private var howItWorksPage: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Image(systemName: "bolt.horizontal.circle.fill")
+                .font(.system(size: 42)).foregroundStyle(.tint)
+            Text("How DoomCoder works").font(.largeTitle.bold())
+            Text("A 20-second tour so nothing feels like magic.")
+                .foregroundStyle(.secondary)
+
+            flowDiagram
+                .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 10) {
+                bullet(icon: "1.circle.fill",
+                       title: "Your AI agent calls `dc`",
+                       body: "A tiny built-in tool we install into each supported agent. It reports start, waiting, error, and done.")
+                bullet(icon: "2.circle.fill",
+                       title: "DoomCoder keeps your Mac alive",
+                       body: "Sleep + App Nap stay disabled while any session is live, in Screen On or Screen Off mode.")
+                bullet(icon: "3.circle.fill",
+                       title: "You get notified when it matters",
+                       body: "Mac banners plus optional iPhone pushes via ntfy. Pick per-agent what you want to track.")
+            }
+        }
+        .padding(32)
+    }
+
+    private var flowDiagram: some View {
+        HStack(spacing: 10) {
+            diagramBox(icon: "desktopcomputer", label: "Mac")
+            diagramArrow
+            diagramBox(icon: "app.connected.to.app.below.fill", label: "Socket")
+            diagramArrow
+            diagramBox(icon: "brain", label: "Agent")
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func diagramBox(icon: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.title2).foregroundStyle(.tint)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(width: 80, height: 60)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.08))
+        }
+    }
+
+    private var diagramArrow: some View {
+        Image(systemName: "arrow.left.and.right")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+    }
+
+    private func bullet(icon: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(.tint)
+                .font(.body)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline).fontWeight(.semibold)
+                Text(body).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var welcomePage: some View {
