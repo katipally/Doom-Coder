@@ -214,7 +214,7 @@ struct AgentSetupSheet: View {
                       systemImage: "2.circle")
                 Label("3. When the agent calls dc, DoomCoder sees it, keeps your Mac awake, and fires notifications.",
                       systemImage: "3.circle")
-                Label("No tokens. No network (unless you enable iPhone push). All local.",
+                Label("Minimal overhead — about 50 tokens per `dc` call. No network (unless you enable iPhone push). All local.",
                       systemImage: "lock.shield")
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
@@ -231,20 +231,8 @@ struct AgentSetupSheet: View {
 
     private var installAndVerifyView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if info?.id == "cursor" {
-                cursorUserRulesCallout
-            }
-            if let waiting = waitingFor {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for \(waiting). Restart the agent if you haven't already, then start any chat.")
-                        .font(.caption)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.10)))
-            } else if !installComplete && !installing {
-                Text("Click **Install** to apply the changes above and verify end-to-end.")
+            if !installComplete && !installing {
+                Text("Click **Install & Verify** to apply the changes above and run a local pipeline self-test.")
             }
             ScrollView {
                 Text(installLog.isEmpty ? "Ready." : installLog)
@@ -257,6 +245,12 @@ struct AgentSetupSheet: View {
             .background {
                 RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.04))
             }
+            if installComplete && info?.id == "cursor" {
+                cursorUserRulesCallout
+            }
+            if installComplete {
+                nextStepsCallout
+            }
             if let err = installError {
                 Label(err, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).font(.callout)
@@ -264,12 +258,48 @@ struct AgentSetupSheet: View {
         }
     }
 
+    private var nextStepsCallout: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Next step — restart the agent", systemImage: "arrow.clockwise.circle.fill")
+                .font(.callout.bold())
+                .foregroundStyle(.blue)
+            Text(restartHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("DoomCoder will turn the agent row green as soon as the agent loads the config and makes its first `dc` call. If it doesn't flip in a minute, open the Doctor window to diagnose.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 8).fill(Color.blue.opacity(0.08))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.blue.opacity(0.30), lineWidth: 1)
+        }
+    }
+
+    private var restartHint: String {
+        switch info?.id {
+        case "cursor":         return "Quit Cursor (⌘Q) and reopen it. Start any chat — the first reply should make the row go green."
+        case "copilot-cli":    return "Open a new terminal tab and run `copilot` again. The next reply should make the row go green."
+        case "claude-code":    return "Close the current Claude Code session and start a new one. The next reply should make the row go green."
+        case "windsurf":       return "Quit Windsurf and reopen it. Start any chat — the first reply should make the row go green."
+        case "gemini-cli":     return "Open a new terminal tab and run `gemini` again. The next reply should make the row go green."
+        case "codex":          return "Open a new terminal tab and run `codex` again. The next reply should make the row go green."
+        default:               return "Fully quit and relaunch the agent so it picks up the new config."
+        }
+    }
+
     private var cursorUserRulesCallout: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Cursor requires one extra paste for global coverage", systemImage: "lightbulb.fill")
+            Label("Cursor — paste the snippet into User Rules", systemImage: "lightbulb.fill")
                 .font(.callout.bold())
                 .foregroundStyle(.orange)
-            Text("Cursor's project rules file only auto-attaches inside your home folder. To make DoomCoder work in every project, also paste the snippet into Cursor → Settings → Rules → User Rules.")
+            Text("Cursor's project rule file (`~/.cursor/rules/doomcoder.mdc`) only auto-attaches inside your home folder. For every-project coverage, paste the snippet once into **Cursor → Settings → Rules → User Rules** — that setting isn't writable from outside the app.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -278,7 +308,7 @@ struct AgentSetupSheet: View {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(RulesInstaller.snippet, forType: .string)
-                    showCopyToast("Snippet copied — paste into Cursor → Settings → Rules")
+                    showCopyToast("Snippet copied — paste into Cursor → Settings → Rules → User Rules")
                 } label: {
                     Label("Copy snippet", systemImage: "doc.on.doc")
                 }
@@ -289,7 +319,7 @@ struct AgentSetupSheet: View {
                         NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
                     }
                 } label: {
-                    Label("Open Cursor", systemImage: "arrow.up.right.square")
+                    Label("Open Cursor Settings", systemImage: "arrow.up.right.square")
                 }
             }
         }
@@ -315,7 +345,7 @@ struct AgentSetupSheet: View {
 
     private var explainBody: String {
         guard let info else { return "Unknown agent." }
-        return "\(info.displayName) supports MCP — an open protocol for tool integrations. DoomCoder adds a read-only MCP server entry to the agent's config. The agent calls it to announce lifecycle events. Runs locally, zero tokens."
+        return "\(info.displayName) supports MCP — an open protocol for tool integrations. DoomCoder adds a read-only MCP server entry to the agent's config. The agent calls it once per reply to announce when it's done (or waiting on you). Runs locally; roughly 50 tokens per call."
     }
 
     private var diskTargets: [String] {
@@ -415,63 +445,35 @@ struct AgentSetupSheet: View {
                         append("• No rules file for this agent — config alone is enough.")
                     }
 
-                    // --- Verify phase 1: self-test (30s) --------------------
+                    // --- Verify: DoomCoder-side self-test only -------------
+                    // v1.8.2: We no longer wait for the agent to send a real
+                    // handshake or first tool call during install. Those are
+                    // agent-dependent and users stared at a 2-minute progress
+                    // bar before abandoning. Everything after this point is
+                    // handled by the live pipeline: when the agent restarts
+                    // and fires `mcp-hello` / `dc`, the sidebar flips green
+                    // on its own. Deep diagnostics live in the Doctor window.
                     append("")
-                    append("── Verifying end-to-end ──")
-                    waitingFor = "DoomCoder self-test"
-                    append("• Self-test: can DoomCoder talk to its own MCP script?")
+                    append("── Self-test ──")
+                    append("• Can DoomCoder reach its own MCP script?")
                     if let sm = agentStatus {
                         let selfResult = await MCPRoundTripTest.selfTest(statusManager: sm)
                         switch selfResult {
                         case .failure(let f):
-                            waitingFor = nil
                             append("✗ Self-test failed: \(f.errorDescription ?? "unknown")")
-                            append("  Fix this before restarting \(mcp.displayName) — the socket pipeline is broken.")
+                            append("  Socket pipeline is broken — open Doctor after closing this sheet.")
                             installError = "Self-test failed"
                             installing = false
                             return
                         case .success(let s):
                             append("✓ Self-test passed (\(s.millis) ms).")
                         }
-
-                        // --- Verify phase 2: handshake from real agent (60s) ---
-                        append("• Please restart \(mcp.displayName) now so it loads the new config.")
-                        append("  Waiting up to 60s for a handshake from \(mcp.displayName)…")
-                        waitingFor = "handshake from \(mcp.displayName)"
-                        let since = Date.now
-                        let hello = await MCPRoundTripTest.awaitAgentHandshake(
-                            agentId: info.id, since: since, timeout: 60, statusManager: sm)
-                        switch hello {
-                        case .failure(let f):
-                            waitingFor = nil
-                            append("⚠︎ \(f.errorDescription ?? "no handshake yet")")
-                            append("  Restart \(mcp.displayName); the next turn should flip the badge to 🟢 Configured.")
-                            installComplete = true
-                            append("Done.")
-                            installing = false
-                            return
-                        case .success:
-                            sm.markConfigured(info.id)
-                            append("✓ Handshake received — \(mcp.displayName) loaded the config.")
-                        }
-
-                        // --- Verify phase 3: first `dc` tool call (60s) ----
-                        append("• Start any chat in \(mcp.displayName) so it calls the `dc` tool.")
-                        append("  Waiting up to 60s for first tool call…")
-                        waitingFor = "first `dc` tool call from \(mcp.displayName)"
-                        let tool = await MCPRoundTripTest.awaitFirstToolCall(
-                            agentId: info.id, since: since, timeout: 60, statusManager: sm)
-                        switch tool {
-                        case .success:
-                            append("✓ Rules honored — \(mcp.displayName) called `dc`. Setup complete.")
-                        case .failure(let f):
-                            append("⚠︎ \(f.errorDescription ?? "rules not honored yet")")
-                            append("  Config is loaded, but the rules snippet hasn't fired a `dc` call yet.")
-                            if info.id == "cursor" {
-                                append("  Cursor tip: also paste the snippet into Settings → Rules → User Rules.")
-                            }
-                        }
-                        waitingFor = nil
+                        // Mark the row configured as soon as files are on
+                        // disk + self-test succeeds. Live promotion happens
+                        // separately when `mcp-hello` arrives.
+                        sm.markConfigured(info.id)
+                        append("")
+                        append("✓ Files are in place. \(mcp.displayName) will flip to 🟢 Live the moment it restarts and makes its first `dc` call. Run Doctor if it doesn't turn green.")
                     } else if MCPInstaller.status(for: mcp) == .live {
                         append("✓ MCP script installed. (No status manager attached — skipping live verify.)")
                     }
@@ -551,6 +553,8 @@ struct ChannelSetupSheet: View {
 
     private var explainBody: String {
         switch kind {
+        case .inMac:
+            return "In-Mac Alert fires a loud system banner on this Mac when an agent needs attention, and loops a short sound so you can't miss it. No phone, no network, no setup beyond a one-time notification permission. Works even when DoomCoder isn't the front app."
         case .ntfy:
             return "DoomCoder posts each notification to a private ntfy.sh topic. Install the ntfy iOS app and subscribe to your topic. Works even when you're not on the Apple ecosystem. Free."
         }
@@ -565,6 +569,28 @@ struct ChannelSetupSheet: View {
     private var installView: some View {
         VStack(alignment: .leading, spacing: 12) {
             switch kind {
+            case .inMac:
+                Text("DoomCoder needs permission to post notifications. macOS will prompt you the first time; you can always change your mind in **System Settings → Notifications → DoomCoder**.")
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Text("Alert sound duration")
+                        .font(.caption).bold()
+                    Picker("", selection: Binding(
+                        get: { InMacAlert.shared.durationSeconds },
+                        set: { InMacAlert.shared.durationSeconds = $0 }
+                    )) {
+                        Text("5 s").tag(5)
+                        Text("7 s").tag(7)
+                        Text("10 s").tag(10)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
+                .padding(8)
+                .background { RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)) }
+                Text("The banner's looping sound stops the moment you click or dismiss it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             case .ntfy:
                 Text("Your private topic (random by default — keep it secret):")
                 HStack {
@@ -730,6 +756,10 @@ struct ChannelSetupSheet: View {
         switch step {
         case .explain:
             switch kind {
+            case .inMac:
+                // No per-channel seeding needed; UN auth is requested on
+                // first real delivery via NotificationManager.
+                step = .install
             case .ntfy:
                 relay.ntfy.generateTopicIfNeeded()
                 step = .install
@@ -739,10 +769,11 @@ struct ChannelSetupSheet: View {
         case .verify:
             // Ensure this channel becomes the active delivery method once
             // setup is complete, so the very next agent event actually lands.
-            if relay.ntfy.isReady {
-                switch kind {
-                case .ntfy: relay.selectedChannelID = "ntfy"
-                }
+            switch kind {
+            case .inMac:
+                relay.selectedChannelID = "inmac"
+            case .ntfy:
+                if relay.ntfy.isReady { relay.selectedChannelID = "ntfy" }
             }
             onDone()
         }
@@ -755,6 +786,10 @@ struct ChannelSetupSheet: View {
         verifyOutput = "Sending…"
         Task {
             switch kind {
+            case .inMac:
+                relay.sendTest(channelID: "inmac")
+                try? await Task.sleep(for: .milliseconds(500))
+                verifyOutput = "✓ If you just heard a sound and saw a banner, the In-Mac channel is wired up. Click or dismiss the banner to stop the loop."
             case .ntfy:
                 relay.sendTest(channelID: "ntfy")
                 try? await Task.sleep(for: .seconds(2))

@@ -84,7 +84,7 @@ private struct AgentRow: View {
                 }
             } label: {
                 Label(isTracked ? "Tracking" : "Track",
-                      systemImage: isTracked ? "eye.fill" : "eye")
+                      systemImage: isTracked ? "bell.fill" : "bell")
                     .labelStyle(.titleAndIcon)
                     .font(.caption2)
             }
@@ -110,10 +110,19 @@ private struct AgentRow: View {
     }
 
     private var installBadge: StatusBadge {
+        // Touch agentStatus.mcpHelloAt so this computed property re-runs
+        // whenever a hello arrives — otherwise the sidebar is stuck on
+        // .warn until the window is redrawn for an unrelated reason.
+        _ = agentStatus.mcpHelloAt[info.id]
         if let mcp = Self.mcpAgent(for: info.id) {
             switch MCPInstaller.status(for: mcp) {
             case .live:                    return StatusBadge(.ready)
-            case .configWritten:           return StatusBadge(.warn)
+            case .configWritten:
+                // Locally-known configured (sticky flag) — neutral instead
+                // of ⚠︎. Only show warn when config is written but the
+                // agent has never produced a hello anywhere.
+                if agentStatus.isAgentConfigured(info.id) { return StatusBadge(.off) }
+                return StatusBadge(.warn)
             case .modified:                return StatusBadge(.warn)
             case .notInstalled:            return StatusBadge(.off)
             case .missingConfig:           return StatusBadge(.error)
@@ -152,7 +161,8 @@ private struct ChannelRow: View {
 
     private var channelID: String {
         switch kind {
-        case .ntfy: return "ntfy"
+        case .inMac: return "inmac"
+        case .ntfy:  return "ntfy"
         }
     }
 
@@ -162,7 +172,8 @@ private struct ChannelRow: View {
 
     private var badge: StatusBadge {
         switch kind {
-        case .ntfy: return relay.ntfy.isReady ? StatusBadge(.ready) : StatusBadge(.off)
+        case .inMac: return relay.inMac.isReady ? StatusBadge(.ready) : StatusBadge(.off)
+        case .ntfy:  return relay.ntfy.isReady  ? StatusBadge(.ready) : StatusBadge(.off)
         }
     }
 }

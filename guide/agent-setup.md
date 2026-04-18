@@ -37,7 +37,7 @@ Cursor's User Rules file (`Cursor → Settings → Rules → User Rules`) is not
 
 ## Token cost
 
-The `dc` tool uses a single-character status (`s`=start, `w`=wait, `e`=err, `d`=done) plus an optional ≤60-char message. The rules snippet is under 150 tokens. A 30-minute session with ~20 state transitions costs **under 5k tokens of overhead** — negligible.
+The `dc` tool takes one single-character status. In v5+ DoomCoder's rules snippet instructs agents to call `dc("d")` **exactly once per reply** (when done) and optionally `dc("w")` once before asking you a clarifying question. The wire protocol still accepts `s` (start), `i` (info), and `e` (error) so older snippets keep working, but they are ignored by ingestion. Each `dc` call costs roughly **~50 tokens** (tool schema + arguments + result). One call per reply — not a per-tool-use hook.
 
 ## Verifying
 

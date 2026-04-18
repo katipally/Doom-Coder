@@ -29,7 +29,10 @@ struct DoomCoderDoctor: View {
             table
         }
         .frame(minWidth: 720, idealWidth: 820, minHeight: 520, idealHeight: 640)
-        .onAppear { Task { await runProbes() } }
+        .onAppear {
+            AgentStatusBridge.shared = agentStatus
+            Task { await runProbes() }
+        }
     }
 
     // MARK: Header
@@ -123,10 +126,11 @@ struct DoomCoderDoctor: View {
         for mcp in MCPInstaller.Agent.allCases {
             let status = MCPInstaller.status(for: mcp)
             let live = agentStatus.lastHello(for: mcp.catalogId)
+            let lastDC = agentStatus.lastToolCall(for: mcp.catalogId)
             let ttl: TimeInterval = 600
             let isLive = live.map { Date.now.timeIntervalSince($0) < ttl } ?? false
             let sev: ProbeSeverity
-            let detail: String
+            var detail: String
             switch status {
             case .live:
                 sev = .ok
@@ -141,11 +145,15 @@ struct DoomCoderDoctor: View {
                 sev = .info
                 detail = "Not installed."
             }
+            if let dc = lastDC {
+                detail += " · last dc \(relative(dc))"
+            }
             r.append(ProbeRow(
                 id: "mcp-\(mcp.catalogId)",
                 label: "MCP · \(mcp.displayName)",
                 severity: sev,
-                detail: detail
+                detail: detail,
+                action: status == .notInstalled ? nil : .selfTest(agent: mcp)
             ))
         }
 
@@ -257,10 +265,17 @@ private struct ProbeRow: Identifiable {
     let label: String
     let severity: ProbeSeverity
     let detail: String
+    var action: ProbeAction? = nil
+}
+
+enum ProbeAction {
+    case selfTest(agent: MCPInstaller.Agent)
 }
 
 private struct ProbeRowView: View {
     let row: ProbeRow
+    @State private var testing = false
+    @State private var testResult: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -273,8 +288,65 @@ private struct ProbeRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let r = testResult {
+                    Text(r)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background { RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.05)) }
+                }
             }
             Spacer()
+            if case let .selfTest(agent) = row.action {
+                Button {
+                    runSelfTest(agent: agent)
+                } label: {
+                    if testing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Self-test", systemImage: "waveform.path.ecg")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .controlSize(.small)
+                .disabled(testing)
+            }
         }
     }
+
+    private func runSelfTest(agent: MCPInstaller.Agent) {
+        testing = true
+        testResult = "Running…"
+        Task {
+            // Self-test is agent-agnostic (spawns our own mcp.py) but we
+            // associate it with the row the user clicked so the result is
+            // contextual. Uses the shared AgentStatusManager stored on the
+            // window environment via a singleton bridge.
+            let sm = AgentStatusBridge.shared
+            guard let sm else {
+                await MainActor.run {
+                    testResult = "✗ Doctor isn't wired yet — reopen the window and retry."
+                    testing = false
+                }
+                return
+            }
+            let res = await MCPRoundTripTest.selfTest(statusManager: sm)
+            await MainActor.run {
+                switch res {
+                case .success(let s):
+                    testResult = "✓ Script healthy in \(s.millis) ms (this agent's config is wired the same way)."
+                case .failure(let f):
+                    testResult = "✗ \(f.errorDescription ?? "Self-test failed.")"
+                }
+                testing = false
+            }
+        }
+    }
+}
+
+// Tiny bridge so ProbeRowView can reach the app-wide AgentStatusManager
+// without threading it through every view constructor. Set once on Doctor
+// appearance.
+enum AgentStatusBridge {
+    nonisolated(unsafe) static var shared: AgentStatusManager!
 }

@@ -66,12 +66,16 @@ final class IPhoneRelay {
     // MARK: Channels
 
     let ntfy = NtfyChannel()
+    let inMac = InMacChannel()
 
     /// Static registry of every channel DoomCoder knows about, regardless of
     /// configuration state. Order here is the order shown in the picker.
     var allChannels: [(info: ChannelInfo, channel: any IPhoneChannel)] {
         [
-            (ChannelInfo(id: "ntfy", displayName: "ntfy.sh", icon: "bell.badge.fill"), ntfy)
+            (ChannelInfo(id: "inmac", displayName: "In-Mac Alert",
+                         icon: "bell.and.waves.left.and.right.fill"), inMac),
+            (ChannelInfo(id: "ntfy", displayName: "ntfy.sh",
+                         icon: "bell.badge.fill"), ntfy)
         ]
     }
 
