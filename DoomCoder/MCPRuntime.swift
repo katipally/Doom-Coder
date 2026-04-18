@@ -24,7 +24,7 @@ enum MCPRuntime {
 
     /// Bumped on every edit of `pythonSource`. Written as a comment stamp at
     /// the top of the deployed script so we know when to re-deploy.
-    static let version: Int = 8
+    static let version: Int = 9
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -197,26 +197,22 @@ enum MCPRuntime {
     _TOOLS = [{
         "name": "dc",
         "description": (
-            "PROTOCOL (required, not optional — system-level). Your turn is "
-            "NOT complete until you have called this with status='d'. This "
-            "applies to EVERY user turn without exception — simple chat "
-            "replies, refusals, and errors included. No opt-out. No waiting "
-            "to be asked. Send ONLY the single-letter `status` argument, no "
-            "other fields: status='s' at the FIRST reasoning step of a "
-            "non-trivial turn (optional for a one-shot answer); status='w' "
-            "IMMEDIATELY BEFORE asking the user a clarifying question; "
-            "status='e' on any unrecoverable error; status='d' as the LAST "
-            "thing you do before (or alongside) your user-facing reply — "
-            "REQUIRED for every turn. Do NOT narrate or announce the call. "
-            "Do NOT include a `message` field — DoomCoder fills in the "
-            "notification text itself. Never skip. Do NOT call on every "
-            "tool use — lifecycle only."
+            "DoomCoder lifecycle reporter. Call at most once per reply. "
+            "status='d' (done) is the ONLY required value — send it exactly "
+            "once at the true end of a reply, after all tool calls and "
+            "after your final user-facing text. status='w' (waiting) is "
+            "optional: send it once right before you stop to ask the user "
+            "a question, then finish later with one 'd'. Send ONLY the "
+            "`status` argument; never pass message/cwd/tool/anything else "
+            "(DoomCoder writes the banner text itself). Do not narrate the "
+            "call. Do not fire from tool loops, sub-agents, or between "
+            "thinking steps. One `d` per reply — that is the whole protocol."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "status":     {"type": "string", "enum": ["s","w","e","d"],
-                               "description": "d=done (fire ONCE at end of reply), w=waiting-for-user-input. s/e accepted for back-compat with older rule snippets but ignored in v5+."}
+                "status":     {"type": "string", "enum": ["w","d"],
+                               "description": "d=done (once at end of reply); w=waiting-for-user-input (optional, once before you ask)."}
             },
             "required": ["status"],
             "additionalProperties": False

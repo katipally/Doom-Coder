@@ -14,17 +14,18 @@ import Foundation
 //   4. Offer a matching Restore Backup button in Settings that rolls any
 //      installer back to the most recent pre-install state.
 //
-// Supported agents in Phase B:
+// Supported agents in v1.8.3:
 //   • Cursor       — ~/.cursor/mcp.json (JSON)
-//   • Windsurf     — ~/.codeium/windsurf/mcp_config.json (JSON)
-//   • VS Code      — ~/Library/Application Support/Code/User/mcp.json (JSON)
-//   • Gemini CLI   — ~/.gemini/settings.json (JSON)
-//   • Codex CLI    — ~/.codex/config.toml (TOML; string-level edit)
+//   • Claude Code  — ~/.claude.json (JSON)
+//   • Copilot CLI  — ~/.copilot/mcp-config.json (JSON)
+//
+// v1.8.3: dropped Windsurf/VS Code/Gemini/Codex cases. Users on those
+// agents follow the generic Install Anywhere pane instead.
 
 enum MCPInstaller {
 
     enum Agent: String, CaseIterable, Identifiable {
-        case cursor, windsurf, vscode, gemini, codex
+        case cursor
         case claudeCode = "claude-code"
         case copilotCLI = "copilot-cli"
         var id: String { rawValue }
@@ -32,10 +33,6 @@ enum MCPInstaller {
         var catalogId: String {
             switch self {
             case .cursor:     return "cursor"
-            case .windsurf:   return "windsurf"
-            case .vscode:     return "vscode-mcp"
-            case .gemini:     return "gemini-cli"
-            case .codex:      return "codex"
             case .claudeCode: return "claude-code"
             case .copilotCLI: return "copilot-cli"
             }
@@ -50,14 +47,6 @@ enum MCPInstaller {
             switch self {
             case .cursor:
                 return "Adds a \"doomcoder\" entry to ~/.cursor/mcp.json. Cursor will spawn this MCP server automatically the next time it starts."
-            case .windsurf:
-                return "Adds a \"doomcoder\" entry to ~/.codeium/windsurf/mcp_config.json. Windsurf/Cascade spawns the server on its next launch."
-            case .vscode:
-                return "Adds a \"doomcoder\" entry to VS Code's user-wide mcp.json. Works with GitHub Copilot's agent mode and any MCP-aware extension."
-            case .gemini:
-                return "Adds a \"doomcoder\" MCP server to ~/.gemini/settings.json. Gemini CLI will connect on its next run."
-            case .codex:
-                return "Appends an [mcp_servers.doomcoder] section to ~/.codex/config.toml. Codex CLI will pick it up on the next command."
             case .claudeCode:
                 return "Adds a \"doomcoder\" MCP server to ~/.claude.json. Claude Code connects on next launch and calls the `dc` tool per the rules snippet we install alongside."
             case .copilotCLI:
@@ -71,14 +60,6 @@ enum MCPInstaller {
             switch self {
             case .cursor:
                 return home.appendingPathComponent(".cursor/mcp.json")
-            case .windsurf:
-                return home.appendingPathComponent(".codeium/windsurf/mcp_config.json")
-            case .vscode:
-                return home.appendingPathComponent("Library/Application Support/Code/User/mcp.json")
-            case .gemini:
-                return home.appendingPathComponent(".gemini/settings.json")
-            case .codex:
-                return home.appendingPathComponent(".codex/config.toml")
             case .claudeCode:
                 return home.appendingPathComponent(".claude.json")
             case .copilotCLI:
@@ -92,7 +73,7 @@ enum MCPInstaller {
                 .appendingPathComponent(".doomcoder/backups/\(rawValue)", isDirectory: true)
         }
 
-        var isTOML: Bool { self == .codex }
+        var isTOML: Bool { false }
 
         /// Human-readable key that identifies "our" server entry inside the
         /// config. Same across all agents for easy grep + uninstall.

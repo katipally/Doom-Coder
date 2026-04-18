@@ -66,10 +66,6 @@ enum AgentCatalog {
         Info(id: "claude-code", displayName: "Claude Code"),
         Info(id: "copilot-cli", displayName: "Copilot CLI"),
         Info(id: "cursor",      displayName: "Cursor"),
-        Info(id: "windsurf",    displayName: "Windsurf"),
-        Info(id: "gemini-cli",  displayName: "Gemini CLI"),
-        Info(id: "codex",       displayName: "Codex"),
-        Info(id: "vscode-mcp",  displayName: "VS Code (MCP)"),
     ]
 
     static func info(forId id: String) -> Info? {

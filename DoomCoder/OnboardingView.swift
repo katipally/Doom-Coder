@@ -166,7 +166,7 @@ struct OnboardingView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 42)).foregroundStyle(.tint)
             Text("Configure an AI agent").font(.largeTitle.bold())
-            Text("Pick at least one AI agent — Cursor, Claude Code, Copilot CLI, Windsurf, VS Code MCP, Gemini, or Codex — and run its guided Setup. DoomCoder wires a local MCP server so the agent can announce when it's done (or waiting on you).")
+            Text("Pick one of three first-class agents — Cursor, Claude Code, or Copilot CLI — and run its guided Setup. DoomCoder wires a local MCP server so the agent can announce when it's done (or waiting on you). Using a different agent? The Install Anywhere pane has the same snippet you can paste anywhere.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
