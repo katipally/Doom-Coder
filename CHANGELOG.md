@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 1.8.1
+
+**v1.8.0 polish — Setup flow, stale-session UX, Doctor dashboard, onboarding explainer.**
+Follow-up patch to the v1.8.0 overhaul. Fixes the duplicated "waiting for handshake"
+step users reported, replaces the mysterious 30-minute "timed out" banner with a
+gentler every-2h informational ping, surfaces a live Doctor dashboard, and adds a
+welcome page explaining how DoomCoder actually works.
+
+### Setup sheet
+- **Collapsed 3 steps → 2.** Explain → Install-and-Verify. The old separate Verify
+  step duplicated the 30-second handshake wait that Install was already doing;
+  it's now a single streaming log.
+- Added an inline "Waiting for [Agent] — restart it, then start any chat" strip
+  so users know what DoomCoder is actually waiting for.
+- Added a Mac ↔ Socket ↔ Agent diagram and a "What's happening?" disclosure with
+  plain-English explanation of MCP + rules snippet handshake.
+- Cursor gets a prominent **Copy snippet** action with toast feedback and a direct
+  "Open Cursor → Settings → Rules" button right in the Install step.
+- Verify timeouts rebalanced: 30 s self-test + 60 s handshake + 60 s first tool
+  call (was 30 / 30 / 30 — too tight for Cursor cold starts).
+
+### Stale-session rework
+- Idle threshold raised 30 min → 2 hours, and the session is **no longer
+  auto-closed**. A big task that genuinely runs for 6 hours stays tracked.
+- Instead of a single "timed out" banner, DoomCoder now sends an informational
+  "[Agent] — session inactive 2h+" banner every 2 hours with an interactive
+  **End session** action. Click the action to stop watching without opening the
+  app.
+
+### Live Tracking + Doctor
+- Live Tracking window audit: every configured agent renders with a clear
+  per-agent toggle. Unconfigured agents show a disabled row with an "Open
+  Configure" CTA so the tab isn't a dead-end.
+- Doctor now **auto-runs on open** — parallel MCP self-test and per-agent
+  handshake check, with live green / amber / red status pills and a per-row
+  "Fix" link that opens the Setup sheet for that agent.
+
+### Onboarding
+- Added a **"How DoomCoder works"** welcome page (page 1) with the
+  Mac ↔ Socket ↔ Agent diagram and a 20-second explainer so first-run users
+  understand why they're pasting rules and what MCP is before they're asked
+  to configure anything.
+
+---
+
 ## [1.8.0] - 2026-04-20
 
 **Full UX overhaul — naming, tracking, Cursor, and transport cleanup.**
