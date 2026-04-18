@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - 1.8.1
+## [1.8.1] - 2026-04-17
 
 **v1.8.0 polish — Setup flow, stale-session UX, Doctor dashboard, onboarding explainer.**
 Follow-up patch to the v1.8.0 overhaul. Fixes the duplicated "waiting for handshake"
