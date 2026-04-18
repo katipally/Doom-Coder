@@ -177,8 +177,8 @@ struct AgentSetupSheet: View {
                 Button {
                     if let url = URL(string: "cursor://settings") {
                         NSWorkspace.shared.open(url)
-                    } else {
-                        NSWorkspace.shared.launchApplication("Cursor")
+                    } else if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.todesktop.230313mzl4w4u92") {
+                        NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
                     }
                 } label: {
                     Label("Open Cursor", systemImage: "arrow.up.right.square")
