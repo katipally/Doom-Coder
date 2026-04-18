@@ -24,11 +24,12 @@ final class AgentStatusManager {
 
     // MARK: - Config
 
-    // Sessions with no events for this long are force-finalised to `.done`.
-    // Raised from 10 → 30 min in v1.3: real Claude sessions routinely idle
-    // much longer between prompts, and the previous timeout was prematurely
-    // marking live work as stale.
-    let staleTimeout: TimeInterval = 30 * 60
+    // Sessions with no events for this long trigger an informational inactivity
+    // banner. v1.8.1: raised from 30min → 2h and the reaper no longer force-
+    // closes sessions (real agent sessions routinely idle for hours between
+    // turns, and the "timed out" wording alarmed users). The reaper now only
+    // emits an informational ping with an interactive "End session" action.
+    let staleTimeout: TimeInterval = 2 * 60 * 60
 
     // Duplicate attention events within this window (per session / status /
     // tool triple) are dropped. Keying by tool too (v1.3) lets back-to-back
@@ -65,6 +66,10 @@ final class AgentStatusManager {
     // Uninstall. Decouples the Track UI from live handshake state so a
     // previously-verified agent stays tickable across restarts / idle periods.
     @ObservationIgnored private(set) var configuredAgentIds: Set<String> = []
+    // v1.8.1: per-session timestamp of the last inactivity ping we emitted.
+    // Prevents the reaper from firing a "Session inactive 2h+" banner every
+    // 60s — we re-ping only after another staleTimeout window has elapsed.
+    @ObservationIgnored private var lastInactivityPingAt: [String: Date] = [:]
     @ObservationIgnored nonisolated(unsafe) private var _reaperTimer: Timer?
 
     // Round-trip test continuations keyed by nonce. Reserved for future MCP
@@ -161,6 +166,9 @@ final class AgentStatusManager {
 
     func ingest(_ event: AgentEvent) {
         lastEventAt = Date.now
+        // Real event arrived → reset the inactivity ping cooldown for this
+        // session so the reaper starts its 2h clock afresh.
+        if let sid = event.sessionId { lastInactivityPingAt.removeValue(forKey: sid) }
 
         Log.ingest.info("agent=\(event.agent, privacy: .public) status=\(event.status.rawValue, privacy: .public) src=\(event.src.rawValue, privacy: .public)")
 
@@ -395,23 +403,54 @@ final class AgentStatusManager {
     }
 
     private func reapStaleSessions() {
+        // v1.8.1: no longer auto-closes sessions. Emits an informational
+        // "Session inactive 2h+" event with an interactive "End session"
+        // action on the iOS / macOS notification. The session stays `.running`
+        // in the UI until the user explicitly ends it (or the agent pings
+        // again, at which point inactivity pings reset).
         let now = Date.now
-        let stale = sessions.filter { $0.state != .done && now.timeIntervalSince($0.lastEventAt) > staleTimeout }
-        for var s in stale {
-            s.state = .done
-            s.lastMessage = (s.lastMessage ?? "") + " (timed out)"
-            if let idx = sessionsById[s.id] { sessions[idx] = s }
+        for s in sessions where s.state != .done {
+            guard now.timeIntervalSince(s.lastEventAt) > staleTimeout else { continue }
+            let lastPing = lastInactivityPingAt[s.id] ?? .distantPast
+            guard now.timeIntervalSince(lastPing) > staleTimeout else { continue }
+
+            lastInactivityPingAt[s.id] = now
+            let hours = Int(staleTimeout / 3600)
             let synthetic = AgentEvent(
                 src: s.source,
                 agent: s.agent,
-                status: .done,
+                status: .info,
                 sessionId: s.id,
                 cwd: s.cwd,
-                message: "Timed out after \(Int(staleTimeout / 60)) min"
+                message: "Session inactive \(hours)h+ — still tracking. Tap to end."
             )
+            // Mark so NotificationManager routes it as an interactive
+            // inactivity banner (info events are normally silent).
             onSessionUpdated?(s, synthetic)
-            schedulePrune(sessionId: s.id, delay: 1)
         }
+    }
+
+    /// User-initiated end. Marks the session `.done` and removes it from the
+    /// watched set (so we stop pulling iPhone notifications). Called by the
+    /// "End session" notification action and by any future UI affordance.
+    func endSession(id: String) {
+        guard let idx = sessionsById[id] else { return }
+        var s = sessions[idx]
+        guard s.state != .done else { return }
+        s.state = .done
+        sessions[idx] = s
+        lastInactivityPingAt.removeValue(forKey: id)
+        let synthetic = AgentEvent(
+            src: s.source,
+            agent: s.agent,
+            status: .done,
+            sessionId: s.id,
+            cwd: s.cwd,
+            message: "Ended by user"
+        )
+        onSessionUpdated?(s, synthetic)
+        schedulePrune(sessionId: s.id, delay: 1)
+        recomputeActivity()
     }
 
     // MARK: - MCP handshake

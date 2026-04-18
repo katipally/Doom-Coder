@@ -95,6 +95,11 @@ struct DoomCoderApp: App {
             iPhoneRelay.fire(event: event, session: session)
         }
 
+        // Wire the notification "End session" action back to the manager.
+        NotificationManager.shared.onEndSession = { sid in
+            agentStatus.endSession(id: sid)
+        }
+
         _ = socketServer.start()
     }
 }
