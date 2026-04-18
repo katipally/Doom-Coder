@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.4] - Unreleased
+
+**Strip-down release.** Everything except the core "keep Mac awake"
+functionality has been removed. Doom Coder is now a single-purpose
+menu bar utility with two modes and a session timer. That's it.
+
+### Removed
+- All agent tracking (Cursor, Claude Code, Copilot CLI, etc.)
+- All MCP runtime, installer, and round-trip test harness
+- All hook-based watchers and rules installer
+- iPhone Relay channel (ntfy / Pushover delivery)
+- In-Mac notification channel
+- Socket server and event bus
+- Onboarding, Doctor, Agent Tracking, Configure windows
+- All `Ref/` hook reference docs and most `guide/` documents
+- Legacy defaults migrator
+- `NSAppleEventsUsageDescription` and `NSUserNotificationsUsageDescription`
+  from `Info.plist` (no longer needed)
+
+### Kept
+- Screen On / Screen Off modes (IOPMAssertion based)
+- Session timer (1 / 2 / 4 / 8 hours auto-disable)
+- ⌥ Space global toggle (requires Accessibility)
+- Launch at Login
+- Settings, Check for Updates (Sparkle), About, Quit
+- Screen-off re-arm interval after user activity
+
+---
+
 ## [1.8.3] - 2026-04-17
 
 **Trust patch, part 2.** v1.8.2 softened the `dc` snippet from v4 to v5 but
@@ -907,6 +936,7 @@ existing agent hook configs. No user action required.
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
+[1.8.4]: https://github.com/katipally/Doom-Coder/compare/v1.8.3...v1.8.4
 [0.2.1]: https://github.com/katipally/Doom-Coder/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/katipally/Doom-Coder/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2

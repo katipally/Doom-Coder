@@ -107,8 +107,7 @@ final class SleepManager {
     // assertion. On Apple Silicon the IOPM `PreventSystemSleep` assertion
     // keeps the CPU alive (verified via `pmset -g assertions` + powermetrics
     // sampling during Screen-Off). The `.idleSystemSleepDisabled` activity
-    // additionally opts our own process out of App Nap so background work
-    // we host (socket reader, MCP script spawns) stays responsive.
+    // additionally opts our own process out of App Nap.
     @ObservationIgnored nonisolated(unsafe) private var activityToken: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var _elapsedTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _sessionTimer: Timer?
