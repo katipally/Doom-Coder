@@ -89,15 +89,18 @@ struct TrackAgentsView: View {
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.15), in: Capsule())
                             .foregroundStyle(.secondary)
+                            .transition(.opacity)
                     }
                 }
                 HStack(spacing: 5) {
                     Circle()
                         .fill(stateColor(live?.displayState))
                         .frame(width: 7, height: 7)
+                        .symbolEffect(.pulse, isActive: live?.displayState == .running)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .contentTransition(.interpolate)
                 }
             }
 
@@ -106,7 +109,9 @@ struct TrackAgentsView: View {
             Toggle("", isOn: Binding(
                 get: { enabled[agent] ?? true },
                 set: { v in
-                    enabled[agent] = v
+                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                        enabled[agent] = v
+                    }
                     TrackingStore.setEnabled(agent, v)
                 }
             ))
@@ -127,7 +132,9 @@ struct TrackAgentsView: View {
         .onTapGesture {
             guard isInstalled else { return }
             let v = !(enabled[agent] ?? true)
-            enabled[agent] = v
+            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                enabled[agent] = v
+            }
             TrackingStore.setEnabled(agent, v)
         }
     }
@@ -162,9 +169,11 @@ struct TrackAgentsView: View {
                 iMap[a] = AgentInstallerV2.isInstalled(a)
             }
         }
-        enabled = eMap
-        installed = iMap
-        cliFolderCount = CopilotCLIFolderManager.folderCount()
+        withAnimation(.spring(duration: 0.3, bounce: 0.12)) {
+            enabled = eMap
+            installed = iMap
+            cliFolderCount = CopilotCLIFolderManager.folderCount()
+        }
         pausedFlag = PauseFlag.isPaused
     }
 }
@@ -222,15 +231,19 @@ struct TrackAccordion: View {
                 Text(agent.displayName).font(.caption.weight(.medium))
                 HStack(spacing: 4) {
                     Circle().fill(stateColor(live?.displayState)).frame(width: 6, height: 6)
+                        .symbolEffect(.pulse, isActive: live?.displayState == .running)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption2).foregroundStyle(.secondary)
+                        .contentTransition(.interpolate)
                 }
             }
             Spacer()
             Toggle("", isOn: Binding(
                 get: { enabled[agent] ?? true },
                 set: { v in
-                    enabled[agent] = v
+                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                        enabled[agent] = v
+                    }
                     TrackingStore.setEnabled(agent, v)
                 }
             ))
@@ -243,9 +256,12 @@ struct TrackAccordion: View {
         .contentShape(Rectangle())
         .onTapGesture {
             let v = !(enabled[agent] ?? true)
-            enabled[agent] = v
+            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                enabled[agent] = v
+            }
             TrackingStore.setEnabled(agent, v)
         }
+        .transition(.opacity.combined(with: .offset(y: -8)))
     }
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
@@ -276,9 +292,11 @@ struct TrackAccordion: View {
                 iMap[a] = AgentInstallerV2.isInstalled(a)
             }
         }
-        enabled = eMap
-        installed = iMap
-        cliFolderCount = CopilotCLIFolderManager.folderCount()
+        withAnimation(.spring(duration: 0.3, bounce: 0.12)) {
+            enabled = eMap
+            installed = iMap
+            cliFolderCount = CopilotCLIFolderManager.folderCount()
+        }
     }
 
     // Count of installed+enabled agents (for header subtitle in parent view).

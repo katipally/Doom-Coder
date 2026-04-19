@@ -1,10 +1,12 @@
 import Foundation
 import Observation
 import OSLog
+import SwiftUI
 
 // Central event hub. Consumes HookEnvelope from the socket listener,
-// maintains per-session raw event timelines, emits notifications for
-// milestone events, and persists to EventStore.
+// normalizes via per-agent normalizers, maintains SessionAggregate
+// instances with counters/flags, emits notifications for milestone
+// events, and persists raw events to EventStore.
 @Observable
 @MainActor
 final class AgentTrackingManager {
@@ -12,48 +14,101 @@ final class AgentTrackingManager {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "agents")
 
+    /// Stale threshold: sessions with no events for this long are considered stale.
+    var staleThreshold: TimeInterval = 900  // 15 minutes
+
+    /// Auto-eviction delay after a session reaches terminal state.
+    var evictionDelay: TimeInterval = 1800  // 30 minutes
+
+    // MARK: - Session aggregate model
+
+    /// Aggregate model that tracks counters/flags instead of doing naive
+    /// string matching. Derives UI state from the accumulated data.
     struct Session: Identifiable, Sendable {
-        let id: String          // session key
+        let id: String              // agent::sessionId
         let agent: TrackedAgent
+        let sessionId: String
         var events: [TimelineEvent] = []
         var lastEvent: String
+        var lastPhase: NormalizedEventPhase = .sessionStart
         var toolCounts: [String: Int] = [:]
         var lastTool: String?
         var cwd: String
         var startedAt: Date
         var updatedAt: Date
 
-        /// Whether the session is still active.
-        var isLive: Bool { !NotificationPolicy.isTerminal(event: lastEvent) }
+        // Counters
+        var toolCallCount: Int = 0
+        var activeToolCount: Int = 0
+        var errorCount: Int = 0
+        var subagentCount: Int = 0
 
-        /// Human-readable status derived from the latest event.
-        var status: String {
-            humanReadable(for: lastEvent)
-        }
+        // Flags
+        var awaitingPermission: Bool = false
+        var hasEnded: Bool = false
+        var hasFailed: Bool = false
 
-        /// Color-friendly category (for the UI's stateColor helper).
+        /// Whether the session is still active (not terminal).
+        var isLive: Bool { !hasEnded && !hasFailed }
+
+        /// Human-readable status derived from the aggregate state.
+        var status: String { displayState.humanReadable }
+
+        /// Color-friendly UI state derived from counters/flags.
         var displayState: AgentSessionState {
-            Self.stateFromEvent(lastEvent)
-        }
-
-        private func humanReadable(for event: String) -> String {
-            let e = event.lowercased()
-            if e.contains("sessionstart") { return "running" }
-            if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return "completed" }
-            if e.contains("error") || e.contains("failure") { return "failed" }
-            if e.contains("permission") { return "waiting for approval" }
-            if e.contains("notification") || e.contains("elicitation") { return "waiting for input" }
-            if e.contains("afteragentresponse") { return "waiting for input" }
-            return "running"
-        }
-
-        static func stateFromEvent(_ event: String) -> AgentSessionState {
-            let e = event.lowercased()
-            if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return .completed }
-            if e.contains("error") || e.contains("failure") { return .failed }
-            if e.contains("permission") { return .waitingApproval }
-            if e.contains("notification") || e.contains("elicitation") || e.contains("afteragentresponse") { return .waitingInput }
+            if hasFailed { return .failed }
+            if hasEnded { return .completed }
+            if awaitingPermission { return .waitingApproval }
+            if lastPhase == .agentResponse { return .waitingInput }
             return .running
+        }
+
+        /// Check if session is stale (no events for too long).
+        func isStale(threshold: TimeInterval) -> Bool {
+            !hasEnded && !hasFailed && Date().timeIntervalSince(updatedAt) > threshold
+        }
+
+        // MARK: - Apply normalized event
+
+        mutating func apply(_ event: NormalizedHookEvent) {
+            lastEvent = event.rawEvent
+            lastPhase = event.phase
+            updatedAt = event.timestamp
+            if let tool = event.toolName {
+                toolCounts[tool, default: 0] += 1
+                lastTool = tool
+            }
+
+            switch event.phase {
+            case .toolStart:
+                activeToolCount += 1
+            case .toolEnd:
+                activeToolCount = max(0, activeToolCount - 1)
+                toolCallCount += 1
+            case .toolError:
+                activeToolCount = max(0, activeToolCount - 1)
+                toolCallCount += 1
+                errorCount += 1
+            case .permissionNeeded:
+                awaitingPermission = true
+            case .sessionEnd:
+                hasEnded = true
+            case .error:
+                errorCount += 1
+                if event.isFatal { hasFailed = true }
+            case .subagentStart:
+                subagentCount += 1
+            case .subagentEnd:
+                subagentCount = max(0, subagentCount - 1)
+            case .sessionStart, .userPrompt, .agentResponse,
+                 .fileChanged, .other:
+                break
+            }
+
+            // Clear permission flag when work resumes after permission grant
+            if awaitingPermission && (event.phase == .toolStart || event.phase == .userPrompt) {
+                awaitingPermission = false
+            }
         }
     }
 
@@ -69,41 +124,45 @@ final class AgentTrackingManager {
             logger.info("drop: pause flag set (agent=\(env.agent, privacy: .public))")
             return
         }
-        guard let agent = TrackedAgent(rawValue: env.agent) else {
-            logger.notice("drop: unknown agent \(env.agent, privacy: .public)")
+
+        // Normalize via per-agent normalizer
+        guard let normalized = EventNormalizerRegistry.normalize(envelope: env) else {
+            logger.notice("drop: normalization failed for agent=\(env.agent, privacy: .public) event=\(env.event, privacy: .public)")
             return
         }
-        let payload = env.payloadDict ?? [:]
-        let sessionKey = Self.sessionKey(agent: agent, env: env, payload: payload)
-        let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
-        let path = payload["cwd"] as? String ?? env.cwd
 
-        // Build timeline entry
-        let summary = Self.buildSummary(event: env.event, tool: tool, payload: payload)
+        let sessionKey = "\(normalized.agent.rawValue)::\(normalized.sessionId)"
+
+        // Build timeline entry (raw event log)
         let timelineEvent = TimelineEvent(
-            event: env.event,
-            tool: tool,
-            path: path,
-            timestamp: Date(timeIntervalSince1970: env.ts),
-            summary: summary
+            event: normalized.rawEvent,
+            tool: normalized.toolName,
+            path: normalized.filePath ?? normalized.cwd,
+            timestamp: normalized.timestamp,
+            summary: normalized.summary
         )
 
+        let isNewSession = sessions[sessionKey] == nil
         var s = sessions[sessionKey] ?? Session(
             id: sessionKey,
-            agent: agent,
-            lastEvent: env.event,
-            cwd: path,
-            startedAt: Date(),
-            updatedAt: Date()
+            agent: normalized.agent,
+            sessionId: normalized.sessionId,
+            lastEvent: normalized.rawEvent,
+            cwd: normalized.cwd,
+            startedAt: normalized.timestamp,
+            updatedAt: normalized.timestamp
         )
         s.events.append(timelineEvent)
-        s.lastEvent = env.event
-        s.updatedAt = Date()
-        if let tool {
-            s.toolCounts[tool, default: 0] += 1
-            s.lastTool = tool
+        s.apply(normalized)
+
+        // Animate structural changes (new/terminal sessions) for smooth live strip
+        if isNewSession || !s.isLive {
+            withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+                sessions[sessionKey] = s
+            }
+        } else {
+            sessions[sessionKey] = s
         }
-        sessions[sessionKey] = s
 
         // Persist to SQLite (with raw JSON payload for Logs detail view)
         let payloadString: String?
@@ -113,62 +172,41 @@ final class AgentTrackingManager {
             payloadString = nil
         }
         EventStore.shared.insert(
-            sessionKey: sessionKey, agent: agent.rawValue, event: env.event,
-            tool: tool, path: path, state: env.event, ts: env.ts,
+            sessionKey: sessionKey, agent: normalized.agent.rawValue,
+            event: normalized.rawEvent,
+            tool: normalized.toolName, path: normalized.cwd,
+            state: normalized.phase.rawValue, ts: env.ts,
             payload: payloadString
         )
 
-        // Notification dispatch — only for milestone events
-        let shouldNotify = NotificationPolicy.isNotifiable(agent: agent, event: env.event)
-        logger.info("ingest agent=\(agent.rawValue, privacy: .public) event=\(env.event, privacy: .public) notify=\(shouldNotify)")
+        // Notification dispatch — uses user-configurable phase preferences
+        let shouldNotify = NotificationPolicy.isNotifiable(phase: normalized.phase)
+        logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify)")
         if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
-                sessionKey: sessionKey, agent: agent, event: env.event
+                sessionKey: sessionKey, agent: normalized.agent,
+                event: normalized.rawEvent
             ))
         }
 
-        // Evict terminal sessions after 10 minutes
-        if NotificationPolicy.isTerminal(event: env.event) {
+        // Evict terminal sessions after configured delay
+        if !s.isLive {
+            let delay = evictionDelay
             Task { [sessionKey] in
-                try? await Task.sleep(for: .seconds(600))
+                try? await Task.sleep(for: .seconds(delay))
                 await MainActor.run {
                     if let cur = self.sessions[sessionKey], !cur.isLive {
-                        self.sessions.removeValue(forKey: sessionKey)
+                        withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                            self.sessions.removeValue(forKey: sessionKey)
+                        }
                     }
                 }
             }
         }
     }
-
-    // MARK: - Session key extraction
-
-    private static func sessionKey(agent: TrackedAgent, env: HookEnvelope, payload: [String: Any]) -> String {
-        // Try all known session-id field names across agents.
-        let sid = (payload["session_id"] as? String)
-            ?? (payload["sessionId"] as? String)
-            ?? (payload["session"] as? String)
-            ?? (payload["conversation_id"] as? String)    // Cursor
-            ?? (payload["generation_id"] as? String)
-            ?? "pid-\(env.pid)"                            // uses parent PID from dc-hook
-        return "\(agent.rawValue)::\(sid)"
-    }
-
-    // MARK: - Summary builder
-
-    private static func buildSummary(event: String, tool: String?, payload: [String: Any]) -> String {
-        if let tool {
-            let filePath = (payload["file_path"] as? String) ?? (payload["input"] as? [String: Any])?["file_path"] as? String
-            if let filePath {
-                return "\(tool): \(URL(fileURLWithPath: filePath).lastPathComponent)"
-            }
-            return tool
-        }
-        // Fall back to a short description of the event
-        return event
-    }
 }
 
-// Kept for backward compatibility with UI code (stateColor helpers).
+// UI state enum — derived from SessionAggregate counters/flags.
 enum AgentSessionState: String, Sendable {
     case running
     case waitingInput     = "waiting_input"

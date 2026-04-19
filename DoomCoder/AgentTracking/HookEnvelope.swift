@@ -56,42 +56,29 @@ struct TimelineEvent: Identifiable, Sendable {
 
 // MARK: - Notification policy
 
-/// Per-agent milestone events that should trigger push notifications.
-/// Everything else is stored in the session timeline but stays silent.
+/// Determines whether an event should trigger a push notification.
+/// Uses user-configurable NotificationPrefs stored in ChannelStore.
+/// Falls back to normalized event phase for consistent cross-agent behavior.
 enum NotificationPolicy {
-    /// Milestone events per agent that warrant a push notification.
-    static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
-        switch agent {
-        case .claude:
-            return claudeMilestones.contains(event)
-        case .cursor:
-            return cursorMilestones.contains(event)
-        case .vscode:
-            return vscodeMilestones.contains(event)
-        case .copilotCLI:
-            return copilotCLIMilestones.contains(event)
-        }
+    /// Check using normalized event phase (preferred path).
+    static func isNotifiable(phase: NormalizedEventPhase) -> Bool {
+        let prefs = ChannelStore.loadPrefs()
+        return prefs.shouldNotify(phase: phase.rawValue)
     }
 
-    private static let claudeMilestones: Set<String> = [
-        "SessionStart", "SessionEnd", "Notification",
-        "Stop", "StopFailure", "PermissionRequest",
-        "TaskCompleted"
-    ]
-
-    private static let cursorMilestones: Set<String> = [
-        "sessionStart", "sessionEnd",
-        "afterAgentResponse", "stop"
-    ]
-
-    private static let vscodeMilestones: Set<String> = [
-        "SessionStart", "SessionEnd",
-        "Stop", "PermissionRequest"
-    ]
-
-    private static let copilotCLIMilestones: Set<String> = [
-        "sessionStart", "sessionEnd", "errorOccurred"
-    ]
+    /// Legacy: check by raw agent + event name (for backward compat).
+    static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
+        // Create a minimal envelope just for phase lookup
+        let envelope = HookEnvelope(
+            v: "1", agent: agent.rawValue, event: event,
+            cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
+            synthetic: false, payloadRaw: nil
+        )
+        if let normalized = EventNormalizerRegistry.normalize(envelope: envelope) {
+            return isNotifiable(phase: normalized.phase)
+        }
+        return false
+    }
 
     /// Whether the event signals that a session has ended.
     static func isTerminal(event: String) -> Bool {

@@ -4,10 +4,37 @@ import Foundation
 // Channels: macOS notifications, ntfy. Each can be toggled globally and overridden per-agent.
 struct ChannelStore {
     static let defaultsKey = "doomcoder.channels.v2"
+    static let prefsKey = "doomcoder.notification.prefs.v1"
 
     struct ChannelConfig: Codable, Sendable, Equatable {
         var macNotification: Bool = true
         var ntfy: Bool = false
+    }
+
+    /// Which event phases should trigger a push notification.
+    struct NotificationPrefs: Codable, Sendable, Equatable {
+        var sessionStart: Bool = false
+        var sessionEnd: Bool = true
+        var error: Bool = true
+        var permissionNeeded: Bool = true
+        var agentResponse: Bool = true
+        var subagentStart: Bool = false
+        var subagentEnd: Bool = false
+        var toolUse: Bool = false
+
+        func shouldNotify(phase: String) -> Bool {
+            switch phase {
+            case "sessionStart":      return sessionStart
+            case "sessionEnd":        return sessionEnd
+            case "error", "toolError": return error
+            case "permissionNeeded":  return permissionNeeded
+            case "agentResponse":     return agentResponse
+            case "subagentStart":     return subagentStart
+            case "subagentEnd":       return subagentEnd
+            case "toolStart", "toolEnd": return toolUse
+            default:                  return false
+            }
+        }
     }
 
     struct Store: Codable, Sendable {
@@ -56,5 +83,20 @@ struct ChannelStore {
 
     static func clearOverride(for agent: TrackedAgent) {
         setPerAgent(agent, config: nil)
+    }
+
+    // MARK: - Notification preferences
+
+    static func loadPrefs() -> NotificationPrefs {
+        guard let data = UserDefaults.standard.data(forKey: prefsKey),
+              let decoded = try? JSONDecoder().decode(NotificationPrefs.self, from: data)
+        else { return NotificationPrefs() }
+        return decoded
+    }
+
+    static func savePrefs(_ prefs: NotificationPrefs) {
+        if let data = try? JSONEncoder().encode(prefs) {
+            UserDefaults.standard.set(data, forKey: prefsKey)
+        }
     }
 }

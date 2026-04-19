@@ -10,6 +10,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var selected: TrackedAgent? = .claude
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
     @State private var statusMessage: String = ""
+    @State private var statusIsError: Bool = false
+    @State private var isInstalling: Bool = false
     @State private var verifyWaiting = false
     @State private var verifyResult: String? = nil
     @State private var realWatching = false
@@ -26,6 +28,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var hookWarnings: [TrackedAgent: String] = [:]
     // Permission status
     @State private var permStatus: String = "…"
+    // Notification event preferences
+    @State private var notifPrefs = ChannelStore.loadPrefs()
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -55,6 +59,9 @@ struct ConfigureAgentsViewV2: View {
         }
         .onReceive(healthTimer) { _ in
             validateAllHooks()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPermStatus()
         }
         .alert("Update Hook Configs", isPresented: $showMigrationAlert) {
             Button("Update All") {
@@ -246,6 +253,7 @@ struct ConfigureAgentsViewV2: View {
                     } label: {
                         Label("Hook Warning", systemImage: "exclamationmark.shield")
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 // Prerequisites (dynamic checks)
@@ -293,16 +301,39 @@ struct ConfigureAgentsViewV2: View {
                             } else {
                                 let isInst = installedCache[agent] ?? false
                                 Button(isInst ? "Reinstall" : "Install") {
+                                    withAnimation(.spring(duration: 0.3)) { isInstalling = true; statusMessage = "" }
                                     let r = AgentInstallerV2.install(agent)
-                                    statusMessage = resultMessage(r, verb: "Install")
+                                    let msg = resultMessage(r, verb: "Install")
+                                    let isErr: Bool
+                                    if case .failure = r { isErr = true } else { isErr = false }
+                                    withAnimation(.spring(duration: 0.3)) {
+                                        statusMessage = msg
+                                        statusIsError = isErr
+                                        isInstalling = false
+                                    }
                                     Task { await detectAllAsync() }
                                 }
+                                .disabled(isInstalling)
                                 if isInst {
                                     Button("Uninstall", role: .destructive) {
+                                        withAnimation(.spring(duration: 0.3)) { isInstalling = true; statusMessage = "" }
                                         let r = AgentInstallerV2.uninstall(agent)
-                                        statusMessage = resultMessage(r, verb: "Uninstall")
+                                        let msg = resultMessage(r, verb: "Uninstall")
+                                        let isErr: Bool
+                                        if case .failure = r { isErr = true } else { isErr = false }
+                                        withAnimation(.spring(duration: 0.3)) {
+                                            statusMessage = msg
+                                            statusIsError = isErr
+                                            isInstalling = false
+                                        }
                                         Task { await detectAllAsync() }
                                     }
+                                    .disabled(isInstalling)
+                                }
+                                if isInstalling {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .transition(.opacity)
                                 }
                             }
 
@@ -406,10 +437,25 @@ struct ConfigureAgentsViewV2: View {
 
                 // Status
                 if !statusMessage.isEmpty {
-                    Text(statusMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
+                    HStack(spacing: 6) {
+                        Image(systemName: statusIsError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(statusIsError ? .red : .green)
+                        Text(statusMessage)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                        Spacer()
+                        if statusIsError, let agent = selected {
+                            Button("Show Config") {
+                                let path = AgentInstallerV2.configPath(for: agent)
+                                NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.callout)
+                        }
+                    }
+                    .padding(.top, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .padding(20)
@@ -421,12 +467,29 @@ struct ConfigureAgentsViewV2: View {
     private var copilotCLIFoldersSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
+                if cliFolders.isEmpty {
+                    VStack(spacing: 6) {
+                        Image(systemName: "folder.badge.questionmark")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("No project folders registered")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text("Copilot CLI hooks are installed per-project. Add your project folders below to track agent activity.")
+                            .font(.caption).foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+
                 ForEach(cliFolders, id: \.path) { folder in
                     HStack {
                         Image(systemName: "folder.fill").foregroundStyle(.secondary)
+                        Text(folder.lastPathComponent)
+                            .font(.callout.bold())
                         Text(folder.path)
                             .lineLimit(1).truncationMode(.middle)
-                            .font(.callout)
+                            .font(.caption).foregroundStyle(.tertiary)
                         Spacer()
                         let isInst = AgentInstallerV2.isInstalledCLI(folder: folder)
                         if isInst {
@@ -447,17 +510,35 @@ struct ConfigureAgentsViewV2: View {
                     }
                 }
 
-                HStack {
+                Divider()
+
+                HStack(spacing: 8) {
                     Button("Add Folder…") {
                         let p = NSOpenPanel()
                         p.canChooseFiles = false
                         p.canChooseDirectories = true
-                        p.allowsMultipleSelection = false
-                        if p.runModal() == .OK, let url = p.url {
-                            CopilotCLIFolderManager.addFolder(url)
+                        p.allowsMultipleSelection = true
+                        p.prompt = "Add Project"
+                        if p.runModal() == .OK {
+                            for url in p.urls {
+                                CopilotCLIFolderManager.addFolder(url)
+                            }
                             cliFolders = CopilotCLIFolderManager.folders
                         }
                     }
+
+                    Button("Discover Projects") {
+                        let discovered = CopilotCLIFolderManager.discoverRecentFolders()
+                            .filter { d in !cliFolders.contains(where: { $0.path == d.path }) }
+                        for url in discovered.prefix(5) {
+                            CopilotCLIFolderManager.addFolder(url)
+                        }
+                        withAnimation(.spring(duration: 0.3)) {
+                            cliFolders = CopilotCLIFolderManager.folders
+                        }
+                    }
+                    .help("Scans ~/Developer, ~/Projects, ~/Code, ~/Desktop for project folders")
+
                     Spacer()
                     Text("\(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") registered")
                         .font(.caption).foregroundStyle(.tertiary)
@@ -486,19 +567,23 @@ struct ConfigureAgentsViewV2: View {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                             Text("Notifications allowed").font(.callout)
                         case .denied:
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                            Text("Notifications denied").font(.callout)
+                            Image(systemName: "lock.circle.fill").foregroundStyle(.orange)
+                            Text("Enable notifications in System Settings").font(.callout)
                             Spacer()
-                            Button("Open System Settings →") {
+                            Button {
                                 disp.openSystemSettings()
+                            } label: {
+                                Label("Open Settings", systemImage: "gear")
                             }
+                            .controlSize(.small)
                         case .notDetermined:
-                            Image(systemName: "questionmark.circle").foregroundStyle(.orange)
-                            Text("Not asked yet").font(.callout)
+                            Image(systemName: "bell.badge.circle").foregroundStyle(.blue)
+                            Text("Grant permission to receive notifications").font(.callout)
                             Spacer()
-                            Button("Request Permission") {
+                            Button("Allow Notifications") {
                                 disp.requestPermission { _ in refreshPermStatus() }
                             }
+                            .controlSize(.small)
                         @unknown default:
                             Text("Unknown").font(.callout)
                         }
@@ -604,6 +689,22 @@ struct ConfigureAgentsViewV2: View {
                     }
                 } label: {
                     Label("ntfy", systemImage: "paperplane.fill")
+                }
+
+                // Notification event preferences
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 6) {
+                        notifPrefToggle("Session completed", $notifPrefs.sessionEnd)
+                        notifPrefToggle("Errors", $notifPrefs.error)
+                        notifPrefToggle("Permission requests", $notifPrefs.permissionNeeded)
+                        notifPrefToggle("Agent responses", $notifPrefs.agentResponse)
+                        Divider()
+                        notifPrefToggle("Session started", $notifPrefs.sessionStart)
+                        notifPrefToggle("Sub-agent activity", $notifPrefs.subagentStart)
+                        notifPrefToggle("Tool usage", $notifPrefs.toolUse)
+                    }
+                } label: {
+                    Label("Notify me when…", systemImage: "bell.badge")
                 }
 
                 // Test result
@@ -781,7 +882,9 @@ struct ConfigureAgentsViewV2: View {
                 break
             }
         }
-        hookWarnings = warnings
+        withAnimation(.spring(duration: 0.3)) {
+            hookWarnings = warnings
+        }
     }
 
     private func qrCodeImage(for string: String) -> Image {
@@ -848,10 +951,28 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
+    private func notifPrefToggle(_ label: String, _ binding: Binding<Bool>) -> some View {
+        Toggle(label, isOn: Binding(
+            get: { binding.wrappedValue },
+            set: { v in
+                binding.wrappedValue = v
+                ChannelStore.savePrefs(notifPrefs)
+            }
+        ))
+        .toggleStyle(.checkbox)
+        .font(.callout)
+    }
+
     private func resultMessage(_ r: Result<Void, Error>, verb: String) -> String {
         switch r {
         case .success: return "\(verb) successful."
-        case .failure(let e): return "\(verb) failed: \(e.localizedDescription)"
+        case .failure(let e):
+            var msg = "\(verb) failed: \(e.localizedDescription)"
+            if let verifyErr = e as? AgentInstallerV2.VerifyError,
+               let suggestion = verifyErr.recoverySuggestion {
+                msg += " \(suggestion)"
+            }
+            return msg
         }
     }
 }
