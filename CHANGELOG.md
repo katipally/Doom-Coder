@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.6] - 2026-04-19 — Logs tab, health monitoring & UX polish
+
+**Full observability, smarter uninstall, and channel UX.** This release adds a
+dedicated Logs tab for browsing event history and notification dispatch records,
+per-agent health monitoring, dynamic prerequisite checks, hook validation with
+repair, and comprehensive notification channel improvements.
+
+### Added
+- **Logs tab** in Configure Agents sidebar — browse event history with
+  per-agent filtering, expandable JSON payload, CSV/JSON export, configurable
+  retention (1/7/30 days), and notification dispatch history.
+- **Health monitoring** — per-agent health dot (green/grey), event count
+  badges, and "last event" timestamp in the agent sidebar and detail pane.
+- **Dynamic prerequisites** — live checks (binary exists, config dir writable,
+  agent detected) replace static text; auto-refresh + Recheck button.
+- **Hook validation** — periodic (60s) config file integrity check with
+  ⚠️ warning badge and one-click Repair button.
+- **Auto-detect nudge** — "Set up →" label on detected-but-unconfigured agents.
+- **Live activity strip** — compact per-session status display in menu bar
+  showing agent icon, state dot, and time-ago.
+- **Notification permission status** — inline ✅/⚠️/❓ in Channels tab with
+  "Open System Settings →" recovery when denied.
+- **ntfy enhancements** — Copy Subscribe URL button, topic + server display,
+  QR code for phone setup (Core Image CIQRCodeGenerator).
+- **Payload passthrough** — raw JSON payload stored in EventStore, viewable
+  in Logs tab with pretty-print and Copy JSON.
+- **Notification history** — every dispatch logged to EventStore with channel,
+  success/failure, and browsable in Logs → 🔔 Notifications segment.
+- **EventStore schema migration** — `payload` column auto-added via ALTER TABLE;
+  `notifications` table for dispatch records.
+
+### Fixed
+- **"3 of 1" counter bug** — `installedAndEnabledCount()` now correctly counts
+  only agents that are both installed AND have tracking enabled.
+- **Track subtitle** — contextual wording: "no agents configured", "N found,
+  none configured", "all N tracked", "X of Y tracked", "N live · X tracked".
+- **Agent-scoped uninstall** — `stripDcHookEntries` now uses agent token
+  (e.g. "dc-hook claude") so uninstalling Claude preserves VS Code hooks in
+  shared `~/.claude/settings.json`, and vice versa.
+- **Agent-scoped uninstall verification** — `verifyUninstalled` checks only
+  for the specific agent's dc-hook entries, not all dc-hook references.
+
+### Changed
+- Verify labels renamed: "Ping helper" → "Test Helper", "Run demo session" →
+  "Run Demo", "Watch real session" → "Watch Live", each with descriptive
+  subtitle.
+- EventStore `Row` now conforms to `Identifiable` and includes `payload` field.
+- Configurable retention replaces hardcoded 7-day purge (UserDefaults-backed).
+
+---
+
 ## [1.8.5] - 2026-04-19 — End-to-end agent tracking pipeline
 
 **Agent tracking via native hooks.** DoomCoder now tracks AI-agent sessions

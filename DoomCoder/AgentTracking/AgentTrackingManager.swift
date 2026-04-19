@@ -109,10 +109,17 @@ final class AgentTrackingManager {
         }
         sessions[sessionKey] = s
 
-        // Persist to SQLite
+        // Persist to SQLite (with raw JSON payload for Logs detail view)
+        let payloadString: String?
+        if let raw = env.payloadRaw {
+            payloadString = String(data: raw, encoding: .utf8)
+        } else {
+            payloadString = nil
+        }
         EventStore.shared.insert(
             sessionKey: sessionKey, agent: agent.rawValue, event: env.event,
-            tool: tool, path: path, state: env.event, ts: env.ts
+            tool: tool, path: path, state: env.event, ts: env.ts,
+            payload: payloadString
         )
 
         updateAutoFuse()

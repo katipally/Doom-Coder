@@ -34,6 +34,7 @@
 		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
 		DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000040 /* MenuBarWindowView.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
+		DC0000000000002000000042 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* LogsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000040 /* MenuBarWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWindowView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
+		DC0000000000001000000042 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +129,7 @@
 				DC0000000000001000000038 /* MigrationManager.swift */,
 				DC0000000000001000000040 /* MenuBarWindowView.swift */,
 				DC0000000000001000000041 /* TrackingStore.swift */,
+				DC0000000000001000000042 /* LogsView.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -264,6 +267,7 @@
 				DC0000000000002000000038 /* MigrationManager.swift in Sources */,
 				DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */,
 				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
+				DC0000000000002000000042 /* LogsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,7 +399,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 185;
+				CURRENT_PROJECT_VERSION = 186;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -404,7 +408,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -419,7 +423,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 185;
+				CURRENT_PROJECT_VERSION = 186;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -428,7 +432,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
