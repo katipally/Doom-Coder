@@ -9,6 +9,7 @@ struct HookEnvelope: Sendable {
     let cwd: String
     let pid: Int
     let ts: TimeInterval
+    let synthetic: Bool
     let payloadRaw: Data?
 
     var payloadDict: [String: Any]? {
@@ -24,32 +25,82 @@ struct HookEnvelope: Sendable {
         let cwd = (obj["cwd"] as? String) ?? ""
         let pid = (obj["pid"] as? Int) ?? 0
         let ts = (obj["ts"] as? TimeInterval) ?? Date().timeIntervalSince1970
+        let synthetic = (obj["synthetic"] as? Bool) ?? false
         var payloadRaw: Data? = nil
         if let p = obj["payload"] {
             payloadRaw = try? JSONSerialization.data(withJSONObject: p, options: [])
         }
-        return HookEnvelope(v: v, agent: agent, event: event, cwd: cwd, pid: pid, ts: ts, payloadRaw: payloadRaw)
+        return HookEnvelope(v: v, agent: agent, event: event, cwd: cwd, pid: pid, ts: ts, synthetic: synthetic, payloadRaw: payloadRaw)
     }
 }
 
-// App-side session lifecycle derived from heterogeneous hook events.
-enum AgentSessionState: String, Sendable {
-    case running
-    case waitingInput     = "waiting_input"
-    case waitingApproval  = "waiting_approval"
-    case completed
-    case failed
+// MARK: - Timeline event (raw event in a session's ordered log)
 
-    var humanReadable: String {
-        switch self {
-        case .running:          return "running"
-        case .waitingInput:     return "waiting for input"
-        case .waitingApproval:  return "waiting for approval"
-        case .completed:        return "completed"
-        case .failed:           return "failed"
+struct TimelineEvent: Identifiable, Sendable {
+    let id: UUID
+    let event: String
+    let tool: String?
+    let path: String?
+    let timestamp: Date
+    let summary: String
+
+    init(event: String, tool: String? = nil, path: String? = nil, timestamp: Date = .now, summary: String = "") {
+        self.id = UUID()
+        self.event = event
+        self.tool = tool
+        self.path = path
+        self.timestamp = timestamp
+        self.summary = summary
+    }
+}
+
+// MARK: - Notification policy
+
+/// Per-agent milestone events that should trigger push notifications.
+/// Everything else is stored in the session timeline but stays silent.
+enum NotificationPolicy {
+    /// Milestone events per agent that warrant a push notification.
+    static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
+        switch agent {
+        case .claude:
+            return claudeMilestones.contains(event)
+        case .cursor:
+            return cursorMilestones.contains(event)
+        case .vscode:
+            return vscodeMilestones.contains(event)
+        case .copilotCLI:
+            return copilotCLIMilestones.contains(event)
         }
     }
+
+    private static let claudeMilestones: Set<String> = [
+        "SessionStart", "SessionEnd", "Notification",
+        "Stop", "StopFailure", "PermissionRequest",
+        "TaskCompleted"
+    ]
+
+    private static let cursorMilestones: Set<String> = [
+        "sessionStart", "sessionEnd",
+        "afterAgentResponse", "stop"
+    ]
+
+    private static let vscodeMilestones: Set<String> = [
+        "SessionStart", "SessionEnd",
+        "Stop", "PermissionRequest"
+    ]
+
+    private static let copilotCLIMilestones: Set<String> = [
+        "sessionStart", "sessionEnd", "errorOccurred"
+    ]
+
+    /// Whether the event signals that a session has ended.
+    static func isTerminal(event: String) -> Bool {
+        let e = event.lowercased()
+        return e.contains("sessionend") || e.contains("stop") || e == "taskcompleted"
+    }
 }
+
+// MARK: - Agent identity
 
 enum TrackedAgent: String, CaseIterable, Sendable {
     case claude

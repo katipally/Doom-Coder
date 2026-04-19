@@ -78,12 +78,7 @@ enum ChannelTester {
     // MARK: - ntfy Test
 
     private static func sendNtfyTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
-        guard let topic = NtfyTopic.current else {
-            Task { @MainActor in
-                completion(false, "No ntfy topic configured. Set a topic first.")
-            }
-            return
-        }
+        let topic = NtfyTopic.getOrCreate()
 
         let server = NtfyTopic.server ?? "https://ntfy.sh"
         guard let url = URL(string: "\(server)/\(topic)") else {

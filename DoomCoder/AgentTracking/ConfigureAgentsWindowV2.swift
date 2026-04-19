@@ -11,6 +11,7 @@ struct ConfigureAgentsViewV2: View {
     @State private var statusMessage: String = ""
     @State private var verifyWaiting = false
     @State private var verifyResult: String? = nil
+    @State private var realWatching = false
     @State private var showMigrationAlert = false
     @State private var migrationAgents: [TrackedAgent] = []
     // Copilot CLI folders
@@ -36,7 +37,7 @@ struct ConfigureAgentsViewV2: View {
                 channelsDetail
             }
         }
-        .frame(minWidth: 760, minHeight: 520)
+        .frame(minWidth: 820, minHeight: 580)
         .task {
             await detectAllAsync()
             checkMigration()
@@ -156,6 +157,20 @@ struct ConfigureAgentsViewV2: View {
                     Label("Detection", systemImage: "magnifyingglass")
                 }
 
+                // Prerequisites (per-agent setup hints)
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(prerequisites(for: agent), id: \.self) { line in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•").foregroundStyle(.secondary)
+                                Text(line).font(.callout).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Prerequisites", systemImage: "list.bullet.clipboard")
+                }
+
                 // Copilot CLI: folder management
                 if agent == .copilotCLI {
                     copilotCLIFoldersSection
@@ -216,12 +231,17 @@ struct ConfigureAgentsViewV2: View {
                             }
                             .disabled(verifyWaiting)
 
+                            Button(realWatching ? "Watching…" : "Watch real session (120s)") {
+                                watchRealSession(agent: agent)
+                            }
+                            .disabled(realWatching)
+
                             Spacer()
                         }
                         if let r = verifyResult {
                             Text(r).font(.callout).foregroundStyle(.secondary)
                         } else {
-                            Text("Ping checks dc-hook can reach DoomCoder. Demo runs a synthetic 30s lifecycle.")
+                            Text("Gate A: Ping helper. Gate B: synthetic demo. Gate C: open the IDE and trigger a real turn within 120s.")
                                 .font(.callout).foregroundStyle(.tertiary)
                         }
                     }
@@ -500,7 +520,63 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
+    private func watchRealSession(agent: TrackedAgent) {
+        realWatching = true
+        verifyResult = "⏱ Open \(agent.displayName) and trigger one real prompt within 120s…"
+        let baseline = Date().timeIntervalSince1970
+        let agentKey = agent.rawValue
+        Task.detached {
+            let deadline = Date().addingTimeInterval(120)
+            var matched: EventStore.Row? = nil
+            while Date() < deadline {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                let rows = await EventStore.shared.recent(limit: 50)
+                if let hit = rows.first(where: { $0.agent == agentKey && $0.ts >= baseline && !$0.event.hasPrefix("demo-") && $0.event != "ping" }) {
+                    matched = hit
+                    break
+                }
+            }
+            await MainActor.run {
+                if let hit = matched {
+                    verifyResult = "✅ Real \(agent.displayName) event received: \(hit.event)"
+                } else {
+                    verifyResult = "❌ No real \(agent.displayName) event in 120s. Re-run Gate A/B if Ping/Demo also fail."
+                }
+                realWatching = false
+            }
+        }
+    }
+
     // MARK: - Helpers
+
+    private func prerequisites(for agent: TrackedAgent) -> [String] {
+        switch agent {
+        case .claude:
+            return [
+                "Claude Code CLI installed (any version that supports hooks).",
+                "Folder ~/.claude/ writable.",
+                "Run `claude` once so the settings file is initialised."
+            ]
+        case .cursor:
+            return [
+                "Cursor 0.45 or later with Hooks enabled (Settings → Beta → Hooks).",
+                "Folder ~/.cursor/ writable.",
+                "Reload the Cursor window after enabling hooks."
+            ]
+        case .vscode:
+            return [
+                "VS Code with the GitHub Copilot Chat extension installed.",
+                "Hooks live in ~/.claude/settings.json (shared with Claude Code).",
+                "Reload the VS Code window after install for hooks to register."
+            ]
+        case .copilotCLI:
+            return [
+                "GitHub Copilot CLI installed (npm-global, gh-extension, brew, or volta/n).",
+                "For each project you want tracked, click ‘Add folder’ and pick its repo root.",
+                "Hooks file is created at <repo>/.github/hooks/doomcoder.json."
+            ]
+        }
+    }
 
     private func subtitle(_ agent: TrackedAgent) -> String {
         switch agent {
