@@ -17,14 +17,14 @@ struct AboutView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Keep your Mac awake. Nothing else.")
+            Text("Keep your Mac awake. Track your AI agents.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Divider()
 
-            Text("A tiny menu bar utility that holds an IOPMAssertion to prevent macOS from sleeping. Pick Screen On to keep the display awake, or Screen Off to let the display sleep while the Mac stays running.")
+            Text("A lightweight menu bar utility that prevents macOS from sleeping and tracks AI agent sessions. Pick Screen On or Screen Off for sleep blocking, and configure hooks for Claude Code, Cursor, VS Code Copilot, and Copilot CLI to get real-time notifications.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
