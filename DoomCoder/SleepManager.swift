@@ -24,8 +24,7 @@ enum DoomCoderMode: String, CaseIterable {
 @MainActor
 final class SleepManager {
 
-    // Shared instance so AgentTrackingManager and SwiftUI scenes bind to the
-    // same object without depending on @State init ordering.
+    // Shared instance for SwiftUI scenes.
     static let shared = SleepManager()
 
     // MARK: - Public state
@@ -196,47 +195,9 @@ final class SleepManager {
     }
 
     func toggle() {
-        if isActive {
-            // Manual user-initiated disable. Start cool-down so agent-fuse
-            // does not immediately re-enable.
-            _manualOffUntil = Date.now.addingTimeInterval(15 * 60)
-        }
         isActive ? disable() : enable()
     }
 
-    // MARK: - Agent auto-fuse
-
-    @ObservationIgnored nonisolated(unsafe) private var _manualOffUntil: Date?
-    private(set) var isFusedByAgents: Bool = false
-    private(set) var agentFuseReason: String?
-
-    /// Called by AgentTrackingManager when at least one tracked session is
-    /// running or waiting. Safe to call repeatedly; subject to a 15-minute
-    /// cool-down following a manual toggle-off.
-    func forceScreenOn(reason: String) {
-        if let until = _manualOffUntil, until > .now { return }
-        agentFuseReason = reason
-        if isActive {
-            isFusedByAgents = true
-            return
-        }
-        // Force screen-on semantics regardless of current mode selection.
-        // We do not mutate `mode` — the fuse is transparent.
-        let previousMode = mode
-        if previousMode != .screenOn { mode = .screenOn }
-        enable()
-        isFusedByAgents = true
-    }
-
-    /// Called by AgentTrackingManager when no tracked session is in a live
-    /// state. Releases the fuse and disables the blocker if it was only
-    /// active because of the fuse.
-    func releaseAgentFuse() {
-        guard isFusedByAgents else { return }
-        isFusedByAgents = false
-        agentFuseReason = nil
-        disable()
-    }
 
 
     // MARK: - IOPMAssertion

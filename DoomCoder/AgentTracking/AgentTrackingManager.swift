@@ -3,8 +3,8 @@ import Observation
 import OSLog
 
 // Central event hub. Consumes HookEnvelope from the socket listener,
-// maintains per-session raw event timelines, drives SleepManager auto-fuse,
-// emits notifications for milestone events, and persists to EventStore.
+// maintains per-session raw event timelines, emits notifications for
+// milestone events, and persists to EventStore.
 @Observable
 @MainActor
 final class AgentTrackingManager {
@@ -59,10 +59,6 @@ final class AgentTrackingManager {
 
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
-
-    private weak var sleepManager: SleepManager?
-
-    func bind(sleepManager: SleepManager) { self.sleepManager = sleepManager }
 
     // MARK: - Entry point (called from socket listener)
 
@@ -122,8 +118,6 @@ final class AgentTrackingManager {
             payload: payloadString
         )
 
-        updateAutoFuse()
-
         // Notification dispatch — only for milestone events
         let shouldNotify = NotificationPolicy.isNotifiable(agent: agent, event: env.event)
         logger.info("ingest agent=\(agent.rawValue, privacy: .public) event=\(env.event, privacy: .public) notify=\(shouldNotify)")
@@ -140,26 +134,9 @@ final class AgentTrackingManager {
                 await MainActor.run {
                     if let cur = self.sessions[sessionKey], !cur.isLive {
                         self.sessions.removeValue(forKey: sessionKey)
-                        self.updateAutoFuse()
                     }
                 }
             }
-        }
-    }
-
-    // MARK: - Auto-fuse
-
-    private func updateAutoFuse() {
-        let autoFuseEnabled = UserDefaults.standard.object(forKey: "doomcoder.agents.autoFuse") as? Bool ?? true
-        guard autoFuseEnabled else {
-            sleepManager?.releaseAgentFuse()
-            return
-        }
-        let live = !liveSessions.isEmpty
-        if live {
-            sleepManager?.forceScreenOn(reason: "Tracking \(liveSessions.count) agent session(s)")
-        } else {
-            sleepManager?.releaseAgentFuse()
         }
     }
 
