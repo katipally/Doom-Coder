@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 @main
 struct DoomCoderApp: App {
@@ -40,22 +41,21 @@ struct DoomCoderApp: App {
             ConfigureAgentsViewV2()
         }
         .windowResizability(.contentSize)
-
-        Window("Track Agents", id: "trackAgents") {
-            TrackAgentsView()
-        }
-        .windowResizability(.contentSize)
     }
 }
 
 // MARK: - AppDelegate
-final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate {
+final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var whatsNewWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prepare support dirs + SQLite store on main (cheap).
         AgentSupportDir.ensure()
+        PauseFlag.clearOnLaunch()
         EventStore.shared.open()
+
+        // Copy dc-hook to a stable path that survives Xcode rebuilds.
+        AgentInstallerV2.ensureStableHelper()
 
         // Start the socket listener.
         HookSocketListener.shared.start { env in
@@ -67,6 +67,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate {
             AgentInstallerV2.healAllPaths()
         }
 
+        // Set notification delegate BEFORE requesting permission so
+        // foreground banners are enabled from the very first grant.
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
         NotificationDispatcher.shared.requestPermission()
 
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
@@ -75,6 +79,26 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate {
         if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
             showWhatsNew()
         }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    /// Show notification banners even when DoomCoder is in the foreground.
+    /// Menu-bar-only apps (LSUIElement) are always "foreground", so without
+    /// this delegate method macOS silently drops every local notification.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
+
+    /// Handle the user tapping a notification banner.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        // Bring the menu bar popover forward on tap (if needed in the future).
     }
 
     @MainActor

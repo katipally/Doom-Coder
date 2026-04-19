@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.8.5] - Unreleased
+## [1.8.5] - 2026-04-19 — End-to-end agent tracking pipeline
 
 **Agent tracking via native hooks.** DoomCoder now tracks AI-agent sessions
 (Claude Code, Cursor, VS Code Copilot, Copilot CLI) through each agent's
@@ -17,19 +17,55 @@ blocker automatically and fires notifications when your attention is needed.
 
 ### Added
 - `Configure Agents…` wizard: per-agent detect → preview → install →
-  two-gate verify → notification channels. Never touches existing hooks —
-  every entry is tagged with a `x-doomcoder: v1` sentinel and backed up.
-- `Track Agents…` live popover showing running sessions and waiting states.
+  two-gate verify → notification channels.
+- `Track Agents…` live popover showing running sessions with event timeline.
 - Notifications: macOS local + ntfy (topic `dc-<12hex>` stored in keychain).
-  File paths never leave the machine over ntfy.
-- Auto-fuse: sleep blocker engages while any tracked session is active and
-  releases on completion. Manual override honored (15-min cool-down).
-- Right-click / menu "Pause Tracking" global kill switch (touch-file).
-- SQLite event store with 7-day auto-purge under Application Support.
+- Auto-fuse: sleep blocker engages while any tracked session is active.
+- SQLite event store with 7-day auto-purge.
 - One-time What's New sheet after update.
+- **Stable dc-hook path** — binary copied to
+  `~/Library/Application Support/DoomCoder/dc-hook` on every launch so hook
+  configs survive Xcode rebuilds.
+- **Full event coverage** — Claude Code (25 events), Cursor (20), VS Code (9),
+  Copilot CLI (6). All available lifecycle, tool-use, and error events hooked.
+- **Raw event timeline** — sessions store every event as-is with timestamps;
+  no state machine, just a simple `isNotifiable()` check for milestone alerts.
+- **Claude ↔ VS Code dedup** — dc-hook detects the calling agent via env vars
+  (`VSCODE_PID`, `CLAUDE_CODE_SESSION`) and silently exits if invoked by the
+  wrong agent, preventing duplicate events from the shared `settings.json`.
+- **Foreground notification delegate** — `UNUserNotificationCenterDelegate`
+  ensures macOS banners display even when DoomCoder (LSUIElement app) is
+  foreground.
+
+### Fixed
+- **dc-hook binary disappeared on every rebuild.** `helperBinaryPath()` pointed
+  into DerivedData which changes path on rebuild → hooks silently failed.
+- **macOS notifications never appeared.** No delegate was set, so the system
+  suppressed all banners for the foreground LSUIElement app.
+- **ntfy test always failed.** `ChannelTester` used `NtfyTopic.current` (nil
+  before first dispatch) instead of `getOrCreate()`.
+- **Session ID instability.** `dc-hook` used `getpid()` (changes per hook
+  invocation) instead of `getppid()` (stable parent agent PID).
+- **Cursor sessions not grouped.** Session key extraction now checks
+  `conversation_id` (Cursor's field name) alongside `session_id`/`sessionId`.
+- **Pause flag persisted across launches.** File-based sentinel removed;
+  pause is now in-memory and cleared on every launch.
+- **VS Code state transitions** now match PascalCase events from the shared
+  `~/.claude/settings.json`.
+- **Copilot CLI install detection** no longer hard-coded to `false`.
+- **`MenuBarExtra(.window)` no longer crashes** — `.animation()` modifiers
+  replaced with frame-based conditional rendering.
 
 ### Changed
+- Menu bar layout reworked — Track Agents is an inline accordion.
+- Install/Uninstall are contract-based with atomic writes and backup/revert.
+- Notification dedupe window reduced from 30s to 5s.
 - `MARKETING_VERSION` → 1.8.5, `CURRENT_PROJECT_VERSION` → 185.
+
+### Removed
+- `Window("Track Agents")` scene.
+- File-based pause sentinel.
+- `AgentSessionState`-based state machine — replaced with raw event timeline.
 
 ---
 

@@ -19,7 +19,15 @@ struct MenuBarWindowView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var trackedOn: Int = 0
+    @State private var configuredCount: Int = 0
+    @AppStorage("menubar.trackExpanded") private var trackExpanded: Bool = false
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    private var accordionHeight: CGFloat {
+        guard trackExpanded else { return 0 }
+        if configuredCount == 0 { return 32 }
+        return CGFloat(configuredCount) * 36 + 4
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,12 +40,23 @@ struct MenuBarWindowView: View {
             configureRow
             Divider().padding(.horizontal, 12)
             trackRow
-            Divider().padding(.horizontal, 12)
+            if trackExpanded {
+                TrackAccordion(openConfigure: openConfigureWindow)
+                    .frame(height: accordionHeight)
+                Divider().padding(.horizontal, 12)
+            } else {
+                Divider().padding(.horizontal, 12)
+            }
             footer
         }
-        .frame(width: 320, height: 320)
+        .frame(width: 320, height: 320 + accordionHeight)
         .onAppear { refreshTrackedCount() }
         .onReceive(refreshTimer) { _ in refreshTrackedCount() }
+    }
+
+    private func openConfigureWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openWindow(id: "configureAgents")
     }
 
     // MARK: - Sections
@@ -155,8 +174,7 @@ struct MenuBarWindowView: View {
 
     private var trackRow: some View {
         Button {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "trackAgents")
+            trackExpanded.toggle()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "waveform.path.ecg")
@@ -176,7 +194,7 @@ struct MenuBarWindowView: View {
                         .background(Color.green.opacity(0.25), in: Capsule())
                         .foregroundStyle(.green)
                 }
-                Image(systemName: "chevron.right")
+                Image(systemName: trackExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -190,7 +208,8 @@ struct MenuBarWindowView: View {
     private var trackSubtitle: String {
         let live = tracking.liveSessions.count
         if live > 0 { return "\(live) live · \(trackedOn) tracked" }
-        return "\(trackedOn) of \(TrackedAgent.allCases.count) tracked"
+        if configuredCount == 0 { return "no agents configured" }
+        return "\(trackedOn) of \(configuredCount) tracked"
     }
 
     private var footer: some View {
@@ -233,5 +252,6 @@ struct MenuBarWindowView: View {
 
     private func refreshTrackedCount() {
         trackedOn = TrackingStore.enabledCount()
+        configuredCount = TrackAccordion.configuredCount()
     }
 }

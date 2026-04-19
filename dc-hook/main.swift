@@ -13,7 +13,6 @@ import Darwin
 
 let kVersion = "1"
 let kSocketName = "hook.sock"
-let kPauseFileName = "paused"
 let kSupportDirName = "DoomCoder"
 let kHardTimeoutSeconds: UInt32 = 5
 
@@ -23,9 +22,6 @@ func supportDir() -> String {
 }
 
 func socketPath() -> String { "\(supportDir())/\(kSocketName)" }
-func pausePath()  -> String { "\(supportDir())/\(kPauseFileName)" }
-
-func isPaused() -> Bool { FileManager.default.fileExists(atPath: pausePath()) }
 
 func argValue(_ name: String) -> String? {
     let args = CommandLine.arguments
@@ -83,18 +79,46 @@ func sendFrame(_ data: Data) -> Bool {
 }
 
 func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: Any], synthetic: Bool = false) -> Bool {
+    // Use parent PID — dc-hook is a new process per invocation, so getpid()
+    // yields a different value every time. getppid() returns the agent
+    // process that invoked us, giving a stable identity within a session.
     var envelope: [String: Any] = [
         "v": kVersion,
         "agent": agent,
         "event": event,
         "cwd": FileManager.default.currentDirectoryPath,
-        "pid": Int(getpid()),
+        "pid": Int(getppid()),
         "ts": Date().timeIntervalSince1970,
         "payload": payload
     ]
     if synthetic { envelope["synthetic"] = true }
     guard let data = try? JSONSerialization.data(withJSONObject: envelope, options: []) else { return false }
     return sendFrame(data)
+}
+
+// MARK: - Claude / VS Code deduplication
+//
+// Both agents share ~/.claude/settings.json, so ALL hooks fire for BOTH.
+// When we're invoked as `dc-hook claude <event>` but the actual caller is
+// VS Code (or vice-versa), we silently exit to avoid duplicate sessions.
+
+func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
+    let env = ProcessInfo.processInfo.environment
+    switch declaredAgent {
+    case "claude":
+        // If VS Code env vars are present, the caller is VS Code — skip Claude hooks.
+        if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
+            return true
+        }
+    case "vscode":
+        // If Claude session vars are present, the caller is Claude Code — skip VS Code hooks.
+        if env["CLAUDE_CODE_SESSION"] != nil || env["CLAUDE_SESSION_ID"] != nil || env["CLAUDE_CODE_ENTRY_POINT"] != nil {
+            return true
+        }
+    default:
+        break
+    }
+    return false
 }
 
 // MARK: - Replay demo (30s synthetic lifecycle)
@@ -105,34 +129,51 @@ func replayDemo(agent: String) -> Int32 {
     case "claude":
         demoEvents = [
             ("SessionStart", 0),
-            ("Notification", 5),
-            ("SubagentStop", 10),
-            ("Notification", 15),
-            ("Stop", 25)
+            ("UserPromptSubmit", 2),
+            ("PreToolUse", 4),
+            ("PostToolUse", 6),
+            ("FileChanged", 8),
+            ("Notification", 10),
+            ("SubagentStart", 12),
+            ("SubagentStop", 14),
+            ("PreToolUse", 16),
+            ("PostToolUse", 18),
+            ("TaskCompleted", 22),
+            ("SessionEnd", 25)
         ]
     case "cursor":
         demoEvents = [
             ("sessionStart", 0),
-            ("afterAgentResponse", 8),
-            ("afterAgentResponse", 16),
-            ("stop", 25)
+            ("beforeSubmitPrompt", 2),
+            ("preToolUse", 4),
+            ("postToolUse", 6),
+            ("afterFileEdit", 8),
+            ("beforeShellExecution", 10),
+            ("afterShellExecution", 12),
+            ("afterAgentThought", 16),
+            ("afterAgentResponse", 20),
+            ("sessionEnd", 25)
         ]
     case "vscode":
         demoEvents = [
             ("SessionStart", 0),
-            ("Notification", 8),
-            ("Stop", 25)
+            ("PreToolUse", 4),
+            ("PostToolUse", 8),
+            ("SubagentStart", 12),
+            ("SubagentStop", 16),
+            ("SessionEnd", 25)
         ]
     case "copilot_cli":
         demoEvents = [
             ("sessionStart", 0),
-            ("userPromptSubmitted", 5),
-            ("userPromptSubmitted", 12),
-            ("errorOccurred", 20),
+            ("userPromptSubmitted", 3),
+            ("preToolUse", 6),
+            ("postToolUse", 10),
+            ("errorOccurred", 18),
             ("sessionEnd", 25)
         ]
     default:
-        demoEvents = [("sessionStart", 0), ("stop", 10)]
+        demoEvents = [("sessionStart", 0), ("sessionEnd", 10)]
     }
 
     let sessionId = "demo-\(UUID().uuidString.prefix(8))"
@@ -168,8 +209,6 @@ func runMain() -> Int32 {
         return replayDemo(agent: demoAgent)
     }
 
-    if isPaused() { return 0 }
-
     // Resolve agent/event from positional args (v2) or flags (v1 compat)
     let agent: String
     let event: String
@@ -179,6 +218,11 @@ func runMain() -> Int32 {
     } else {
         agent = argValue("agent") ?? "unknown"
         event = argValue("event") ?? "unknown"
+    }
+
+    // Claude/VS Code cross-agent deduplication
+    if shouldSkipDueToCrossAgent(declaredAgent: agent) {
+        return 0
     }
 
     var payloadJSON: Any = [:]
