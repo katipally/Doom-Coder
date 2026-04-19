@@ -364,8 +364,9 @@ struct AgentInstallerV2 {
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {
         let exe = helperBinaryPath()
-        // Use positional args: dc-hook <agent> <event>
-        return "\(exe) \(agent) \(event)"
+        // Shell-quote the path so spaces (e.g. "Application Support") are safe.
+        let quoted = exe.contains(" ") ? "\"\(exe)\"" : exe
+        return "\(quoted) \(agent) \(event)"
     }
 
     // MARK: - Recursive dc-hook entry stripping (D2: path-based identification)
@@ -497,7 +498,14 @@ struct AgentInstallerV2 {
         walkCommandsWithKey(root) { key, cmd in
             guard cmd.contains("dc-hook"), cmd.contains(token) else { return }
             seenEvents.insert(key)
-            if let bin = cmd.split(separator: " ").first {
+            // Extract binary path — may be shell-quoted when path contains spaces.
+            let trimmed = cmd.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("\"") {
+                let inner = trimmed.dropFirst()
+                if let closeIdx = inner.firstIndex(of: "\"") {
+                    helperPaths.insert(String(inner[inner.startIndex..<closeIdx]))
+                }
+            } else if let bin = trimmed.split(separator: " ").first {
                 helperPaths.insert(String(bin))
             }
         }
