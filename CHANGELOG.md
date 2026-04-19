@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.8] - 2026-04-19 — Hooks rework & UI animation polish
+
+**Complete hooks architecture overhaul and smooth UI transitions.** This release
+reworks how DoomCoder installs, normalizes, and notifies on AI agent hook
+events — plus adds spring animations and visual polish throughout.
+
+### Added
+- **Event normalizer engine** — per-agent normalizers map 60+ raw hook events
+  from Claude Code, Cursor, VS Code Copilot, and Copilot CLI into 13 unified
+  `NormalizedEventPhase` values for consistent cross-agent behavior
+- **HookConfigBackend** — actor-serialized config file I/O with backup,
+  transaction support, and agent-token-scoped operations for safe shared-file
+  access (Claude + VS Code share `~/.claude/settings.json`)
+- **Aggregate session model** — sessions track `activeToolCount`, `errorCount`,
+  `awaitingPermission`, `subagentCount` as counters/flags instead of naive
+  string matching, with configurable stale (15 min) and eviction (30 min)
+  thresholds
+- **User-configurable notification preferences** — "Notify me when…" section in
+  Channels tab lets you choose which event phases trigger push notifications
+  (session end, errors, permission requests, agent responses, etc.)
+- **Copilot CLI "Discover Projects"** — auto-scans ~/Developer, ~/Projects,
+  ~/Code, ~/Desktop for project folders; multi-select folder picker; better
+  empty state with guidance
+- **Show Config button** — appears on install/uninstall errors to quickly open
+  the config file in Finder
+- **Spring animations** — smooth transitions throughout: symbol pulse on live
+  dots, content transitions on status text, asymmetric slide-in/fade-out on
+  session strips, accordion expand/collapse
+- **Install loading spinner** — shows ProgressView during hook installation
+  with animated status messages
+
+### Changed
+- Agent-token-scoped hook stripping — installing Claude hooks no longer removes
+  VS Code entries from the shared `~/.claude/settings.json`
+- Notification policy now driven by user preferences instead of hardcoded
+  per-agent milestone event lists
+- Pre-flight install checks — verifies dc-hook binary exists and config
+  directory is writable before attempting installation
+- Improved error messages with recovery suggestions (e.g., "Try using the
+  Repair button to reset hooks" or "Reinstall DoomCoder from the latest
+  release")
+- Permission status UI — auto-refreshes on app focus, clearer wording
+
+### Fixed
+- Hooks installation errors caused by overly aggressive stripping of shared
+  config files
+- Session tracking incorrectly marking sessions as ended on non-terminal events
+
+---
+
 ## [1.8.7] - 2026-04-19 — Menu bar UI polish & animation
 
 **Compact layout, smooth animations, and professional-grade finish.** This
