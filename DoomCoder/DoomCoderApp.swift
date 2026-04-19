@@ -9,11 +9,6 @@ struct DoomCoderApp: App {
     @State private var updaterViewModel = CheckForUpdatesViewModel()
     @State private var tracking = AgentTrackingManager.shared
 
-    init() {
-        // Lightweight bindings only — heavy I/O moves to applicationDidFinishLaunching.
-        AgentTrackingManager.shared.bind(sleepManager: SleepManager.shared)
-    }
-
     var body: some Scene {
         MenuBarExtra {
             MenuBarWindowView(

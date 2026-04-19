@@ -51,10 +51,6 @@ struct SettingsView: View {
             }
 
             Section("Agents") {
-                Toggle("Block sleep while agents are running", isOn: Binding(
-                    get: { UserDefaults.standard.object(forKey: "doomcoder.agents.autoFuse") as? Bool ?? true },
-                    set: { UserDefaults.standard.set($0, forKey: "doomcoder.agents.autoFuse") }
-                ))
                 Toggle("Redact prompt text in local history", isOn: Binding(
                     get: { UserDefaults.standard.object(forKey: "doomcoder.agents.redact") as? Bool ?? true },
                     set: { UserDefaults.standard.set($0, forKey: "doomcoder.agents.redact") }
