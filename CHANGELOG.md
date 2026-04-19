@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.7] - 2026-04-19 — Menu bar UI polish & animation
+
+**Compact layout, smooth animations, and professional-grade finish.** This
+release refines the menu bar window with inline status, spring-animated
+accordions, SF Symbol effects, and a fix for the Updates button.
+
+### Changed
+- Removed "Keep Awake" header — elapsed time now appears inline next to toggle
+- Icon-only footer with tooltips (Settings, About, Updates, Quit) saves space
+- Base window height reduced from 330→260 px; eliminates fullscreen clipping
+- Removed buffer Spacer between sleep-blocking and agent-tracking sections
+- About view tagline updated to mention AI agent tracking
+
+### Added
+- **SF Symbol animations**: bolt bounce on toggle, antenna pulse for live
+  sessions, chip content transitions, chevron rotation on accordion expand
+- **Spring accordion**: inset-card style expand/collapse with
+  `.spring(duration: 0.35, bounce: 0.15)` and conditional mount for clean
+  layout
+- Compact elapsed-time formatter ("5m", "1h 2m") for inline display
+
+### Fixed
+- **Updates button stays disabled** — replaced one-shot poll with KVO/Combine
+  publisher on Sparkle's `canCheckForUpdates`; button re-enables automatically
+  after Sparkle finishes its check
+
+---
+
 ## [1.8.6] - 2026-04-19 — Logs tab, health monitoring & UX polish
 
 **Full observability, smarter uninstall, and channel UX.** This release adds a

@@ -3,13 +3,14 @@ import SwiftUI
 // Menu-bar window (MenuBarExtra(.window)) content.
 //
 // Two-section layout:
-//   Section 1 — Keep Awake: sleep toggle, mode selector, session timer
+//   Section 1 — Sleep blocker: toggle, mode selector, session timer
 //   Section 2 — Agent Tracking: live sessions, configure/track shortcuts
-//   Footer: Settings · About · Updates · Quit
+//   Footer: icon-only (Settings · About · Updates · Quit)
 //
 // Critical: Do NOT use .animation() modifiers in this view — they cause
 // infinite NSHostingView constraint-update loops in menuBarExtra(.window).
 // All animations use withAnimation {} in action closures.
+// .symbolEffect() and .contentTransition() are safe to use.
 struct MenuBarWindowView: View {
     @Bindable var sleepManager: SleepManager
     var updaterViewModel: CheckForUpdatesViewModel
@@ -24,10 +25,17 @@ struct MenuBarWindowView: View {
 
     private let timerOptions = [0, 1, 2, 4, 8]
 
+    /// Compact elapsed time for inline display: "<1m", "5m", "1h 2m"
+    private var compactElapsed: String {
+        let full = sleepManager.elapsedTimeString
+        guard !full.isEmpty else { return "" }
+        return full.replacingOccurrences(of: "Active for ", with: "")
+    }
+
     private var accordionHeight: CGFloat {
         guard trackExpanded else { return 0 }
-        if configuredCount == 0 { return 32 }
-        return CGFloat(configuredCount) * 36 + 4
+        if configuredCount == 0 { return 40 }
+        return CGFloat(configuredCount) * 36 + 8
     }
 
     private var liveStripHeight: CGFloat {
@@ -37,7 +45,7 @@ struct MenuBarWindowView: View {
     }
 
     private var totalHeight: CGFloat {
-        var h: CGFloat = 330
+        var h: CGFloat = 260
         if sleepManager.sessionTimerRemainingText != nil { h += 22 }
         if sleepManager.screenOffCountdown != nil || sleepManager.isScreenOff { h += 22 }
         h += liveStripHeight
@@ -47,8 +55,7 @@ struct MenuBarWindowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Keep Awake ──────────────────────────────────────
-            keepAwakeHeader
+            // ── Sleep Blocker ────────────────────────────────────
             enableRow
             modeRow
             timerRow
@@ -68,7 +75,7 @@ struct MenuBarWindowView: View {
                 VStack { Divider() }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
 
             // ── Agent Tracking ──────────────────────────────────
             agentTrackingHeader
@@ -76,11 +83,17 @@ struct MenuBarWindowView: View {
             agentActionsRow
             if trackExpanded {
                 TrackAccordion(openConfigure: openConfigureWindow)
-                    .frame(height: accordionHeight)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.secondary.opacity(0.04))
+                            .padding(.horizontal, 8)
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            Spacer(minLength: 0)
-            Divider().padding(.horizontal, 12)
+            Divider().padding(.horizontal, 12).padding(.top, 4)
             footer
         }
         .frame(width: 320, height: totalHeight)
@@ -93,27 +106,7 @@ struct MenuBarWindowView: View {
         openWindow(id: "configureAgents")
     }
 
-    // MARK: - Keep Awake
-
-    private var keepAwakeHeader: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(sleepManager.isActive ? Color.accentColor : .secondary)
-            Text("Keep Awake")
-                .font(.headline)
-            Spacer()
-            if sleepManager.isActive, !sleepManager.elapsedTimeString.isEmpty {
-                Text(sleepManager.elapsedTimeString)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 6)
-    }
+    // MARK: - Sleep Blocker
 
     private var enableRow: some View {
         Button {
@@ -121,21 +114,27 @@ struct MenuBarWindowView: View {
                 sleepManager.toggle()
             }
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(sleepManager.isActive ? "Mac stays awake" : "Keep Mac Awake")
-                        .font(.body)
-                    if sleepManager.isActive {
-                        Text(modeStatusText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Prevent sleep while you work")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: sleepManager.isActive ? "bolt.fill" : "bolt.slash")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(sleepManager.isActive ? Color.accentColor : .secondary)
+                            .symbolEffect(.bounce, value: sleepManager.isActive)
+                        Text(sleepManager.isActive ? "Mac stays awake" : "Keep Mac Awake")
+                            .font(.body)
                     }
+                    Text(sleepManager.isActive ? modeStatusText : "Prevent sleep while you work")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if sleepManager.isActive, !compactElapsed.isEmpty {
+                    Text(compactElapsed)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .contentTransition(.numericText())
+                }
                 Toggle("", isOn: Binding(
                     get: { sleepManager.isActive },
                     set: { on in
@@ -150,7 +149,8 @@ struct MenuBarWindowView: View {
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
         }
         .buttonStyle(.plain)
     }
@@ -168,7 +168,7 @@ struct MenuBarWindowView: View {
             modeChip(.screenOff, label: "Screen Off", icon: "moon.fill")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -180,7 +180,9 @@ struct MenuBarWindowView: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: icon).font(.caption2)
+                Image(systemName: icon)
+                    .font(.caption2)
+                    .contentTransition(.symbolEffect(.replace))
                 Text(label).font(.caption)
             }
             .frame(maxWidth: .infinity)
@@ -257,9 +259,10 @@ struct MenuBarWindowView: View {
 
     private var agentTrackingHeader: some View {
         HStack(spacing: 8) {
-            Image(systemName: "waveform.path.ecg")
+            Image(systemName: "antenna.radiowaves.left.and.right")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(!tracking.liveSessions.isEmpty ? .green : .secondary)
+                .symbolEffect(.variableColor.iterative, isActive: !tracking.liveSessions.isEmpty)
             Text("Agent Tracking")
                 .font(.headline)
             Spacer()
@@ -274,7 +277,7 @@ struct MenuBarWindowView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
     }
 
     @ViewBuilder
@@ -324,7 +327,7 @@ struct MenuBarWindowView: View {
             .buttonStyle(.plain)
 
             Button {
-                withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
                     trackExpanded.toggle()
                 }
             } label: {
@@ -336,8 +339,9 @@ struct MenuBarWindowView: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
-                    Image(systemName: trackExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.down")
                         .font(.system(size: 7, weight: .bold))
+                        .rotationEffect(.degrees(trackExpanded ? -180 : 0))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
@@ -350,47 +354,47 @@ struct MenuBarWindowView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
     }
 
     // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: 0) {
-            footerButton("Settings", icon: "gearshape") {
+            footerIcon("gearshape", label: "Settings") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openWindow(id: "settings")
             }
-            footerButton("About", icon: "info.circle") {
+            footerIcon("info.circle", label: "About") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openWindow(id: "about")
             }
-            footerButton("Updates", icon: "arrow.triangle.2.circlepath") {
+            footerIcon("arrow.triangle.2.circlepath", label: "Check for Updates") {
                 updaterViewModel.checkForUpdates()
             }
             .disabled(!updaterViewModel.canCheckForUpdates)
-            footerButton("Quit", icon: "power") {
+            .opacity(updaterViewModel.canCheckForUpdates ? 1 : 0.4)
+            footerIcon("power", label: "Quit") {
                 sleepManager.disable()
                 NSApplication.shared.terminate(nil)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder
-    private func footerButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func footerIcon(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 2) {
-                Image(systemName: icon).font(.body)
-                Text(title).font(.caption2)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+        .help(label)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Helpers
