@@ -20,6 +20,7 @@ struct MenuBarWindowView: View {
 
     @State private var trackedOn: Int = 0
     @State private var configuredCount: Int = 0
+    @State private var detectedCount: Int = 0
     @AppStorage("menubar.trackExpanded") private var trackExpanded: Bool = false
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -27,6 +28,12 @@ struct MenuBarWindowView: View {
         guard trackExpanded else { return 0 }
         if configuredCount == 0 { return 32 }
         return CGFloat(configuredCount) * 36 + 4
+    }
+
+    private var liveStripHeight: CGFloat {
+        let count = tracking.liveSessions.count
+        guard count > 0 else { return 0 }
+        return CGFloat(count) * 22 + 12
     }
 
     var body: some View {
@@ -40,6 +47,7 @@ struct MenuBarWindowView: View {
             configureRow
             Divider().padding(.horizontal, 12)
             trackRow
+            liveActivityStrip
             if trackExpanded {
                 TrackAccordion(openConfigure: openConfigureWindow)
                     .frame(height: accordionHeight)
@@ -49,7 +57,7 @@ struct MenuBarWindowView: View {
             }
             footer
         }
-        .frame(width: 320, height: 320 + accordionHeight)
+        .frame(width: 320, height: 320 + accordionHeight + liveStripHeight)
         .onAppear { refreshTrackedCount() }
         .onReceive(refreshTimer) { _ in refreshTrackedCount() }
     }
@@ -205,10 +213,69 @@ struct MenuBarWindowView: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
+    private var liveActivityStrip: some View {
+        let live = tracking.liveSessions
+        if !live.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(live) { session in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(liveStateColor(session.displayState))
+                            .frame(width: 6, height: 6)
+                        Image(nsImage: AgentIconProvider.icon(for: session.agent, size: 14))
+                            .resizable()
+                            .frame(width: 14, height: 14)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        Text(session.agent.displayName)
+                            .font(.caption2.weight(.medium))
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text(session.status)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(liveTimeAgo(session.updatedAt))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func liveStateColor(_ s: AgentSessionState) -> Color {
+        switch s {
+        case .running:          return .green
+        case .waitingInput:     return .yellow
+        case .waitingApproval:  return .orange
+        case .completed:        return .gray
+        case .failed:           return .red
+        }
+    }
+
+    private func liveTimeAgo(_ date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 60 { return "\(secs)s ago" }
+        let mins = secs / 60
+        if mins < 60 { return "\(mins)m ago" }
+        return "\(mins / 60)h ago"
+    }
+
     private var trackSubtitle: String {
         let live = tracking.liveSessions.count
-        if live > 0 { return "\(live) live · \(trackedOn) tracked" }
-        if configuredCount == 0 { return "no agents configured" }
+        if live > 0 {
+            if configuredCount == 0 { return "\(live) live" }
+            return "\(live) live · \(trackedOn) tracked"
+        }
+        if configuredCount == 0 {
+            if detectedCount > 0 { return "\(detectedCount) found, none configured" }
+            return "no agents configured"
+        }
+        if trackedOn == configuredCount { return "all \(configuredCount) tracked" }
         return "\(trackedOn) of \(configuredCount) tracked"
     }
 
@@ -251,7 +318,8 @@ struct MenuBarWindowView: View {
     }
 
     private func refreshTrackedCount() {
-        trackedOn = TrackingStore.enabledCount()
+        trackedOn = TrackingStore.installedAndEnabledCount()
         configuredCount = TrackAccordion.configuredCount()
+        detectedCount = TrackingStore.detectedCount()
     }
 }

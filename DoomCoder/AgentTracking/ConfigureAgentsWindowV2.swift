@@ -1,10 +1,11 @@
 import SwiftUI
+import CoreImage
 
-// v2 configure window — NavigationSplitView with Agents + Channels tabs.
+// v2 configure window — NavigationSplitView with Agents + Channels + Logs tabs.
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels }
+    enum Tab: Hashable { case agents, channels, logs }
     @State private var tab: Tab = .agents
     @State private var selected: TrackedAgent? = .claude
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
@@ -21,6 +22,12 @@ struct ConfigureAgentsViewV2: View {
     @State private var channelConfig = ChannelStore.load()
     // Channel test results
     @State private var testResult: (Bool, String)? = nil
+    // Hook validation warnings
+    @State private var hookWarnings: [TrackedAgent: String] = [:]
+    // Permission status
+    @State private var permStatus: String = "…"
+    // Periodic health refresh
+    private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationSplitView {
@@ -35,12 +42,19 @@ struct ConfigureAgentsViewV2: View {
                 }
             case .channels:
                 channelsDetail
+            case .logs:
+                LogsView()
             }
         }
         .frame(minWidth: 820, minHeight: 580)
         .task {
             await detectAllAsync()
             checkMigration()
+            refreshPermStatus()
+            validateAllHooks()
+        }
+        .onReceive(healthTimer) { _ in
+            validateAllHooks()
         }
         .alert("Update Hook Configs", isPresented: $showMigrationAlert) {
             Button("Update All") {
@@ -83,6 +97,15 @@ struct ConfigureAgentsViewV2: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
+
+                Button {
+                    tab = .logs
+                    selected = nil
+                } label: {
+                    Label("Logs", systemImage: "list.bullet.rectangle")
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(tab == .logs ? Color.accentColor.opacity(0.15) : Color.clear)
             }
         }
         .listStyle(.sidebar)
@@ -93,6 +116,8 @@ struct ConfigureAgentsViewV2: View {
     private func agentRow(_ agent: TrackedAgent) -> some View {
         let d = detections[agent]
         let isInst = installedCache[agent] ?? false
+        let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
+        let hasWarning = hookWarnings[agent] != nil
         HStack(spacing: 8) {
             Image(nsImage: AgentIconProvider.icon(for: agent, size: 24))
                 .resizable()
@@ -105,6 +130,21 @@ struct ConfigureAgentsViewV2: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if hasWarning {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .font(.caption)
+            } else if isInst {
+                // Health dot: green if events in last hour, grey otherwise
+                Circle()
+                    .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
+                    .frame(width: 8, height: 8)
+            } else if d?.installed == true {
+                // Agent detected but hooks not installed: nudge
+                Text("Set up →")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
             if isInst {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(.green)
@@ -157,14 +197,79 @@ struct ConfigureAgentsViewV2: View {
                     Label("Detection", systemImage: "magnifyingglass")
                 }
 
-                // Prerequisites (per-agent setup hints)
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(prerequisites(for: agent), id: \.self) { line in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text("•").foregroundStyle(.secondary)
-                                Text(line).font(.callout).foregroundStyle(.secondary)
+                // Health Monitoring
+                if installedCache[agent] == true {
+                    GroupBox {
+                        let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
+                        let todayCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 86400)
+                        let lastEv = EventStore.shared.lastEvent(agent: agent.rawValue)
+                        HStack(spacing: 16) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
+                                    .frame(width: 10, height: 10)
+                                Text(eventCount > 0 ? "Active" : "Quiet")
+                                    .font(.callout.weight(.medium))
+                                    .foregroundStyle(eventCount > 0 ? .primary : .secondary)
                             }
+                            Text("\(todayCount) today")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let last = lastEv {
+                                Text("Last: \(timeAgo(Date(timeIntervalSince1970: last.ts)))")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                        }
+                    } label: {
+                        Label("Health", systemImage: "heart.text.square")
+                    }
+                }
+
+                // Hook Validation Warning
+                if let warning = hookWarnings[agent] {
+                    GroupBox {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.yellow)
+                            Text(warning)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Repair") {
+                                let r = AgentInstallerV2.install(agent)
+                                statusMessage = resultMessage(r, verb: "Repair")
+                                Task { await detectAllAsync(); validateAllHooks() }
+                            }
+                        }
+                    } label: {
+                        Label("Hook Warning", systemImage: "exclamationmark.shield")
+                    }
+                }
+
+                // Prerequisites (dynamic checks)
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(dynamicPrereqs(for: agent), id: \.label) { prereq in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: prereq.met ? "checkmark.circle.fill" : "xmark.circle")
+                                    .foregroundStyle(prereq.met ? .green : .red)
+                                    .font(.caption)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(prereq.label).font(.callout)
+                                    if !prereq.met, let fix = prereq.fix {
+                                        Text(fix)
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                            }
+                        }
+                        HStack {
+                            Spacer()
+                            Button("Recheck") { detectAll() }
+                                .controlSize(.small)
                         }
                     }
                 } label: {
@@ -224,25 +329,31 @@ struct ConfigureAgentsViewV2: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 12) {
-                            Button("Ping helper") { pingHelper() }
-
-                            Button(verifyWaiting ? "Waiting…" : "Run demo session") {
-                                startDemoSession(agent: agent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Button("Test Helper") { pingHelper() }
+                                Text("Checks dc-hook binary").font(.caption2).foregroundStyle(.tertiary)
                             }
-                            .disabled(verifyWaiting)
 
-                            Button(realWatching ? "Watching…" : "Watch real session (120s)") {
-                                watchRealSession(agent: agent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Button(verifyWaiting ? "Running…" : "Run Demo") {
+                                    startDemoSession(agent: agent)
+                                }
+                                .disabled(verifyWaiting)
+                                Text("Simulates agent session").font(.caption2).foregroundStyle(.tertiary)
                             }
-                            .disabled(realWatching)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Button(realWatching ? "Watching…" : "Watch Live") {
+                                    watchRealSession(agent: agent)
+                                }
+                                .disabled(realWatching)
+                                Text("Waits for real hook (2 min)").font(.caption2).foregroundStyle(.tertiary)
+                            }
 
                             Spacer()
                         }
                         if let r = verifyResult {
                             Text(r).font(.callout).foregroundStyle(.secondary)
-                        } else {
-                            Text("Gate A: Ping helper. Gate B: synthetic demo. Gate C: open the IDE and trigger a real turn within 120s.")
-                                .font(.callout).foregroundStyle(.tertiary)
                         }
                     }
                 } label: {
@@ -366,6 +477,37 @@ struct ConfigureAgentsViewV2: View {
                 Text("Global defaults applied to all agents unless overridden.")
                     .foregroundStyle(.secondary)
 
+                // Permission Status
+                GroupBox {
+                    HStack(spacing: 8) {
+                        let disp = NotificationDispatcher.shared
+                        switch disp.permissionStatus {
+                        case .authorized, .provisional, .ephemeral:
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            Text("Notifications allowed").font(.callout)
+                        case .denied:
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                            Text("Notifications denied").font(.callout)
+                            Spacer()
+                            Button("Open System Settings →") {
+                                disp.openSystemSettings()
+                            }
+                        case .notDetermined:
+                            Image(systemName: "questionmark.circle").foregroundStyle(.orange)
+                            Text("Not asked yet").font(.callout)
+                            Spacer()
+                            Button("Request Permission") {
+                                disp.requestPermission { _ in refreshPermStatus() }
+                            }
+                        @unknown default:
+                            Text("Unknown").font(.callout)
+                        }
+                        Spacer()
+                    }
+                } label: {
+                    Label("Permission Status", systemImage: "lock.shield")
+                }
+
                 // macOS Notification
                 GroupBox {
                     HStack {
@@ -414,11 +556,9 @@ struct ConfigureAgentsViewV2: View {
                                 .font(.system(.callout, design: .monospaced))
                                 .textSelection(.enabled)
                             Spacer()
-                            Button("Copy") {
-                                if let url = NtfyTopic.shareURL {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                }
+                            Button("Copy Topic") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(NtfyTopic.getOrCreate(), forType: .string)
                             }
                             Button("Regenerate") { _ = NtfyTopic.regenerate() }
                         }
@@ -428,6 +568,38 @@ struct ConfigureAgentsViewV2: View {
                                 .font(.callout).foregroundStyle(.secondary)
                             Text(NtfyTopic.server ?? "https://ntfy.sh")
                                 .font(.callout)
+                            Spacer()
+                        }
+
+                        HStack {
+                            if let url = NtfyTopic.shareURL {
+                                Text("Subscribe URL:")
+                                    .font(.callout).foregroundStyle(.secondary)
+                                Text(url.absoluteString)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                Spacer()
+                                Button("Copy Subscribe URL") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                                }
+                            }
+                        }
+
+                        // QR Code
+                        if let url = NtfyTopic.shareURL {
+                            HStack {
+                                Spacer()
+                                qrCodeImage(for: url.absoluteString)
+                                    .resizable()
+                                    .interpolation(.none)
+                                    .frame(width: 120, height: 120)
+                                Spacer()
+                            }
+                            Text("Scan to subscribe on your phone")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity)
                         }
                     }
                 } label: {
@@ -548,6 +720,86 @@ struct ConfigureAgentsViewV2: View {
     }
 
     // MARK: - Helpers
+
+    private struct Prereq: Identifiable {
+        let label: String
+        let met: Bool
+        let fix: String?
+        var id: String { label }
+    }
+
+    private func dynamicPrereqs(for agent: TrackedAgent) -> [Prereq] {
+        let dcHookOK = FileManager.default.isExecutableFile(atPath: AgentInstallerV2.helperBinaryPath())
+        var list: [Prereq] = []
+        list.append(Prereq(
+            label: "dc-hook binary ready",
+            met: dcHookOK,
+            fix: dcHookOK ? nil : "Binary not found — try reinstalling DoomCoder"
+        ))
+        switch agent {
+        case .claude:
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
+            let file = dir.appending(path: "settings.json")
+            list.append(Prereq(label: "~/.claude/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `claude` once to initialize"))
+            list.append(Prereq(label: "settings.json writable", met: FileManager.default.isWritableFile(atPath: file.path), fix: "Check permissions on ~/.claude/settings.json"))
+        case .cursor:
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".cursor")
+            list.append(Prereq(label: "~/.cursor/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Cursor first"))
+            list.append(Prereq(label: "Cursor 0.45+ with Hooks enabled", met: detections[.cursor]?.installed == true, fix: "Enable Hooks in Settings → Beta"))
+        case .vscode:
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
+            list.append(Prereq(label: "~/.claude/ exists (shared config)", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `claude` once or create ~/.claude/ manually"))
+            list.append(Prereq(label: "VS Code + Copilot Chat extension", met: true, fix: nil))
+        case .copilotCLI:
+            list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm, brew, or gh extension"))
+            list.append(Prereq(label: "At least 1 project folder configured", met: !cliFolders.isEmpty, fix: "Click 'Add folder' below"))
+        }
+        return list
+    }
+
+    private func timeAgo(_ date: Date) -> String {
+        let s = Int(-date.timeIntervalSinceNow)
+        if s < 60 { return "\(s)s ago" }
+        if s < 3600 { return "\(s/60)m ago" }
+        if s < 86400 { return "\(s/3600)h ago" }
+        return "\(s/86400)d ago"
+    }
+
+    private func refreshPermStatus() {
+        NotificationDispatcher.shared.refreshPermissionStatus()
+    }
+
+    private func validateAllHooks() {
+        var warnings: [TrackedAgent: String] = [:]
+        for agent in TrackedAgent.allCases {
+            guard installedCache[agent] == true else { continue }
+            let result = AgentInstallerV2.verifyInstalled(agent)
+            switch result {
+            case .failure:
+                warnings[agent] = "Hook config may have been modified externally"
+            default:
+                break
+            }
+        }
+        hookWarnings = warnings
+    }
+
+    private func qrCodeImage(for string: String) -> Image {
+        guard let data = string.data(using: .utf8),
+              let filter = CIFilter(name: "CIQRCodeGenerator") else {
+            return Image(systemName: "qrcode")
+        }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let output = filter.outputImage else {
+            return Image(systemName: "qrcode")
+        }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        let rep = NSCIImageRep(ciImage: scaled)
+        let ns = NSImage(size: rep.size)
+        ns.addRepresentation(rep)
+        return Image(nsImage: ns)
+    }
 
     private func prerequisites(for agent: TrackedAgent) -> [String] {
         switch agent {

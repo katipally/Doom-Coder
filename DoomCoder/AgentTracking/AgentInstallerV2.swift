@@ -119,10 +119,11 @@ struct AgentInstallerV2 {
 
         do {
             var root = readJSON(at: path) ?? [:]
-            stripDcHookEntries(&root)
+            let token = dcHookAgentToken(agent)
+            stripDcHookEntries(&root, agentToken: token)
             pruneEmptyContainers(&root)
             try writeJSON(root, to: path, needsVersion: agent == .cursor || agent == .copilotCLI)
-            try verifyUninstalled(at: path)
+            try verifyUninstalled(at: path, agent: agent)
             let postHash = sha256(of: path) ?? "absent"
             logger.notice("installer op=uninstall agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
             return .success(())
@@ -198,6 +199,19 @@ struct AgentInstallerV2 {
 
     static func claudeSettingsPath() -> String { NSHomeDirectory() + "/.claude/settings.json" }
     static func cursorHooksPath()   -> String { NSHomeDirectory() + "/.cursor/hooks.json" }
+
+    // MARK: - Public verification
+
+    /// Returns `.success` if hooks are correctly installed for `agent`, `.failure` otherwise.
+    static func verifyInstalled(_ agent: TrackedAgent) -> Result<Void, Error> {
+        let path = configPath(for: agent)
+        do {
+            try verifyInstalled(agent: agent, at: path)
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
 
     // MARK: - Per-agent install implementations
 
@@ -374,18 +388,25 @@ struct AgentInstallerV2 {
     // Walk entire JSON tree. Any object whose `command` or `bash` value contains
     // our helper path (dc-hook) is a DoomCoder entry. Drop it. Prune up-tree.
 
-    static func stripDcHookEntries(_ node: inout [String: Any]) {
+    /// Strip dc-hook entries for a specific agent only. When `agentToken` is nil,
+    /// strips ALL dc-hook entries (legacy behavior for full cleanup).
+    static func stripDcHookEntries(_ node: inout [String: Any], agentToken: String? = nil) {
         let helperName = "dc-hook"
+        let matchesDcHook: (String) -> Bool = { cmd in
+            guard cmd.contains(helperName) else { return false }
+            if let token = agentToken { return cmd.contains(token) }
+            return true
+        }
         for (key, value) in node {
             if var arr = value as? [[String: Any]] {
                 arr.removeAll { obj in
-                    if let cmd = obj["command"] as? String, cmd.contains(helperName) { return true }
-                    if let bash = obj["bash"] as? String, bash.contains(helperName) { return true }
+                    if let cmd = obj["command"] as? String, matchesDcHook(cmd) { return true }
+                    if let bash = obj["bash"] as? String, matchesDcHook(bash) { return true }
                     // Check nested "hooks" arrays (Claude matcher-group style)
                     if let innerHooks = obj["hooks"] as? [[String: Any]] {
                         let cleaned = innerHooks.filter { inner in
-                            if let cmd = inner["command"] as? String, cmd.contains(helperName) { return false }
-                            if let bash = inner["bash"] as? String, bash.contains(helperName) { return false }
+                            if let cmd = inner["command"] as? String, matchesDcHook(cmd) { return false }
+                            if let bash = inner["bash"] as? String, matchesDcHook(bash) { return false }
                             return true
                         }
                         if cleaned.isEmpty { return true }
@@ -397,8 +418,8 @@ struct AgentInstallerV2 {
                     var mutable = obj
                     if var innerHooks = mutable["hooks"] as? [[String: Any]] {
                         innerHooks.removeAll { inner in
-                            if let cmd = inner["command"] as? String, cmd.contains(helperName) { return true }
-                            if let bash = inner["bash"] as? String, bash.contains(helperName) { return true }
+                            if let cmd = inner["command"] as? String, matchesDcHook(cmd) { return true }
+                            if let bash = inner["bash"] as? String, matchesDcHook(bash) { return true }
                             return false
                         }
                         mutable["hooks"] = innerHooks
@@ -412,7 +433,7 @@ struct AgentInstallerV2 {
                 }
                 node[key] = arr
             } else if var dict = value as? [String: Any] {
-                stripDcHookEntries(&dict)
+                stripDcHookEntries(&dict, agentToken: agentToken)
                 node[key] = dict
             }
         }
@@ -521,19 +542,20 @@ struct AgentInstallerV2 {
         }
     }
 
-    private static func verifyUninstalled(at path: String) throws {
-        guard FileManager.default.fileExists(atPath: path) else { return } // fully removed is fine
+    private static func verifyUninstalled(at path: String, agent: TrackedAgent) throws {
+        guard FileManager.default.fileExists(atPath: path) else { return }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
+        let token = dcHookAgentToken(agent)
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            // Malformed — fall back to substring check.
-            if let text = String(data: data, encoding: .utf8), text.contains("dc-hook") {
+            if let text = String(data: data, encoding: .utf8),
+               text.contains("dc-hook") && text.contains(token) {
                 throw VerifyError.residualDcHook
             }
             return
         }
         var residual = false
         walkCommands(root) { cmd in
-            if cmd.contains("dc-hook") { residual = true }
+            if cmd.contains("dc-hook") && cmd.contains(token) { residual = true }
         }
         if residual { throw VerifyError.residualDcHook }
     }
