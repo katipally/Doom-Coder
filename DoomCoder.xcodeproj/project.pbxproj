@@ -9,25 +9,63 @@
 /* Begin PBXBuildFile section */
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
-		DC0000000000002000000004 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000004 /* MenuBarView.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
 		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
+		DC0000000000002000000020 /* HookEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000020 /* HookEnvelope.swift */; };
+		DC0000000000002000000021 /* PauseFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* PauseFlag.swift */; };
+		DC0000000000002000000022 /* AgentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* AgentDetector.swift */; };
+		DC0000000000002000000023 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000023 /* EventStore.swift */; };
+		DC0000000000002000000024 /* NtfyTopic.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* NtfyTopic.swift */; };
+		DC0000000000002000000025 /* HookSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* HookSocketListener.swift */; };
+		DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* NotificationDispatcher.swift */; };
+		DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* AgentTrackingManager.swift */; };
+		DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000030 /* TrackAgentsPopover.swift */; };
+		DC0000000000002000000031 /* WhatsNewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000031 /* WhatsNewSheet.swift */; };
+		DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000032 /* AgentInstallerV2.swift */; };
+		DC0000000000002000000033 /* ChannelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000033 /* ChannelStore.swift */; };
+		DC0000000000002000000034 /* AgentIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000034 /* AgentIconProvider.swift */; };
+		DC0000000000002000000035 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000035 /* DeepLink.swift */; };
+		DC0000000000002000000036 /* ChannelTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000036 /* ChannelTester.swift */; };
+		DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000037 /* CopilotCLIFolderManager.swift */; };
+		DC0000000000002000000038 /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000038 /* MigrationManager.swift */; };
+		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
+		DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000040 /* MenuBarWindowView.swift */; };
+		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
-		DC0000000000001000000004 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
 		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000020 /* HookEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEnvelope.swift; sourceTree = "<group>"; };
+		DC0000000000001000000021 /* PauseFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseFlag.swift; sourceTree = "<group>"; };
+		DC0000000000001000000022 /* AgentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetector.swift; sourceTree = "<group>"; };
+		DC0000000000001000000023 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
+		DC0000000000001000000024 /* NtfyTopic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyTopic.swift; sourceTree = "<group>"; };
+		DC0000000000001000000025 /* HookSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketListener.swift; sourceTree = "<group>"; };
+		DC0000000000001000000027 /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000028 /* AgentTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000030 /* TrackAgentsPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAgentsPopover.swift; sourceTree = "<group>"; };
+		DC0000000000001000000031 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
+		DC0000000000001000000032 /* AgentInstallerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentInstallerV2.swift; sourceTree = "<group>"; };
+		DC0000000000001000000033 /* ChannelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelStore.swift; sourceTree = "<group>"; };
+		DC0000000000001000000034 /* AgentIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconProvider.swift; sourceTree = "<group>"; };
+		DC0000000000001000000035 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
+		DC0000000000001000000036 /* ChannelTester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTester.swift; sourceTree = "<group>"; };
+		DC0000000000001000000037 /* CopilotCLIFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCLIFolderManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000038 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
+		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
+		DC0000000000001000000040 /* MenuBarWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWindowView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,15 +93,42 @@
 			children = (
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
-				DC0000000000001000000004 /* MenuBarView.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
 				DC0000000000001000000014 /* SettingsView.swift */,
+				DC0000000000003000000004 /* AgentTracking */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
 			);
 			path = DoomCoder;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000004 /* AgentTracking */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000020 /* HookEnvelope.swift */,
+				DC0000000000001000000021 /* PauseFlag.swift */,
+				DC0000000000001000000022 /* AgentDetector.swift */,
+				DC0000000000001000000023 /* EventStore.swift */,
+				DC0000000000001000000024 /* NtfyTopic.swift */,
+				DC0000000000001000000025 /* HookSocketListener.swift */,
+				DC0000000000001000000032 /* AgentInstallerV2.swift */,
+				DC0000000000001000000027 /* NotificationDispatcher.swift */,
+				DC0000000000001000000028 /* AgentTrackingManager.swift */,
+				DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */,
+				DC0000000000001000000030 /* TrackAgentsPopover.swift */,
+				DC0000000000001000000031 /* WhatsNewSheet.swift */,
+				DC0000000000001000000033 /* ChannelStore.swift */,
+				DC0000000000001000000034 /* AgentIconProvider.swift */,
+				DC0000000000001000000035 /* DeepLink.swift */,
+				DC0000000000001000000036 /* ChannelTester.swift */,
+				DC0000000000001000000037 /* CopilotCLIFolderManager.swift */,
+				DC0000000000001000000038 /* MigrationManager.swift */,
+				DC0000000000001000000040 /* MenuBarWindowView.swift */,
+				DC0000000000001000000041 /* TrackingStore.swift */,
+			);
+			path = AgentTracking;
 			sourceTree = "<group>";
 		};
 		DC0000000000003000000003 /* Products */ = {
@@ -84,6 +149,7 @@
 				DC0000000000004000000003 /* Frameworks */,
 				DC0000000000004000000001 /* Sources */,
 				DC0000000000004000000002 /* Resources */,
+				DC0000000000004000000010 /* Build dc-hook helper */,
 			);
 			buildRules = (
 			);
@@ -98,6 +164,30 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DC0000000000004000000010 /* Build dc-hook helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/dc-hook/main.swift",
+			);
+			name = "Build dc-hook helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/dc-hook",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nRES_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources\"\nmkdir -p \"$RES_DIR\"\nOUT=\"$RES_DIR/dc-hook\"\nxcrun swiftc -O -target \"$(uname -m)-apple-macos$MACOSX_DEPLOYMENT_TARGET\" \"$SRCROOT/dc-hook/main.swift\" -o \"$OUT\"\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options=runtime \"$OUT\" || true\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXProject section */
 		DC0000000000008000000001 /* Project object */ = {
@@ -151,10 +241,29 @@
 			files = (
 				DC0000000000002000000002 /* DoomCoderApp.swift in Sources */,
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
-				DC0000000000002000000004 /* MenuBarView.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
 				DC0000000000002000000014 /* SettingsView.swift in Sources */,
+				DC0000000000002000000020 /* HookEnvelope.swift in Sources */,
+				DC0000000000002000000021 /* PauseFlag.swift in Sources */,
+				DC0000000000002000000022 /* AgentDetector.swift in Sources */,
+				DC0000000000002000000023 /* EventStore.swift in Sources */,
+				DC0000000000002000000024 /* NtfyTopic.swift in Sources */,
+				DC0000000000002000000025 /* HookSocketListener.swift in Sources */,
+				DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */,
+				DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */,
+				DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */,
+				DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */,
+				DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */,
+				DC0000000000002000000031 /* WhatsNewSheet.swift in Sources */,
+				DC0000000000002000000033 /* ChannelStore.swift in Sources */,
+				DC0000000000002000000034 /* AgentIconProvider.swift in Sources */,
+				DC0000000000002000000035 /* DeepLink.swift in Sources */,
+				DC0000000000002000000036 /* ChannelTester.swift in Sources */,
+				DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */,
+				DC0000000000002000000038 /* MigrationManager.swift in Sources */,
+				DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */,
+				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -198,7 +307,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -261,7 +370,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -286,7 +395,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 184;
+				CURRENT_PROJECT_VERSION = 190;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -295,7 +404,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.4;
+				MARKETING_VERSION = 1.9.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -310,7 +419,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 184;
+				CURRENT_PROJECT_VERSION = 190;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -319,7 +428,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.4;
+				MARKETING_VERSION = 1.9.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

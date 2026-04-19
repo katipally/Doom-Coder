@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.5] - Unreleased
+
+**Agent tracking via native hooks.** DoomCoder now tracks AI-agent sessions
+(Claude Code, Cursor, VS Code Copilot, Copilot CLI) through each agent's
+built-in hook system. A single bundled helper (`dc-hook`) pipes lifecycle
+events through a per-user Unix socket into the app, which drives the sleep
+blocker automatically and fires notifications when your attention is needed.
+
+### Added
+- `Configure Agents…` wizard: per-agent detect → preview → install →
+  two-gate verify → notification channels. Never touches existing hooks —
+  every entry is tagged with a `x-doomcoder: v1` sentinel and backed up.
+- `Track Agents…` live popover showing running sessions and waiting states.
+- Notifications: macOS local + ntfy (topic `dc-<12hex>` stored in keychain).
+  File paths never leave the machine over ntfy.
+- Auto-fuse: sleep blocker engages while any tracked session is active and
+  releases on completion. Manual override honored (15-min cool-down).
+- Right-click / menu "Pause Tracking" global kill switch (touch-file).
+- SQLite event store with 7-day auto-purge under Application Support.
+- One-time What's New sheet after update.
+
+### Changed
+- `MARKETING_VERSION` → 1.8.5, `CURRENT_PROJECT_VERSION` → 185.
+
+---
+
 ## [1.8.4] - Unreleased
 
 **Strip-down release.** Everything except the core "keep Mac awake"
