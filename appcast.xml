@@ -7,10 +7,10 @@
         <language>en</language>
         <item>
             <title>Version 1.8.8</title>
-            <pubDate>Sun, 19 Apr 2026 23:19:20 +0000</pubDate>
+            <pubDate>Sun, 19 Apr 2026 23:22:01 +0000</pubDate>
             <sparkle:releaseNotesLink>https://github.com/katipally/Doom-Coder/releases/tag/v1.8.8</sparkle:releaseNotesLink>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v1.8.8/DoomCoder-1.8.8.zip" sparkle:version="188" sparkle:shortVersionString="1.8.8" sparkle:edSignature="AlI1Sjdl3lOoN4/OvFTpDXb0ZNlq2VG3kmwm1umdN0QRFjuMy6Qc0lPnuvkYm1NrRipvbLk/4GWRhX81iANvDA==" length="5775129" type="application/octet-stream" />
+            <enclosure url="https://github.com/katipally/Doom-Coder/releases/download/v1.8.8/DoomCoder-1.8.8.zip" sparkle:version="188" sparkle:shortVersionString="1.8.8" sparkle:edSignature="s4nzxC8vArJqi3dDNNp/216y33/clD8BK/GK9qGqb5GlWCFCe+VUNKAc9S7lEjxYQifPHLjbB6w/NgJr40SWCg==" length="5720761" type="application/octet-stream" />
         </item>
         <item>
             <title>Version 1.8.7</title>
