@@ -35,6 +35,8 @@
 		DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000040 /* MenuBarWindowView.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
 		DC0000000000002000000042 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* LogsView.swift */; };
+		DC0000000000002000000043 /* HookConfigBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000043 /* HookConfigBackend.swift */; };
+		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +70,8 @@
 		DC0000000000001000000040 /* MenuBarWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWindowView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000042 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000043 /* HookConfigBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookConfigBackend.swift; sourceTree = "<group>"; };
+		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +134,8 @@
 				DC0000000000001000000040 /* MenuBarWindowView.swift */,
 				DC0000000000001000000041 /* TrackingStore.swift */,
 				DC0000000000001000000042 /* LogsView.swift */,
+				DC0000000000001000000043 /* HookConfigBackend.swift */,
+				DC0000000000001000000044 /* AgentEventNormalizer.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -268,6 +274,8 @@
 				DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */,
 				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
 				DC0000000000002000000042 /* LogsView.swift in Sources */,
+				DC0000000000002000000043 /* HookConfigBackend.swift in Sources */,
+				DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
