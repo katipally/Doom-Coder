@@ -113,7 +113,7 @@ struct MenuBarWindowView: View {
 
     private var enableRow: some View {
         Button {
-            withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+            withAnimation(DCAnim.bouncy) {
                 sleepManager.toggle()
             }
         } label: {
@@ -142,7 +142,7 @@ struct MenuBarWindowView: View {
                 Toggle("", isOn: Binding(
                     get: { sleepManager.isActive },
                     set: { on in
-                        withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+                        withAnimation(DCAnim.bouncy) {
                             if on { sleepManager.enable() } else { sleepManager.disable() }
                         }
                     }
@@ -179,7 +179,7 @@ struct MenuBarWindowView: View {
     private func modeChip(_ target: DoomCoderMode, label: String, icon: String) -> some View {
         let selected = sleepManager.mode == target
         Button {
-            withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            withAnimation(DCAnim.smooth) {
                 sleepManager.mode = target
             }
         } label: {
@@ -213,7 +213,7 @@ struct MenuBarWindowView: View {
             ForEach(timerOptions, id: \.self) { hours in
                 let selected = sleepManager.sessionTimerHours == hours
                 Button {
-                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                    withAnimation(DCAnim.snap) {
                         sleepManager.sessionTimerHours = hours
                     }
                 } label: {
@@ -339,7 +339,7 @@ struct MenuBarWindowView: View {
             .buttonStyle(.plain)
 
             Button {
-                withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+                withAnimation(DCAnim.bouncy) {
                     trackExpanded.toggle()
                 }
             } label: {

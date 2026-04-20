@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.8.9] - 2026-04-19 — Hooks rework & UI animation polish
+## [1.8.10] - 2026-04-19 — CI recovery & animation consistency
+
+**Reliability release.** The v1.8.9 publish workflow failed at the "Commit
+appcast.xml" step after `git rebase origin/main` hit a conflict, which meant
+the GitHub Release step never ran and the CI-signed zip never reached users.
+v1.8.10 fixes the pipeline, removes a Swift 6 warnings-as-errors regression
+that blocked every CI build, and unifies scattered spring/ease animations
+into a single set of macOS 26-native tokens so the app moves with one
+consistent rhythm.
+
+### Fixed
+- **Release workflow** — replaced the single `git rebase origin/main` with a
+  5-attempt retry loop that uses `pull --rebase -X theirs` and regenerates
+  the appcast entry from scratch if main moved. Releases no longer abort
+  when another push races the CI run.
+- **CI build** — `AgentTrackingManager.swift` discarded the result of
+  `withAnimation` inside an async `MainActor.run`, triggering Swift 6's
+  `unused_result` warning. Under `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` this
+  failed every Debug build; now explicitly discarded.
+
+### Changed
+- **Unified animation tokens** (`DCAnim`) — new `UIAnimations.swift`
+  centralizes every transition on five native presets: `.snap`, `.smooth`,
+  `.bouncy`, `.fade`, `.micro`. All ad-hoc `.spring(duration: …, bounce: …)`
+  and `.easeInOut(duration: …)` calls across the menu bar, Configure
+  Agents window, Track Agents popover, Live Events store, Logs view, and
+  tracking manager now resolve to these tokens. Result: consistent timing,
+  single source of truth for motion, native macOS 26 feel.
+
+---
+
+
 
 **Complete hooks architecture overhaul and smooth UI transitions.** This release
 reworks how DoomCoder installs, normalizes, and notifies on AI agent hook
