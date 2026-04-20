@@ -22,7 +22,11 @@ jobs:
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          BUILD=$(echo "$VERSION" | tr -d '.')
+          # Compute monotonic build number: major*1000 + minor*100 + patch
+          # e.g. 1.9.0 → 1900, 1.9.1 → 1901, 1.10.0 → 2000
+          # (tr -d '.' would give 190 for 1.9.0 < 1810 for 1.8.10 — wrong)
+          IFS='.' read -r _MAJOR _MINOR _PATCH <<< "$VERSION"
+          BUILD=$(( _MAJOR * 1000 + _MINOR * 100 + _PATCH ))
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD=${BUILD}" >> $GITHUB_ENV
           echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV

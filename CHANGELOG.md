@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.1] - 2026-04-20 — Fix Sparkle build number ordering
+
+### Fixed
+- **Sparkle update loop** — the build number formula `tr -d '.'` produced
+  `190` for v1.9.0, which is numerically less than `1810` (v1.8.10). Sparkle
+  therefore offered v1.8.10 as an "update" to users already on v1.9.0.
+  The formula is now `major*1000 + minor*100 + patch`, giving:
+  - v1.9.0 → 1900, v1.9.1 → 1901 (both > 1810) ✓
+  - All future releases will maintain monotonic ordering.
+
+---
+
 ## [1.9.0] - 2026-04-20 — Bento grid UI + always-awake behavior
 
 **Major UI redesign and behavioral fix.** DoomCoder now keeps your Mac awake
