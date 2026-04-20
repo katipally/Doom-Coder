@@ -87,6 +87,22 @@ struct ChannelStore {
 
     // MARK: - Notification preferences
 
+    /// Bumped when the default allowlist changes. Setting this flag to a new
+    /// value on launch overwrites older saved prefs so users pick up the new
+    /// curated defaults (instead of being stuck on a legacy "notify every
+    /// tool call" config). Current defaults: 4-phase — sessionEnd, error,
+    /// permissionNeeded, agentResponse.
+    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v2"
+
+    /// Run once at launch. If this build's migration flag hasn't been set,
+    /// overwrite saved prefs with the curated defaults and record the flag.
+    static func migratePrefsIfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: prefsMigrationKey) else { return }
+        savePrefs(NotificationPrefs())
+        ud.set(true, forKey: prefsMigrationKey)
+    }
+
     static func loadPrefs() -> NotificationPrefs {
         guard let data = UserDefaults.standard.data(forKey: prefsKey),
               let decoded = try? JSONDecoder().decode(NotificationPrefs.self, from: data)

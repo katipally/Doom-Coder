@@ -14,28 +14,18 @@ struct SettingsView: View {
             }
 
             Section("Global Shortcut") {
-                LabeledContent("Toggle shortcut") {
-                    Text("⌥ Space")
+                LabeledContent("Open DoomCoder") {
+                    Text(GlobalHotkey.shared.current.descriptionForUI)
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
-
-                LabeledContent("Accessibility") {
-                    if sleepManager.hasAccessibilityPermission {
-                        Label("Access granted", systemImage: "checkmark.circle.fill")
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(.green)
-                    } else {
-                        Button("Grant Access") {
-                            sleepManager.requestAccessibilityPermission()
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(Color.accentColor)
-                    }
-                }
-
-                if !sleepManager.hasAccessibilityPermission {
-                    Text("Required for the ⌥ Space global shortcut. After clicking Grant Access, open System Settings → Privacy & Security → Accessibility and enable Doom Coder.")
+                if GlobalHotkey.shared.conflictDetected {
+                    Label("Another app may be using this shortcut. It won't fire until you change it.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                } else {
+                    Text("Works anywhere — no extra permission needed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

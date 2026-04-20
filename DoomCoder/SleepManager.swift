@@ -69,7 +69,10 @@ final class SleepManager {
         isLaunchAtLoginEnabled = (SMAppService.mainApp.status == .enabled)
     }
 
-    // MARK: - Accessibility (required for global ⌥Space hotkey)
+    // MARK: - Accessibility (optional — kept for legacy diagnostics only.
+    // The ⌥Space global hotkey uses Carbon RegisterEventHotKey which does
+    // NOT require Accessibility. This is surfaced only in the Settings
+    // diagnostics section if the user ever asks.)
 
     func requestAccessibilityPermission() {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -86,7 +89,6 @@ final class SleepManager {
                 self._permissionPollCount += 1
                 if AXIsProcessTrustedWithOptions(nil) {
                     self.hasAccessibilityPermission = true
-                    self.setupGlobalHotkey()
                     self._permissionPollTimer?.invalidate()
                     self._permissionPollTimer = nil
                 } else if self._permissionPollCount >= 15 {
@@ -134,26 +136,17 @@ final class SleepManager {
         self.screenOffRearmMinutes = UserDefaults.standard.object(forKey: "doomcoder.screenOffRearm") as? Int ?? 10
         startThermalMonitoring()
         updateThermalState()
-        setupGlobalHotkey()
+        hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
     }
 
-    // MARK: - Global Hotkey (⌥ Space)
-    // Requires Accessibility permission. Prompts via requestAccessibilityPermission(),
-    // then re-installs automatically once permission is detected via polling.
+    // MARK: - Global Hotkey
+    // Owned by GlobalHotkey (Carbon RegisterEventHotKey). No AX permission
+    // required. This class no longer installs a duplicate NSEvent monitor.
 
     private func setupGlobalHotkey() {
         if let existing = _hotkeyMonitor {
             NSEvent.removeMonitor(existing)
             _hotkeyMonitor = nil
-        }
-        hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
-        guard hasAccessibilityPermission else { return }
-
-        _hotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 49,
-                  event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .option
-            else { return }
-            Task { @MainActor [weak self] in self?.toggle() }
         }
     }
 

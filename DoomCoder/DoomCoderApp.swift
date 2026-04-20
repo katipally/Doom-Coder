@@ -6,36 +6,36 @@ import UserNotifications
 struct DoomCoderApp: App {
     @NSApplicationDelegateAdaptor(DoomCoderAppDelegate.self) private var appDelegate
     @State private var sleepManager = SleepManager.shared
-    @State private var updaterViewModel = CheckForUpdatesViewModel()
-    @State private var tracking = AgentTrackingManager.shared
+    @State private var updaterViewModel = CheckForUpdatesViewModel.shared
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarWindowView(
-                sleepManager: sleepManager,
-                updaterViewModel: updaterViewModel,
-                tracking: tracking
-            )
-        } label: {
-            Image(systemName: sleepManager.isActive ? "bolt.fill" : "bolt.slash.fill")
-                .symbolRenderingMode(.monochrome)
-        }
-        .menuBarExtraStyle(.window)
-
+        // No MenuBarExtra — replaced by NSStatusItem + NSPanel wired
+        // by DoomCoderAppDelegate. We still register Window scenes so
+        // openWindow(id:) keeps working for Configure / Settings / About.
+        //
+        // `.defaultLaunchBehavior(.suppressed)` prevents SwiftUI from
+        // auto-instantiating + showing the first Window scene on launch
+        // (LSUIElement apps otherwise get a stray Settings window).
         Window("Settings", id: "settings") {
             SettingsView(sleepManager: sleepManager)
+                .background(WindowOpenerBridge())
         }
         .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
 
         Window("About Doom Coder", id: "about") {
             AboutView()
+                .background(WindowOpenerBridge())
         }
         .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
 
         Window("Configure Agents", id: "configureAgents") {
             ConfigureAgentsViewV2()
+                .background(WindowOpenerBridge())
         }
         .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 
@@ -48,6 +48,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         AgentSupportDir.ensure()
         PauseFlag.clearOnLaunch()
         EventStore.shared.open()
+
+        // Re-apply curated notification defaults for users upgrading from
+        // v4.0 (some of whom had legacy "notify every tool call" prefs).
+        ChannelStore.migratePrefsIfNeeded()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
@@ -71,8 +75,35 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()
 
+        // Install the status bar item + wire the global hotkey.
+        Task { @MainActor in
+            // Belt-and-braces: even with .defaultLaunchBehavior(.suppressed),
+            // older SDK paths or stale saved window state can briefly spawn
+            // a Settings/About/Configure window at launch. Close any that
+            // appear before the user ever sees them.
+            let auxIDs: Set<String> = ["settings", "about", "configureAgents"]
+            for win in NSApp.windows {
+                if let id = win.identifier?.rawValue, auxIDs.contains(id) {
+                    win.close()
+                }
+            }
+
+            StatusItemController.shared.install()
+            GlobalHotkey.shared.register {
+                FloatingPanelController.shared.toggle()
+            }
+
+            // DoomCoder ON = Mac stays awake. If the master toggle was on at
+            // last quit (or this is first launch), start sleep prevention now.
+            // Mode and duration are just configuration — enabling is automatic.
+            let masterOn = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+            if masterOn {
+                SleepManager.shared.enable()
+            }
+        }
+
         if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
-            showWhatsNew()
+            Task { @MainActor in self.showWhatsNew() }
         }
     }
 
@@ -93,7 +124,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        // Bring the menu bar popover forward on tap (if needed in the future).
+        // Bring the panel forward on tap.
+        await MainActor.run {
+            FloatingPanelController.shared.show()
+        }
     }
 
     @MainActor
