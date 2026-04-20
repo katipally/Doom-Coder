@@ -11,6 +11,20 @@ final class HookSocketListener: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.doomcoder", category: "socket")
     private let queue = DispatchQueue(label: "com.doomcoder.socket", qos: .utility)
     private var onEnvelope: (@Sendable (HookEnvelope) -> Void)?
+    private var onTestEnvelope: (@Sendable (HookEnvelope) -> Void)?
+
+    /// True once the raw POSIX listener is bound and accepting connections.
+    /// Used by the Connection Doctor to verify the socket is live before
+    /// sending a ping frame through it.
+    var isRunning: Bool { rawFd >= 0 }
+
+    /// Registers (or clears with nil) a single-slot observer that receives
+    /// every decoded envelope in addition to the primary callback. Used by
+    /// the Connection Doctor for end-to-end ping verification. Not a
+    /// general pub-sub — only one observer at a time.
+    func setTestObserver(_ cb: (@Sendable (HookEnvelope) -> Void)?) {
+        queue.async { [weak self] in self?.onTestEnvelope = cb }
+    }
 
     private init() {}
 
@@ -108,7 +122,11 @@ final class HookSocketListener: @unchecked Sendable {
             let data = Data(payload)
             guard let env = HookEnvelope.decode(data) else { return }
             let cb = self?.onEnvelope
-            DispatchQueue.main.async { cb?(env) }
+            let testCb = self?.onTestEnvelope
+            DispatchQueue.main.async {
+                cb?(env)
+                testCb?(env)
+            }
         }
     }
 }

@@ -74,6 +74,12 @@ final class NotificationDispatcher {
     }
 
     func dispatch(_ ev: Event) {
+        // Master switch off → fully suppress all notifications. Hook socket
+        // keeps running, live events still update the UI; only outbound
+        // alerts are muted until the user re-enables DoomCoder.
+        let masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+        guard masterEnabled else { return }
+
         // Honor per-agent Tracking toggle (user opted this agent out).
         guard TrackingStore.isEnabled(ev.agent) else { return }
 
@@ -89,7 +95,7 @@ final class NotificationDispatcher {
         let ts = Date().timeIntervalSince1970
 
         if channels.macNotification {
-            postLocal(title: title, body: body)
+            postLocal(title: title, body: body, threadID: ev.sessionKey)
             EventStore.shared.insertNotification(
                 sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
                 title: title, body: body, channel: "macOS", success: true, ts: ts
@@ -114,7 +120,7 @@ final class NotificationDispatcher {
                 requestPermission { granted in cont.resume(returning: granted) }
             }
             guard ok else { return false }
-            postLocal(title: "DoomCoder", body: "macOS notifications are working ✨")
+            postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
             return true
         case .ntfy:
             postNtfy(title: "DoomCoder", body: "ntfy channel is working ✨")
@@ -142,15 +148,41 @@ final class NotificationDispatcher {
     }
 
     // MARK: - macOS local
+    //
+    // Posts are serialised through a single serial DispatchQueue with a tiny
+    // stagger between each. Without this, UNUserNotificationCenter can
+    // reorder bursts of notifications (the banner queue sorts by scheduled
+    // delivery time, which for immediate triggers can collapse to the same
+    // millisecond and produce reversed order). `threadIdentifier` groups
+    // notifications from the same agent session in Notification Center.
+    nonisolated private static let notifyQueue = DispatchQueue(
+        label: "com.doomcoder.notify.serial",
+        qos: .userInitiated
+    )
 
-    private func postLocal(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req) { [weak self] err in
-            if let err { self?.logger.error("local notify failed: \(err.localizedDescription, privacy: .public)") }
+    private func postLocal(title: String, body: String, threadID: String) {
+        let logger = self.logger
+        Self.notifyQueue.async {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            content.threadIdentifier = threadID
+            // A tiny 10ms trigger preserves enqueue order vs. immediate nil
+            // triggers, which UN can collapse to the same delivery slot.
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.01, repeats: false)
+            let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(req) { err in
+                if let err {
+                    Task { @MainActor in
+                        logger.error("local notify failed: \(err.localizedDescription, privacy: .public)")
+                    }
+                }
+            }
+            // 50 ms stagger between posts so macOS preserves our enqueue
+            // order even under rapid bursts (session start → tool call →
+            // session end arriving within the same runloop tick).
+            Thread.sleep(forTimeInterval: 0.05)
         }
     }
 

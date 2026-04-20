@@ -215,15 +215,27 @@ struct AgentInstallerV2 {
 
     // MARK: - Public verification
 
-    /// Returns `.success` if hooks are correctly installed for `agent`, `.failure` otherwise.
-    static func verifyInstalled(_ agent: TrackedAgent) -> Result<Void, Error> {
-        let path = configPath(for: agent)
-        do {
-            try verifyInstalled(agent: agent, at: path)
-            return .success(())
-        } catch {
-            return .failure(error)
+    /// Returns `.success` if hooks are correctly installed for `agent`,
+    /// `.failure(VerifyError.integrityDrift(...))` with a concrete diff if
+    /// any expected events are missing or any helper path is stale.
+    ///
+    /// - Parameter folder: Only meaningful for `.copilotCLI`, which has a
+    ///   per-project config. For other agents the argument is ignored.
+    static func verifyInstalled(_ agent: TrackedAgent, folder: URL? = nil) -> Result<Void, Error> {
+        let path = configPath(for: agent, folder: folder)
+        return verifyDetailed(agent: agent, at: path, folder: folder)
+    }
+
+    /// Walks every registered Copilot CLI folder and verifies its config
+    /// individually. Used by the Configure window to surface a precise
+    /// per-folder integrity summary instead of a misleading blanket
+    /// warning for CLI projects.
+    static func verifyAllCLIFolders() -> [URL: Result<Void, Error>] {
+        var out: [URL: Result<Void, Error>] = [:]
+        for folder in CopilotCLIFolderManager.folders {
+            out[folder] = verifyInstalled(.copilotCLI, folder: folder)
         }
+        return out
     }
 
     // MARK: - Per-agent install implementations
@@ -511,6 +523,12 @@ struct AgentInstallerV2 {
         case configPermissionDenied(String)
         case agentNotInstalled(TrackedAgent)
         case helperBinaryMissing
+        /// Integrity drift detected by a post-install verification.
+        /// `missing` are expected events that are not mapped in the
+        /// config; `wrongPath` are helper binary paths referenced in the
+        /// config that no longer exist or aren't executable. `folder` is
+        /// populated for per-folder Copilot CLI configs.
+        case integrityDrift(missing: [String], wrongPath: [String], folder: URL?)
 
         var errorDescription: String? {
             switch self {
@@ -532,6 +550,19 @@ struct AgentInstallerV2 {
                 return "\(a.displayName) does not appear to be installed on this system."
             case .helperBinaryMissing:
                 return "dc-hook binary not found in the app bundle. Try reinstalling DoomCoder."
+            case .integrityDrift(let missing, let wrongPath, let folder):
+                var parts: [String] = []
+                if let f = folder {
+                    parts.append("Folder \(f.lastPathComponent):")
+                }
+                if !missing.isEmpty {
+                    parts.append("missing events [\(missing.joined(separator: ", "))]")
+                }
+                if !wrongPath.isEmpty {
+                    parts.append("stale helper path [\(wrongPath.joined(separator: ", "))]")
+                }
+                if parts.isEmpty { parts.append("hook config drifted from expected layout") }
+                return parts.joined(separator: " ")
             }
         }
 
@@ -550,8 +581,54 @@ struct AgentInstallerV2 {
                 return "Fix file permissions in Terminal, then retry."
             case .agentNotInstalled:
                 return nil
+            case .integrityDrift(_, _, let folder):
+                return folder == nil
+                    ? "Use Repair to reinstall the hook config."
+                    : "Use Repair to reinstall hooks for this folder."
             }
         }
+    }
+
+    /// Non-throwing detailed verification that collects *every* mismatch
+    /// (all missing events + all stale helper paths) and surfaces them as
+    /// a single `integrityDrift` error so the UI can show the user a
+    /// precise diff instead of a vague external-modification banner.
+    private static func verifyDetailed(agent: TrackedAgent, at path: String, folder: URL?) -> Result<Void, Error> {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return .failure(VerifyError.fileMissing)
+        }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return .failure(VerifyError.parseError)
+        }
+        let token = dcHookAgentToken(agent)
+        var seenEvents = Set<String>()
+        var helperPaths = Set<String>()
+        walkCommandsWithKey(root) { key, cmd in
+            guard cmd.contains("dc-hook"), cmd.contains(token) else { return }
+            seenEvents.insert(key)
+            let trimmed = cmd.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("\"") {
+                let inner = trimmed.dropFirst()
+                if let closeIdx = inner.firstIndex(of: "\"") {
+                    helperPaths.insert(String(inner[inner.startIndex..<closeIdx]))
+                }
+            } else if let bin = trimmed.split(separator: " ").first {
+                helperPaths.insert(String(bin))
+            }
+        }
+        var missing: [String] = []
+        for event in expectedEvents(for: agent) where !seenEvents.contains(event) {
+            missing.append(event)
+        }
+        var wrongPath: [String] = []
+        for bin in helperPaths where bin.hasPrefix("/") {
+            if !FileManager.default.isExecutableFile(atPath: bin) {
+                wrongPath.append(bin)
+            }
+        }
+        if missing.isEmpty && wrongPath.isEmpty { return .success(()) }
+        return .failure(VerifyError.integrityDrift(missing: missing, wrongPath: wrongPath, folder: folder))
     }
 
     private static func verifyInstalled(agent: TrackedAgent, at path: String) throws {

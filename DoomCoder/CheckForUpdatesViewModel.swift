@@ -16,6 +16,8 @@ final class SparkleUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
 @Observable
 @MainActor
 final class CheckForUpdatesViewModel {
+    static let shared = CheckForUpdatesViewModel()
+
     private(set) var canCheckForUpdates = false
 
     @ObservationIgnored

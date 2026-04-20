@@ -32,13 +32,17 @@
 		DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000037 /* CopilotCLIFolderManager.swift */; };
 		DC0000000000002000000038 /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000038 /* MigrationManager.swift */; };
 		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
-		DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000040 /* MenuBarWindowView.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
 		DC0000000000002000000042 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* LogsView.swift */; };
 		DC0000000000002000000043 /* HookConfigBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000043 /* HookConfigBackend.swift */; };
 		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
 		DC0000000000002000000046 /* UIAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000046 /* UIAnimations.swift */; };
+		DC0000000000002000000047 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000047 /* FloatingPanelController.swift */; };
+		DC0000000000002000000048 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000048 /* StatusItemController.swift */; };
+		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
+		DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000050 /* AccessibilityPermission.swift */; };
+		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,13 +73,17 @@
 		DC0000000000001000000037 /* CopilotCLIFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCLIFolderManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000038 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
-		DC0000000000001000000040 /* MenuBarWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWindowView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000042 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000043 /* HookConfigBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookConfigBackend.swift; sourceTree = "<group>"; };
 		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000046 /* UIAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAnimations.swift; sourceTree = "<group>"; };
+		DC0000000000001000000047 /* FloatingPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelController.swift; sourceTree = "<group>"; };
+		DC0000000000001000000048 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
+		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
+		DC0000000000001000000050 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
+		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +114,11 @@
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
 				DC0000000000001000000014 /* SettingsView.swift */,
+				DC0000000000001000000047 /* FloatingPanelController.swift */,
+				DC0000000000001000000048 /* StatusItemController.swift */,
+				DC0000000000001000000049 /* GlobalHotkey.swift */,
+				DC0000000000001000000050 /* AccessibilityPermission.swift */,
+				DC0000000000001000000051 /* PanelRootView.swift */,
 				DC0000000000003000000004 /* AgentTracking */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
@@ -135,7 +148,6 @@
 				DC0000000000001000000036 /* ChannelTester.swift */,
 				DC0000000000001000000037 /* CopilotCLIFolderManager.swift */,
 				DC0000000000001000000038 /* MigrationManager.swift */,
-				DC0000000000001000000040 /* MenuBarWindowView.swift */,
 				DC0000000000001000000041 /* TrackingStore.swift */,
 				DC0000000000001000000042 /* LogsView.swift */,
 				DC0000000000001000000043 /* HookConfigBackend.swift */,
@@ -277,13 +289,17 @@
 				DC0000000000002000000036 /* ChannelTester.swift in Sources */,
 				DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */,
 				DC0000000000002000000038 /* MigrationManager.swift in Sources */,
-				DC0000000000002000000040 /* MenuBarWindowView.swift in Sources */,
 				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
 				DC0000000000002000000042 /* LogsView.swift in Sources */,
 				DC0000000000002000000043 /* HookConfigBackend.swift in Sources */,
 				DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */,
 				DC0000000000002000000045 /* LiveEventsStore.swift in Sources */,
 				DC0000000000002000000046 /* UIAnimations.swift in Sources */,
+				DC0000000000002000000047 /* FloatingPanelController.swift in Sources */,
+				DC0000000000002000000048 /* StatusItemController.swift in Sources */,
+				DC0000000000002000000049 /* GlobalHotkey.swift in Sources */,
+				DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */,
+				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

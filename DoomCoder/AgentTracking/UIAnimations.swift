@@ -31,4 +31,11 @@ enum DCAnim {
 
     /// Tight state update — counters, status text, small number changes.
     static let micro: Animation = .easeOut(duration: 0.15)
+
+    /// Matched spring for accordion open/close — same response/damping in
+    /// both directions so expand and collapse feel symmetric. Tuned to
+    /// respond=0.32s / damping=0.9 per macOS 26 motion guidance.
+    static let accordion: Animation = .interpolatingSpring(
+        mass: 1.0, stiffness: 380, damping: 38, initialVelocity: 0
+    )
 }

@@ -158,14 +158,13 @@ final class AgentTrackingManager {
         s.events.append(timelineEvent)
         s.apply(normalized)
 
-        // Animate structural changes (new/terminal sessions) for smooth live strip
-        if isNewSession || !s.isLive {
-            withAnimation(DCAnim.bouncy) {
-                sessions[sessionKey] = s
-            }
-        } else {
-            sessions[sessionKey] = s
-        }
+        // Assign without wrapping in withAnimation. Animation is applied at
+        // the view layer via .animation(value:) on the sessions list, which
+        // is safer than driving SwiftUI transactions from a socket-delivered
+        // mutation (prior approach risked NSHostingView constraint loops when
+        // hosted under MenuBarExtra(.window)).
+        _ = isNewSession
+        sessions[sessionKey] = s
 
         // Persist to SQLite (with raw JSON payload for Logs detail view)
         let payloadString: String?
@@ -199,9 +198,7 @@ final class AgentTrackingManager {
                 try? await Task.sleep(for: .seconds(delay))
                 await MainActor.run {
                     if let cur = self.sessions[sessionKey], !cur.isLive {
-                        _ = withAnimation(DCAnim.smooth) {
-                            self.sessions.removeValue(forKey: sessionKey)
-                        }
+                        self.sessions.removeValue(forKey: sessionKey)
                     }
                 }
             }

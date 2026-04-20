@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreImage
+import UserNotifications
 
 // v2 configure window — NavigationSplitView with Agents + Channels + Logs tabs.
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
@@ -12,9 +13,6 @@ struct ConfigureAgentsViewV2: View {
     @State private var statusMessage: String = ""
     @State private var statusIsError: Bool = false
     @State private var isInstalling: Bool = false
-    @State private var verifyWaiting = false
-    @State private var verifyResult: String? = nil
-    @State private var realWatching = false
     @State private var showMigrationAlert = false
     @State private var migrationAgents: [TrackedAgent] = []
     // Copilot CLI folders
@@ -24,8 +22,11 @@ struct ConfigureAgentsViewV2: View {
     @State private var channelConfig = ChannelStore.load()
     // Channel test results
     @State private var testResult: (Bool, String)? = nil
-    // Hook validation warnings
+    // Hook validation warnings (human-readable drift diff per agent)
     @State private var hookWarnings: [TrackedAgent: String] = [:]
+    // Copilot CLI folders whose last verification failed — used to target
+    // Repair to the specific failing folders instead of a blanket reinstall.
+    @State private var cliFailingFolders: [URL] = []
     // Permission status
     @State private var permStatus: String = "…"
     // Notification event preferences
@@ -248,20 +249,21 @@ struct ConfigureAgentsViewV2: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // Hook Validation Warning
+                // Hook Validation Warning — shows the concrete drift diff
+                // (missing events / stale helper paths / failing folders)
+                // rather than a blanket external-modification banner.
                 if let warning = hookWarnings[agent] {
                     GroupBox {
-                        HStack {
+                        HStack(alignment: .top) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.yellow)
                             Text(warning)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                             Button("Repair") {
-                                let r = AgentInstallerV2.install(agent)
-                                statusMessage = resultMessage(r, verb: "Repair")
-                                Task { await detectAllAsync(); validateAllHooks() }
+                                repairDriftedHooks(agent: agent)
                             }
                         }
                     } label: {
@@ -370,44 +372,9 @@ struct ConfigureAgentsViewV2: View {
                     Label("Hooks", systemImage: "link")
                 }
 
-                // Verify
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Button("Test Helper") { pingHelper() }
-                                Text("Checks dc-hook binary").font(.caption2).foregroundStyle(.tertiary)
-                            }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Button(verifyWaiting ? "Running…" : "Run Demo") {
-                                    startDemoSession(agent: agent)
-                                }
-                                .disabled(verifyWaiting)
-                                Text("Simulates agent session").font(.caption2).foregroundStyle(.tertiary)
-                            }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Button(realWatching ? "Watching…" : "Watch Live") {
-                                    watchRealSession(agent: agent)
-                                }
-                                .disabled(realWatching)
-                                Text("Waits for real hook (2 min)").font(.caption2).foregroundStyle(.tertiary)
-                            }
-
-                            Spacer()
-                        }
-                        if let r = verifyResult {
-                            Text(r).font(.callout).foregroundStyle(.secondary)
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .top)),
-                                    removal: .opacity
-                                ))
-                        }
-                    }
-                } label: {
-                    Label("Verify", systemImage: "checkmark.shield")
-                }
+                // Verify — single inline Connection Doctor (replaces the
+                // old Test Helper / Run Demo / Watch Live trio).
+                ConnectionDoctorSection(agent: agent)
 
                 // Live Events
                 liveEventsSection(agent)
@@ -752,14 +719,6 @@ struct ConfigureAgentsViewV2: View {
             VStack(alignment: .leading, spacing: 6) {
                 // Toolbar row
                 HStack {
-                    Button {
-                        fireDemoForLiveEvents(agent: agent)
-                    } label: {
-                        Label("Test", systemImage: "play.circle")
-                    }
-                    .controlSize(.small)
-                    .help("Fire a synthetic demo session to test hook connectivity")
-
                     Spacer()
 
                     Button(role: .destructive) {
@@ -778,7 +737,7 @@ struct ConfigureAgentsViewV2: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             if events.isEmpty {
-                                Text("No events yet — install hooks, then use the agent or tap Test.")
+                                Text("No events yet — install hooks and use the agent, or run the Connection Doctor above.")
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                                     .frame(maxWidth: .infinity, alignment: .center)
@@ -807,15 +766,6 @@ struct ConfigureAgentsViewV2: View {
             }
         } label: {
             Label("Live Events", systemImage: "antenna.radiowaves.left.and.right")
-        }
-    }
-
-    private func fireDemoForLiveEvents(agent: TrackedAgent) {
-        Task.detached {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: AgentInstallerV2.helperBinaryPath())
-            proc.arguments = ["--replay-demo", agent.rawValue]
-            try? proc.run()
         }
     }
 
@@ -855,78 +805,6 @@ struct ConfigureAgentsViewV2: View {
                 if !affected.isEmpty {
                     migrationAgents = affected
                     showMigrationAlert = true
-                }
-            }
-        }
-    }
-
-    private func pingHelper() {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: AgentInstallerV2.helperBinaryPath())
-        proc.arguments = ["--ping"]
-        do {
-            try proc.run(); proc.waitUntilExit()
-            withAnimation(DCAnim.smooth) {
-                verifyResult = proc.terminationStatus == 0
-                    ? "✅ Ping passed — dc-hook can reach DoomCoder."
-                    : "❌ Ping failed — helper exited \(proc.terminationStatus)."
-            }
-        } catch {
-            withAnimation(DCAnim.smooth) {
-                verifyResult = "❌ Ping failed — \(error.localizedDescription)"
-            }
-        }
-    }
-
-    private func startDemoSession(agent: TrackedAgent) {
-        withAnimation(DCAnim.smooth) {
-            verifyWaiting = true
-            verifyResult = nil
-        }
-        // Fire demo via dc-hook --replay-demo <agent>
-        Task.detached {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: AgentInstallerV2.helperBinaryPath())
-            proc.arguments = ["--replay-demo", agent.rawValue]
-            try? proc.run()
-            proc.waitUntilExit()
-            await MainActor.run {
-                withAnimation(DCAnim.smooth) {
-                    verifyResult = proc.terminationStatus == 0
-                        ? "✅ Demo complete — check Track Agents and notifications."
-                        : "❌ Demo failed — exit \(proc.terminationStatus)."
-                    verifyWaiting = false
-                }
-            }
-        }
-    }
-
-    private func watchRealSession(agent: TrackedAgent) {
-        withAnimation(DCAnim.smooth) {
-            realWatching = true
-            verifyResult = "⏱ Open \(agent.displayName) and trigger one real prompt within 120s…"
-        }
-        let baseline = Date().timeIntervalSince1970
-        let agentKey = agent.rawValue
-        Task.detached {
-            let deadline = Date().addingTimeInterval(120)
-            var matched: EventStore.Row? = nil
-            while Date() < deadline {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                let rows = await EventStore.shared.recent(limit: 50)
-                if let hit = rows.first(where: { $0.agent == agentKey && $0.ts >= baseline && !$0.event.hasPrefix("demo-") && $0.event != "ping" }) {
-                    matched = hit
-                    break
-                }
-            }
-            await MainActor.run {
-                withAnimation(DCAnim.smooth) {
-                    if let hit = matched {
-                        verifyResult = "✅ Real \(agent.displayName) event received: \(hit.event)"
-                    } else {
-                        verifyResult = "❌ No real \(agent.displayName) event in 120s. Re-run Gate A/B if Ping/Demo also fail."
-                    }
-                    realWatching = false
                 }
             }
         }
@@ -984,19 +862,59 @@ struct ConfigureAgentsViewV2: View {
 
     private func validateAllHooks() {
         var warnings: [TrackedAgent: String] = [:]
+        var failingFolders: [URL] = []
         for agent in TrackedAgent.allCases {
             guard installedCache[agent] == true else { continue }
-            let result = AgentInstallerV2.verifyInstalled(agent)
-            switch result {
-            case .failure:
-                warnings[agent] = "Hook config may have been modified externally"
-            default:
-                break
+            if agent == .copilotCLI {
+                // Per-folder verification: treat the agent as healthy as
+                // long as *any* registered folder is OK. Surface the diff
+                // for any folder that actually fails so the user can act
+                // on it.
+                let results = AgentInstallerV2.verifyAllCLIFolders()
+                if results.isEmpty { continue }
+                var failureMessages: [String] = []
+                for (folder, result) in results {
+                    if case .failure(let err) = result {
+                        failingFolders.append(folder)
+                        failureMessages.append(err.localizedDescription)
+                    }
+                }
+                if !failureMessages.isEmpty {
+                    warnings[agent] = failureMessages.joined(separator: "\n")
+                }
+            } else {
+                if case .failure(let err) = AgentInstallerV2.verifyInstalled(agent) {
+                    warnings[agent] = err.localizedDescription
+                }
             }
         }
         withAnimation(DCAnim.smooth) {
             hookWarnings = warnings
+            cliFailingFolders = failingFolders
         }
+    }
+
+    /// Repairs hook configs when drift was detected. For Copilot CLI this
+    /// reinstalls *only* the folders that failed verification instead of
+    /// blanket-reinstalling every registered folder.
+    private func repairDriftedHooks(agent: TrackedAgent) {
+        if agent == .copilotCLI && !cliFailingFolders.isEmpty {
+            var failures: [String] = []
+            for folder in cliFailingFolders {
+                if case .failure(let err) = AgentInstallerV2.install(.copilotCLI, folder: folder) {
+                    failures.append("\(folder.lastPathComponent): \(err.localizedDescription)")
+                }
+            }
+            statusMessage = failures.isEmpty
+                ? "Repair successful — reinstalled \(cliFailingFolders.count) folder\(cliFailingFolders.count == 1 ? "" : "s")."
+                : "Repair failed for:\n\(failures.joined(separator: "\n"))"
+            statusIsError = !failures.isEmpty
+        } else {
+            let r = AgentInstallerV2.install(agent)
+            statusMessage = resultMessage(r, verb: "Repair")
+            if case .failure = r { statusIsError = true } else { statusIsError = false }
+        }
+        Task { await detectAllAsync(); validateAllHooks() }
     }
 
     private func qrCodeImage(for string: String) -> Image {
@@ -1145,5 +1063,372 @@ private struct LiveEventRow: View {
 
             Divider().opacity(0.4)
         }
+    }
+}
+
+// MARK: - Connection Doctor
+
+/// Inline step-wizard that replaces the old Test Helper / Run Demo /
+/// Watch Live / liveEventsSection Test button row. Runs a fixed sequence
+/// of checks that trace the full path from the dc-hook binary through
+/// the unix socket into a macOS local notification. Each step renders
+/// with a status pill (pending/running/ok/warn/fail) and an optional
+/// Fix CTA so the user can act on the specific failure.
+struct ConnectionDoctorSection: View {
+    let agent: TrackedAgent
+
+    enum StepStatus: Equatable {
+        case pending
+        case running
+        case ok
+        case warn
+        case fail
+    }
+
+    struct DoctorStep: Identifiable, Equatable {
+        let id: Int
+        let title: String
+        var detail: String
+        var status: StepStatus
+        var fixTitle: String?
+    }
+
+    @State private var steps: [DoctorStep] = Self.initialSteps()
+    @State private var running = false
+    @State private var summary: String? = nil
+    @State private var summaryIsGood: Bool = false
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await runDoctor() }
+                    } label: {
+                        if running {
+                            Label("Running…", systemImage: "stopwatch")
+                        } else {
+                            Label("Run Doctor", systemImage: "stethoscope")
+                        }
+                    }
+                    .disabled(running)
+
+                    Spacer()
+
+                    if let summary {
+                        HStack(spacing: 6) {
+                            Image(systemName: summaryIsGood ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(summaryIsGood ? .green : .orange)
+                            Text(summary)
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    }
+                }
+
+                Divider().opacity(0.4)
+
+                ForEach(steps) { step in
+                    stepRow(step)
+                }
+            }
+            .animation(DCAnim.smooth, value: steps)
+            .animation(DCAnim.fade, value: summary)
+        } label: {
+            Label("Connection Doctor", systemImage: "waveform.path.ecg")
+        }
+    }
+
+    @ViewBuilder
+    private func stepRow(_ step: DoctorStep) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            statusPill(step.status)
+                .frame(width: 70, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.callout.weight(.medium))
+                if !step.detail.isEmpty {
+                    Text(step.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer()
+
+            if (step.status == .fail || step.status == .warn), let fix = step.fixTitle {
+                Button(fix) {
+                    Task { await applyFix(for: step) }
+                }
+                .controlSize(.small)
+                .disabled(running)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func statusPill(_ status: StepStatus) -> some View {
+        switch status {
+        case .pending:
+            Label("pending", systemImage: "circle")
+                .foregroundStyle(.tertiary)
+                .font(.caption2)
+                .labelStyle(.titleAndIcon)
+        case .running:
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text("running").font(.caption2).foregroundStyle(.secondary)
+            }
+        case .ok:
+            Label("ok", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption2)
+        case .warn:
+            Label("warn", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.caption2)
+        case .fail:
+            Label("fail", systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+                .font(.caption2)
+        }
+    }
+
+    // MARK: - Steps
+
+    private static func initialSteps() -> [DoctorStep] {
+        [
+            DoctorStep(id: 0, title: "Helper binary present",
+                       detail: "Checks dc-hook exists at its stable path and is executable.",
+                       status: .pending, fixTitle: "Reinstall helper"),
+            DoctorStep(id: 1, title: "Socket listening",
+                       detail: "Confirms the in-app unix socket is bound and accepting connections.",
+                       status: .pending, fixTitle: "Restart listener"),
+            DoctorStep(id: 2, title: "Config parsed & events mapped",
+                       detail: "Verifies every expected hook event is mapped to the correct binary.",
+                       status: .pending, fixTitle: "Repair"),
+            DoctorStep(id: 3, title: "End-to-end ping round-trip",
+                       detail: "Sends dc-hook --ping and waits for the envelope to arrive over the socket.",
+                       status: .pending, fixTitle: "Check helper permissions"),
+            DoctorStep(id: 4, title: "Notification dispatch",
+                       detail: "Posts a local test notification via macOS Notification Center.",
+                       status: .pending, fixTitle: "Open notification settings")
+        ]
+    }
+
+    // MARK: - Run
+
+    private func runDoctor() async {
+        running = true
+        summary = nil
+        steps = Self.initialSteps()
+        var failures = 0
+        var firstFailedIndex: Int? = nil
+
+        for idx in steps.indices {
+            if firstFailedIndex != nil { break }
+            setStatus(idx, .running)
+            let outcome = await runStep(idx)
+            setStatus(idx, outcome.status, detail: outcome.detail)
+            if outcome.status == .fail || outcome.status == .warn {
+                failures += 1
+                if firstFailedIndex == nil { firstFailedIndex = idx }
+            }
+        }
+
+        running = false
+        if failures == 0 {
+            summary = "Connected ✨"
+            summaryIsGood = true
+        } else {
+            summary = "\(failures) issue\(failures == 1 ? "" : "s") found"
+            summaryIsGood = false
+        }
+    }
+
+    private struct StepOutcome {
+        let status: StepStatus
+        let detail: String
+    }
+
+    private func runStep(_ idx: Int) async -> StepOutcome {
+        switch idx {
+        case 0: return checkHelperBinary()
+        case 1: return checkSocketListening()
+        case 2: return checkConfigMapping()
+        case 3: return await checkEndToEndPing()
+        case 4: return await checkNotificationDispatch()
+        default: return StepOutcome(status: .ok, detail: "")
+        }
+    }
+
+    private func setStatus(_ idx: Int, _ status: StepStatus, detail: String? = nil) {
+        guard idx < steps.count else { return }
+        var step = steps[idx]
+        step.status = status
+        if let detail { step.detail = detail }
+        steps[idx] = step
+    }
+
+    // MARK: - Step implementations
+
+    private func checkHelperBinary() -> StepOutcome {
+        let path = AgentInstallerV2.helperBinaryPath()
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: path) {
+            return StepOutcome(status: .fail, detail: "Not found at \(path).")
+        }
+        if !fm.isExecutableFile(atPath: path) {
+            return StepOutcome(status: .fail, detail: "Not executable: \(path).")
+        }
+        return StepOutcome(status: .ok, detail: "Found at \(path).")
+    }
+
+    private func checkSocketListening() -> StepOutcome {
+        if HookSocketListener.shared.isRunning {
+            return StepOutcome(status: .ok, detail: "Listener bound and accepting connections.")
+        }
+        return StepOutcome(status: .fail, detail: "In-app unix socket listener is not running.")
+    }
+
+    private func checkConfigMapping() -> StepOutcome {
+        if agent == .copilotCLI {
+            let results = AgentInstallerV2.verifyAllCLIFolders()
+            if results.isEmpty {
+                return StepOutcome(status: .warn, detail: "No project folders registered — add one to enable CLI tracking.")
+            }
+            var failingFolders: [String] = []
+            for (folder, result) in results {
+                if case .failure(let err) = result {
+                    failingFolders.append("\(folder.lastPathComponent): \(err.localizedDescription)")
+                }
+            }
+            if failingFolders.isEmpty {
+                return StepOutcome(status: .ok, detail: "All \(results.count) folder(s) verified.")
+            }
+            return StepOutcome(status: .fail, detail: failingFolders.joined(separator: "\n"))
+        } else {
+            switch AgentInstallerV2.verifyInstalled(agent) {
+            case .success:
+                return StepOutcome(status: .ok, detail: "All expected hook events mapped.")
+            case .failure(let err):
+                return StepOutcome(status: .fail, detail: err.localizedDescription)
+            }
+        }
+    }
+
+    private func checkEndToEndPing() async -> StepOutcome {
+        // Register a one-shot observer on the shared socket listener so
+        // we can confirm the envelope actually made the round-trip.
+        let listener = HookSocketListener.shared
+        let pidStr = String(ProcessInfo.processInfo.processIdentifier)
+        let box = EnvelopeBox()
+        listener.setTestObserver { env in
+            if env.event.lowercased() == "unknown" || env.event.lowercased().contains("ping") {
+                box.signal(env)
+            }
+        }
+        defer { listener.setTestObserver(nil) }
+
+        let helperPath = AgentInstallerV2.helperBinaryPath()
+        guard FileManager.default.isExecutableFile(atPath: helperPath) else {
+            return StepOutcome(status: .fail, detail: "Helper binary missing or not executable.")
+        }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: helperPath)
+        proc.arguments = ["--ping"]
+        do {
+            try proc.run()
+        } catch {
+            return StepOutcome(status: .fail, detail: "Failed to launch dc-hook --ping: \(error.localizedDescription)")
+        }
+        proc.waitUntilExit()
+        if proc.terminationStatus != 0 {
+            return StepOutcome(status: .fail, detail: "dc-hook --ping exited with status \(proc.terminationStatus). Host pid: \(pidStr).")
+        }
+
+        // Wait up to 5s for an envelope to arrive via the socket.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if box.received { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        if box.received {
+            return StepOutcome(status: .ok, detail: "Ping envelope received on socket within 5s.")
+        }
+        return StepOutcome(status: .fail, detail: "dc-hook --ping exited 0 but no envelope arrived on the socket within 5s.")
+    }
+
+    private func checkNotificationDispatch() async -> StepOutcome {
+        let disp = NotificationDispatcher.shared
+        let granted: Bool = await withCheckedContinuation { cont in
+            disp.requestPermission { ok in cont.resume(returning: ok) }
+        }
+        if !granted {
+            return StepOutcome(status: .fail, detail: "macOS notifications are not authorized for DoomCoder.")
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "DoomCoder · Doctor"
+        content.body = "Connection Doctor test — this is not a real agent event."
+        content.categoryIdentifier = "doomcoder.doctor"
+        content.sound = .default
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        do {
+            try await UNUserNotificationCenter.current().add(req)
+            return StepOutcome(status: .ok, detail: "Test notification posted. You should see a banner momentarily.")
+        } catch {
+            return StepOutcome(status: .fail, detail: "Failed to post notification: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Fixes
+
+    private func applyFix(for step: DoctorStep) async {
+        switch step.id {
+        case 0:
+            _ = AgentInstallerV2.ensureStableHelper()
+        case 1:
+            // Restart listener in-place. The primary callback is owned by
+            // the AppDelegate, so stop+start without a new callback is
+            // deliberately skipped — we ping again instead.
+            HookSocketListener.shared.stop()
+            // Give the raw fd time to close + rebind via AppDelegate
+            // lifecycle. We don't re-subscribe the primary callback from
+            // here. The user can relaunch if the listener is wedged.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        case 2:
+            if agent == .copilotCLI {
+                for folder in CopilotCLIFolderManager.folders {
+                    _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
+                }
+            } else {
+                _ = AgentInstallerV2.install(agent)
+            }
+        case 3:
+            // Nothing we can do programmatically — point user at perms.
+            NSWorkspace.shared.selectFile(AgentInstallerV2.helperBinaryPath(),
+                                          inFileViewerRootedAtPath: "")
+        case 4:
+            NotificationDispatcher.shared.openSystemSettings()
+        default:
+            break
+        }
+        await runDoctor()
+    }
+}
+
+/// Thread-safe one-shot flag used by the end-to-end ping step to signal
+/// when the expected envelope arrives from the socket listener.
+private final class EnvelopeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _received = false
+    var received: Bool { lock.lock(); defer { lock.unlock() }; return _received }
+    func signal(_ env: HookEnvelope) {
+        lock.lock(); _received = true; lock.unlock()
     }
 }

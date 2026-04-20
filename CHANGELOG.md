@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-04-20 — Bento grid UI + always-awake behavior
+
+**Major UI redesign and behavioral fix.** DoomCoder now keeps your Mac awake
+the moment you turn it on — no extra tap required. The floating panel switches
+to a bento grid layout (wider, two cards side-by-side) that eliminates the
+persistent clipping bug that affected the previous single-column design.
+
+### Fixed
+- **Always-awake on launch** — when DoomCoder is enabled, sleep prevention
+  starts automatically at app launch and whenever the master toggle is turned
+  on. Mode (Screen On / Screen Off) and Duration are now pure configuration —
+  the Mac stays awake without any additional tap required.
+- **Panel clipping** — removed the `ScrollView` + `frame(height:)` +
+  `fixedSize` triple that fought each other at the SwiftUI/AppKit boundary.
+  The panel now uses `fixedSize(horizontal:true, vertical:true)` on a plain
+  `VStack` so NSHostingController always shows the full content.
+
+### Changed
+- **Bento grid layout** — panel widened to 480 pt; "Prevent Sleep" and
+  "Agent Tracking" cards sit side-by-side in an `HStack`. Total content height
+  drops to ~380 pt, well within any screen without scrolling.
+- **Duration strip** — removed the "Stop" tile. Strip now shows
+  `∞  1h  2h  4h  8h`. Default is ∞ (indefinite). Selecting a tile updates
+  the auto-disable timer; the dot indicator highlights the active choice.
+
+---
+
 ## [1.8.10] - 2026-04-19 — CI recovery & animation consistency
 
 **Reliability release.** The v1.8.9 publish workflow failed at the "Commit
