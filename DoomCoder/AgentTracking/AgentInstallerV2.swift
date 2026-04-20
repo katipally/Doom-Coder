@@ -375,9 +375,9 @@ struct AgentInstallerV2 {
     ]
 
     static let vscodeEvents = [
-        "SessionStart", "SessionEnd",
-        "PreToolUse", "PostToolUse", "PostToolUseFailure",
-        "PermissionRequest",
+        "SessionStart", "UserPromptSubmit",
+        "PreToolUse", "PostToolUse",
+        "PreCompact",
         "Stop", "SubagentStart", "SubagentStop"
     ]
 
@@ -608,10 +608,10 @@ struct AgentInstallerV2 {
 
     private static func dcHookAgentToken(_ agent: TrackedAgent) -> String {
         switch agent {
-        case .claude:     return "dc-hook claude"
-        case .cursor:     return "dc-hook cursor"
-        case .vscode:     return "dc-hook vscode"
-        case .copilotCLI: return "dc-hook copilot_cli"
+        case .claude:     return "claude"
+        case .cursor:     return "cursor"
+        case .vscode:     return "vscode"
+        case .copilotCLI: return "copilot_cli"
         }
     }
 

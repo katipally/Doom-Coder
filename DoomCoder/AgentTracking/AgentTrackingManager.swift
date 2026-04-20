@@ -125,6 +125,9 @@ final class AgentTrackingManager {
             return
         }
 
+        // Always capture raw envelope for Live Events — even if normalization fails.
+        LiveEventsStore.shared.append(env)
+
         // Normalize via per-agent normalizer
         guard let normalized = EventNormalizerRegistry.normalize(envelope: env) else {
             logger.notice("drop: normalization failed for agent=\(env.agent, privacy: .public) event=\(env.event, privacy: .public)")

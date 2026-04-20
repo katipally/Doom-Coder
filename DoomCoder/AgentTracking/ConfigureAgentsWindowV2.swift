@@ -391,6 +391,9 @@ struct ConfigureAgentsViewV2: View {
                     Label("Verify", systemImage: "checkmark.shield")
                 }
 
+                // Live Events
+                liveEventsSection(agent)
+
                 // Channel overrides
                 GroupBox {
                     let hasOverride = ChannelStore.hasOverride(for: agent)
@@ -721,6 +724,79 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
+    // MARK: - Live Events
+
+    @ViewBuilder
+    private func liveEventsSection(_ agent: TrackedAgent) -> some View {
+        let store = LiveEventsStore.shared
+        let events = store.events(for: agent)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                // Toolbar row
+                HStack {
+                    Button {
+                        fireDemoForLiveEvents(agent: agent)
+                    } label: {
+                        Label("Test", systemImage: "play.circle")
+                    }
+                    .controlSize(.small)
+                    .help("Fire a synthetic demo session to test hook connectivity")
+
+                    Spacer()
+
+                    Button(role: .destructive) {
+                        store.clear(agent: agent)
+                    } label: {
+                        Label("Clear", systemImage: "trash")
+                    }
+                    .controlSize(.small)
+                    .disabled(events.isEmpty)
+                }
+
+                Divider()
+
+                // Events scroll area
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if events.isEmpty {
+                                Text("No events yet — install hooks, then use the agent or tap Test.")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.vertical, 20)
+                            } else {
+                                ForEach(events) { ev in
+                                    LiveEventRow(event: ev)
+                                        .id(ev.id)
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 180)
+                    .onChange(of: events.count) { _, _ in
+                        if let last = events.last {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Live Events", systemImage: "antenna.radiowaves.left.and.right")
+        }
+    }
+
+    private func fireDemoForLiveEvents(agent: TrackedAgent) {
+        Task.detached {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: AgentInstallerV2.helperBinaryPath())
+            proc.arguments = ["--replay-demo", agent.rawValue]
+            try? proc.run()
+        }
+    }
+
     // MARK: - Actions
 
     private func detectAll() {
@@ -973,6 +1049,65 @@ struct ConfigureAgentsViewV2: View {
                 msg += " \(suggestion)"
             }
             return msg
+        }
+    }
+}
+
+// MARK: - LiveEventRow
+
+private struct LiveEventRow: View {
+    let event: LiveEvent
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(duration: 0.2, bounce: 0.1)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(event.timeLabel)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 56, alignment: .leading)
+
+                    Text(event.event)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(event.synthetic ? .purple : .primary)
+
+                    if !event.shortCwd.isEmpty {
+                        Text(event.shortCwd)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer()
+
+                    if event.payloadJSON != nil {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded, let json = event.payloadJSON {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(json)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 4)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            Divider().opacity(0.4)
         }
     }
 }
