@@ -8,6 +8,7 @@ import OSLog
 // Minimal content only — no prompt text, no file paths over ntfy. 5-second
 // dedupe window per (session, event).
 @MainActor
+@Observable
 final class NotificationDispatcher {
     static let shared = NotificationDispatcher()
 

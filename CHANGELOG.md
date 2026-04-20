@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Complete hooks architecture overhaul and smooth UI transitions.** This release
 reworks how DoomCoder installs, normalizes, and notifies on AI agent hook
-events — plus adds spring animations and visual polish throughout.
+events — plus adds spring animations, a Live Events panel, and visual polish
+throughout.
 
 ### Added
+- **Live Events panel** — per-agent real-time event feed in Configure Agents
+  window; shows HH:mm:ss · event name · working directory; tap to expand JSON
+  payload; Test button fires a synthetic demo; Clear resets the feed
 - **Event normalizer engine** — per-agent normalizers map 60+ raw hook events
   from Claude Code, Cursor, VS Code Copilot, and Copilot CLI into 13 unified
   `NormalizedEventPhase` values for consistent cross-agent behavior
@@ -39,6 +43,15 @@ events — plus adds spring animations and visual polish throughout.
   with animated status messages
 
 ### Changed
+- **Hook token fix** — `dcHookAgentToken()` now returns bare agent name
+  (`claude`, `cursor`, `vscode`, `copilot_cli`) so install verification works
+  correctly even when the binary path contains spaces (e.g. `Application Support`)
+- **VS Code event list corrected** — now uses the 8 events VS Code Copilot
+  actually supports (`SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+  `PostToolUse`, `PreCompact`, `SubagentStart`, `SubagentStop`, `Stop`);
+  removed `SessionEnd`, `PostToolUseFailure`, `PermissionRequest`
+- Permission status auto-refreshes when app returns to foreground (powered by
+  `@Observable` on `NotificationDispatcher` for instant SwiftUI reactivity)
 - Agent-token-scoped hook stripping — installing Claude hooks no longer removes
   VS Code entries from the shared `~/.claude/settings.json`
 - Notification policy now driven by user preferences instead of hardcoded
@@ -48,12 +61,15 @@ events — plus adds spring animations and visual polish throughout.
 - Improved error messages with recovery suggestions (e.g., "Try using the
   Repair button to reset hooks" or "Reinstall DoomCoder from the latest
   release")
-- Permission status UI — auto-refreshes on app focus, clearer wording
 
 ### Fixed
+- **All hook installation failures** — single root-cause bug in
+  `dcHookAgentToken()` caused "event 'sessionStart' is missing" error for
+  every agent; now fixed
 - Hooks installation errors caused by overly aggressive stripping of shared
   config files
 - Session tracking incorrectly marking sessions as ended on non-terminal events
+- Permission status label not updating after granting notification access
 
 ---
 
