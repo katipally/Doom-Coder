@@ -109,7 +109,7 @@ struct TrackAgentsView: View {
             Toggle("", isOn: Binding(
                 get: { enabled[agent] ?? true },
                 set: { v in
-                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                    withAnimation(DCAnim.snap) {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
@@ -132,7 +132,7 @@ struct TrackAgentsView: View {
         .onTapGesture {
             guard isInstalled else { return }
             let v = !(enabled[agent] ?? true)
-            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+            withAnimation(DCAnim.snap) {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
@@ -169,7 +169,7 @@ struct TrackAgentsView: View {
                 iMap[a] = AgentInstallerV2.isInstalled(a)
             }
         }
-        withAnimation(.spring(duration: 0.3, bounce: 0.12)) {
+        withAnimation(DCAnim.smooth) {
             enabled = eMap
             installed = iMap
             cliFolderCount = CopilotCLIFolderManager.folderCount()
@@ -241,7 +241,7 @@ struct TrackAccordion: View {
             Toggle("", isOn: Binding(
                 get: { enabled[agent] ?? true },
                 set: { v in
-                    withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                    withAnimation(DCAnim.snap) {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
@@ -256,7 +256,7 @@ struct TrackAccordion: View {
         .contentShape(Rectangle())
         .onTapGesture {
             let v = !(enabled[agent] ?? true)
-            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+            withAnimation(DCAnim.snap) {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
@@ -292,7 +292,7 @@ struct TrackAccordion: View {
                 iMap[a] = AgentInstallerV2.isInstalled(a)
             }
         }
-        withAnimation(.spring(duration: 0.3, bounce: 0.12)) {
+        withAnimation(DCAnim.smooth) {
             enabled = eMap
             installed = iMap
             cliFolderCount = CopilotCLIFolderManager.folderCount()

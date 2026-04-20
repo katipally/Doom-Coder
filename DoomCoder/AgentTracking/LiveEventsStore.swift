@@ -23,13 +23,13 @@ final class LiveEventsStore {
         if list.count > Self.maxPerAgent {
             list.removeFirst(list.count - Self.maxPerAgent)
         }
-        withAnimation(.spring(duration: 0.25, bounce: 0.05)) {
+        withAnimation(DCAnim.snap) {
             eventsByAgent[agent] = list
         }
     }
 
     func clear(agent: TrackedAgent) {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(DCAnim.fade) {
             eventsByAgent[agent] = []
         }
     }

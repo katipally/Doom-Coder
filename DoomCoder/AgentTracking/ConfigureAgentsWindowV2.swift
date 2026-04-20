@@ -84,7 +84,7 @@ struct ConfigureAgentsViewV2: View {
             Section("Agents") {
                 ForEach(TrackedAgent.allCases, id: \.self) { agent in
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(DCAnim.fade) {
                             tab = .agents
                             selected = agent
                         }
@@ -96,13 +96,13 @@ struct ConfigureAgentsViewV2: View {
                         (tab == .agents && selected == agent)
                         ? Color.accentColor.opacity(0.15) : Color.clear
                     )
-                    .animation(.easeInOut(duration: 0.2), value: tab == .agents && selected == agent)
+                    .animation(DCAnim.fade, value: tab == .agents && selected == agent)
                 }
             }
 
             Section {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(DCAnim.fade) {
                         tab = .channels
                         selected = nil
                     }
@@ -111,10 +111,10 @@ struct ConfigureAgentsViewV2: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
-                .animation(.easeInOut(duration: 0.2), value: tab == .channels)
+                .animation(DCAnim.fade, value: tab == .channels)
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(DCAnim.fade) {
                         tab = .logs
                         selected = nil
                     }
@@ -123,7 +123,7 @@ struct ConfigureAgentsViewV2: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .logs ? Color.accentColor.opacity(0.15) : Color.clear)
-                .animation(.easeInOut(duration: 0.2), value: tab == .logs)
+                .animation(DCAnim.fade, value: tab == .logs)
             }
         }
         .listStyle(.sidebar)
@@ -226,7 +226,7 @@ struct ConfigureAgentsViewV2: View {
                                 Circle()
                                     .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
                                     .frame(width: 10, height: 10)
-                                    .animation(.easeInOut(duration: 0.4), value: eventCount > 0)
+                                    .animation(DCAnim.smooth, value: eventCount > 0)
                                 Text(eventCount > 0 ? "Active" : "Quiet")
                                     .font(.callout.weight(.medium))
                                     .foregroundStyle(eventCount > 0 ? .primary : .secondary)
@@ -315,12 +315,12 @@ struct ConfigureAgentsViewV2: View {
                             } else {
                                 let isInst = installedCache[agent] ?? false
                                 Button(isInst ? "Reinstall" : "Install") {
-                                    withAnimation(.spring(duration: 0.3)) { isInstalling = true; statusMessage = "" }
+                                    withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
                                     let r = AgentInstallerV2.install(agent)
                                     let msg = resultMessage(r, verb: "Install")
                                     let isErr: Bool
                                     if case .failure = r { isErr = true } else { isErr = false }
-                                    withAnimation(.spring(duration: 0.3)) {
+                                    withAnimation(DCAnim.smooth) {
                                         statusMessage = msg
                                         statusIsError = isErr
                                         isInstalling = false
@@ -330,12 +330,12 @@ struct ConfigureAgentsViewV2: View {
                                 .disabled(isInstalling)
                                 if isInst {
                                     Button("Uninstall", role: .destructive) {
-                                        withAnimation(.spring(duration: 0.3)) { isInstalling = true; statusMessage = "" }
+                                        withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
                                         let r = AgentInstallerV2.uninstall(agent)
                                         let msg = resultMessage(r, verb: "Uninstall")
                                         let isErr: Bool
                                         if case .failure = r { isErr = true } else { isErr = false }
-                                        withAnimation(.spring(duration: 0.3)) {
+                                        withAnimation(DCAnim.smooth) {
                                             statusMessage = msg
                                             statusIsError = isErr
                                             isInstalling = false
@@ -554,7 +554,7 @@ struct ConfigureAgentsViewV2: View {
                         for url in discovered.prefix(5) {
                             CopilotCLIFolderManager.addFolder(url)
                         }
-                        withAnimation(.spring(duration: 0.3)) {
+                        withAnimation(DCAnim.smooth) {
                             cliFolders = CopilotCLIFolderManager.folders
                         }
                     }
@@ -798,7 +798,7 @@ struct ConfigureAgentsViewV2: View {
                     .frame(height: 180)
                     .onChange(of: events.count) { _, _ in
                         if let last = events.last {
-                            withAnimation(.easeOut(duration: 0.25)) {
+                            withAnimation(DCAnim.fade) {
                                 proxy.scrollTo(last.id, anchor: .bottom)
                             }
                         }
@@ -841,7 +841,7 @@ struct ConfigureAgentsViewV2: View {
         }.value
         var d: [TrackedAgent: AgentDetection] = [:]
         for det in results.0 { d[det.agent] = det }
-        withAnimation(.spring(duration: 0.3)) {
+        withAnimation(DCAnim.smooth) {
             detections = d
             installedCache = results.1
             cliFolders = CopilotCLIFolderManager.folders
@@ -866,20 +866,20 @@ struct ConfigureAgentsViewV2: View {
         proc.arguments = ["--ping"]
         do {
             try proc.run(); proc.waitUntilExit()
-            withAnimation(.spring(duration: 0.3)) {
+            withAnimation(DCAnim.smooth) {
                 verifyResult = proc.terminationStatus == 0
                     ? "✅ Ping passed — dc-hook can reach DoomCoder."
                     : "❌ Ping failed — helper exited \(proc.terminationStatus)."
             }
         } catch {
-            withAnimation(.spring(duration: 0.3)) {
+            withAnimation(DCAnim.smooth) {
                 verifyResult = "❌ Ping failed — \(error.localizedDescription)"
             }
         }
     }
 
     private func startDemoSession(agent: TrackedAgent) {
-        withAnimation(.spring(duration: 0.3)) {
+        withAnimation(DCAnim.smooth) {
             verifyWaiting = true
             verifyResult = nil
         }
@@ -891,7 +891,7 @@ struct ConfigureAgentsViewV2: View {
             try? proc.run()
             proc.waitUntilExit()
             await MainActor.run {
-                withAnimation(.spring(duration: 0.3)) {
+                withAnimation(DCAnim.smooth) {
                     verifyResult = proc.terminationStatus == 0
                         ? "✅ Demo complete — check Track Agents and notifications."
                         : "❌ Demo failed — exit \(proc.terminationStatus)."
@@ -902,7 +902,7 @@ struct ConfigureAgentsViewV2: View {
     }
 
     private func watchRealSession(agent: TrackedAgent) {
-        withAnimation(.spring(duration: 0.3)) {
+        withAnimation(DCAnim.smooth) {
             realWatching = true
             verifyResult = "⏱ Open \(agent.displayName) and trigger one real prompt within 120s…"
         }
@@ -920,7 +920,7 @@ struct ConfigureAgentsViewV2: View {
                 }
             }
             await MainActor.run {
-                withAnimation(.spring(duration: 0.3)) {
+                withAnimation(DCAnim.smooth) {
                     if let hit = matched {
                         verifyResult = "✅ Real \(agent.displayName) event received: \(hit.event)"
                     } else {
@@ -994,7 +994,7 @@ struct ConfigureAgentsViewV2: View {
                 break
             }
         }
-        withAnimation(.spring(duration: 0.3)) {
+        withAnimation(DCAnim.smooth) {
             hookWarnings = warnings
         }
     }
@@ -1098,7 +1098,7 @@ private struct LiveEventRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.spring(duration: 0.2, bounce: 0.1)) { expanded.toggle() }
+                withAnimation(DCAnim.snap) { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     Text(event.timeLabel)

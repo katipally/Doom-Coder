@@ -160,7 +160,7 @@ final class AgentTrackingManager {
 
         // Animate structural changes (new/terminal sessions) for smooth live strip
         if isNewSession || !s.isLive {
-            withAnimation(.spring(duration: 0.35, bounce: 0.15)) {
+            withAnimation(DCAnim.bouncy) {
                 sessions[sessionKey] = s
             }
         } else {
@@ -199,7 +199,7 @@ final class AgentTrackingManager {
                 try? await Task.sleep(for: .seconds(delay))
                 await MainActor.run {
                     if let cur = self.sessions[sessionKey], !cur.isLive {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                        _ = withAnimation(DCAnim.smooth) {
                             self.sessions.removeValue(forKey: sessionKey)
                         }
                     }

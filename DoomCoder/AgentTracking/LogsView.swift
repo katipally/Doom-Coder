@@ -100,7 +100,7 @@ struct LogsView: View {
         let isExpanded = expandedID == row.id
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(DCAnim.micro) {
                     expandedID = isExpanded ? nil : row.id
                 }
             } label: {
