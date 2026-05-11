@@ -1,0 +1,80 @@
+import Foundation
+import AppKit
+
+// Downloads real agent icons from the lobehub @lobehub/icons-static-png CDN
+// and caches them in ~/Library/Application Support/DoomCoder/icons/cdn-{agent}.png.
+// Only fetches once per agent; network errors silently fall back to SF Symbols.
+enum IconDownloader {
+    private static let cdnBase =
+        "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@1.90.0/light"
+
+    // Maps each CLI/IDE agent to its lobehub filename.
+    // .vscode has no lobehub entry — its icon comes from the installed .app bundle.
+    private static let cdnFilenames: [TrackedAgent: String] = [
+        .claude:     "claudecode-color.png",
+        .codexCLI:   "codex-color.png",
+        .copilotCLI: "githubcopilot.png",
+        .cursor:     "cursor.png",
+        .windsurf:   "windsurf.png",
+    ]
+
+    // MARK: - Public API
+
+    /// URL for the cached CDN icon (may not exist yet if download is pending).
+    static func cdnCacheURL(for agent: TrackedAgent) -> URL {
+        let dir = AgentSupportDir.url.appendingPathComponent("icons", isDirectory: true)
+        return dir.appendingPathComponent("cdn-\(agent.rawValue).png")
+    }
+
+    /// Returns the cached CDN icon if it has already been downloaded.
+    static func cachedIcon(for agent: TrackedAgent, size: CGFloat = 32) -> NSImage? {
+        let url = cdnCacheURL(for: agent)
+        guard FileManager.default.fileExists(atPath: url.path),
+              let image = NSImage(contentsOf: url) else { return nil }
+        image.size = NSSize(width: size, height: size)
+        return image
+    }
+
+    /// Kicks off background downloads for all agents that have CDN icons and
+    /// whose cache file does not yet exist. Safe to call on every app launch —
+    /// already-downloaded icons are skipped.
+    static func prefetch() {
+        Task.detached(priority: .background) {
+            let iconsDir = AgentSupportDir.url.appendingPathComponent("icons", isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: iconsDir, withIntermediateDirectories: true)
+
+            await withTaskGroup(of: Void.self) { group in
+                for (agent, filename) in cdnFilenames {
+                    let dest = cdnCacheURL(for: agent)
+                    guard !FileManager.default.fileExists(atPath: dest.path) else { continue }
+                    group.addTask { await download(filename: filename, to: dest) }
+                }
+            }
+        }
+    }
+
+    // MARK: - Private
+
+    private static func download(filename: String, to dest: URL) async {
+        guard let url = URL(string: "\(cdnBase)/\(filename)") else { return }
+        do {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 10
+            config.timeoutIntervalForResource = 20
+            let session = URLSession(configuration: config)
+            let (data, response) = try await session.data(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200,
+                  !data.isEmpty else { return }
+            // Write atomically via a temp file then rename.
+            let tmp = dest.deletingLastPathComponent()
+                .appendingPathComponent(UUID().uuidString + ".png")
+            try data.write(to: tmp, options: .atomic)
+            _ = try? FileManager.default.replaceItem(
+                at: dest, withItemAt: tmp,
+                backupItemName: nil, resultingItemURL: nil)
+        } catch {
+            // Network failure is expected when offline — silent fallback.
+        }
+    }
+}

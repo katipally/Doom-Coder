@@ -45,6 +45,7 @@
 		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
+		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +89,7 @@
 		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +162,7 @@
 				DC0000000000001000000046 /* UIAnimations.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
+				DC0000000000001000000102 /* IconDownloader.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -308,6 +311,7 @@
 				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
+				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

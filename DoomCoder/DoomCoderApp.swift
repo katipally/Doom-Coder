@@ -66,6 +66,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             AgentInstallerV2.healAllPaths()
         }
 
+        // Download agent icons from lobehub CDN in the background.
+        // No-op if already cached; silent fallback on network failure.
+        IconDownloader.prefetch()
+
         // Set notification delegate BEFORE requesting permission so
         // foreground banners are enabled from the very first grant.
         let center = UNUserNotificationCenter.current()
