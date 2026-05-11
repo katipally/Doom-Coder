@@ -17,6 +17,7 @@ struct ConfigureAgentsViewV2: View {
     @State private var migrationAgents: [TrackedAgent] = []
     // Copilot CLI folders
     @State private var cliFolders: [URL] = CopilotCLIFolderManager.folders
+    @State private var showRemoveAllFoldersConfirm = false
     @State private var installedCache: [TrackedAgent: Bool] = [:]
     // Channel store
     @State private var channelConfig = ChannelStore.load()
@@ -471,44 +472,86 @@ struct ConfigureAgentsViewV2: View {
                 }
 
                 ForEach(cliFolders, id: \.path) { folder in
-                    HStack {
-                        Image(systemName: "folder.fill").foregroundStyle(.secondary)
+                    let folderExists = FileManager.default.fileExists(atPath: folder.path)
+                    let isInst = folderExists && AgentInstallerV2.isInstalledCLI(folder: folder)
+                    HStack(spacing: 6) {
+                        // Status icon: green = hooks installed, orange = missing, red = folder gone
+                        Image(systemName: folderExists
+                              ? (isInst ? "folder.fill.badge.checkmark" : "folder.fill")
+                              : "folder.fill.badge.minus")
+                            .foregroundStyle(folderExists ? (isInst ? .green : .secondary) : .orange)
+                            .help(folderExists
+                                  ? (isInst ? "Hooks installed" : "No hooks installed")
+                                  : "Folder not found on disk — only Remove is available")
+
                         Text(folder.lastPathComponent)
                             .font(.callout.bold())
+                            .foregroundStyle(folderExists ? .primary : .secondary)
                         Text(folder.path)
                             .lineLimit(1).truncationMode(.middle)
                             .font(.caption).foregroundStyle(.tertiary)
+
                         Spacer()
-                        let isInst = AgentInstallerV2.isInstalledCLI(folder: folder)
-                        if isInst {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.caption)
-                        }
+
+                        // ── Hook actions ────────────────────────────
                         Button(isInst ? "Reinstall" : "Install") {
                             _ = CopilotCLIFolderManager.installHooks(in: folder)
-                            cliFolders = CopilotCLIFolderManager.folders
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
                         }
                         .controlSize(.small)
-                        Button("Remove") {
-                            _ = CopilotCLIFolderManager.uninstallHooks(from: folder)
-                            cliFolders = CopilotCLIFolderManager.folders
+                        .disabled(!folderExists)
+                        .help(isInst
+                              ? "Overwrite and refresh hooks in this folder"
+                              : (folderExists ? "Install DoomCoder hooks in this folder"
+                                             : "Folder not found — cannot install"))
+
+                        Button("Uninstall") {
+                            _ = CopilotCLIFolderManager.uninstallHooksFromFolder(folder)
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
                         }
                         .controlSize(.small)
+                        .disabled(!isInst)
+                        .help(isInst
+                              ? "Remove hooks from disk — folder stays in list so you can reinstall later"
+                              : "No hooks to uninstall")
+
+                        // ── Separator between hook ↔ list actions ─────
+                        Divider().frame(maxHeight: 16)
+
+                        // ── List action ──────────────────────────────
+                        Button("Remove", role: .destructive) {
+                            CopilotCLIFolderManager.removeFolder(folder)
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
+                        }
+                        .controlSize(.small)
+                        .help(isInst
+                              ? "Remove this folder from DoomCoder's list — hooks on disk are NOT deleted"
+                              : "Remove this folder from DoomCoder's tracking list")
                     }
+                    .padding(.vertical, 2)
                 }
 
-                // Bulk actions — only shown when at least one folder is registered.
-                // Counts are recomputed each render so buttons auto-adapt to any
-                // manual folder edits the user may have made outside the app.
+                // ── Bulk actions ─────────────────────────────────────────────────────
+                // Only shown when at least one folder is registered.
+                // Counts recompute every render so they reflect manual on-disk edits.
                 if !cliFolders.isEmpty {
                     let notInstalled = cliFolders.filter { !AgentInstallerV2.isInstalledCLI(folder: $0) }
                     let installed = cliFolders.filter { AgentInstallerV2.isInstalledCLI(folder: $0) }
 
                     Divider()
 
+                    // Section: Hook Actions
                     HStack(spacing: 6) {
-                        // Install All — only hits folders that are missing hooks.
+                        Text("HOOK ACTIONS")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                        Rectangle()
+                            .frame(height: 0.5)
+                            .foregroundStyle(.separator)
+                    }
+
+                    HStack(spacing: 6) {
+                        // Install missing hooks only
                         Button {
                             CopilotCLIFolderManager.installMissing()
                             withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
@@ -518,10 +561,10 @@ struct ConfigureAgentsViewV2: View {
                         .controlSize(.small)
                         .disabled(notInstalled.isEmpty)
                         .help(notInstalled.isEmpty
-                              ? "All folders already have hooks installed"
+                              ? "All registered folders already have hooks installed"
                               : "Install hooks in \(notInstalled.count) folder\(notInstalled.count == 1 ? "" : "s") that are missing them")
 
-                        // Reinstall All — force-writes hooks to every registered folder.
+                        // Force overwrite in every folder
                         Button {
                             CopilotCLIFolderManager.reinstallAll()
                             withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
@@ -531,19 +574,49 @@ struct ConfigureAgentsViewV2: View {
                         .controlSize(.small)
                         .help("Overwrite and refresh hooks in all \(cliFolders.count) registered folder\(cliFolders.count == 1 ? "" : "s")")
 
-                        // Remove All — uninstalls hooks from every folder that has them,
-                        // but keeps the folder list intact so the user can reinstall later.
+                        // Remove hooks from installed folders — list untouched
                         Button(role: .destructive) {
                             CopilotCLIFolderManager.uninstallHooksOnly()
                             withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
                         } label: {
-                            Label("Remove All (\(installed.count))", systemImage: "xmark.circle")
+                            Label("Uninstall All (\(installed.count))", systemImage: "minus.circle")
                         }
                         .controlSize(.small)
                         .disabled(installed.isEmpty)
                         .help(installed.isEmpty
                               ? "No folders have hooks installed"
-                              : "Remove hooks from \(installed.count) folder\(installed.count == 1 ? "" : "s") — folder registrations are kept")
+                              : "Remove hooks from \(installed.count) folder\(installed.count == 1 ? "" : "s") — folders stay in list so you can reinstall later")
+                    }
+
+                    // Section: Folder List Actions
+                    HStack(spacing: 6) {
+                        Text("FOLDER LIST")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                        Rectangle()
+                            .frame(height: 0.5)
+                            .foregroundStyle(.separator)
+                    }
+
+                    Button(role: .destructive) {
+                        showRemoveAllFoldersConfirm = true
+                    } label: {
+                        Label("Remove All (\(cliFolders.count)) from List", systemImage: "trash.circle")
+                    }
+                    .controlSize(.small)
+                    .help("Remove all \(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") from DoomCoder's tracking list — hooks on disk are NOT deleted")
+                    .confirmationDialog(
+                        "Remove \(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") from DoomCoder?",
+                        isPresented: $showRemoveAllFoldersConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remove All from List", role: .destructive) {
+                            CopilotCLIFolderManager.removeAllFolders()
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text("Hooks installed in these folders will NOT be deleted. You can re-add folders and reinstall at any time.")
                     }
                 }
 
