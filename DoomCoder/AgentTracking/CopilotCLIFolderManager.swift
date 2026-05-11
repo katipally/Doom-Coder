@@ -99,12 +99,13 @@ enum CopilotCLIFolderManager {
             }
         }
 
-        // Source 2: Common project directories
+        // Source 2: Common project directories (no ~/Desktop — accessing it
+        // triggers macOS TCC permission prompts on every app rebuild).
         let projectDirs = [
             NSHomeDirectory() + "/Developer",
             NSHomeDirectory() + "/Projects",
             NSHomeDirectory() + "/Code",
-            NSHomeDirectory() + "/Desktop"
+            NSHomeDirectory() + "/src"
         ]
         for dir in projectDirs {
             if let children = try? fm.contentsOfDirectory(atPath: dir) {

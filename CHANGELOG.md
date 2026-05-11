@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-05-10 — Windsurf support, smarter notifications, false-positive fix
+
+**Major release.** Windsurf Cascade is now fully tracked (all 12 hook events).
+Notifications are smarter — done and error alerts include session duration and
+the real agent app icon. A long-standing false-positive where Claude Code running
+inside a Cursor or VS Code terminal was misidentified as VS Code Copilot is fixed.
+
+### Added
+- **Windsurf Cascade support** — full detection, icon resolution, and event
+  normalization for all 12 Windsurf hook events (`pre/post_read_code`,
+  `pre/post_write_code`, `pre/post_run_command`, `pre/post_mcp_tool_use`,
+  `pre_user_prompt`, `post_cascade_response`, `post_cascade_response_with_transcript`,
+  `post_setup_worktree`). Hooks install to `~/.codeium/windsurf/hooks.json`.
+- **Session duration in notifications** — done and error notifications now show
+  elapsed time (e.g. "Claude Code — done  ·  3m 14s").
+- **Agent icons in notifications** — each macOS notification shows the real app icon
+  as a thumbnail attachment so you instantly know which tool finished.
+- **Windsurf demo mode** — `dc-hook windsurf --demo` replays all 8 key Cascade events
+  with realistic delays.
+- **What's New sheet (v2.0.0)** — shown once to users upgrading from older versions.
+
+### Fixed
+- **Claude Code false-positive in Cursor/VS Code** — Claude Code running inside a
+  Cursor or VS Code integrated terminal now correctly reports as Claude Code, not
+  VS Code Copilot. The fix uses `CLAUDE_CODE_ENTRY_POINT` as a definitive signal.
+- **Cursor + VS Code duplicate sessions** — when Cursor fires VS Code Copilot extension
+  hooks (because Cursor is VS Code-based), dc-hook vscode now detects the Cursor
+  environment via `CURSOR_TRACE_ID` / `TERM_PROGRAM=cursor` / IPC socket path and
+  silently exits, preventing duplicate session entries.
+- **inferred-waiting extended to Windsurf** — the 60-second idle detector that posts
+  a "check in" notification now includes Windsurf alongside Cursor, VS Code, and
+  Copilot CLI.
+
+---
+
 ## [1.9.1] - 2026-04-20 — Fix Sparkle build number ordering
 
 ### Fixed

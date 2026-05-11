@@ -116,6 +116,7 @@ actor HookConfigBackend {
         case .cursor:     return "cursor"
         case .vscode:     return "vscode"
         case .copilotCLI: return "copilot_cli"
+        case .windsurf:   return "windsurf"
         }
     }
 

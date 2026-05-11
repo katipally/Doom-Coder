@@ -525,7 +525,7 @@ struct ConfigureAgentsViewV2: View {
                             cliFolders = CopilotCLIFolderManager.folders
                         }
                     }
-                    .help("Scans ~/Developer, ~/Projects, ~/Code, ~/Desktop for project folders")
+                    .help("Scans ~/Developer, ~/Projects, ~/Code, ~/src for project folders")
 
                     Spacer()
                     Text("\(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") registered")
@@ -844,6 +844,10 @@ struct ConfigureAgentsViewV2: View {
         case .copilotCLI:
             list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm, brew, or gh extension"))
             list.append(Prereq(label: "At least 1 project folder configured", met: !cliFolders.isEmpty, fix: "Click 'Add folder' below"))
+        case .windsurf:
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codeium/windsurf")
+            list.append(Prereq(label: "~/.codeium/windsurf/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Windsurf and open it once"))
+            list.append(Prereq(label: "Windsurf installed", met: detections[.windsurf]?.installed == true, fix: "Download from windsurf.com"))
         }
         return list
     }
@@ -960,6 +964,12 @@ struct ConfigureAgentsViewV2: View {
                 "For each project you want tracked, click ‘Add folder’ and pick its repo root.",
                 "Hooks file is created at <repo>/.github/hooks/doomcoder.json."
             ]
+        case .windsurf:
+            return [
+                "Windsurf installed (download from windsurf.com).",
+                "Open Windsurf at least once so ~/.codeium/windsurf/ is created.",
+                "Folder ~/.codeium/windsurf/ writable."
+            ]
         }
     }
 
@@ -969,6 +979,7 @@ struct ConfigureAgentsViewV2: View {
         case .cursor:     return "Hooks in ~/.cursor/hooks.json (version: 1, command only)"
         case .vscode:     return "VS Code reads ~/.claude/settings.json natively"
         case .copilotCLI: return "Per-project .github/hooks/doomcoder.json (bash/cwd/timeoutSec)"
+        case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
         }
     }
 
@@ -978,6 +989,7 @@ struct ConfigureAgentsViewV2: View {
         case .cursor:     return "~/.cursor/hooks.json"
         case .vscode:     return "~/.claude/settings.json"
         case .copilotCLI: return ".github/hooks/doomcoder.json"
+        case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         }
     }
 
