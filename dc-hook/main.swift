@@ -220,6 +220,13 @@ private func chainContains(_ chain: [String], anyOf needles: [String]) -> Bool {
 
 // Per-agent ancestor patterns. Matching is case-insensitive substring on
 // either the full comm string or its trailing path component.
+//
+// Extension-invoked CLIs (e.g. Claude Code VS Code extension, Codex extension):
+// When a CLI is launched by a VS Code/Cursor extension, the process tree is:
+//   dc-hook → claude/codex → extension-host → Code Helper → Code.app
+// The CLI is dc-hook's direct parent, so kClaudePatterns / kCodexPatterns
+// match on hop 0 — the disqualifier never fires. Hooks work correctly
+// whether the CLI is started from a standalone terminal or via an extension.
 private let kClaudePatterns:    [String] = ["claude", "anthropic"]
 private let kCursorPatterns:    [String] = ["cursor"]
 private let kVSCodePatterns:    [String] = ["code helper", "/code", "vscode", "visual studio code"]
