@@ -131,22 +131,28 @@ func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: A
 @_silgen_name("proc_pidpath")
 private func proc_pidpath(_ pid: Int32, _ buffer: UnsafeMutableRawPointer, _ buffersize: UInt32) -> Int32
 
+// Mirrors struct proc_bsdshortinfo from <sys/proc_info.h> exactly.
+// Field ORDER must match the C layout — Swift struct fields have no padding
+// reordering, so any mismatch silently corrupts every field read via
+// proc_pidinfo(PROC_PIDT_SHORTBSDINFO). Total size: 64 bytes.
+// Layout: pid(4), ppid(4), pgid(4), status(4), comm(16), flags(4),
+//         uid(4), gid(4), ruid(4), rgid(4), svuid(4), svgid(4), rfu1(4)
 private struct DCProcBSDShortInfo {
-    var pbsi_flags: UInt32 = 0
-    var pbsi_status: UInt32 = 0
-    var pbsi_xstatus: UInt32 = 0
-    var pbsi_pid: UInt32 = 0
-    var pbsi_ppid: UInt32 = 0
-    var pbsi_uid: UInt32 = 0
-    var pbsi_gid: UInt32 = 0
-    var pbsi_ruid: UInt32 = 0
-    var pbsi_rgid: UInt32 = 0
-    var pbsi_svuid: UInt32 = 0
-    var pbsi_svgid: UInt32 = 0
-    var pbsi_rfu1: UInt32 = 0
+    var pbsi_pid: UInt32 = 0      // offset  0
+    var pbsi_ppid: UInt32 = 0     // offset  4
+    var pbsi_pgid: UInt32 = 0     // offset  8
+    var pbsi_status: UInt32 = 0   // offset 12
     var pbsi_comm: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar,
-                     CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) =
-        (0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0)
+                    CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) =
+        (0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0) // offset 16, 16 bytes (MAXCOMLEN)
+    var pbsi_flags: UInt32 = 0    // offset 32
+    var pbsi_uid: UInt32 = 0      // offset 36
+    var pbsi_gid: UInt32 = 0      // offset 40
+    var pbsi_ruid: UInt32 = 0     // offset 44
+    var pbsi_rgid: UInt32 = 0     // offset 48
+    var pbsi_svuid: UInt32 = 0    // offset 52
+    var pbsi_svgid: UInt32 = 0    // offset 56
+    var pbsi_rfu1: UInt32 = 0     // offset 60
 }
 
 @_silgen_name("proc_pidinfo")
