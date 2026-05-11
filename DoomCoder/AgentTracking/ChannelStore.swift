@@ -13,11 +13,11 @@ struct ChannelStore {
 
     /// Which event phases should trigger a push notification.
     struct NotificationPrefs: Codable, Sendable, Equatable {
-        var sessionStart: Bool = false
+        var sessionStart: Bool = true
         var sessionEnd: Bool = true
         var error: Bool = true
         var permissionNeeded: Bool = true
-        var agentResponse: Bool = true
+        var agentResponse: Bool = false
         var subagentStart: Bool = false
         var subagentEnd: Bool = false
         var toolUse: Bool = false
@@ -89,10 +89,10 @@ struct ChannelStore {
 
     /// Bumped when the default allowlist changes. Setting this flag to a new
     /// value on launch overwrites older saved prefs so users pick up the new
-    /// curated defaults (instead of being stuck on a legacy "notify every
-    /// tool call" config). Current defaults: 4-phase — sessionEnd, error,
-    /// permissionNeeded, agentResponse.
-    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v2"
+    /// curated defaults. Current defaults: 4-phase — sessionStart, sessionEnd,
+    /// error, permissionNeeded. agentResponse is intentionally OFF to prevent
+    /// notification spam from Claude's frequent Notification hook events.
+    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v3"
 
     /// Run once at launch. If this build's migration flag hasn't been set,
     /// overwrite saved prefs with the curated defaults and record the flag.

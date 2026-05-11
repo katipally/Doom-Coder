@@ -115,6 +115,13 @@ final class AgentTrackingManager {
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
+    // 60-second inference timers: fire a "may need your attention" notification when
+    // a toolStart has no matching toolEnd/toolError within the window. Applied only
+    // to agents without explicit permission hooks (all agents except Claude Code).
+    private var waitTimers: [String: Task<Void, Never>] = [:]
+    private static let waitInferenceAgents: Set<TrackedAgent> = [.cursor, .vscode, .copilotCLI, .windsurf]
+    private static let waitInferenceSeconds: TimeInterval = 60
+
     // MARK: - Entry point (called from socket listener)
 
     func ingest(_ env: HookEnvelope) {
@@ -187,12 +194,26 @@ final class AgentTrackingManager {
         if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
                 sessionKey: sessionKey, agent: normalized.agent,
-                event: normalized.rawEvent
+                event: normalized.rawEvent, phase: normalized.phase
             ))
+        }
+
+        // 60s waiting inference for agents without explicit permission hooks.
+        // Start a timer on toolStart, cancel it when the tool resolves.
+        if Self.waitInferenceAgents.contains(normalized.agent) {
+            switch normalized.phase {
+            case .toolStart:
+                startWaitInferenceTimer(sessionKey: sessionKey, agent: normalized.agent)
+            case .toolEnd, .toolError, .sessionEnd, .error:
+                cancelWaitInferenceTimer(sessionKey: sessionKey)
+            default:
+                break
+            }
         }
 
         // Evict terminal sessions after configured delay
         if !s.isLive {
+            cancelWaitInferenceTimer(sessionKey: sessionKey)
             let delay = evictionDelay
             Task { [sessionKey] in
                 try? await Task.sleep(for: .seconds(delay))
@@ -203,6 +224,35 @@ final class AgentTrackingManager {
                 }
             }
         }
+    }
+
+    // MARK: - Wait inference timer
+
+    private func startWaitInferenceTimer(sessionKey: String, agent: TrackedAgent) {
+        // Cancel any existing timer for this session (re-arm on each tool call)
+        waitTimers[sessionKey]?.cancel()
+        let delay = Self.waitInferenceSeconds
+        waitTimers[sessionKey] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                // Only fire if the session is still live (not ended/failed)
+                guard let session = self.sessions[sessionKey], session.isLive else { return }
+                self.logger.info("wait-inference fired sessionKey=\(sessionKey, privacy: .public)")
+                self.waitTimers.removeValue(forKey: sessionKey)
+                // Dispatch inferred-waiting notification
+                NotificationDispatcher.shared.dispatch(.init(
+                    sessionKey: sessionKey, agent: agent,
+                    event: "inferredWaiting", phase: nil
+                ))
+            }
+        }
+    }
+
+    private func cancelWaitInferenceTimer(sessionKey: String) {
+        waitTimers[sessionKey]?.cancel()
+        waitTimers.removeValue(forKey: sessionKey)
     }
 }
 

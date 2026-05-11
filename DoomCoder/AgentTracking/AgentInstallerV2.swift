@@ -97,6 +97,7 @@ struct AgentInstallerV2 {
             case .cursor:     try installCursor()
             case .vscode:     try installVSCode()
             case .copilotCLI: try installCopilotCLI(folder: folder)
+            case .windsurf:   try installWindsurf()
             }
             try verifyInstalled(agent: agent, at: path)
             let postHash = sha256(of: path) ?? "?"
@@ -135,7 +136,8 @@ struct AgentInstallerV2 {
             let token = dcHookAgentToken(agent)
             stripDcHookEntries(&root, agentToken: token)
             pruneEmptyContainers(&root)
-            try writeJSON(root, to: path, needsVersion: agent == .cursor || agent == .copilotCLI)
+            let needsVer = agent == .cursor || agent == .copilotCLI
+            try writeJSON(root, to: path, needsVersion: needsVer)
             try verifyUninstalled(at: path, agent: agent)
             let postHash = sha256(of: path) ?? "absent"
             logger.notice("installer op=uninstall agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
@@ -160,7 +162,8 @@ struct AgentInstallerV2 {
     static func healAllPaths() {
         var healed = 0
         var files = 0
-        for agent in TrackedAgent.allCases where agent != .copilotCLI {
+        let nonFolderAgents = TrackedAgent.allCases.filter { $0 != .copilotCLI }
+        for agent in nonFolderAgents {
             if isInstalled(agent) {
                 files += 1
                 if case .success = install(agent) { healed += 1 }
@@ -189,6 +192,8 @@ struct AgentInstallerV2 {
             return fileContainsDcHookFor(agent: "claude", at: claudeSettingsPath())
         case .cursor:
             return fileContainsDcHookFor(agent: "cursor", at: cursorHooksPath())
+        case .windsurf:
+            return fileContainsDcHookFor(agent: "windsurf", at: windsurfHooksPath())
         }
     }
 
@@ -204,6 +209,7 @@ struct AgentInstallerV2 {
         case .claude:     return claudeSettingsPath()
         case .cursor:     return cursorHooksPath()
         case .vscode:     return claudeSettingsPath() // VSCode reads ~/.claude/settings.json natively
+        case .windsurf:   return windsurfHooksPath()
         case .copilotCLI:
             let base = folder ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             return base.appendingPathComponent(".github/hooks/doomcoder.json").path
@@ -212,6 +218,7 @@ struct AgentInstallerV2 {
 
     static func claudeSettingsPath() -> String { NSHomeDirectory() + "/.claude/settings.json" }
     static func cursorHooksPath()   -> String { NSHomeDirectory() + "/.cursor/hooks.json" }
+    static func windsurfHooksPath() -> String { NSHomeDirectory() + "/.codeium/windsurf/hooks.json" }
 
     // MARK: - Public verification
 
@@ -334,6 +341,30 @@ struct AgentInstallerV2 {
         try writeJSON(root, to: path, needsVersion: false)
     }
 
+    private static func installWindsurf() throws {
+        // Windsurf uses ~/.codeium/windsurf/hooks.json with a top-level "hooks" dict.
+        // No version field required. Format: {"hooks": {"event": [{"command": "..."}]}}
+        let path = windsurfHooksPath()
+        try ensureParentDir(path)
+        var root = readJSON(at: path) ?? [:]
+        backup(path)
+
+        // Strip only Windsurf dc-hook entries (preserves any other hooks user may have)
+        stripDcHookEntries(&root, agentToken: "windsurf")
+        pruneEmptyContainers(&root)
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        for event in windsurfEvents {
+            let entry: [String: Any] = ["command": cmdFor("windsurf", event)]
+            var arr = (hooks[event] as? [[String: Any]]) ?? []
+            arr.append(entry)
+            hooks[event] = arr
+        }
+        root["hooks"] = hooks
+        // Windsurf does NOT require a version field — write without it
+        try writeJSON(root, to: path, needsVersion: false)
+    }
+
     private static func installCopilotCLI(folder: URL?) throws {
         guard let folder = folder else {
             throw InstallerError.missingFolder
@@ -398,6 +429,18 @@ struct AgentInstallerV2 {
         "userPromptSubmitted",
         "preToolUse", "postToolUse",
         "errorOccurred"
+    ]
+
+    // All 12 Windsurf Cascade hook events — snake_case, no version field required.
+    static let windsurfEvents = [
+        "pre_read_code", "post_read_code",
+        "pre_write_code", "post_write_code",
+        "pre_run_command", "post_run_command",
+        "pre_mcp_tool_use", "post_mcp_tool_use",
+        "pre_user_prompt",
+        "post_cascade_response",
+        "post_cascade_response_with_transcript",
+        "post_setup_worktree"
     ]
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {
@@ -510,6 +553,7 @@ struct AgentInstallerV2 {
         case .cursor:     return cursorEvents
         case .vscode:     return vscodeEvents
         case .copilotCLI: return copilotCLIEvents
+        case .windsurf:   return windsurfEvents
         }
     }
 
@@ -689,6 +733,7 @@ struct AgentInstallerV2 {
         case .cursor:     return "cursor"
         case .vscode:     return "vscode"
         case .copilotCLI: return "copilot_cli"
+        case .windsurf:   return "windsurf"
         }
     }
 

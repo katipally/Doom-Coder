@@ -60,6 +60,19 @@ enum DeepLink {
                 let hooksFile = AgentInstallerV2.configPath(for: .copilotCLI, folder: folder)
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: hooksFile)])
             }
+
+        case .windsurf:
+            let bid = "com.codeium.windsurf"
+            let hookFile = AgentInstallerV2.windsurfHooksPath()
+            if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+                NSWorkspace.shared.open(
+                    [URL(fileURLWithPath: hookFile)],
+                    withApplicationAt: appURL,
+                    configuration: NSWorkspace.OpenConfiguration()
+                )
+            } else {
+                openFileInDefaultEditor(hookFile)
+            }
         }
     }
 

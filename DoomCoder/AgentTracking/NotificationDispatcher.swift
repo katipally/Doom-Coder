@@ -70,7 +70,8 @@ final class NotificationDispatcher {
     struct Event: Sendable {
         let sessionKey: String
         let agent: TrackedAgent
-        let event: String       // raw event name from the hook
+        let event: String                   // raw event name from the hook
+        let phase: NormalizedEventPhase?    // nil only for synthetic events (e.g. inferredWaiting)
     }
 
     func dispatch(_ ev: Event) {
@@ -95,7 +96,7 @@ final class NotificationDispatcher {
         let ts = Date().timeIntervalSince1970
 
         if channels.macNotification {
-            postLocal(title: title, body: body, threadID: ev.sessionKey)
+            postLocal(title: title, body: body, threadID: ev.sessionKey, agent: ev.agent)
             EventStore.shared.insertNotification(
                 sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
                 title: title, body: body, channel: "macOS", success: true, ts: ts
@@ -133,18 +134,56 @@ final class NotificationDispatcher {
     // MARK: - Copy
 
     private func titleFor(_ ev: Event) -> String {
-        let e = ev.event.lowercased()
-        if e.contains("error") || e.contains("failure") { return "DoomCoder · failed" }
-        if e.contains("sessionend") || e.contains("stop") || e == "taskcompleted" { return "DoomCoder · done" }
-        if e.contains("permission") || e.contains("notification") || e.contains("elicitation") || e.contains("afteragentresponse") {
-            return "DoomCoder · needs you"
+        // Synthetic inferred-waiting bypasses the normalizer — handle by name.
+        if ev.event == "inferredWaiting" { return "DoomCoder · check in" }
+        switch ev.phase {
+        case .sessionStart:                 return "DoomCoder · started"
+        case .sessionEnd:                   return "DoomCoder · done"
+        case .error, .toolError:            return "DoomCoder · failed"
+        case .permissionNeeded:             return "DoomCoder · needs you"
+        default:                            return "DoomCoder"
         }
-        if e.contains("sessionstart") { return "DoomCoder · started" }
-        return "DoomCoder"
     }
 
     private func bodyFor(_ ev: Event) -> String {
-        "\(ev.agent.displayName) — \(ev.event)"
+        let name = ev.agent.displayName
+
+        // Synthetic inferred-waiting (60s timeout) — distinct phrasing.
+        if ev.event == "inferredWaiting" {
+            return "\(name) — may need your attention"
+        }
+
+        switch ev.phase {
+        case .sessionStart:
+            return name
+
+        case .sessionEnd:
+            let duration = sessionDuration(for: ev.sessionKey)
+            return duration.map { "\(name) — done  ·  \($0)" } ?? "\(name) — done"
+
+        case .error, .toolError:
+            let duration = sessionDuration(for: ev.sessionKey)
+            return duration.map { "\(name) — failed  ·  \($0)" } ?? "\(name) — failed"
+
+        case .permissionNeeded:
+            return "\(name) — needs you"
+
+        default:
+            return name
+        }
+    }
+
+    /// Looks up the session in AgentTrackingManager and formats elapsed time since start.
+    private func sessionDuration(for sessionKey: String) -> String? {
+        guard let session = AgentTrackingManager.shared.sessions[sessionKey] else { return nil }
+        let elapsed = Date().timeIntervalSince(session.startedAt)
+        guard elapsed > 1 else { return nil }
+        let minutes = Int(elapsed) / 60
+        let seconds = Int(elapsed) % 60
+        if minutes > 0 {
+            return "\(minutes)m \(seconds)s"
+        }
+        return "\(seconds)s"
     }
 
     // MARK: - macOS local
@@ -160,14 +199,25 @@ final class NotificationDispatcher {
         qos: .userInitiated
     )
 
-    private func postLocal(title: String, body: String, threadID: String) {
+    private func postLocal(title: String, body: String, threadID: String, agent: TrackedAgent? = nil) {
         let logger = self.logger
+        let iconURL = agent.flatMap { AgentIconProvider.iconFileURL(for: $0) }
         Self.notifyQueue.async {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
             content.sound = .default
             content.threadIdentifier = threadID
+            // Attach agent icon as notification thumbnail if available.
+            if let iconURL,
+               let attachment = try? UNNotificationAttachment(
+                   identifier: "agent-icon",
+                   url: iconURL,
+                   options: [UNNotificationAttachmentOptionsThumbnailClippingRectKey:
+                               CGRect(x: 0, y: 0, width: 1, height: 1) as AnyObject]
+               ) {
+                content.attachments = [attachment]
+            }
             // A tiny 10ms trigger preserves enqueue order vs. immediate nil
             // triggers, which UN can collapse to the same delivery slot.
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.01, repeats: false)

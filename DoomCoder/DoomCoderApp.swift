@@ -56,6 +56,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
 
+        // Pre-fetch logo.dev icons for CLI tools (background, cached 7 days).
+        AgentIconProvider.prefetchLogoDev()
+
         // Start the socket listener.
         HookSocketListener.shared.start { env in
             Task { @MainActor in AgentTrackingManager.shared.ingest(env) }
@@ -102,7 +105,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             }
         }
 
-        if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
+        // Show the most recent What's New sheet (checked newest-first).
+        if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
+            Task { @MainActor in self.showWhatsNewV2() }
+        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
             Task { @MainActor in self.showWhatsNew() }
         }
     }
@@ -128,6 +134,31 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         await MainActor.run {
             FloatingPanelController.shared.show()
         }
+    }
+
+    @MainActor
+    func showWhatsNewV2() {
+        let hosting = NSHostingController(rootView: WhatsNewSheetV2(onDismiss: { [weak self] in
+            self?.whatsNewWindow?.close()
+            self?.whatsNewWindow = nil
+        }))
+        hosting.sizingOptions = []
+        let contentSize = NSSize(width: 520, height: 460)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hosting
+        window.setContentSize(contentSize)
+        window.title = "What's New in DoomCoder"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.level = .floating
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        whatsNewWindow = window
     }
 
     @MainActor
