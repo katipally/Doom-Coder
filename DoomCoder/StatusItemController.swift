@@ -134,17 +134,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openConfigure() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         WindowOpener.open(.configureAgents)
     }
 
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         WindowOpener.open(.settings)
     }
 
     @objc private func openAbout() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         WindowOpener.open(.about)
     }
 

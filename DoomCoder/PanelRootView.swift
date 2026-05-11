@@ -107,7 +107,7 @@ struct PanelRootView: View {
                 .foregroundStyle(.primary)
             Spacer(minLength: 4)
             Button("Fix") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                NSApplication.shared.activate()
                 WindowOpener.open(.settings)
             }
             .buttonStyle(.plain)
@@ -150,9 +150,11 @@ struct PanelRootView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(masterEnabled ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.06))
                         .frame(width: 32, height: 32)
-                    Image(systemName: "bolt.horizontal.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(masterEnabled ? Color.accentColor : .secondary)
+                    Image("logo-doomcoder")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .opacity(masterEnabled ? 1.0 : 0.45)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("DoomCoder")
@@ -360,11 +362,11 @@ struct PanelRootView: View {
     private var footer: some View {
         HStack(spacing: 0) {
             footerItem("gearshape", label: "Settings") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                NSApplication.shared.activate()
                 WindowOpener.open(.settings)
             }
             footerItem("info.circle", label: "About") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                NSApplication.shared.activate()
                 WindowOpener.open(.about)
             }
             footerItem("arrow.triangle.2.circlepath", label: "Updates") {
@@ -424,26 +426,6 @@ struct PanelRootView: View {
         .background(tint.opacity(0.12), in: Capsule())
     }
 
-    enum ActionTone { case accent, destructive, neutral }
-
-    @ViewBuilder
-    private func actionBar(icon: String, label: String, tone: ActionTone, action: @escaping () -> Void) -> some View {
-        let fg: Color = tone == .destructive ? .red : (tone == .accent ? .white : .primary)
-        let bg: Color = tone == .destructive ? Color.red.opacity(0.18)
-            : (tone == .accent ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08))
-
-        PressableButton(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon).font(.caption)
-                Text(label).font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(fg)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(bg))
-        }
-    }
-
     @ViewBuilder
     private func compactAction(
         icon: String,
@@ -474,7 +456,7 @@ struct PanelRootView: View {
     }
 
     private func openConfigureWindow() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.activate()
         WindowOpener.open(.configureAgents)
     }
 }
@@ -645,41 +627,11 @@ private struct InnerCard<Content: View>: View {
 private struct PanelBackground: View {
     var body: some View {
         ZStack {
-            Color(nsColor: NSColor(calibratedWhite: 0.11, alpha: 1.0)) // ~#1C1C1E
-            // Subtle top highlight
-            LinearGradient(
-                colors: [Color.white.opacity(0.06), .clear],
-                startPoint: .top, endPoint: .center
-            )
-            // Subtle grain via blend-mode overlay (keeps cost low; no image assets).
-            GrainOverlay()
-                .opacity(0.35)
-                .blendMode(.overlay)
-                .allowsHitTesting(false)
-        }
-    }
-}
-
-private struct GrainOverlay: View {
-    var body: some View {
-        // Procedural grain: tile a tiny canvas of randomized pixels.
-        Canvas { ctx, size in
-            var generator = SystemRandomNumberGenerator()
-            let step: CGFloat = 2
-            var y: CGFloat = 0
-            while y < size.height {
-                var x: CGFloat = 0
-                while x < size.width {
-                    let r = Double(generator.next() & 0xFF) / 255.0
-                    let alpha = 0.015 + r * 0.03
-                    ctx.fill(
-                        Path(CGRect(x: x, y: y, width: step, height: step)),
-                        with: .color(Color.white.opacity(alpha))
-                    )
-                    x += step
-                }
-                y += step
-            }
+            // Liquid Glass — native macOS material with dark vibrancy.
+            Rectangle()
+                .fill(.ultraThinMaterial)
+            // Subtle dark tint to keep contrast on bright desktop backgrounds.
+            Color.black.opacity(0.35)
         }
     }
 }
