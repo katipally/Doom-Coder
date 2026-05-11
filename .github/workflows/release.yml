@@ -204,7 +204,9 @@ jobs:
           exit 1
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.3.2
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           name: "Doom Coder ${{ env.TAG }}"
           files: DoomCoder-${{ env.VERSION }}.zip
