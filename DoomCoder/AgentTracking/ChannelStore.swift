@@ -13,7 +13,7 @@ struct ChannelStore {
 
     /// Which event phases should trigger a push notification.
     struct NotificationPrefs: Codable, Sendable, Equatable {
-        var sessionStart: Bool = true
+        var sessionStart: Bool = false
         var sessionEnd: Bool = true
         var error: Bool = true
         var permissionNeeded: Bool = true
@@ -92,7 +92,7 @@ struct ChannelStore {
     /// curated defaults. Current defaults: 4-phase — sessionStart, sessionEnd,
     /// error, permissionNeeded. agentResponse is intentionally OFF to prevent
     /// notification spam from Claude's frequent Notification hook events.
-    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v3"
+    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v4"
 
     /// Run once at launch. If this build's migration flag hasn't been set,
     /// overwrite saved prefs with the curated defaults and record the flag.

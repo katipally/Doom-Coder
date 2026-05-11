@@ -119,9 +119,14 @@ func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
     let env = ProcessInfo.processInfo.environment
     switch declaredAgent {
     case "claude":
-        // CLAUDE_CODE_ENTRY_POINT is always set by Claude Code CLI — accept unconditionally.
-        // Without this guard, running Claude inside Cursor/VSCode terminal would false-skip.
-        if env["CLAUDE_CODE_ENTRY_POINT"] != nil { return false }
+        // Accept only when Claude Code CLI is the actual caller.
+        // Check all three Claude identity signals — symmetric with the vscode skip
+        // condition below (which skips if ANY of these is set). Using the same set
+        // of signals means exactly one hook fires per event regardless of which
+        // Claude signal is present in the environment.
+        if env["CLAUDE_CODE_ENTRY_POINT"] != nil
+            || env["CLAUDE_CODE_SESSION"] != nil
+            || env["CLAUDE_SESSION_ID"] != nil { return false }
         // Otherwise a VSCode/Cursor terminal is present: caller is VS Code Copilot, not Claude.
         if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" { return true }
 
