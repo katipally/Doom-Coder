@@ -146,16 +146,12 @@ struct PanelRootView: View {
     private var masterCard: some View {
         MasterCard {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(masterEnabled ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.06))
-                        .frame(width: 32, height: 32)
-                    Image("logo-doomcoder")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                        .opacity(masterEnabled ? 1.0 : 0.45)
-                }
+                Image("logo")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .opacity(masterEnabled ? 1.0 : 0.5)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("DoomCoder")
                         .font(.system(size: 14, weight: .semibold))
