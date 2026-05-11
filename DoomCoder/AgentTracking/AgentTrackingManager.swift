@@ -182,8 +182,14 @@ final class AgentTrackingManager {
         )
 
         // Notification dispatch — uses user-configurable phase preferences
+        // Suppress sessionEnd notifications when the agent PID is dead — this
+        // means the user already quit (Cmd+Q) before the final Stop/sessionEnd
+        // hook arrived. Timeline entry is still recorded above.
+        let isQuitInitiatedEnd = normalized.phase == .sessionEnd
+            && !PIDLiveness.isAlive(pid_t(env.pid))
         let shouldNotify = NotificationPolicy.isNotifiable(phase: normalized.phase)
-        logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify)")
+            && !isQuitInitiatedEnd
+        logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
         if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
                 sessionKey: sessionKey, agent: normalized.agent,

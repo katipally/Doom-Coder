@@ -848,6 +848,10 @@ struct ConfigureAgentsViewV2: View {
             let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codeium/windsurf")
             list.append(Prereq(label: "~/.codeium/windsurf/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Windsurf and open it once"))
             list.append(Prereq(label: "Windsurf installed", met: detections[.windsurf]?.installed == true, fix: "Download from windsurf.com"))
+        case .codexCLI:
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex")
+            list.append(Prereq(label: "~/.codex/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `codex` once to initialize"))
+            list.append(Prereq(label: "Codex CLI installed", met: detections[.codexCLI]?.installed == true, fix: "Install via npm: `npm i -g @openai/codex`"))
         }
         return list
     }
@@ -970,6 +974,12 @@ struct ConfigureAgentsViewV2: View {
                 "Open Windsurf at least once so ~/.codeium/windsurf/ is created.",
                 "Folder ~/.codeium/windsurf/ writable."
             ]
+        case .codexCLI:
+            return [
+                "OpenAI Codex CLI installed (`npm i -g @openai/codex`).",
+                "Run `codex` once so ~/.codex/ is created.",
+                "Hooks written to ~/.codex/hooks.json; feature flag `codex_hooks = true` added to ~/.codex/config.toml."
+            ]
         }
     }
 
@@ -980,6 +990,7 @@ struct ConfigureAgentsViewV2: View {
         case .vscode:     return "VS Code reads ~/.claude/settings.json natively"
         case .copilotCLI: return "Per-project .github/hooks/doomcoder.json (bash/cwd/timeoutSec)"
         case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
+        case .codexCLI:   return "Hooks in ~/.codex/hooks.json + codex_hooks feature flag"
         }
     }
 
@@ -990,6 +1001,7 @@ struct ConfigureAgentsViewV2: View {
         case .vscode:     return "~/.claude/settings.json"
         case .copilotCLI: return ".github/hooks/doomcoder.json"
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
+        case .codexCLI:   return "~/.codex/hooks.json"
         }
     }
 

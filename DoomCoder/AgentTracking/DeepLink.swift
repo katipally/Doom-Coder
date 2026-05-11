@@ -73,6 +73,9 @@ enum DeepLink {
             } else {
                 openFileInDefaultEditor(hookFile)
             }
+
+        case .codexCLI:
+            openFileInDefaultEditor(AgentInstallerV2.codexHooksPath())
         }
     }
 
