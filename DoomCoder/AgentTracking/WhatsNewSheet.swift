@@ -3,6 +3,18 @@ import SwiftUI
 // One-time "What's New" sheets, one struct per release, gated by UserDefaults.
 // Hosted in an NSWindow owned by the AppDelegate (MenuBarExtra can't host sheets).
 
+// Shared helper used by both WhatsNewSheetV2 and WhatsNewSheet.
+@ViewBuilder
+private func featureRow(icon: String, title: String, body: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+        Image(systemName: icon).font(.title3).frame(width: 28)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.headline)
+            Text(body).foregroundStyle(.secondary).font(.callout)
+        }
+    }
+}
+
 // MARK: - v2.0.0 — Windsurf, notification polish, false-positive fix
 
 struct WhatsNewSheetV2: View {
@@ -31,7 +43,7 @@ struct WhatsNewSheetV2: View {
             HStack {
                 Button("Open Configure Agents") {
                     UserDefaults.standard.set(true, forKey: Self.defaultsKey)
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.activate()
                     openWindow(id: "configureAgents")
                     onDismiss()
                 }
@@ -45,17 +57,6 @@ struct WhatsNewSheetV2: View {
         }
         .padding(24)
         .frame(width: 520, height: 460, alignment: .topLeading)
-    }
-
-    @ViewBuilder
-    private func featureRow(icon: String, title: String, body: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).font(.title3).frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(body).foregroundStyle(.secondary).font(.callout)
-            }
-        }
     }
 }
 
@@ -90,7 +91,7 @@ struct WhatsNewSheet: View {
             HStack {
                 Button("Open Configure Agents") {
                     UserDefaults.standard.set(true, forKey: Self.defaultsKey)
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.activate()
                     openWindow(id: "configureAgents")
                     onDismiss()
                 }
@@ -104,17 +105,6 @@ struct WhatsNewSheet: View {
         }
         .padding(24)
         .frame(width: 520, height: 440, alignment: .topLeading)
-    }
-
-    @ViewBuilder
-    private func featureRow(icon: String, title: String, body: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).font(.title3).frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(body).foregroundStyle(.secondary).font(.callout)
-            }
-        }
     }
 }
 

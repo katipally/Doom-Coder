@@ -15,7 +15,7 @@ struct TrackAgentsView: View {
     @State private var installed: [TrackedAgent: Bool] = [:]
     @State private var cliFolderCount: Int = 0
     @State private var tick = 0
-    private let refreshTimer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+    @State private var refreshTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,8 +33,24 @@ struct TrackAgentsView: View {
             footer
         }
         .frame(width: 420, height: 420)
-        .onAppear { reload() }
-        .onReceive(refreshTimer) { _ in tick &+= 1; reload() }
+        .onAppear {
+            reload()
+            refreshTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    guard !Task.isCancelled else { break }
+                    tick &+= 1
+                    reload()
+                }
+            }
+        }
+        .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
+            reload()
+        }
     }
 
     // MARK: - Pieces
@@ -189,7 +205,7 @@ struct TrackAccordion: View {
     @State private var installed: [TrackedAgent: Bool] = [:]
     @State private var cliFolderCount: Int = 0
     @State private var tick = 0
-    private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    @State private var refreshTask: Task<Void, Never>? = nil
 
     var openConfigure: () -> Void = {}
 
@@ -214,8 +230,24 @@ struct TrackAccordion: View {
                 }
             }
         }
-        .onAppear { reload() }
-        .onReceive(refreshTimer) { _ in tick &+= 1; reload() }
+        .onAppear {
+            reload()
+            refreshTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { break }
+                    tick &+= 1
+                    reload()
+                }
+            }
+        }
+        .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
+            reload()
+        }
     }
 
     @ViewBuilder
@@ -255,6 +287,7 @@ struct TrackAccordion: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture {
+            guard installed[agent] == true else { return }
             let v = !(enabled[agent] ?? true)
             withAnimation(DCAnim.snap) {
                 enabled[agent] = v

@@ -302,12 +302,13 @@ struct LogsView: View {
 
     private func agentColor(_ agent: String) -> Color {
         switch agent.lowercased() {
-        case "claude":     return .orange
-        case "cursor":     return .blue
-        case "vscode":     return .purple
+        case "claude":      return .orange
+        case "cursor":      return .blue
+        case "vscode":      return .purple
         case "copilot_cli": return .green
-        case "windsurf":   return Color(red: 0, green: 0.67, blue: 1)
-        default:           return .gray
+        case "windsurf":    return Color(red: 0, green: 0.67, blue: 1)
+        case "codex_cli":   return Color(red: 0.4, green: 0.2, blue: 1.0)
+        default:            return .gray
         }
     }
 

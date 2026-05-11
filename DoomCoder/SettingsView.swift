@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var sleepManager: SleepManager
     @Environment(\.openWindow) private var openWindow
+    @State private var ntfyRegenerated = false
 
     var body: some View {
         Form {
@@ -53,11 +54,25 @@ struct SettingsView: View {
                 }
                 HStack {
                     Button("Open Configure Agents…") {
-                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        NSApplication.shared.activate()
                         openWindow(id: "configureAgents")
                     }
                     Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
-                    Button("Regenerate ntfy topic") { _ = NtfyTopic.regenerate() }
+                    Button {
+                        _ = NtfyTopic.regenerate()
+                        ntfyRegenerated = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            ntfyRegenerated = false
+                        }
+                    } label: {
+                        if ntfyRegenerated {
+                            Label("Regenerated", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Text("Regenerate ntfy topic")
+                        }
+                    }
                 }
                 .buttonStyle(.bordered)
             }

@@ -14,7 +14,7 @@ final class NotificationDispatcher {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "notify")
     private var lastDispatchAt: [String: Date] = [:]
-    private let dedupeWindow: TimeInterval = 5
+    private let dedupeWindow: TimeInterval = 10
 
     // Cached permission status. Updated by `refreshPermissionStatus()` on
     // launch, on channel-toggle, and when the app becomes active.
@@ -101,14 +101,23 @@ final class NotificationDispatcher {
             return
         }
 
-        let key = "\(ev.sessionKey)::\(ev.event)"
+        // Compute display content BEFORE building the dedup key.
+        // Claude Code fires both PreToolUse and Notification hooks for the same
+        // permission prompt — different raw event names but identical title + body.
+        // Keying on rendered content collapses them into a single dispatch.
+        let title = titleFor(ev)
+        let body  = bodyFor(ev)
+        let key = "\(ev.sessionKey)::\(ev.phase.rawValue)::\(title)::\(body)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow {
             return
         }
         lastDispatchAt[key] = Date()
 
-        let title = titleFor(ev)
-        let body = bodyFor(ev)
+        // Prune stale entries to prevent unbounded dictionary growth across long sessions.
+        if lastDispatchAt.count > 100 {
+            let staleThreshold = dedupeWindow * 8
+            lastDispatchAt = lastDispatchAt.filter { Date().timeIntervalSince($0.value) < staleThreshold }
+        }
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
         let ts = Date().timeIntervalSince1970
 
@@ -263,10 +272,10 @@ final class NotificationDispatcher {
                     }
                 }
             }
-            // 50 ms stagger between posts so macOS preserves our enqueue
+            // 20 ms stagger between posts so macOS preserves our enqueue
             // order even under rapid bursts (session start → tool call →
             // session end arriving within the same runloop tick).
-            Thread.sleep(forTimeInterval: 0.05)
+            Thread.sleep(forTimeInterval: 0.02)
         }
     }
 
