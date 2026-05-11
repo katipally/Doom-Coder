@@ -10,6 +10,7 @@ struct LogsView: View {
         case vscode = "VS Code"
         case copilot = "Copilot"
         case windsurf = "Windsurf"
+        case codex = "Codex"
         case notifications = "🔔"
         var id: String { rawValue }
     }
@@ -332,6 +333,7 @@ struct LogsView: View {
         case .vscode:        return TrackedAgent.vscode.rawValue
         case .copilot:       return TrackedAgent.copilotCLI.rawValue
         case .windsurf:      return TrackedAgent.windsurf.rawValue
+        case .codex:         return TrackedAgent.codexCLI.rawValue
         case .all, .notifications: return nil
         }
     }

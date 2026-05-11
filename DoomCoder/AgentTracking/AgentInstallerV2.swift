@@ -98,6 +98,7 @@ struct AgentInstallerV2 {
             case .vscode:     try installVSCode()
             case .copilotCLI: try installCopilotCLI(folder: folder)
             case .windsurf:   try installWindsurf()
+            case .codexCLI:   try installCodexCLI()
             }
             try verifyInstalled(agent: agent, at: path)
             let postHash = sha256(of: path) ?? "?"
@@ -194,6 +195,8 @@ struct AgentInstallerV2 {
             return fileContainsDcHookFor(agent: "cursor", at: cursorHooksPath())
         case .windsurf:
             return fileContainsDcHookFor(agent: "windsurf", at: windsurfHooksPath())
+        case .codexCLI:
+            return fileContainsDcHookFor(agent: "codex_cli", at: codexHooksPath())
         }
     }
 
@@ -210,6 +213,7 @@ struct AgentInstallerV2 {
         case .cursor:     return cursorHooksPath()
         case .vscode:     return claudeSettingsPath() // VSCode reads ~/.claude/settings.json natively
         case .windsurf:   return windsurfHooksPath()
+        case .codexCLI:   return codexHooksPath()
         case .copilotCLI:
             let base = folder ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             return base.appendingPathComponent(".github/hooks/doomcoder.json").path
@@ -219,6 +223,8 @@ struct AgentInstallerV2 {
     static func claudeSettingsPath() -> String { NSHomeDirectory() + "/.claude/settings.json" }
     static func cursorHooksPath()   -> String { NSHomeDirectory() + "/.cursor/hooks.json" }
     static func windsurfHooksPath() -> String { NSHomeDirectory() + "/.codeium/windsurf/hooks.json" }
+    static func codexHooksPath()    -> String { NSHomeDirectory() + "/.codex/hooks.json" }
+    static func codexConfigPath()   -> String { NSHomeDirectory() + "/.codex/config.toml" }
 
     // MARK: - Public verification
 
@@ -365,6 +371,78 @@ struct AgentInstallerV2 {
         try writeJSON(root, to: path, needsVersion: false)
     }
 
+    /// Codex CLI uses `~/.codex/hooks.json` with a nested matcher format
+    /// (same shape as Claude). Each event maps to an array of matcher groups,
+    /// each containing `hooks: [{ type: "command", command: "..." }]`.
+    /// Also requires `[features] codex_hooks = true` in `~/.codex/config.toml`.
+    private static func installCodexCLI() throws {
+        let path = codexHooksPath()
+        try ensureParentDir(path)
+        var root = readJSON(at: path) ?? [:]
+        backup(path)
+
+        stripDcHookEntries(&root, agentToken: "codex_cli")
+        pruneEmptyContainers(&root)
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        for event in codexEvents {
+            let hookEntry: [String: Any] = [
+                "type": "command",
+                "command": cmdFor("codex_cli", event)
+            ]
+            let matcherGroup: [String: Any] = ["hooks": [hookEntry]]
+            var arr = (hooks[event] as? [[String: Any]]) ?? []
+            arr.append(matcherGroup)
+            hooks[event] = arr
+        }
+        root["hooks"] = hooks
+        try writeJSON(root, to: path, needsVersion: false)
+
+        try ensureCodexFeatureFlag()
+    }
+
+    /// Ensure `[features] codex_hooks = true` is present in `~/.codex/config.toml`.
+    /// Idempotent — preserves all other settings. Uses sentinel comments so
+    /// uninstall can strip our managed block precisely.
+    private static func ensureCodexFeatureFlag() throws {
+        let path = codexConfigPath()
+        try ensureParentDir(path)
+        let existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        let beginMarker = "# doomcoder-managed:codex-features v1 BEGIN"
+        let endMarker = "# doomcoder-managed:codex-features v1 END"
+
+        // Already enabled outside our managed block? Don't touch.
+        if !existing.contains(beginMarker) {
+            let hasFlag = existing.range(
+                of: #"(?m)^\s*codex_hooks\s*=\s*true"#,
+                options: .regularExpression
+            ) != nil
+            if hasFlag { return }
+        }
+
+        // Strip any prior managed block (idempotency)
+        var stripped = existing
+        if let beginRange = stripped.range(of: beginMarker),
+           let endRange = stripped.range(of: endMarker, range: beginRange.upperBound..<stripped.endIndex) {
+            let blockEnd = stripped.index(endRange.upperBound, offsetBy: 0)
+            // Also drop trailing newline after END marker if present
+            var dropEnd = blockEnd
+            if dropEnd < stripped.endIndex, stripped[dropEnd] == "\n" {
+                dropEnd = stripped.index(after: dropEnd)
+            }
+            stripped.removeSubrange(beginRange.lowerBound..<dropEnd)
+        }
+
+        let needsLeadingNewline = !stripped.isEmpty && !stripped.hasSuffix("\n")
+        let block = "\(needsLeadingNewline ? "\n" : "")\(beginMarker)\n[features]\ncodex_hooks = true\n\(endMarker)\n"
+        let final = stripped + block
+
+        if existing != final {
+            backup(path)
+            try final.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+
     private static func installCopilotCLI(folder: URL?) throws {
         guard let folder = folder else {
             throw InstallerError.missingFolder
@@ -441,6 +519,13 @@ struct AgentInstallerV2 {
         "post_cascade_response",
         "post_cascade_response_with_transcript",
         "post_setup_worktree"
+    ]
+
+    // OpenAI Codex CLI hook events (May 2026). Requires `codex_hooks = true`
+    // feature flag in ~/.codex/config.toml.
+    static let codexEvents = [
+        "SessionStart", "PreToolUse", "PermissionRequest",
+        "PostToolUse", "UserPromptSubmit", "Stop"
     ]
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {
@@ -554,6 +639,7 @@ struct AgentInstallerV2 {
         case .vscode:     return vscodeEvents
         case .copilotCLI: return copilotCLIEvents
         case .windsurf:   return windsurfEvents
+        case .codexCLI:   return codexEvents
         }
     }
 
@@ -734,6 +820,7 @@ struct AgentInstallerV2 {
         case .vscode:     return "vscode"
         case .copilotCLI: return "copilot_cli"
         case .windsurf:   return "windsurf"
+        case .codexCLI:   return "codex_cli"
         }
     }
 

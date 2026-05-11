@@ -84,6 +84,23 @@ final class NotificationDispatcher {
         // Honor per-agent Tracking toggle (user opted this agent out).
         guard TrackingStore.isEnabled(ev.agent) else { return }
 
+        // Per-agent burst protection. Prevents tight-loop storms from a stuck
+        // agent. Emits at most one informational notif per depleted window.
+        switch RateLimiter.shared.evaluate(agent: ev.agent) {
+        case .allow:
+            break
+        case .dropped(let emitWarning):
+            if emitWarning {
+                postLocal(
+                    title: "DoomCoder · rate-limited",
+                    body: "Throttling \(ev.agent.displayName) notifications — too many in a short time.",
+                    threadID: "ratelimit::\(ev.agent.rawValue)",
+                    agent: ev.agent
+                )
+            }
+            return
+        }
+
         let key = "\(ev.sessionKey)::\(ev.event)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow {
             return
@@ -134,36 +151,60 @@ final class NotificationDispatcher {
     // MARK: - Copy
 
     private func titleFor(_ ev: Event) -> String {
+        let name = ev.agent.displayName
         switch ev.phase {
-        case .sessionStart:                 return "DoomCoder · started"
-        case .sessionEnd:                   return "DoomCoder · done"
-        case .error, .toolError:            return "DoomCoder · failed"
-        case .permissionNeeded:             return "DoomCoder · needs you"
-        default:                            return "DoomCoder"
+        case .sessionStart:                 return "\(name) · started"
+        case .sessionEnd:                   return "\(name) · done"
+        case .error, .toolError:            return "\(name) · failed"
+        case .permissionNeeded:             return "\(name) · needs you"
+        default:                            return name
         }
     }
 
     private func bodyFor(_ ev: Event) -> String {
-        let name = ev.agent.displayName
+        let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
+        let cwdLabel = session.flatMap { shortCwd($0.cwd) }
+        let lastTool = session?.lastTool
+        let duration = sessionDuration(for: ev.sessionKey)
 
         switch ev.phase {
         case .sessionStart:
-            return name
+            return cwdLabel.map { "Started in \($0)" } ?? "Started"
 
         case .sessionEnd:
-            let duration = sessionDuration(for: ev.sessionKey)
-            return duration.map { "\(name) — done  ·  \($0)" } ?? "\(name) — done"
+            // Prefer "finished editing <file>" when a recent file edit is known,
+            // else "finished using <tool>", else just duration.
+            if let tool = lastTool, !tool.isEmpty {
+                return duration.map { "Finished using \(tool) · \($0)" } ?? "Finished using \(tool)"
+            }
+            if let cwd = cwdLabel {
+                return duration.map { "Finished in \(cwd) · \($0)" } ?? "Finished in \(cwd)"
+            }
+            return duration.map { "Finished · \($0)" } ?? "Finished"
 
         case .error, .toolError:
-            let duration = sessionDuration(for: ev.sessionKey)
-            return duration.map { "\(name) — failed  ·  \($0)" } ?? "\(name) — failed"
+            if let tool = lastTool, !tool.isEmpty {
+                return duration.map { "Failed in \(tool) · \($0)" } ?? "Failed in \(tool)"
+            }
+            return duration.map { "Failed · \($0)" } ?? "Failed"
 
         case .permissionNeeded:
-            return "\(name) — needs you"
+            if let tool = lastTool, !tool.isEmpty {
+                return "Waiting for your approval · \(tool)"
+            }
+            return "Waiting for your approval"
 
         default:
-            return name
+            return ev.agent.displayName
         }
+    }
+
+    /// Short, human-friendly cwd label: "~/foo/bar" → "bar" (last path component).
+    private func shortCwd(_ cwd: String) -> String? {
+        let trimmed = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let last = (trimmed as NSString).lastPathComponent
+        return last.isEmpty ? nil : last
     }
 
     /// Looks up the session in AgentTrackingManager and formats elapsed time since start.

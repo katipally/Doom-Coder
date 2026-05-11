@@ -58,6 +58,9 @@ enum MigrationManager {
             case .windsurf:
                 // New agent — no v1 legacy format exists, nothing to strip
                 break
+            case .codexCLI:
+                // New agent — no v1 legacy format exists, nothing to strip
+                break
             }
 
             // Re-install with correct v2 schema
