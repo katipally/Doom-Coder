@@ -70,9 +70,14 @@ enum IconDownloader {
             let tmp = dest.deletingLastPathComponent()
                 .appendingPathComponent(UUID().uuidString + ".png")
             try data.write(to: tmp, options: .atomic)
-            _ = try? FileManager.default.replaceItem(
-                at: dest, withItemAt: tmp,
-                backupItemName: nil, resultingItemURL: nil)
+            do {
+                _ = try FileManager.default.replaceItem(
+                    at: dest, withItemAt: tmp,
+                    backupItemName: nil, resultingItemURL: nil)
+            } catch {
+                // replaceItem failed — clean up temp so we don't litter the cache dir.
+                try? FileManager.default.removeItem(at: tmp)
+            }
         } catch {
             // Network failure is expected when offline — silent fallback.
         }
