@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] - 2026-05-11 — Remove speculative "may need your attention" notifications
+
+### Changed
+- Removed the inference timer entirely. DoomCoder now only sends notifications
+  for confirmed hook events (session start/end, permission needed, errors).
+  The "DoomCoder · check in — may need your attention" banner, which fired after
+  a configurable timeout when a tool hadn't resolved, has been removed.
+  No more false positives from long compilations, test runs, or background work.
+
+---
+
 ## [2.0.1] - 2026-05-11 — Notification accuracy & false-positive fixes
 
 **Bug-fix release.** Fixes five notification quality issues reported after 2.0.0.
