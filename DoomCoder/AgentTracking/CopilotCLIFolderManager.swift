@@ -48,7 +48,29 @@ enum CopilotCLIFolderManager {
         return result
     }
 
-    /// Uninstall from all registered folders.
+    /// Install hooks in all registered folders that do not yet have them.
+    static func installMissing() {
+        for folder in folders where !AgentInstallerV2.isInstalledCLI(folder: folder) {
+            _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
+        }
+    }
+
+    /// Re-install hooks in every registered folder (overwrites any manual edits).
+    static func reinstallAll() {
+        for folder in folders {
+            _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
+        }
+    }
+
+    /// Remove hooks from all registered folders WITHOUT removing them from the folder list.
+    /// Useful when the user wants to temporarily disable tracking while keeping their folder list.
+    static func uninstallHooksOnly() {
+        for folder in folders {
+            _ = AgentInstallerV2.uninstall(.copilotCLI, folder: folder)
+        }
+    }
+
+    /// Uninstall from all registered folders AND clear the folder list.
     static func uninstallAll() {
         for folder in folders {
             _ = AgentInstallerV2.uninstall(.copilotCLI, folder: folder)

@@ -498,6 +498,55 @@ struct ConfigureAgentsViewV2: View {
                     }
                 }
 
+                // Bulk actions — only shown when at least one folder is registered.
+                // Counts are recomputed each render so buttons auto-adapt to any
+                // manual folder edits the user may have made outside the app.
+                if !cliFolders.isEmpty {
+                    let notInstalled = cliFolders.filter { !AgentInstallerV2.isInstalledCLI(folder: $0) }
+                    let installed = cliFolders.filter { AgentInstallerV2.isInstalledCLI(folder: $0) }
+
+                    Divider()
+
+                    HStack(spacing: 6) {
+                        // Install All — only hits folders that are missing hooks.
+                        Button {
+                            CopilotCLIFolderManager.installMissing()
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
+                        } label: {
+                            Label("Install All (\(notInstalled.count))", systemImage: "arrow.down.circle")
+                        }
+                        .controlSize(.small)
+                        .disabled(notInstalled.isEmpty)
+                        .help(notInstalled.isEmpty
+                              ? "All folders already have hooks installed"
+                              : "Install hooks in \(notInstalled.count) folder\(notInstalled.count == 1 ? "" : "s") that are missing them")
+
+                        // Reinstall All — force-writes hooks to every registered folder.
+                        Button {
+                            CopilotCLIFolderManager.reinstallAll()
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
+                        } label: {
+                            Label("Reinstall All (\(cliFolders.count))", systemImage: "arrow.counterclockwise.circle")
+                        }
+                        .controlSize(.small)
+                        .help("Overwrite and refresh hooks in all \(cliFolders.count) registered folder\(cliFolders.count == 1 ? "" : "s")")
+
+                        // Remove All — uninstalls hooks from every folder that has them,
+                        // but keeps the folder list intact so the user can reinstall later.
+                        Button(role: .destructive) {
+                            CopilotCLIFolderManager.uninstallHooksOnly()
+                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
+                        } label: {
+                            Label("Remove All (\(installed.count))", systemImage: "xmark.circle")
+                        }
+                        .controlSize(.small)
+                        .disabled(installed.isEmpty)
+                        .help(installed.isEmpty
+                              ? "No folders have hooks installed"
+                              : "Remove hooks from \(installed.count) folder\(installed.count == 1 ? "" : "s") — folder registrations are kept")
+                    }
+                }
+
                 Divider()
 
                 HStack(spacing: 8) {
