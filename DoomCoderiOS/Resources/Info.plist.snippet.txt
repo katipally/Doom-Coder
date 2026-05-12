@@ -1,0 +1,28 @@
+<!-- Snippet — paste into the iOS app target's Info.plist via Xcode's plist editor or source view. -->
+<key>NSSupportsLiveActivities</key>
+<true/>
+<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+<true/>
+<key>ITSAppUsesNonExemptEncryption</key>
+<false/>
+<key>NSUserActivityTypes</key>
+<array>
+    <string>com.doomcoder.ios.sessionDetail</string>
+</array>
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key>
+        <string>com.doomcoder.ios.deeplink</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>doomcoder</string>
+        </array>
+    </dict>
+</array>
+<key>UIBackgroundModes</key>
+<array>
+    <string>remote-notification</string>
+</array>
+<key>NSUserTrackingUsageDescription</key>
+<string>Doom Coder does not track you. This entry is required only if you add SDKs that request tracking; otherwise it is unused.</string>

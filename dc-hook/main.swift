@@ -11,7 +11,8 @@ import Foundation
 import Darwin
 #endif
 
-let kVersion = "1"
+let kVersion = "3"
+let kSchemaVersion = "3.0.0"
 let kSocketName = "hook.sock"
 let kSupportDirName = "DoomCoder"
 let kHardTimeoutSeconds: UInt32 = 5
@@ -101,17 +102,32 @@ func sendFrame(_ data: Data) -> Bool {
     return written == data.count
 }
 
+func cwdHashSuffix(_ cwd: String) -> String {
+    var h: UInt32 = 2166136261
+    for b in cwd.utf8 {
+        h ^= UInt32(b)
+        h = h &* 16777619
+    }
+    return String(format: "%06x", h & 0xFFFFFF)
+}
+
+func macHostname() -> String { ProcessInfo.processInfo.hostName }
+
 func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: Any], synthetic: Bool = false) -> Bool {
-    // Use parent PID — dc-hook is a new process per invocation, so getpid()
-    // yields a different value every time. getppid() returns the agent
-    // process that invoked us, giving a stable identity within a session.
+    let cwd = FileManager.default.currentDirectoryPath
     var envelope: [String: Any] = [
         "v": kVersion,
+        "schemaVersion": kSchemaVersion,
         "agent": agent,
         "event": event,
-        "cwd": FileManager.default.currentDirectoryPath,
+        "hookPhase": event,
+        "cwd": cwd,
+        "cwdBasename": (cwd as NSString).lastPathComponent,
+        "cwdHashSuffix": cwdHashSuffix(cwd),
+        "macHostname": macHostname(),
         "pid": Int(getppid()),
         "ts": Date().timeIntervalSince1970,
+        "wantsBlockingReply": false,
         "payload": payload
     ]
     if synthetic { envelope["synthetic"] = true }
@@ -363,8 +379,9 @@ func replayDemo(agent: String) -> Int32 {
 }
 
 func runMain() -> Int32 {
-    // Don't use hard alarm for demos (they take 30s)
-    if !flagPresent("replay-demo") {
+    let waitable = flagPresent("waitable")
+    // Don't use hard alarm for demos (they take 30s) or waitable approvals (up to 30s)
+    if !flagPresent("replay-demo") && !waitable {
         signal(SIGALRM) { _ in _exit(0) }
         alarm(kHardTimeoutSeconds)
     }
@@ -403,8 +420,67 @@ func runMain() -> Int32 {
         }
     }
 
+    if waitable {
+        return runWaitable(agent: agent, event: event, payload: payloadJSON)
+    }
+
     _ = sendEnvelope(agent: agent, event: event, payload: payloadJSON)
     return 0
 }
+
+/// Waitable approval path (Phase 4). Sends an envelope with wantsBlockingReply=true
+/// + requestId, then polls ~/Library/Application Support/DoomCoder/approvals/<rid>.json
+/// up to ~30 seconds. Returns:
+///   0 → approve / always / timeout (failsafe allow)
+///   2 → deny  (Claude PreToolUse convention: block tool)
+func runWaitable(agent: String, event: String, payload: Any) -> Int32 {
+    let rid = generateRequestId()
+    let cwd = FileManager.default.currentDirectoryPath
+    let envelope: [String: Any] = [
+        "v": kVersion,
+        "schemaVersion": kSchemaVersion,
+        "agent": agent,
+        "event": event,
+        "hookPhase": event,
+        "cwd": cwd,
+        "cwdBasename": (cwd as NSString).lastPathComponent,
+        "cwdHashSuffix": cwdHashSuffix(cwd),
+        "macHostname": macHostname(),
+        "pid": Int(getppid()),
+        "ts": Date().timeIntervalSince1970,
+        "wantsBlockingReply": true,
+        "requestId": rid,
+        "payload": payload
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: envelope, options: []) {
+        _ = sendFrame(data)
+    }
+    // Poll approval file every 250ms for up to 30 seconds.
+    let approvalPath = "\(supportDir())/approvals/\(rid).json"
+    let deadline = Date().addingTimeInterval(30)
+    while Date() < deadline {
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: approvalPath)),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let decision = obj["decision"] as? String {
+            try? FileManager.default.removeItem(atPath: approvalPath)
+            switch decision {
+            case "deny":
+                FileHandle.standardError.write("[dc-hook] denied by user via iOS\n".data(using: .utf8) ?? Data())
+                return 2
+            default:
+                return 0
+            }
+        }
+        usleep(250_000)
+    }
+    return 0
+}
+
+func generateRequestId() -> String {
+    let lo = UInt64.random(in: 0...UInt64.max)
+    let hi = UInt64.random(in: 0...UInt64.max)
+    return String(format: "%016llx%016llx", hi, lo)
+}
+
 
 exit(runMain())

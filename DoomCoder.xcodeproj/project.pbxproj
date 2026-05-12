@@ -46,6 +46,11 @@
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
+		DC0000000000002000000103 /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* FeatureFlags.swift */; };
+		DC0000000000002000000104 /* CloudKitSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* CloudKitSchema.swift */; };
+		DC0000000000002000000105 /* CloudKitPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000105 /* CloudKitPublisher.swift */; };
+		DC0000000000002000000106 /* ApprovalCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000106 /* ApprovalCoordinator.swift */; };
+		DC0000000000002000000107 /* SettingsSyncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000107 /* SettingsSyncer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +95,11 @@
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
+		DC0000000000001000000103 /* FeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlags.swift; sourceTree = "<group>"; };
+		DC0000000000001000000104 /* CloudKitSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSchema.swift; sourceTree = "<group>"; };
+		DC0000000000001000000105 /* CloudKitPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPublisher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000106 /* ApprovalCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalCoordinator.swift; sourceTree = "<group>"; };
+		DC0000000000001000000107 /* SettingsSyncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSyncer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +173,11 @@
 				DC0000000000001000000100 /* PIDLiveness.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
 				DC0000000000001000000102 /* IconDownloader.swift */,
+				DC0000000000001000000103 /* FeatureFlags.swift */,
+				DC0000000000001000000104 /* CloudKitSchema.swift */,
+				DC0000000000001000000105 /* CloudKitPublisher.swift */,
+				DC0000000000001000000106 /* ApprovalCoordinator.swift */,
+				DC0000000000001000000107 /* SettingsSyncer.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -312,6 +327,11 @@
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
+				DC0000000000002000000103 /* FeatureFlags.swift in Sources */,
+				DC0000000000002000000104 /* CloudKitSchema.swift in Sources */,
+				DC0000000000002000000105 /* CloudKitPublisher.swift in Sources */,
+				DC0000000000002000000106 /* ApprovalCoordinator.swift in Sources */,
+				DC0000000000002000000107 /* SettingsSyncer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -443,8 +463,8 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 3000;
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
@@ -452,7 +472,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -467,8 +487,8 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 3000;
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
@@ -476,7 +496,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

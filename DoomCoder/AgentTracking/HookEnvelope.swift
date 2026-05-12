@@ -12,6 +12,15 @@ struct HookEnvelope: Sendable {
     let synthetic: Bool
     let payloadRaw: Data?
 
+    let schemaVersion: String?
+    let agentVariant: String?
+    let macHostname: String?
+    let cwdBasename: String?
+    let cwdHashSuffix: String?
+    let hookPhase: String?
+    let wantsBlockingReply: Bool
+    let requestId: String?
+
     var payloadDict: [String: Any]? {
         guard let d = payloadRaw else { return nil }
         return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
@@ -30,7 +39,18 @@ struct HookEnvelope: Sendable {
         if let p = obj["payload"] {
             payloadRaw = try? JSONSerialization.data(withJSONObject: p, options: [])
         }
-        return HookEnvelope(v: v, agent: agent, event: event, cwd: cwd, pid: pid, ts: ts, synthetic: synthetic, payloadRaw: payloadRaw)
+        return HookEnvelope(
+            v: v, agent: agent, event: event, cwd: cwd, pid: pid, ts: ts,
+            synthetic: synthetic, payloadRaw: payloadRaw,
+            schemaVersion: obj["schemaVersion"] as? String,
+            agentVariant: obj["agentVariant"] as? String,
+            macHostname: obj["macHostname"] as? String,
+            cwdBasename: obj["cwdBasename"] as? String,
+            cwdHashSuffix: obj["cwdHashSuffix"] as? String,
+            hookPhase: obj["hookPhase"] as? String,
+            wantsBlockingReply: (obj["wantsBlockingReply"] as? Bool) ?? false,
+            requestId: obj["requestId"] as? String
+        )
     }
 }
 
@@ -72,7 +92,10 @@ enum NotificationPolicy {
         let envelope = HookEnvelope(
             v: "1", agent: agent.rawValue, event: event,
             cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
-            synthetic: false, payloadRaw: nil
+            synthetic: false, payloadRaw: nil,
+            schemaVersion: nil, agentVariant: nil, macHostname: nil,
+            cwdBasename: nil, cwdHashSuffix: nil, hookPhase: nil,
+            wantsBlockingReply: false, requestId: nil
         )
         if let normalized = EventNormalizerRegistry.normalize(envelope: envelope) {
             return isNotifiable(phase: normalized.phase)

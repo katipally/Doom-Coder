@@ -179,6 +179,9 @@ final class AgentTrackingManager {
             payload: payloadString
         )
 
+        publishToCloudKit(envelope: env, normalized: normalized, session: s, sessionKey: sessionKey, payloadString: payloadString)
+        ApprovalCoordinator.shared.handleIfNeeded(envelope: env)
+
         // Notification dispatch — uses user-configurable phase preferences
         // Suppress sessionEnd notifications when the agent PID is dead — this
         // means the user already quit (Cmd+Q) before the final Stop/sessionEnd
@@ -209,6 +212,81 @@ final class AgentTrackingManager {
         }
     }
 
+    // MARK: - CloudKit bridge
+
+    private func publishToCloudKit(envelope env: HookEnvelope,
+                                    normalized: NormalizedHookEvent,
+                                    session s: Session,
+                                    sessionKey: String,
+                                    payloadString: String?) {
+        guard FeatureFlags.cloudKitEnabled else { return }
+
+        let now = normalized.timestamp
+        let cwd = s.cwd
+        let basename = (cwd as NSString).lastPathComponent
+        let suffix = env.cwdHashSuffix ?? CloudKitHash.fnv1a6(cwd)
+        let hostname = env.macHostname ?? ProcessInfo.processInfo.hostName
+        let phase = env.hookPhase ?? normalized.phase.rawValue
+        let expiresEvent = now.addingTimeInterval(7 * 24 * 3600)
+
+        let event = CKAgentEvent(
+            sessionKey: sessionKey,
+            agent: normalized.agent.rawValue,
+            agentVariant: env.agentVariant,
+            macHostname: hostname,
+            cwdBasename: basename,
+            cwdHashSuffix: suffix,
+            hookPhase: phase,
+            occurredAt: now,
+            payloadJSON: payloadString ?? "{}",
+            expiresAt: expiresEvent
+        )
+
+        let status: CKSessionAggregate.Status = {
+            if s.hasFailed { return .failed }
+            if s.hasEnded { return .completed }
+            if s.awaitingPermission { return .waitingApproval }
+            return .running
+        }()
+        let filesEdited = (s.toolCounts["Edit"] ?? 0)
+            + (s.toolCounts["Write"] ?? 0)
+            + (s.toolCounts["MultiEdit"] ?? 0)
+
+        let aggregate = CKSessionAggregate(
+            sessionKey: sessionKey,
+            agent: normalized.agent.rawValue,
+            agentVariant: env.agentVariant,
+            macHostname: hostname,
+            cwdBasename: basename,
+            cwdHashSuffix: suffix,
+            startedAt: s.startedAt,
+            lastEventAt: s.updatedAt,
+            endedAt: s.hasEnded || s.hasFailed ? s.updatedAt : nil,
+            status: status,
+            currentTool: s.lastTool,
+            totalToolCalls: s.toolCallCount,
+            totalFilesEdited: filesEdited,
+            totalErrors: s.errorCount,
+            model: nil,
+            promptPreview: nil,
+            expiresAt: s.updatedAt.addingTimeInterval(7 * 24 * 3600)
+        )
+
+        CloudKitPublisher.shared.publish(event: event, aggregate: aggregate)
+    }
+
+}
+
+// FNV-1a 32-bit hash → 6 hex chars (matches dc-hook cwdHashSuffix algorithm).
+enum CloudKitHash {
+    static func fnv1a6(_ s: String) -> String {
+        var h: UInt32 = 2166136261
+        for b in s.utf8 {
+            h ^= UInt32(b)
+            h = h &* 16777619
+        }
+        return String(format: "%06x", h & 0xFFFFFF)
+    }
 }
 
 // UI state enum — derived from SessionAggregate counters/flags.

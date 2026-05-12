@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Bindable var sleepManager: SleepManager
     @Environment(\.openWindow) private var openWindow
     @State private var ntfyRegenerated = false
+    @State private var cloudKitTestResult: String?
 
     var body: some View {
         Form {
@@ -75,6 +76,37 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+            }
+
+            Section("iOS Companion (Beta)") {
+                Toggle("Enable CloudKit sync", isOn: Binding(
+                    get: { FeatureFlags.cloudKitEnabled },
+                    set: { FeatureFlags.cloudKitEnabled = $0; SettingsSyncer.shared.pushLocal() }
+                ))
+                Toggle("Minimal Mode (strip prompt + tool details)", isOn: Binding(
+                    get: { FeatureFlags.minimalMode },
+                    set: { FeatureFlags.minimalMode = $0; SettingsSyncer.shared.pushLocal() }
+                ))
+                HStack {
+                    Button("Send test event") {
+                        cloudKitTestResult = "Sending…"
+                        Task {
+                            let result = await CloudKitPublisher.shared.sendTestEvent()
+                            switch result {
+                            case .success(let name): cloudKitTestResult = "OK · \(name)"
+                            case .failure(let err): cloudKitTestResult = "Failed · \(err.localizedDescription)"
+                            }
+                        }
+                    }
+                    .disabled(!FeatureFlags.cloudKitEnabled)
+                    if let r = cloudKitTestResult {
+                        Text(r).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.bordered)
+                Text("Requires iCloud sign-in. iOS app launches in 3.0.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

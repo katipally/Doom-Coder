@@ -61,6 +61,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             Task { @MainActor in AgentTrackingManager.shared.ingest(env) }
         }
 
+        // Pull synced settings from iCloud on launch (no-op if cloudKitEnabled=false).
+        Task { @MainActor in await SettingsSyncer.shared.pull() }
+
         // Path-heal any installed hooks off the main thread (JSON I/O).
         Task.detached(priority: .utility) {
             AgentInstallerV2.healAllPaths()
