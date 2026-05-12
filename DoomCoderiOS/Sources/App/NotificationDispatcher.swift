@@ -42,6 +42,31 @@ final class NotificationDispatcher {
         try? await UNUserNotificationCenter.current().add(req)
     }
 
+    /// Deliver an approval notification sourced from a `CKSessionAggregate`
+    /// (macOS writes approval state into the aggregate, not a separate ApprovalRequest record).
+    func deliverApprovalFromAggregate(_ agg: CKSessionAggregate) async {
+        guard let rid = agg.pendingRequestId else { return }
+        let displayName = agentDisplayName(agg.agent)
+        let tool = agg.currentTool ?? "a tool"
+
+        let content = UNMutableNotificationContent()
+        content.title = "\(displayName) is waiting for approval"
+        content.body = "\(tool) in \(agg.cwdBasename) needs your go-ahead"
+        content.sound = .default
+        content.relevanceScore = 1.0
+        content.threadIdentifier = "\(agg.agent)::approval"
+        content.categoryIdentifier = "APPROVAL_REQUEST"
+        content.userInfo = [
+            "requestId": rid,
+            "agent": agg.agent,
+            "toolName": tool,
+            "sessionKey": agg.sessionKey
+        ]
+
+        let req = UNNotificationRequest(identifier: "approval.\(agg.sessionKey)", content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(req)
+    }
+
     func deliverFailure(agent: String, cwd: String, tool: String, exitCode: Int, durationMs: Int) async {
         let content = UNMutableNotificationContent()
         content.title = "\(agentDisplayName(agent)) failed in \(cwd)"

@@ -138,14 +138,7 @@ struct SessionCard: View {
 
     private var headerRow: some View {
         HStack(alignment: .center, spacing: 10) {
-            // Agent icon with brand ring
-            ZStack {
-                Circle().fill(brandColor.opacity(0.18))
-                Image(systemName: agentSFSymbol(row.agent))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(brandColor)
-            }
-            .frame(width: 32, height: 32)
+            AgentBrandIcon(agent: row.agent, size: 32)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(agentDisplayName(row.agent))
@@ -199,7 +192,7 @@ struct SessionCard: View {
                 HStack(spacing: 8) {
                     Button {
                         Task {
-                            let uuid = UserDefaults.standard.string(forKey: "device.uuid") ?? UUID().uuidString
+                            let uuid = DevicePresenceUpdater.shared.deviceUUID()
                             try? await CloudKitClient.shared.writeApprovalResponse(
                                 requestId: rid, decision: "approve", deviceUUID: uuid)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -213,7 +206,7 @@ struct SessionCard: View {
 
                     Button {
                         Task {
-                            let uuid = UserDefaults.standard.string(forKey: "device.uuid") ?? UUID().uuidString
+                            let uuid = DevicePresenceUpdater.shared.deviceUUID()
                             try? await CloudKitClient.shared.writeApprovalResponse(
                                 requestId: rid, decision: "deny", deviceUUID: uuid)
                             UINotificationFeedbackGenerator().notificationOccurred(.warning)

@@ -130,13 +130,13 @@ struct HistoryTab: View {
 private extension SessionStore.SessionRow {
     var cellView: some View {
         HStack(spacing: 10) {
-            ZStack {
+            ZStack(alignment: .bottomTrailing) {
+                AgentBrandIcon(agent: agent, size: 28)
                 Circle()
-                    .fill(cellStatusColor.opacity(0.15))
-                    .frame(width: 28, height: 28)
-                Image(systemName: cellStatusSystemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(cellStatusColor)
+                    .fill(cellStatusColor)
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().strokeBorder(.black.opacity(0.25), lineWidth: 0.5))
+                    .offset(x: 2, y: 2)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(cellAgentDisplayName).font(.subheadline.bold())

@@ -1,6 +1,9 @@
 import Foundation
 import CloudKit
+import OSLog
 import UIKit
+
+private let ckLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "DoomCoderiOS", category: "CloudKitSubs")
 
 @MainActor
 final class CloudKitSubscriptionHandler {
@@ -25,9 +28,16 @@ final class CloudKitSubscriptionHandler {
         do {
             try await CloudKitClient.shared.modifySubscriptions(saving: subs)
             defaults.set(true, forKey: keyRegistered)
+            ckLog.info("CloudKit subscriptions registered successfully")
         } catch {
-            // Will retry on next launch
+            ckLog.error("CloudKit subscription registration failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Force re-registration (e.g., after account change or explicit user reset).
+    func forceReRegister() async {
+        defaults.removeObject(forKey: keyRegistered)
+        await registerAll()
     }
 
     private func buildSubscription(recordType: String,
@@ -65,17 +75,45 @@ final class PushReceiver {
             switch rec.recordType {
             case CloudKitSchema.RecordType.sessionAggregate:
                 if let agg = decodeAggregate(rec) {
+                    // Capture previous status before upsert so we can detect transitions.
+                    let prevStatus = SessionStore.shared.liveSessions.first { $0.id == agg.sessionKey }?.status
                     SessionStore.shared.upsert(agg)
                     await LiveActivityManager.shared.update(with: agg)
+                    await dispatchStatusNotification(agg: agg, previousStatus: prevStatus)
                 }
             case CloudKitSchema.RecordType.approvalRequest:
+                // macOS does not write ApprovalRequest CKRecords; approvals come via sessionAggregate.
+                // Kept here for forward-compatibility.
                 await NotificationDispatcher.shared.deliverApproval(recordName: recordName, record: rec)
             case CloudKitSchema.RecordType.userSettings:
                 SettingsSyncer.shared.applyRemote(rec)
             default: break
             }
         } catch {
-            // ignore push for already-deleted records
+            ckLog.debug("Push record fetch failed (likely already deleted): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func dispatchStatusNotification(agg: CKSessionAggregate,
+                                            previousStatus: CKSessionAggregate.Status?) async {
+        let settings = IOSUserSettings.shared
+        switch agg.status {
+        case .waitingApproval where previousStatus != .waitingApproval:
+            guard settings.notifyApprovals else { return }
+            await NotificationDispatcher.shared.deliverApprovalFromAggregate(agg)
+        case .failed where previousStatus == .running || previousStatus == .waitingApproval:
+            guard settings.notifyFailures else { return }
+            let durationMs = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt) * 1000)
+            await NotificationDispatcher.shared.deliverFailure(
+                agent: agg.agent, cwd: agg.cwdBasename,
+                tool: agg.currentTool ?? "unknown", exitCode: -1, durationMs: durationMs)
+        case .completed where previousStatus == .running || previousStatus == .waitingApproval:
+            guard settings.notifySessionSummaries else { return }
+            let durationSec = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt))
+            await NotificationDispatcher.shared.deliverSummary(
+                agent: agg.agent, cwd: agg.cwdBasename,
+                toolCalls: agg.totalToolCalls, filesEdited: agg.totalFilesEdited, durationSec: durationSec)
+        default: break
         }
     }
 
@@ -105,7 +143,8 @@ final class PushReceiver {
             totalErrors: (rec["totalErrors"] as? Int) ?? 0,
             model: rec["model"] as? String,
             promptPreview: rec["promptPreview"] as? String,
-            expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400)
+            expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400),
+            pendingRequestId: rec["pendingRequestId"] as? String
         )
     }
 }

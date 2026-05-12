@@ -7,13 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DC0000000000012000000000 /* DoomCoderiOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000011000000001 /* DoomCoderiOSTests.swift */; };
-		DC0000000000002000000200 /* DoomCoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* DoomCoderTests.swift */; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
-		DC0000000000002000000098 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000098 /* PrivacyInfo.xcprivacy */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
 		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
@@ -45,6 +42,7 @@
 		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
 		DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000050 /* AccessibilityPermission.swift */; };
 		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
+		DC0000000000002000000098 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000098 /* PrivacyInfo.xcprivacy */; };
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
@@ -53,21 +51,13 @@
 		DC0000000000002000000105 /* CloudKitPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000105 /* CloudKitPublisher.swift */; };
 		DC0000000000002000000106 /* ApprovalCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000106 /* ApprovalCoordinator.swift */; };
 		DC0000000000002000000107 /* SettingsSyncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000107 /* SettingsSyncer.swift */; };
+		DC0000000000002000000200 /* DoomCoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* DoomCoderTests.swift */; };
+		DC0000000000012000000000 /* DoomCoderiOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000011000000001 /* DoomCoderiOSTests.swift */; };
 		DCFD000000000002FFFF0001 /* DoomCoderActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0002 /* DoomCoderActivityWidget.swift */; };
 		DCFD000000000002FFFF0002 /* DoomCoderActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */; };
 		DCFD000000000002FFFF0003 /* ApprovalIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0004 /* ApprovalIntents.swift */; };
 		DCFD000000000002FFFF0004 /* DoomCoderWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0001 /* DoomCoderWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		DCFD000000000007FFFF0001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = DC0000000000008000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = DCFD000000000004FFFF0001;
-			remoteInfo = DoomCoderWidget;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXContainerItemProxy section */
 		DC0000000000006500000001 /* PBXContainerItemProxy */ = {
@@ -77,15 +67,19 @@
 			remoteGlobalIDString = DC0000000000007000000001;
 			remoteInfo = DoomCoder;
 		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXContainerItemProxy section */
 		DC0000000000016500000000 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DC0000000000008000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = DDD1E22F2FB38A3B009381F9;
 			remoteInfo = DoomCoderiOS;
+		};
+		DCFD000000000007FFFF0001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DC0000000000008000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DCFD000000000004FFFF0001;
+			remoteInfo = DoomCoderWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -111,7 +105,6 @@
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
-		DC0000000000001000000098 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
 		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000020 /* HookEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEnvelope.swift; sourceTree = "<group>"; };
@@ -142,6 +135,7 @@
 		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
 		DC0000000000001000000050 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000098 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
@@ -150,15 +144,15 @@
 		DC0000000000001000000105 /* CloudKitPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPublisher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000106 /* ApprovalCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalCoordinator.swift; sourceTree = "<group>"; };
 		DC0000000000001000000107 /* SettingsSyncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSyncer.swift; sourceTree = "<group>"; };
+		DC0000000000001000000200 /* DoomCoderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoomCoderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC0000000000001000000201 /* DoomCoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderTests.swift; sourceTree = "<group>"; };
+		DC0000000000011000000000 /* DoomCoderiOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoomCoderiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC0000000000011000000001 /* DoomCoderiOSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderiOSTests.swift; sourceTree = "<group>"; };
 		DCFD000000000001FFFF0001 /* DoomCoderWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DoomCoderWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCFD000000000001FFFF0002 /* DoomCoderActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DoomCoderActivityWidget.swift; path = DoomCoderiOS/Sources/Widget/DoomCoderActivityWidget.swift; sourceTree = "<group>"; };
 		DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DoomCoderActivityAttributes.swift; path = DoomCoderiOS/Sources/LiveActivity/DoomCoderActivityAttributes.swift; sourceTree = "<group>"; };
 		DCFD000000000001FFFF0004 /* ApprovalIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalIntents.swift; path = DoomCoderiOS/Sources/LiveActivity/ApprovalIntents.swift; sourceTree = "<group>"; };
 		DDD1E2302FB38A3B009381F9 /* DoomCoderiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoderiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DC0000000000001000000200 /* DoomCoderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoomCoderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DC0000000000001000000201 /* DoomCoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderTests.swift; sourceTree = "<group>"; };
-		DC0000000000011000000000 /* DoomCoderiOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoomCoderiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DC0000000000011000000001 /* DoomCoderiOSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderiOSTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -184,6 +178,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DC0000000000004000000201 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC0000000000014000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DCFD000000000003FFFF0002 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -192,26 +200,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DDD1E22D2FB38A3B009381F9 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		DC0000000000004000000201 /* Frameworks (DoomCoderTests) */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		DC0000000000014000000001 /* Frameworks (DoomCoderiOSTests) */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -305,16 +293,6 @@
 			path = AgentTracking;
 			sourceTree = "<group>";
 		};
-		DDD1E7372FB393FA009381F9 /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				DCFD000000000001FFFF0002 /* DoomCoderActivityWidget.swift */,
-				DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */,
-				DCFD000000000001FFFF0004 /* ApprovalIntents.swift */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		DC0000000000003000000200 /* DoomCoderTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -329,6 +307,16 @@
 				DC0000000000011000000001 /* DoomCoderiOSTests.swift */,
 			);
 			path = DoomCoderiOSTests;
+			sourceTree = "<group>";
+		};
+		DDD1E7372FB393FA009381F9 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				DCFD000000000001FFFF0002 /* DoomCoderActivityWidget.swift */,
+				DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */,
+				DCFD000000000001FFFF0004 /* ApprovalIntents.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -354,6 +342,44 @@
 			productName = DoomCoder;
 			productReference = DC0000000000001000000001 /* DoomCoder.app */;
 			productType = "com.apple.product-type.application";
+		};
+		DC0000000000007000000200 /* DoomCoderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DC0000000000006000000200 /* Build configuration list for PBXNativeTarget "DoomCoderTests" */;
+			buildPhases = (
+				DC0000000000004000000200 /* Sources */,
+				DC0000000000004000000201 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DC0000000000006500000002 /* PBXTargetDependency */,
+			);
+			name = DoomCoderTests;
+			packageProductDependencies = (
+			);
+			productName = DoomCoderTests;
+			productReference = DC0000000000001000000200 /* DoomCoderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DC0000000000017000000000 /* DoomCoderiOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DC0000000000016000000000 /* Build configuration list for PBXNativeTarget "DoomCoderiOSTests" */;
+			buildPhases = (
+				DC0000000000014000000000 /* Sources */,
+				DC0000000000014000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DC0000000000016500000001 /* PBXTargetDependency */,
+			);
+			name = DoomCoderiOSTests;
+			packageProductDependencies = (
+			);
+			productName = DoomCoderiOSTests;
+			productReference = DC0000000000011000000000 /* DoomCoderiOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		DCFD000000000004FFFF0001 /* DoomCoderWidget */ = {
 			isa = PBXNativeTarget;
@@ -397,44 +423,6 @@
 			productName = DoomCoderiOS;
 			productReference = DDD1E2302FB38A3B009381F9 /* DoomCoderiOS.app */;
 			productType = "com.apple.product-type.application";
-		};
-		DC0000000000007000000200 /* DoomCoderTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = DC0000000000006000000200 /* Build configuration list for PBXNativeTarget "DoomCoderTests" */;
-			buildPhases = (
-				DC0000000000004000000200 /* Sources */,
-				DC0000000000004000000201 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				DC0000000000006500000002 /* PBXTargetDependency */,
-			);
-			name = DoomCoderTests;
-			packageProductDependencies = (
-			);
-			productName = DoomCoderTests;
-			productReference = DC0000000000001000000200 /* DoomCoderTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		DC0000000000017000000000 /* DoomCoderiOSTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = DC0000000000016000000000 /* Build configuration list for PBXNativeTarget "DoomCoderiOSTests" */;
-			buildPhases = (
-				DC0000000000014000000000 /* Sources */,
-				DC0000000000014000000001 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				DC0000000000016500000001 /* PBXTargetDependency */,
-			);
-			name = DoomCoderiOSTests;
-			packageProductDependencies = (
-			);
-			productName = DoomCoderiOSTests;
-			productReference = DC0000000000011000000000 /* DoomCoderiOSTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -589,6 +577,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DC0000000000004000000200 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DC0000000000002000000200 /* DoomCoderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC0000000000014000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DC0000000000012000000000 /* DoomCoderiOSTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DCFD000000000003FFFF0001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -606,33 +610,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		DC0000000000004000000200 /* Sources (DoomCoderTests) */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				DC0000000000002000000200 /* DoomCoderTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXSourcesBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		DC0000000000014000000000 /* Sources (DoomCoderiOSTests) */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				DC0000000000012000000000 /* DoomCoderiOSTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		DCFD000000000007FFFF0002 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = DCFD000000000004FFFF0001 /* DoomCoderWidget */;
-			targetProxy = DCFD000000000007FFFF0001 /* PBXContainerItemProxy */;
-		};
 		DC0000000000006500000002 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DC0000000000007000000001 /* DoomCoder */;
@@ -642,6 +622,11 @@
 			isa = PBXTargetDependency;
 			target = DDD1E22F2FB38A3B009381F9 /* DoomCoderiOS */;
 			targetProxy = DC0000000000016500000000 /* PBXContainerItemProxy */;
+		};
+		DCFD000000000007FFFF0002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DCFD000000000004FFFF0001 /* DoomCoderWidget */;
+			targetProxy = DCFD000000000007FFFF0001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -812,6 +797,80 @@
 			};
 			name = Release;
 		};
+		DC0000000000005000000200 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3000;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				INFOPLIST_FILE = DoomCoderTests/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.tests;
+				PRODUCT_NAME = DoomCoderTests;
+				SDKROOT = macosx;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoder.app/Contents/MacOS/DoomCoder";
+			};
+			name = Debug;
+		};
+		DC0000000000005000000201 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3000;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				INFOPLIST_FILE = DoomCoderTests/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.tests;
+				PRODUCT_NAME = DoomCoderTests;
+				SDKROOT = macosx;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoder.app/Contents/MacOS/DoomCoder";
+			};
+			name = Release;
+		};
+		DC0000000000015000000000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				INFOPLIST_FILE = DoomCoderiOSTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.tests;
+				PRODUCT_NAME = DoomCoderiOSTests;
+				SDKROOT = iphoneos;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoderiOS.app/DoomCoderiOS";
+			};
+			name = Debug;
+		};
+		DC0000000000015000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				INFOPLIST_FILE = DoomCoderiOSTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.tests;
+				PRODUCT_NAME = DoomCoderiOSTests;
+				SDKROOT = iphoneos;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoderiOS.app/DoomCoderiOS";
+			};
+			name = Release;
+		};
 		DCFD000000000005FFFF0001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -960,86 +1019,6 @@
 		};
 /* End XCBuildConfiguration section */
 
-/* Begin XCBuildConfiguration section */
-		DC0000000000005000000200 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3000;
-				DEVELOPMENT_TEAM = A9P2388PHM;
-				INFOPLIST_FILE = DoomCoderTests/Info.plist;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.tests;
-				PRODUCT_NAME = DoomCoderTests;
-				SDKROOT = macosx;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoder.app/Contents/MacOS/DoomCoder";
-			};
-			name = Debug;
-		};
-		DC0000000000005000000201 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3000;
-				DEVELOPMENT_TEAM = A9P2388PHM;
-				INFOPLIST_FILE = DoomCoderTests/Info.plist;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.tests;
-				PRODUCT_NAME = DoomCoderTests;
-				SDKROOT = macosx;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoder.app/Contents/MacOS/DoomCoder";
-			};
-			name = Release;
-		};
-/* End XCBuildConfiguration section */
-
-/* Begin XCBuildConfiguration section */
-		DC0000000000015000000000 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A9P2388PHM;
-				INFOPLIST_FILE = DoomCoderiOSTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.tests;
-				PRODUCT_NAME = DoomCoderiOSTests;
-				SDKROOT = iphoneos;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoderiOS.app/DoomCoderiOS";
-			};
-			name = Debug;
-		};
-		DC0000000000015000000001 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A9P2388PHM;
-				INFOPLIST_FILE = DoomCoderiOSTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.tests;
-				PRODUCT_NAME = DoomCoderiOSTests;
-				SDKROOT = iphoneos;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DoomCoderiOS.app/DoomCoderiOS";
-			};
-			name = Release;
-		};
-/* End XCBuildConfiguration section */
-
 /* Begin XCConfigurationList section */
 		DC0000000000006000000001 /* Build configuration list for PBXProject "DoomCoder" */ = {
 			isa = XCConfigurationList;
@@ -1059,24 +1038,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DCFD000000000006FFFF0001 /* Build configuration list for PBXNativeTarget "DoomCoderWidget" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DCFD000000000005FFFF0001 /* Debug */,
-				DCFD000000000005FFFF0002 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		DDD1E23A2FB38A3C009381F9 /* Build configuration list for PBXNativeTarget "DoomCoderiOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DDD1E2382FB38A3C009381F9 /* Debug */,
-				DDD1E2392FB38A3C009381F9 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		DC0000000000006000000200 /* Build configuration list for PBXNativeTarget "DoomCoderTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1091,6 +1052,24 @@
 			buildConfigurations = (
 				DC0000000000015000000000 /* Debug */,
 				DC0000000000015000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DCFD000000000006FFFF0001 /* Build configuration list for PBXNativeTarget "DoomCoderWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCFD000000000005FFFF0001 /* Debug */,
+				DCFD000000000005FFFF0002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DDD1E23A2FB38A3C009381F9 /* Build configuration list for PBXNativeTarget "DoomCoderiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DDD1E2382FB38A3C009381F9 /* Debug */,
+				DDD1E2392FB38A3C009381F9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -74,13 +74,7 @@ struct SessionDetailView: View {
 
     private func header(_ agg: CKSessionAggregate) -> some View {
         HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(agentBrandColor(agg.agent).opacity(0.18))
-                Image(systemName: agentSFSymbol(agg.agent))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(agentBrandColor(agg.agent))
-            }
-            .frame(width: 40, height: 40)
+            AgentBrandIcon(agent: agg.agent, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Image(systemName: statusSystemImage(agg.status))

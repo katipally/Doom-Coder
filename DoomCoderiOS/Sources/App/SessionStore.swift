@@ -30,7 +30,32 @@ final class SessionStore: ObservableObject {
         var pendingRequestId: String?
     }
 
-    private init() {}
+    private init() {
+        // Clean up stale "live" sessions every 5 minutes.
+        // Sessions stuck in running/waitingApproval with no event for 30+ min
+        // are considered orphaned (e.g. Mac app crashed without sending sessionStop).
+        let timer = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.cleanupStaleSessions() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func cleanupStaleSessions() {
+        let threshold = Date().addingTimeInterval(-1800) // 30 min
+        let stale = liveSessions.filter { row in
+            (row.status == .running || row.status == .waitingApproval) &&
+            row.lastEventAt < threshold
+        }
+        for row in stale {
+            var tombstone = row
+            tombstone.status = .completed  // move to history rather than delete
+            tombstone.endedAt = row.lastEventAt
+            liveSessions.removeAll { $0.id == row.id }
+            if !history.contains(where: { $0.id == row.id }) {
+                history.insert(tombstone, at: 0)
+            }
+        }
+    }
 
     func upsert(_ agg: CKSessionAggregate) {
         let row = SessionRow(

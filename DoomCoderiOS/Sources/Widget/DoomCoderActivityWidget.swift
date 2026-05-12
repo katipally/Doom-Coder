@@ -69,21 +69,117 @@ private func formatElapsed(_ sec: Int) -> String {
     return "\(m):\(String(format: "%02d", s))"
 }
 
-// MARK: - Agent icon
+// MARK: - Agent icon (inline Canvas — widget target cannot import app sources)
+
+private func agentBrandColor(hex: String) -> Color { Color(hex: hex) }
 
 private struct AgentIconView: View {
     let agent: String
     let size: CGFloat
     let colorHex: String
 
+    private var color: Color { Color(hex: colorHex) }
+
     var body: some View {
         ZStack {
-            Circle().fill(Color(hex: colorHex).opacity(0.22))
-            Image(systemName: agentSFSymbol(agent))
-                .font(.system(size: size * 0.44, weight: .semibold))
-                .foregroundStyle(Color(hex: colorHex))
+            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+                .fill(color.opacity(0.18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+                        .strokeBorder(color.opacity(0.38), lineWidth: 1)
+                )
+            logoMark
         }
         .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private var logoMark: some View {
+        let inner = size * 0.58
+        switch agent {
+        case "claude":
+            // 6 radiating bars (Anthropic asterisk)
+            Canvas { ctx, sz in
+                let cx = sz.width / 2, cy = sz.height / 2
+                let barLen = sz.width * 0.44, barW = sz.width * 0.13
+                for i in 0..<6 {
+                    let angle = Double(i) * .pi / 3
+                    var env = ctx
+                    env.translateBy(x: cx, y: cy)
+                    env.rotate(by: .radians(angle))
+                    let r = Path(roundedRect: CGRect(x: -barW / 2, y: sz.height * 0.08,
+                                                     width: barW, height: barLen),
+                                 cornerRadius: barW / 2)
+                    env.fill(r, with: .color(color))
+                }
+            }
+            .frame(width: inner, height: inner)
+
+        case "cursor":
+            Canvas { ctx, sz in
+                let s = sz.width
+                var path = Path()
+                path.move(to: CGPoint(x: s * 0.15, y: s * 0.10))
+                path.addLine(to: CGPoint(x: s * 0.15, y: s * 0.80))
+                path.addLine(to: CGPoint(x: s * 0.37, y: s * 0.59))
+                path.addLine(to: CGPoint(x: s * 0.55, y: s * 0.90))
+                path.addLine(to: CGPoint(x: s * 0.66, y: s * 0.84))
+                path.addLine(to: CGPoint(x: s * 0.48, y: s * 0.54))
+                path.addLine(to: CGPoint(x: s * 0.75, y: s * 0.54))
+                path.closeSubpath()
+                ctx.fill(path, with: .color(color))
+            }
+            .frame(width: inner, height: inner)
+
+        case "vscode":
+            Text("</>")
+                .font(.system(size: inner * 0.36, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+                .frame(width: inner, height: inner)
+
+        case "copilot_cli":
+            Canvas { ctx, sz in
+                let s = sz.width, lw = s * 0.11
+                var arc = Path()
+                arc.addArc(center: CGPoint(x: s / 2, y: s * 0.56),
+                           radius: s * 0.36, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+                ctx.stroke(arc, with: .color(color), lineWidth: lw)
+                ctx.stroke(Path(ellipseIn: CGRect(x: s * 0.10, y: s * 0.45, width: s * 0.30, height: s * 0.30)),
+                           with: .color(color), lineWidth: lw)
+                ctx.stroke(Path(ellipseIn: CGRect(x: s * 0.60, y: s * 0.45, width: s * 0.30, height: s * 0.30)),
+                           with: .color(color), lineWidth: lw)
+            }
+            .frame(width: inner, height: inner)
+
+        case "windsurf":
+            Canvas { ctx, sz in
+                let s = sz.width, lw = s * 0.10
+                for off: CGFloat in [0, s * 0.22] {
+                    var wave = Path()
+                    wave.move(to: CGPoint(x: s * 0.05, y: s * 0.38 + off))
+                    wave.addCurve(to: CGPoint(x: s * 0.50, y: s * 0.38 + off),
+                                  control1: CGPoint(x: s * 0.20, y: s * 0.22 + off),
+                                  control2: CGPoint(x: s * 0.35, y: s * 0.54 + off))
+                    wave.addCurve(to: CGPoint(x: s * 0.95, y: s * 0.38 + off),
+                                  control1: CGPoint(x: s * 0.65, y: s * 0.22 + off),
+                                  control2: CGPoint(x: s * 0.80, y: s * 0.54 + off))
+                    ctx.stroke(wave, with: .color(color), lineWidth: lw)
+                }
+            }
+            .frame(width: inner, height: inner)
+
+        case "codex_cli":
+            Text(">_")
+                .font(.system(size: inner * 0.38, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+                .frame(width: inner, height: inner)
+
+        default:
+            Text(String(agentDisplayName(agent).prefix(1)))
+                .font(.system(size: inner * 0.50, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+                .frame(width: inner, height: inner)
+        }
     }
 }
 
