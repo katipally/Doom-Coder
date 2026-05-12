@@ -9,21 +9,23 @@ private let ckLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "DoomCoder
 final class CloudKitSubscriptionHandler {
     static let shared = CloudKitSubscriptionHandler()
     private let defaults = UserDefaults.standard
-    private let keyRegistered = "ck.subscriptions.registered.v3"
+    private let keyRegistered = "ck.subscriptions.registered.v4"
     private init() {}
 
     func registerAll() async {
         if defaults.bool(forKey: keyRegistered) { return }
-        // v3: alert push + mutableContent + desiredKeys so all data arrives in payload,
-        // enabling the Notification Service Extension to build a rich notification
-        // without any extra CloudKit fetch. This makes notifications ntfy-reliable.
+        // v4: split aggregate into two subscriptions:
+        //   - alert sub: fires only for waitingApproval/failed/completed — alert push via NSE
+        //   - silent sub: fires for running — silent push to wake app for LiveActivity updates
+        // This prevents spammy running-state notifications (every tool call = one push).
         let subs: [CKSubscription] = [
-            buildAggregateSubscription(),
+            buildAggregateAlertSubscription(),
+            buildAggregateSilentSubscription(),
             buildSubscription(recordType: CloudKitSchema.RecordType.approvalRequest,
-                              subscriptionId: "sub.approvalrequest.v3",
+                              subscriptionId: "sub.approvalrequest.v4",
                               desiredKeys: ["agent", "cwdBasename", "toolName", "toolArgsJSON", "sessionKey"]),
             buildSubscription(recordType: CloudKitSchema.RecordType.userSettings,
-                              subscriptionId: "sub.usersettings.v3",
+                              subscriptionId: "sub.usersettings.v4",
                               desiredKeys: nil)
         ]
         do {
@@ -41,25 +43,22 @@ final class CloudKitSubscriptionHandler {
         await registerAll()
     }
 
-    /// Session aggregate subscription — alert push with embedded record fields.
-    /// The Notification Service Extension reads these fields without a CloudKit fetch.
-    private func buildAggregateSubscription() -> CKQuerySubscription {
+    /// Alert subscription — only fires for actionable states (not running).
+    /// The NSE intercepts and builds a rich notification. Alert pushes are
+    /// always delivered by APNs regardless of Low Power Mode or app state.
+    private func buildAggregateAlertSubscription() -> CKQuerySubscription {
+        let predicate = NSPredicate(format: "status IN %@",
+                                    ["waitingApproval", "failed", "completed"])
         let sub = CKQuerySubscription(
             recordType: CloudKitSchema.RecordType.sessionAggregate,
-            predicate: NSPredicate(value: true),
-            subscriptionID: "sub.sessionaggregate.v3",
+            predicate: predicate,
+            subscriptionID: "sub.sessionaggregate.alert.v4",
             options: [.firesOnRecordCreation, .firesOnRecordUpdate])
         let info = CKSubscription.NotificationInfo()
-        // Alert push — always delivered by APNs (not throttled like silent pushes).
-        // The NSE overwrites title/body with specific content before display.
-        info.alertBody = "Agent update — tap to view"
-        // Lets Notification Service Extension intercept and enrich the push.
-        info.shouldSendMutableContent = true
-        // Also wake the app in background to update SessionStore/LiveActivity.
-        info.shouldSendContentAvailable = true
+        info.alertBody = "Agent update — tap to view"  // NSE overwrites this
+        info.shouldSendMutableContent = true            // allows NSE to intercept
+        info.shouldSendContentAvailable = true          // wakes app for LiveActivity
         info.shouldBadge = false
-        // Embed these record fields in the APNs payload (ck.qry.fo dict).
-        // NSE reads them without making a separate CloudKit network call.
         info.desiredKeys = [
             "status", "agent", "cwdBasename", "currentTool",
             "sessionKey", "pendingRequestId",
@@ -69,15 +68,31 @@ final class CloudKitSubscriptionHandler {
         return sub
     }
 
+    /// Silent subscription — fires for running-state updates.
+    /// Wakes the app in background to update SessionStore and LiveActivity.
+    /// No visible notification is shown for routine tool calls.
+    private func buildAggregateSilentSubscription() -> CKQuerySubscription {
+        let predicate = NSPredicate(format: "status = %@", "running")
+        let sub = CKQuerySubscription(
+            recordType: CloudKitSchema.RecordType.sessionAggregate,
+            predicate: predicate,
+            subscriptionID: "sub.sessionaggregate.silent.v4",
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate])
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true  // silent push only
+        info.shouldBadge = false
+        info.desiredKeys = [
+            "status", "agent", "cwdBasename", "currentTool",
+            "sessionKey", "totalToolCalls", "totalFilesEdited"
+        ]
+        sub.notificationInfo = info
+        return sub
+    }
+
     private func buildSubscription(recordType: String,
                                    subscriptionId: String,
                                    desiredKeys: [String]?) -> CKQuerySubscription {
-        let options: CKQuerySubscription.Options
-        if recordType == CloudKitSchema.RecordType.approvalRequest {
-            options = [.firesOnRecordCreation]
-        } else {
-            options = [.firesOnRecordCreation, .firesOnRecordUpdate]
-        }
+        let options: CKQuerySubscription.Options = [.firesOnRecordCreation]
         let sub = CKQuerySubscription(recordType: recordType,
                                       predicate: NSPredicate(value: true),
                                       subscriptionID: subscriptionId,

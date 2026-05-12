@@ -82,14 +82,14 @@ final class NotificationService: UNNotificationServiceExtension {
             let toolLabel = tool.isEmpty ? "an action" : tool
             content.body = "\(toolLabel)\(cwdLabel)"
             content.categoryIdentifier = "APPROVAL_REQUEST"
-            // Stash requestId so the Approve/Deny intent can read it.
-            if let rid = requestId {
-                var info = content.userInfo
-                info["pendingRequestId"] = rid
-                info["sessionKey"] = sessionKey
-                info["agent"] = agent
-                content.userInfo = info
-            }
+            // Stash requestId + toolName so ApprovalResponder can write the decision.
+            // Keys must match exactly what ApprovalResponder reads.
+            var info = content.userInfo
+            info["requestId"] = requestId ?? sessionKey   // ApprovalResponder reads "requestId"
+            info["sessionKey"] = sessionKey
+            info["agent"] = agent
+            info["toolName"] = tool.isEmpty ? "tool" : tool  // ApprovalResponder reads "toolName"
+            content.userInfo = info
             content.interruptionLevel = .active
 
         case "failed":
@@ -154,17 +154,19 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private func registerCategoriesIfNeeded() {
+        // Action identifiers MUST match exactly what ApprovalResponder.swift handles:
+        // "APPROVE", "DENY", "ALWAYS" — mismatching these means buttons do nothing.
         let approve = UNNotificationAction(
-            identifier: "APPROVE_ACTION",
+            identifier: "APPROVE",
             title: "Approve",
             options: [.authenticationRequired])
         let deny = UNNotificationAction(
-            identifier: "DENY_ACTION",
+            identifier: "DENY",
             title: "Deny",
             options: [.destructive, .authenticationRequired])
         let always = UNNotificationAction(
-            identifier: "ALWAYS_ALLOW_ACTION",
-            title: "Always Allow",
+            identifier: "ALWAYS",
+            title: "Always Allow This Tool",
             options: [.authenticationRequired])
         let approvalCategory = UNNotificationCategory(
             identifier: "APPROVAL_REQUEST",
