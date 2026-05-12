@@ -5,6 +5,8 @@ struct SettingsTab: View {
     @ObservedObject var settings = IOSUserSettings.shared
     @State private var iCloudStatus: String = "Checking…"
     @State private var connectedMacs: Int = 0
+    @State private var isResettingSubscriptions = false
+    @State private var subscriptionResetResult: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -26,6 +28,27 @@ struct SettingsTab: View {
                     Toggle("Failures", isOn: $settings.notifyFailures)
                     Toggle("Session summaries", isOn: $settings.notifySessionSummaries)
                     Toggle("Tool-call updates", isOn: $settings.notifyToolCallUpdates)
+
+                    Button {
+                        Task { await resetSubscriptions() }
+                    } label: {
+                        HStack {
+                            if isResettingSubscriptions {
+                                ProgressView().tint(.blue)
+                                Text("Re-registering…")
+                            } else {
+                                Image(systemName: "arrow.clockwise.circle")
+                                Text("Reset Notification Subscriptions")
+                            }
+                        }
+                    }
+                    .disabled(isResettingSubscriptions)
+
+                    if let result = subscriptionResetResult {
+                        Text(result)
+                            .font(.caption)
+                            .foregroundStyle(result.hasPrefix("✓") ? .green : .red)
+                    }
                 }
                 Section("Privacy") {
                     Toggle("Minimal Mode", isOn: $settings.minimalMode)
@@ -82,8 +105,21 @@ struct SettingsTab: View {
         connectedMacs = await CloudKitClient.shared.fetchMacPresenceCount()
     }
 
+    private func resetSubscriptions() async {
+        isResettingSubscriptions = true
+        subscriptionResetResult = nil
+        await CloudKitSubscriptionHandler.shared.forceReRegister()
+        await MainActor.run {
+            isResettingSubscriptions = false
+            subscriptionResetResult = "✓ Subscriptions re-registered"
+        }
+        // Auto-clear the success message after 3 seconds
+        try? await Task.sleep(for: .seconds(3))
+        await MainActor.run { subscriptionResetResult = nil }
+    }
+
     private func clearAll() async {
-        // Mark for re-fetch; CloudKit history is owned by Mac. Local view-only state reset.
         await MainActor.run { SessionStore.shared.setHistory([]) }
     }
 }
+

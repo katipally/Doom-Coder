@@ -57,6 +57,8 @@
 		DCFD000000000002FFFF0002 /* DoomCoderActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */; };
 		DCFD000000000002FFFF0003 /* ApprovalIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0004 /* ApprovalIntents.swift */; };
 		DCFD000000000002FFFF0004 /* DoomCoderWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DCFD000000000001FFFF0001 /* DoomCoderWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+DCNS000000000002FFFF0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCNS000000000001FFFF000A /* NotificationService.swift */; };
+DCNS000000000002FFFF0002 /* DoomCoderNS.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DCNS000000000001FFFF0002 /* DoomCoderNS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +83,13 @@
 			remoteGlobalIDString = DCFD000000000004FFFF0001;
 			remoteInfo = DoomCoderWidget;
 		};
+DCNS000000000003FFFF0001 /* PBXContainerItemProxy */ = {
+isa = PBXContainerItemProxy;
+containerPortal = DC0000000000008000000001 /* Project object */;
+proxyType = 1;
+remoteGlobalIDString = DCNS000000000001FFFF0001;
+remoteInfo = DoomCoderNS;
+};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -91,6 +100,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				DCFD000000000002FFFF0004 /* DoomCoderWidget.appex in Embed App Extensions */,
+				DCNS000000000002FFFF0002 /* DoomCoderNS.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -153,6 +163,10 @@
 		DCFD000000000001FFFF0003 /* DoomCoderActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DoomCoderActivityAttributes.swift; path = DoomCoderiOS/Sources/LiveActivity/DoomCoderActivityAttributes.swift; sourceTree = "<group>"; };
 		DCFD000000000001FFFF0004 /* ApprovalIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalIntents.swift; path = DoomCoderiOS/Sources/LiveActivity/ApprovalIntents.swift; sourceTree = "<group>"; };
 		DDD1E2302FB38A3B009381F9 /* DoomCoderiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoderiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+DCNS000000000001FFFF0002 /* DoomCoderNS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DoomCoderNS.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+DCNS000000000001FFFF000A /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DoomCoderiOS/NotificationService/NotificationService.swift"; sourceTree = SOURCE_ROOT; };
+DCNS000000000001FFFF000B /* NotificationService/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "DoomCoderiOS/NotificationService/Info.plist"; sourceTree = SOURCE_ROOT; };
+DCNS000000000001FFFF000C /* NotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "DoomCoderiOS/NotificationService/NotificationService.entitlements"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -160,6 +174,9 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Sources/Widget/DoomCoderActivityWidget.swift,
+				NotificationService/NotificationService.swift,
+				NotificationService/Info.plist,
+				NotificationService/NotificationService.entitlements,
 			);
 			target = DDD1E22F2FB38A3B009381F9 /* DoomCoderiOS */;
 		};
@@ -400,6 +417,25 @@
 			productReference = DCFD000000000001FFFF0001 /* DoomCoderWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+DCNS000000000001FFFF0001 /* DoomCoderNS */ = {
+isa = PBXNativeTarget;
+buildConfigurationList = DCNS000000000001FFFF0006 /* Build configuration list for PBXNativeTarget "DoomCoderNS" */;
+buildPhases = (
+DCNS000000000001FFFF0003 /* Sources */,
+DCNS000000000001FFFF0004 /* Frameworks */,
+DCNS000000000001FFFF0005 /* Resources */,
+);
+buildRules = (
+);
+dependencies = (
+);
+name = DoomCoderNS;
+packageProductDependencies = (
+);
+productName = DoomCoderNS;
+productReference = DCNS000000000001FFFF0002 /* DoomCoderNS.appex */;
+productType = "com.apple.product-type.app-extension";
+};
 		DDD1E22F2FB38A3B009381F9 /* DoomCoderiOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DDD1E23A2FB38A3C009381F9 /* Build configuration list for PBXNativeTarget "DoomCoderiOS" */;
@@ -413,6 +449,7 @@
 			);
 			dependencies = (
 				DCFD000000000007FFFF0002 /* PBXTargetDependency */,
+				DCNS000000000003FFFF0002 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DDD1E2312FB38A3B009381F9 /* DoomCoderiOS */,
@@ -473,6 +510,7 @@
 				DC0000000000007000000200 /* DoomCoderTests */,
 				DDD1E22F2FB38A3B009381F9 /* DoomCoderiOS */,
 				DCFD000000000004FFFF0001 /* DoomCoderWidget */,
+				DCNS000000000001FFFF0001 /* DoomCoderNS */,
 				DC0000000000017000000000 /* DoomCoderiOSTests */,
 			);
 		};
@@ -610,6 +648,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+DCNS000000000001FFFF0003 /* Sources */ = {
+isa = PBXSourcesBuildPhase;
+buildActionMask = 2147483647;
+files = (
+DCNS000000000002FFFF0001 /* NotificationService.swift in Sources */,
+);
+runOnlyForDeploymentPostprocessing = 0;
+};
+DCNS000000000001FFFF0004 /* Frameworks */ = {
+isa = PBXFrameworksBuildPhase;
+buildActionMask = 2147483647;
+files = (
+);
+runOnlyForDeploymentPostprocessing = 0;
+};
+DCNS000000000001FFFF0005 /* Resources */ = {
+isa = PBXResourcesBuildPhase;
+buildActionMask = 2147483647;
+files = (
+);
+runOnlyForDeploymentPostprocessing = 0;
+};
+DCNS000000000001FFFF0009 /* NotificationService */ = {
+isa = PBXGroup;
+children = (
+DCNS000000000001FFFF000A /* NotificationService.swift */,
+DCNS000000000001FFFF000B /* Info.plist */,
+DCNS000000000001FFFF000C /* NotificationService.entitlements */,
+);
+path = NotificationService;
+sourceTree = "<group>";
+};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -628,6 +698,11 @@
 			target = DCFD000000000004FFFF0001 /* DoomCoderWidget */;
 			targetProxy = DCFD000000000007FFFF0001 /* PBXContainerItemProxy */;
 		};
+DCNS000000000003FFFF0002 /* PBXTargetDependency */ = {
+isa = PBXTargetDependency;
+target = DCNS000000000001FFFF0001 /* DoomCoderNS */;
+targetProxy = DCNS000000000003FFFF0001 /* PBXContainerItemProxy */;
+};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -1017,6 +1092,58 @@
 			};
 			name = Release;
 		};
+DCNS000000000001FFFF0007 /* Debug */ = {
+isa = XCBuildConfiguration;
+buildSettings = {
+CODE_SIGN_ENTITLEMENTS = "DoomCoderiOS/NotificationService/NotificationService.entitlements";
+CODE_SIGN_STYLE = Automatic;
+CURRENT_PROJECT_VERSION = 1;
+DEVELOPMENT_TEAM = A9P2388PHM;
+INFOPLIST_FILE = "DoomCoderiOS/NotificationService/Info.plist";
+IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+LD_RUNPATH_SEARCH_PATHS = (
+"$(inherited)",
+"@executable_path/Frameworks",
+"@executable_path/../../Frameworks",
+);
+MARKETING_VERSION = 3.0.0;
+PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.notificationservice;
+PRODUCT_NAME = DoomCoderNS;
+SDKROOT = iphoneos;
+SKIP_INSTALL = YES;
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+SWIFT_VERSION = 6.0;
+TARGETED_DEVICE_FAMILY = "1,2";
+};
+name = Debug;
+};
+DCNS000000000001FFFF0008 /* Release */ = {
+isa = XCBuildConfiguration;
+buildSettings = {
+CODE_SIGN_ENTITLEMENTS = "DoomCoderiOS/NotificationService/NotificationService.entitlements";
+CODE_SIGN_STYLE = Automatic;
+CURRENT_PROJECT_VERSION = 1;
+DEVELOPMENT_TEAM = A9P2388PHM;
+INFOPLIST_FILE = "DoomCoderiOS/NotificationService/Info.plist";
+IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+LD_RUNPATH_SEARCH_PATHS = (
+"$(inherited)",
+"@executable_path/Frameworks",
+"@executable_path/../../Frameworks",
+);
+MARKETING_VERSION = 3.0.0;
+MTL_ENABLE_DEBUG_INFO = NO;
+PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.ios.notificationservice;
+PRODUCT_NAME = DoomCoderNS;
+SDKROOT = iphoneos;
+SKIP_INSTALL = YES;
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+SWIFT_VERSION = 6.0;
+TARGETED_DEVICE_FAMILY = "1,2";
+VALIDATE_PRODUCT = YES;
+};
+name = Release;
+};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1074,6 +1201,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+DCNS000000000001FFFF0006 /* Build configuration list for PBXNativeTarget "DoomCoderNS" */ = {
+isa = XCConfigurationList;
+buildConfigurations = (
+DCNS000000000001FFFF0007 /* Debug */,
+DCNS000000000001FFFF0008 /* Release */,
+);
+defaultConfigurationIsVisible = 0;
+defaultConfigurationName = Release;
+};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

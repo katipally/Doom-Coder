@@ -10,11 +10,11 @@
     <array>
         <string>iCloud.com.doomcoder.app</string>
     </array>
-    <key>aps-environment</key>
-    <string>development</string>
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.doomcoder.ios</string>
     </array>
+    <key>aps-environment</key>
+    <string>development</string>
 </dict>
 </plist>

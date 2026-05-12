@@ -9,21 +9,22 @@ private let ckLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "DoomCoder
 final class CloudKitSubscriptionHandler {
     static let shared = CloudKitSubscriptionHandler()
     private let defaults = UserDefaults.standard
-    private let keyRegistered = "ck.subscriptions.registered.v1"
+    private let keyRegistered = "ck.subscriptions.registered.v3"
     private init() {}
 
     func registerAll() async {
         if defaults.bool(forKey: keyRegistered) { return }
+        // v3: alert push + mutableContent + desiredKeys so all data arrives in payload,
+        // enabling the Notification Service Extension to build a rich notification
+        // without any extra CloudKit fetch. This makes notifications ntfy-reliable.
         let subs: [CKSubscription] = [
-            buildSubscription(recordType: CloudKitSchema.RecordType.sessionAggregate,
-                              subscriptionId: "sub.sessionaggregate.v1",
-                              options: [.firesOnRecordCreation, .firesOnRecordUpdate]),
+            buildAggregateSubscription(),
             buildSubscription(recordType: CloudKitSchema.RecordType.approvalRequest,
-                              subscriptionId: "sub.approvalrequest.v1",
-                              options: [.firesOnRecordCreation]),
+                              subscriptionId: "sub.approvalrequest.v3",
+                              desiredKeys: ["agent", "cwdBasename", "toolName", "toolArgsJSON", "sessionKey"]),
             buildSubscription(recordType: CloudKitSchema.RecordType.userSettings,
-                              subscriptionId: "sub.usersettings.v1",
-                              options: [.firesOnRecordCreation, .firesOnRecordUpdate])
+                              subscriptionId: "sub.usersettings.v3",
+                              desiredKeys: nil)
         ]
         do {
             try await CloudKitClient.shared.modifySubscriptions(saving: subs)
@@ -40,9 +41,43 @@ final class CloudKitSubscriptionHandler {
         await registerAll()
     }
 
+    /// Session aggregate subscription — alert push with embedded record fields.
+    /// The Notification Service Extension reads these fields without a CloudKit fetch.
+    private func buildAggregateSubscription() -> CKQuerySubscription {
+        let sub = CKQuerySubscription(
+            recordType: CloudKitSchema.RecordType.sessionAggregate,
+            predicate: NSPredicate(value: true),
+            subscriptionID: "sub.sessionaggregate.v3",
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate])
+        let info = CKSubscription.NotificationInfo()
+        // Alert push — always delivered by APNs (not throttled like silent pushes).
+        // The NSE overwrites title/body with specific content before display.
+        info.alertBody = "Agent update — tap to view"
+        // Lets Notification Service Extension intercept and enrich the push.
+        info.shouldSendMutableContent = true
+        // Also wake the app in background to update SessionStore/LiveActivity.
+        info.shouldSendContentAvailable = true
+        info.shouldBadge = false
+        // Embed these record fields in the APNs payload (ck.qry.fo dict).
+        // NSE reads them without making a separate CloudKit network call.
+        info.desiredKeys = [
+            "status", "agent", "cwdBasename", "currentTool",
+            "sessionKey", "pendingRequestId",
+            "totalToolCalls", "totalFilesEdited"
+        ]
+        sub.notificationInfo = info
+        return sub
+    }
+
     private func buildSubscription(recordType: String,
                                    subscriptionId: String,
-                                   options: CKQuerySubscription.Options) -> CKQuerySubscription {
+                                   desiredKeys: [String]?) -> CKQuerySubscription {
+        let options: CKQuerySubscription.Options
+        if recordType == CloudKitSchema.RecordType.approvalRequest {
+            options = [.firesOnRecordCreation]
+        } else {
+            options = [.firesOnRecordCreation, .firesOnRecordUpdate]
+        }
         let sub = CKQuerySubscription(recordType: recordType,
                                       predicate: NSPredicate(value: true),
                                       subscriptionID: subscriptionId,
@@ -50,6 +85,7 @@ final class CloudKitSubscriptionHandler {
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true
         info.shouldBadge = false
+        if let keys = desiredKeys { info.desiredKeys = keys }
         sub.notificationInfo = info
         return sub
     }
