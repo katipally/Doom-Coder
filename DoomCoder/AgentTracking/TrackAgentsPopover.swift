@@ -6,7 +6,7 @@ import SwiftUI
 // language as the Configure Agents list. Live session state shown inline.
 //
 // Flipping a toggle does not uninstall hooks — it only suppresses
-// NotificationDispatcher from firing for that agent. Events still land in
+// NotificationRouter from firing for that agent. Events still land in
 // the event store and live-session UI.
 struct TrackAgentsView: View {
     @State private var manager = AgentTrackingManager.shared

@@ -77,7 +77,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // foreground banners are enabled from the very first grant.
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        NotificationDispatcher.shared.requestPermission()
+        NotificationRouter.shared.requestPermission()
+
+        // Run 3.0 first-launch migration (ntfy → iosCompanion, keychain cleanup).
+        MigrationManager.migrateToV3IfNeeded()
 
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()

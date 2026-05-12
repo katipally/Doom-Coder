@@ -1,14 +1,40 @@
 import Foundation
 
 // Stores global + per-agent notification channel preferences in UserDefaults.
-// Channels: macOS notifications, ntfy. Each can be toggled globally and overridden per-agent.
+// Channels: macOS notifications, iOS Companion. Each can be toggled globally and overridden per-agent.
 struct ChannelStore {
-    static let defaultsKey = "doomcoder.channels.v2"
+    static let defaultsKey = "doomcoder.channels.v3"
     static let prefsKey = "doomcoder.notification.prefs.v1"
 
     struct ChannelConfig: Codable, Sendable, Equatable {
         var macNotification: Bool = true
-        var ntfy: Bool = false
+        var iosCompanion: Bool = true
+    }
+
+    // MARK: - v2 → v3 migration (ntfy → iosCompanion, run once at 3.0 first-launch)
+
+    private static let v2Key = "doomcoder.channels.v2"
+    private static let v2MigratedFlag = "doomcoder.channels.v3.migrated"
+
+    static func migrateV2toV3IfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: v2MigratedFlag) else { return }
+
+        if let data = ud.data(forKey: v2Key) {
+            struct V2Config: Codable { var macNotification: Bool = true; var ntfy: Bool = false }
+            struct V2Store: Codable { var global: V2Config = V2Config(); var perAgent: [String: V2Config] = [:] }
+            if let v2 = try? JSONDecoder().decode(V2Store.self, from: data) {
+                var v3 = Store()
+                v3.global = ChannelConfig(macNotification: v2.global.macNotification, iosCompanion: v2.global.ntfy)
+                for (key, cfg) in v2.perAgent {
+                    v3.perAgent[key] = ChannelConfig(macNotification: cfg.macNotification, iosCompanion: cfg.ntfy)
+                }
+                save(v3)
+            }
+        }
+
+        ud.set(true, forKey: v2MigratedFlag)
+        ud.removeObject(forKey: v2Key)
     }
 
     /// Which event phases should trigger a push notification.

@@ -192,7 +192,7 @@ final class AgentTrackingManager {
             && !isQuitInitiatedEnd
         logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
         if shouldNotify {
-            NotificationDispatcher.shared.dispatch(.init(
+            NotificationRouter.shared.dispatch(.init(
                 sessionKey: sessionKey, agent: normalized.agent,
                 event: normalized.rawEvent, phase: normalized.phase
             ))

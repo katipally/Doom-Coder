@@ -10,7 +10,7 @@ final class CloudKitClient {
 
     func fetchActiveSessions() async throws -> [CKSessionAggregate] {
         let predicate = NSPredicate(format: "status IN %@", ["running", "waitingApproval"])
-        return try await query(recordType: CloudKitSchema.RecordType.sessionAggregate,
+        return try await queryAggregates(recordType: CloudKitSchema.RecordType.sessionAggregate,
                                predicate: predicate,
                                sortKey: "lastEventAt")
     }
@@ -18,7 +18,7 @@ final class CloudKitClient {
     func fetchHistory(daysBack: Int = 7) async throws -> [CKSessionAggregate] {
         let cutoff = Date().addingTimeInterval(-Double(daysBack) * 86_400)
         let predicate = NSPredicate(format: "lastEventAt >= %@", cutoff as NSDate)
-        return try await query(recordType: CloudKitSchema.RecordType.sessionAggregate,
+        return try await queryAggregates(recordType: CloudKitSchema.RecordType.sessionAggregate,
                                predicate: predicate,
                                sortKey: "lastEventAt")
     }
@@ -31,7 +31,7 @@ final class CloudKitClient {
 
     func fetchEvents(sessionKey: String) async throws -> [CKAgentEvent] {
         let predicate = NSPredicate(format: "sessionKey == %@", sessionKey)
-        return try await query(recordType: CloudKitSchema.RecordType.agentEvent,
+        return try await queryEvents(recordType: CloudKitSchema.RecordType.agentEvent,
                                predicate: predicate,
                                sortKey: "occurredAt",
                                ascending: true)
@@ -69,10 +69,10 @@ final class CloudKitClient {
         }
     }
 
-    private func query<T>(recordType: String,
+    private func queryAggregates(recordType: String,
                           predicate: NSPredicate,
                           sortKey: String?,
-                          ascending: Bool = false) async throws -> [T] where T == CKSessionAggregate {
+                          ascending: Bool = false) async throws -> [CKSessionAggregate] {
         let q = CKQuery(recordType: recordType, predicate: predicate)
         if let sortKey { q.sortDescriptors = [NSSortDescriptor(key: sortKey, ascending: ascending)] }
         let (matchResults, _) = try await db.records(matching: q, resultsLimit: 200)
@@ -85,10 +85,10 @@ final class CloudKitClient {
         return out
     }
 
-    private func query<T>(recordType: String,
+    private func queryEvents(recordType: String,
                           predicate: NSPredicate,
                           sortKey: String?,
-                          ascending: Bool = false) async throws -> [T] where T == CKAgentEvent {
+                          ascending: Bool = false) async throws -> [CKAgentEvent] {
         let q = CKQuery(recordType: recordType, predicate: predicate)
         if let sortKey { q.sortDescriptors = [NSSortDescriptor(key: sortKey, ascending: ascending)] }
         let (matchResults, _) = try await db.records(matching: q, resultsLimit: 500)

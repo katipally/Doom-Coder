@@ -4,13 +4,12 @@ import AppKit
 import OSLog
 
 // Fan-out for DoomCoder agent notifications. Honors the TrackingStore
-// per-agent opt-out and the global ChannelStore (macOS local + ntfy).
-// Minimal content only — no prompt text, no file paths over ntfy. 5-second
-// dedupe window per (session, event).
+// per-agent opt-out and the global ChannelStore (macOS local notifications).
+// 5-second dedupe window per (session, event).
 @MainActor
 @Observable
-final class NotificationDispatcher {
-    static let shared = NotificationDispatcher()
+final class NotificationRouter {
+    static let shared = NotificationRouter()
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "notify")
     private var lastDispatchAt: [String: Date] = [:]
@@ -128,34 +127,18 @@ final class NotificationDispatcher {
                 title: title, body: body, channel: "macOS", success: true, ts: ts
             )
         }
-        if channels.ntfy {
-            postNtfy(title: title, body: body)
-            EventStore.shared.insertNotification(
-                sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
-                title: title, body: body, channel: "ntfy", success: true, ts: ts
-            )
-        }
     }
 
-    /// Sends a test notification on the chosen channel. Returns true if the
-    /// request was successfully submitted (not a delivery guarantee).
+    /// Sends a test macOS notification, bypassing dedupe. Returns true on success.
     @discardableResult
-    func sendTest(channel: TestChannel) async -> Bool {
-        switch channel {
-        case .macOS:
-            let ok = await withCheckedContinuation { cont in
-                requestPermission { granted in cont.resume(returning: granted) }
-            }
-            guard ok else { return false }
-            postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
-            return true
-        case .ntfy:
-            postNtfy(title: "DoomCoder", body: "ntfy channel is working ✨")
-            return true
+    func sendTest() async -> Bool {
+        let ok = await withCheckedContinuation { cont in
+            requestPermission { granted in cont.resume(returning: granted) }
         }
+        guard ok else { return false }
+        postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
+        return true
     }
-
-    enum TestChannel { case macOS, ntfy }
 
     // MARK: - Copy
 
@@ -277,21 +260,5 @@ final class NotificationDispatcher {
             // session end arriving within the same runloop tick).
             Thread.sleep(forTimeInterval: 0.02)
         }
-    }
-
-    // MARK: - ntfy
-
-    private func postNtfy(title: String, body: String) {
-        let topic = NtfyTopic.getOrCreate()
-        let server = NtfyTopic.server ?? "https://ntfy.sh"
-        guard let url = URL(string: "\(server)/\(topic)") else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue(title, forHTTPHeaderField: "Title")
-        req.setValue("default", forHTTPHeaderField: "Priority")
-        req.httpBody = Data(body.utf8)
-        URLSession.shared.dataTask(with: req) { [weak self] _, _, err in
-            if let err { self?.logger.error("ntfy failed: \(err.localizedDescription, privacy: .public)") }
-        }.resume()
     }
 }

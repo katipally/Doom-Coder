@@ -407,13 +407,13 @@ struct ConfigureAgentsViewV2: View {
                                     var c = override; c.macNotification = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
-                                    if v { NotificationDispatcher.shared.requestPermission() }
+                                    if v { NotificationRouter.shared.requestPermission() }
                                 }
                             ))
-                            Toggle("ntfy", isOn: Binding(
-                                get: { override.ntfy },
+                            Toggle("iOS Companion", isOn: Binding(
+                                get: { override.iosCompanion },
                                 set: { v in
-                                    var c = override; c.ntfy = v
+                                    var c = override; c.iosCompanion = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
                                 }
@@ -674,7 +674,7 @@ struct ConfigureAgentsViewV2: View {
                 // Permission Status
                 GroupBox {
                     HStack(spacing: 8) {
-                        let disp = NotificationDispatcher.shared
+                        let disp = NotificationRouter.shared
                         switch disp.permissionStatus {
                         case .authorized, .provisional, .ephemeral:
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
@@ -714,12 +714,12 @@ struct ConfigureAgentsViewV2: View {
                             set: { v in
                                 channelConfig.global.macNotification = v
                                 ChannelStore.setGlobal(channelConfig.global)
-                                if v { NotificationDispatcher.shared.requestPermission() }
+                                if v { NotificationRouter.shared.requestPermission() }
                             }
                         ))
                         Spacer()
                         Button("Test") {
-                            ChannelTester.sendTest(channel: .macNotification) { ok, msg in
+                            CloudKitDiagnostics.sendTest(channel: .macNotification) { ok, msg in
                                 testResult = (ok, msg)
                             }
                         }
@@ -728,80 +728,30 @@ struct ConfigureAgentsViewV2: View {
                     Label("macOS", systemImage: "bell.fill")
                 }
 
-                // ntfy
+                // iOS Companion
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Toggle("ntfy", isOn: Binding(
-                                get: { channelConfig.global.ntfy },
+                            Toggle("iOS Companion", isOn: Binding(
+                                get: { channelConfig.global.iosCompanion },
                                 set: { v in
-                                    channelConfig.global.ntfy = v
+                                    channelConfig.global.iosCompanion = v
                                     ChannelStore.setGlobal(channelConfig.global)
                                 }
                             ))
                             Spacer()
-                            Button("Test") {
-                                ChannelTester.sendTest(channel: .ntfy) { ok, msg in
+                            Button("Test CloudKit") {
+                                CloudKitDiagnostics.sendTest(channel: .cloudKit) { ok, msg in
                                     testResult = (ok, msg)
                                 }
                             }
                         }
-
-                        HStack {
-                            Text("Topic:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.getOrCreate())
-                                .font(.system(.callout, design: .monospaced))
-                                .textSelection(.enabled)
-                            Spacer()
-                            Button("Copy Topic") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(NtfyTopic.getOrCreate(), forType: .string)
-                            }
-                            Button("Regenerate") { _ = NtfyTopic.regenerate() }
-                        }
-
-                        HStack {
-                            Text("Server:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.server ?? "https://ntfy.sh")
-                                .font(.callout)
-                            Spacer()
-                        }
-
-                        HStack {
-                            if let url = NtfyTopic.shareURL {
-                                Text("Subscribe URL:")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                Text(url.absoluteString)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                Spacer()
-                                Button("Copy Subscribe URL") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                }
-                            }
-                        }
-
-                        // QR Code
-                        if let url = NtfyTopic.shareURL {
-                            HStack {
-                                Spacer()
-                                qrCodeImage(for: url.absoluteString)
-                                    .resizable()
-                                    .interpolation(.none)
-                                    .frame(width: 120, height: 120)
-                                Spacer()
-                            }
-                            Text("Scan to subscribe on your phone")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity)
-                        }
+                        Text("Agent events sync to your iPhone via iCloud. Install the Doom Coder iOS app to receive Live Activities and approval requests.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 } label: {
-                    Label("ntfy", systemImage: "paperplane.fill")
+                    Label("iOS Companion", systemImage: "iphone.and.arrow.forward")
                 }
 
                 // Notification event preferences
@@ -990,7 +940,7 @@ struct ConfigureAgentsViewV2: View {
     }
 
     private func refreshPermStatus() {
-        NotificationDispatcher.shared.refreshPermissionStatus()
+        NotificationRouter.shared.refreshPermissionStatus()
     }
 
     private func validateAllHooks() {
@@ -1514,7 +1464,7 @@ struct ConnectionDoctorSection: View {
     }
 
     private func checkNotificationDispatch() async -> StepOutcome {
-        let disp = NotificationDispatcher.shared
+        let disp = NotificationRouter.shared
         let granted: Bool = await withCheckedContinuation { cont in
             disp.requestPermission { ok in cont.resume(returning: ok) }
         }
@@ -1563,7 +1513,7 @@ struct ConnectionDoctorSection: View {
             NSWorkspace.shared.selectFile(AgentInstallerV2.helperBinaryPath(),
                                           inFileViewerRootedAtPath: "")
         case 4:
-            NotificationDispatcher.shared.openSystemSettings()
+            NotificationRouter.shared.openSystemSettings()
         default:
             break
         }
