@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] - Unreleased — Full rebuild: iOS companion, CloudKit, notarization
+
+### Summary
+Complete rewrite of Doom Coder from a sleep-blocker utility to a dual-platform AI agent
+tracking system. macOS app is now signed and notarized via Apple Developer ID. New iOS
+companion app on the App Store delivers Live Activities, Dynamic Island, rich notifications,
+and remote approval for Claude Code — all synced via CloudKit with zero server infrastructure.
+
+### Added
+- **iOS companion app** (`com.doomcoder.ios`) with 3-tab interface: Live, History, Settings
+- **Live Activities + Dynamic Island** — up to 3 simultaneous agent sessions visible from Lock Screen and Dynamic Island without unlocking your phone
+- **CloudKit relay** — Mac events sync to iOS via CloudKit private DB (iCloud); no servers, no accounts, no pairing codes. Sign into the same iCloud account on both devices.
+- **Remote approvals** — when Claude Code pauses and asks a question, respond Approve / Deny / Always Allow from your iPhone notification or Lock Screen Live Activity button
+- **Rich hook payload v3** — captures model, token usage, tool args, exit codes, elapsed time, session boundaries; credential redaction built in (API keys, tokens, JWTs stripped before any write)
+- **Offline outbox** — Mac spools events to local JSON when CloudKit is unreachable; replays automatically on reconnect
+- **CloudKit diagnostics** — "Send test event" button in Settings verifies the Mac↔iOS round-trip
+- **Minimal Mode** — strips all payload fields except agent/session/tool name for privacy-sensitive workspaces
+- **Signed + notarized macOS app** — opens without Gatekeeper warning via GitHub Release ZIP (Developer ID Application under Apple Team A9P2388PHM)
+- **GitHub Actions CI/CD** — macOS build + iOS Simulator build on every PR; full notarization + TestFlight upload on version tags
+- **Privacy manifests** — `PrivacyInfo.xcprivacy` for both Mac and iOS targets declaring Required Reason API usage
+- **Privacy policy** — hosted at `docs/privacy.html` (GitHub Pages)
+- **Widget Extension** (`com.doomcoder.ios.widget`) — Live Activity views for Dynamic Island compact/minimal/expanded and Lock Screen
+- **Always Allow store** — persist per-tool approval rules so frequent tools are not interrupted again
+- **Settings bidirectional sync** — notification preferences, Minimal Mode, history retention synced between Mac and iOS via CloudKit UserSettings record
+- **Sleep prevention during sessions** — Mac holds `IOPMAssertion` while any agent session is active so long runs never get interrupted by macOS sleep
+
+### Changed
+- macOS version bumped from 2.0.2 → 3.0.0 (build 3000)
+- Hook payload bumped to `version: 3`, `schemaVersion: "3.0.0"`; adds `wantsBlockingReply`, `requestId`, `hookPhase`, `cwdBasename`, `cwdHashSuffix`, `macHostname`
+- `AgentInstallerV2` now installs all 5 hook phases (PreToolUse, PostToolUse, SessionStart, SessionStop, UserPromptSubmit) for supported agents
+- `NotificationDispatcher` renamed to `NotificationRouter`; ntfy branch removed
+
+### Removed
+- **ntfy.sh integration** — replaced entirely by CloudKit+APNs. ntfy topic generation, keychain storage, topic regeneration UX, and the ntfy dependency are all gone.
+- `NtfyTopic.swift` — deleted
+- `ChannelTester.swift` — replaced by `CloudKitDiagnostics.swift`
+- ntfy keychain entries wiped on first 3.0 launch by `MigrationManager`
+
+### Migration (2.x → 3.0)
+On first launch after upgrading via Sparkle, `MigrationManager` automatically:
+1. Migrates `ChannelStore` v2 → v3 (ntfy fields → `iosCompanion`)
+2. Wipes ntfy keychain entries
+3. Discards the UserDefaults event log (7-day history is rebuilt from CloudKit on iOS)
+4. Registers CloudKit subscriptions if signed into iCloud
+
+---
+
+
 ## [2.1.0] - 2026-05-11 — New logo in header
 
 ### Added

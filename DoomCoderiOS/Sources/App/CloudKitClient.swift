@@ -4,11 +4,34 @@ import CloudKit
 @MainActor
 final class CloudKitClient {
     static let shared = CloudKitClient()
-    let container = CKContainer(identifier: CloudKitSchema.containerIdentifier)
-    var db: CKDatabase { container.privateCloudDatabase }
-    private init() {}
+
+    // Nil in XCTest — CKContainer(identifier:) and .default() both throw
+    // NSExceptions in the iOS Simulator when CODE_SIGNING_ALLOWED=NO.
+    private let _container: CKContainer?
+    private var db: CKDatabase { _container!.privateCloudDatabase }
+
+    var container: CKContainer? { _container }
+
+    func accountStatus() async -> CKAccountStatus {
+        guard let c = _container else { return .noAccount }
+        return (try? await c.accountStatus()) ?? .couldNotDetermine
+    }
+
+    func fetchMacPresenceCount() async -> Int {
+        guard let c = _container else { return 0 }
+        let pred = NSPredicate(format: "platform == %@", "macOS")
+        let q = CKQuery(recordType: CloudKitSchema.RecordType.devicePresence, predicate: pred)
+        let (results, _) = (try? await c.privateCloudDatabase.records(matching: q, resultsLimit: 50)) ?? ([], nil)
+        return results.count
+    }
+
+    private init() {
+        let isTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        _container = isTest ? nil : CKContainer(identifier: CloudKitSchema.containerIdentifier)
+    }
 
     func fetchActiveSessions() async throws -> [CKSessionAggregate] {
+        guard _container != nil else { return [] }
         let predicate = NSPredicate(format: "status IN %@", ["running", "waitingApproval"])
         return try await queryAggregates(recordType: CloudKitSchema.RecordType.sessionAggregate,
                                predicate: predicate,
@@ -16,6 +39,7 @@ final class CloudKitClient {
     }
 
     func fetchHistory(daysBack: Int = 7) async throws -> [CKSessionAggregate] {
+        guard _container != nil else { return [] }
         let cutoff = Date().addingTimeInterval(-Double(daysBack) * 86_400)
         let predicate = NSPredicate(format: "lastEventAt >= %@", cutoff as NSDate)
         return try await queryAggregates(recordType: CloudKitSchema.RecordType.sessionAggregate,
@@ -24,12 +48,30 @@ final class CloudKitClient {
     }
 
     func fetchAggregate(sessionKey: String) async throws -> CKSessionAggregate? {
+        guard _container != nil else { return nil }
         let id = CKRecord.ID(recordName: sessionKey)
         let record = try await db.record(for: id)
         return decodeAggregate(record)
     }
 
+    func record(for id: CKRecord.ID) async throws -> CKRecord? {
+        guard let c = _container else { return nil }
+        return try await c.privateCloudDatabase.record(for: id)
+    }
+
+    @discardableResult
+    func save(_ record: CKRecord) async throws -> CKRecord? {
+        guard let c = _container else { return nil }
+        return try await c.privateCloudDatabase.save(record)
+    }
+
+    func modifySubscriptions(saving: [CKSubscription]) async throws {
+        guard let c = _container else { return }
+        _ = try await c.privateCloudDatabase.modifySubscriptions(saving: saving, deleting: [])
+    }
+
     func fetchEvents(sessionKey: String) async throws -> [CKAgentEvent] {
+        guard _container != nil else { return [] }
         let predicate = NSPredicate(format: "sessionKey == %@", sessionKey)
         return try await queryEvents(recordType: CloudKitSchema.RecordType.agentEvent,
                                predicate: predicate,
@@ -38,6 +80,7 @@ final class CloudKitClient {
     }
 
     func writeApprovalResponse(requestId: String, decision: String, deviceUUID: String) async throws {
+        guard _container != nil else { return }
         let id = CKRecord.ID(recordName: requestId)
         let rec = CKRecord(recordType: CloudKitSchema.RecordType.approvalResponse, recordID: id)
         rec["requestId"] = requestId as CKRecordValue
@@ -48,6 +91,7 @@ final class CloudKitClient {
     }
 
     func writeDevicePresence(uuid: String, name: String, appVersion: String) async throws {
+        guard let container = _container else { return }
         let id = CKRecord.ID(recordName: uuid)
         let rec = CKRecord(recordType: CloudKitSchema.RecordType.devicePresence, recordID: id)
         rec["deviceUUID"] = uuid as CKRecordValue
@@ -65,7 +109,7 @@ final class CloudKitClient {
                 case .failure(let err): cont.resume(throwing: err)
                 }
             }
-            db.add(op)
+            container.privateCloudDatabase.add(op)
         }
     }
 
@@ -127,7 +171,8 @@ final class CloudKitClient {
             totalErrors: (rec["totalErrors"] as? Int) ?? 0,
             model: rec["model"] as? String,
             promptPreview: rec["promptPreview"] as? String,
-            expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400)
+            expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400),
+            pendingRequestId: rec["pendingRequestId"] as? String
         )
     }
 

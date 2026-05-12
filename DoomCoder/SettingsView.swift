@@ -56,6 +56,16 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
 
+            Section("Updates") {
+                Toggle("Join Beta Channel", isOn: Binding(
+                    get: { FeatureFlags.joinBetaChannel },
+                    set: { FeatureFlags.joinBetaChannel = $0 }
+                ))
+                Text("Receive pre-release builds for early access to new features. Stable releases are always available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("iOS Companion (Beta)") {
                 Toggle("Enable CloudKit sync", isOn: Binding(
                     get: { FeatureFlags.cloudKitEnabled },

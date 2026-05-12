@@ -10,8 +10,53 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build (Debug)
+  mac-test:
+    name: macOS Test (Debug)
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Validate Privacy Manifests
+        run: |
+          plutil -lint DoomCoder/PrivacyInfo.xcprivacy
+          plutil -lint DoomCoderiOS/Resources/PrivacyInfo.xcprivacy
+          # Verify no tracking domains or collected data types snuck in
+          for f in DoomCoder/PrivacyInfo.xcprivacy DoomCoderiOS/Resources/PrivacyInfo.xcprivacy; do
+            TRACKING=$(plutil -extract NSPrivacyTracking raw "$f")
+            if [ "$TRACKING" != "false" ]; then
+              echo "ERROR: NSPrivacyTracking is not false in $f" >&2; exit 1
+            fi
+            COUNT=$(plutil -extract NSPrivacyCollectedDataTypes raw "$f" 2>/dev/null || echo 0)
+            if [ "$COUNT" != "0" ]; then
+              echo "ERROR: NSPrivacyCollectedDataTypes is non-empty in $f" >&2; exit 1
+            fi
+          done
+          echo "Privacy manifests OK"
+
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+  ios-test:
+    name: iOS Test (Debug)
     runs-on: macos-26
 
     steps:
@@ -25,17 +70,16 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies \
             -project DoomCoder.xcodeproj \
-            -scheme DoomCoder
+            -scheme DoomCoderiOS
 
-      - name: Build
+      - name: Test
         run: |
-          xcodebuild \
+          xcodebuild test \
             -project DoomCoder.xcodeproj \
-            -scheme DoomCoder \
+            -scheme DoomCoderiOS \
             -configuration Debug \
-            -destination 'platform=macOS' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            build
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+

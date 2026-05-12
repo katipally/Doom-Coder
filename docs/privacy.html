@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Doom Coder</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 48px auto; padding: 0 24px; color: #1c1c1e; line-height: 1.7; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 1.2rem; font-weight: 600; margin-top: 36px; }
+    .date { color: #636366; font-size: 0.9rem; margin-bottom: 32px; }
+    a { color: #007aff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #000; color: #f2f2f7; }
+      a { color: #0a84ff; }
+      .date { color: #8e8e93; }
+    }
+  </style>
+</head>
+<body>
+  <h1>⚡ Doom Coder — Privacy Policy</h1>
+  <p class="date">Effective: May 2026 · Last updated: May 2026</p>
+
+  <p>Doom Coder is a free, open-source app for tracking AI coding agents on macOS and iOS. This policy explains how your data is handled.</p>
+
+  <h2>What data Doom Coder collects</h2>
+  <p>Doom Coder collects information about your AI agent sessions — tool calls, model names, token counts, working directory names, and session boundaries — in order to display them in the Mac menu bar and iOS Live Activities.</p>
+
+  <h2>Where your data goes</h2>
+  <p>All data is stored exclusively in your own <strong>iCloud private database</strong> (CloudKit). This database is accessible only to you. Apple cannot read its contents. Doom Coder never sends data to any third-party server, analytics platform, or external service.</p>
+
+  <h2>What Doom Coder does NOT do</h2>
+  <ul>
+    <li>No analytics or telemetry of any kind</li>
+    <li>No advertising or tracking</li>
+    <li>No third-party SDKs that collect data</li>
+    <li>No account creation or login (iCloud sign-in is handled entirely by Apple)</li>
+    <li>No sale or sharing of your data</li>
+  </ul>
+
+  <h2>File system access</h2>
+  <p>The Mac app reads your agent hook configuration files (e.g., <code>~/.claude/settings.json</code>) to install and verify hooks. It does not read, upload, or store the contents of files you are editing with AI agents.</p>
+
+  <h2>Notifications</h2>
+  <p>The iOS app may send local and push notifications for agent events (approvals, failures, session summaries). Notification permission is requested the first time you open the app and can be withdrawn at any time in iOS Settings.</p>
+
+  <h2>iCloud data retention</h2>
+  <p>Agent events stored in CloudKit are automatically pruned after 7 days by default (configurable in Settings). You can clear all history at any time from the app's Settings tab.</p>
+
+  <h2>Open source</h2>
+  <p>Both apps are fully open source. You can inspect every line of code at <a href="https://github.com/katipally/Doom-Coder">github.com/katipally/Doom-Coder</a>.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes materially, the updated date above will be updated and a notice will appear in the app. Continued use of the app after changes constitutes acceptance.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or concerns: open an issue at <a href="https://github.com/katipally/Doom-Coder/issues">github.com/katipally/Doom-Coder/issues</a>.</p>
+</body>
+</html>

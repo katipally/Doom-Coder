@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build & Release
+  mac-release:
+    name: macOS Build, Sign, Notarize & Release
     runs-on: macos-26
 
     steps:
@@ -22,9 +22,6 @@ jobs:
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Compute monotonic build number: major*1000 + minor*100 + patch
-          # e.g. 1.9.0 → 1900, 1.9.1 → 1901, 1.10.0 → 2000
-          # (tr -d '.' would give 190 for 1.9.0 < 1810 for 1.8.10 — wrong)
           IFS='.' read -r _MAJOR _MINOR _PATCH <<< "$VERSION"
           BUILD=$(( _MAJOR * 1000 + _MINOR * 100 + _PATCH ))
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
@@ -33,6 +30,40 @@ jobs:
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Import Developer ID certificate
+        env:
+          MAC_CERTIFICATE_BASE64: ${{ secrets.MAC_CERTIFICATE_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          CERT_PATH="$RUNNER_TEMP/mac_cert.p12"
+
+          echo "$MAC_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" \
+            -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application" | awk -F'"' '{print $2}' | head -1)
+          echo "SIGNING_IDENTITY=${SIGNING_IDENTITY}" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> $GITHUB_ENV
+
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode \
+            > "$KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          chmod 600 "$KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
       - name: Update version in project
         run: |
@@ -62,65 +93,91 @@ jobs:
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
 
-      - name: Ad-hoc sign app (proper bottom-up component signing)
+      - name: Sign app with Developer ID (bottom-up)
         run: |
           cp -R "build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app" .
 
-          # Remove any quarantine / build-artifact extended attributes
           xattr -cr DoomCoder.app
 
           APP="DoomCoder.app"
           SPARKLE_FW="$APP/Contents/Frameworks/Sparkle.framework"
           SPARKLE_VER="$SPARKLE_FW/Versions/B"
+          ID="${{ env.SIGNING_IDENTITY }}"
 
-          # --- Bottom-up signing (innermost first, outermost last) ---
-          # codesign --deep is DEPRECATED (macOS 13+) and produces unreliable
-          # signatures on nested components. Sign each item individually.
-
-          # 1. Sign Sparkle XPC Services (deepest nested bundles)
+          # 1. Sign Sparkle XPC Services (deepest nested first)
           for xpc in "$SPARKLE_VER/XPCServices/Installer.xpc" \
                      "$SPARKLE_VER/XPCServices/Downloader.xpc"; do
             if [ -d "$xpc" ]; then
               echo "Signing: $xpc"
-              codesign --force --options runtime --sign - "$xpc"
+              codesign --force --options runtime --timestamp --sign "$ID" "$xpc"
             fi
           done
 
           # 2. Sign Sparkle helper apps and tools
           if [ -d "$SPARKLE_VER/Updater.app" ]; then
             echo "Signing: Updater.app"
-            codesign --force --options runtime --sign - "$SPARKLE_VER/Updater.app"
+            codesign --force --options runtime --timestamp --sign "$ID" "$SPARKLE_VER/Updater.app"
           fi
           if [ -f "$SPARKLE_VER/Autoupdate" ]; then
             echo "Signing: Autoupdate"
-            codesign --force --options runtime --sign - "$SPARKLE_VER/Autoupdate"
+            codesign --force --options runtime --timestamp --sign "$ID" "$SPARKLE_VER/Autoupdate"
           fi
 
-          # 3. Sign the Sparkle framework itself (after all its children)
+          # 3. Sign the Sparkle framework (after all its children)
           echo "Signing: Sparkle.framework"
-          codesign --force --options runtime --sign - "$SPARKLE_FW"
+          codesign --force --options runtime --timestamp --sign "$ID" "$SPARKLE_FW"
 
-          # 4. Sign the main app bundle last (seals everything)
-          # Include entitlements to disable library validation — required for
-          # ad-hoc signing with hardened runtime + embedded frameworks
-          echo "Signing: DoomCoder.app (with entitlements)"
-          codesign --force --options runtime --sign - \
+          # 4. Sign dc-hook helper binary if present
+          if [ -f "$APP/Contents/Resources/dc-hook" ]; then
+            echo "Signing: dc-hook"
+            codesign --force --options runtime --timestamp --sign "$ID" \
+              "$APP/Contents/Resources/dc-hook"
+          fi
+
+          # 5. Sign the main app bundle last (seals everything)
+          echo "Signing: DoomCoder.app"
+          codesign --force --options runtime --timestamp --sign "$ID" \
             --entitlements DoomCoder/DoomCoder.entitlements "$APP"
 
-          # --- Verify every component ---
           echo ""
           echo "=== Verifying signatures ==="
           codesign --verify --strict --verbose=2 "$APP" 2>&1
           echo ""
-          echo "=== Main app signature ==="
           codesign -dvv "$APP" 2>&1
-          echo ""
-          echo "=== Sparkle framework signature ==="
-          codesign -dvv "$SPARKLE_FW" 2>&1
 
-      - name: Create ZIP
+      - name: Notarize app
         run: |
-          zip -r --symlinks "DoomCoder-${{ env.VERSION }}.zip" DoomCoder.app
+          ditto -c -k --keepParent DoomCoder.app notarize_input.zip
+
+          xcrun notarytool submit notarize_input.zip \
+            --key "$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8" \
+            --key-id "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            --issuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            --wait \
+            --output-format plist \
+            > notarize_result.plist || {
+              echo "::error::Notarization submission failed"
+              cat notarize_result.plist || true
+              exit 1
+            }
+
+          NOTARY_STATUS=$(plutil -extract status raw notarize_result.plist)
+          echo "Notarization status: ${NOTARY_STATUS}"
+          if [ "${NOTARY_STATUS}" != "Accepted" ]; then
+            echo "::error::Notarization rejected — see log for details"
+            cat notarize_result.plist
+            exit 1
+          fi
+
+      - name: Staple notarization ticket
+        run: |
+          xcrun stapler staple DoomCoder.app
+          xcrun stapler validate DoomCoder.app
+          echo "✅ Notarization ticket stapled successfully"
+
+      - name: Create final release ZIP
+        run: |
+          ditto -c -k --keepParent "DoomCoder.app" "DoomCoder-${{ env.VERSION }}.zip"
 
       - name: Download Sparkle tools
         run: |
@@ -135,8 +192,6 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          # Pipe key via stdin — correct Sparkle 2.x API (env var not supported)
-          # -p flag outputs ONLY the base64 signature, no parsing needed
           SPARKLE_SIG=$(echo "${SPARKLE_PRIVATE_KEY}" | \
             sparkle-tools/bin/sign_update --ed-key-file - -p "DoomCoder-${{ env.VERSION }}.zip")
           ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
@@ -160,10 +215,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Retry up to 5 times in case main moves between fetch and push.
-          # Strategy: stash our generated changes, rebase onto latest main,
-          # re-apply, then push. Non-fast-forward pushes are retried with
-          # a fresh appcast regeneration in case main already advanced.
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
             git add -A
@@ -175,13 +226,10 @@ jobs:
 
             git fetch origin main
 
-            # Prefer our generated appcast.xml & Info.plist bumps on conflict —
-            # they are deterministic from the tag and always correct.
             if ! git pull --rebase -X theirs origin main; then
-              echo "Rebase failed, aborting and retrying with regenerated appcast"
+              echo "Rebase failed, aborting and retrying"
               git rebase --abort || true
               git reset --hard "origin/main"
-              # Re-apply the generated appcast entry on top of fresh main
               python3 scripts/update_appcast.py \
                 --version "${{ env.VERSION }}" \
                 --build "${{ env.BUILD }}" \
@@ -196,7 +244,6 @@ jobs:
               exit 0
             fi
 
-            echo "Push rejected, sleeping before retry"
             sleep $((attempt * 2))
           done
 
@@ -216,37 +263,156 @@ jobs:
 
             1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
             2. Unzip and drag **`DoomCoder.app`** to your `/Applications` folder
+            3. Double-click to open — the app is **signed and notarized by Apple**, so it opens without any Gatekeeper warning
 
-            ### ⚠️ Opening for the first time (macOS Gatekeeper)
+            ### iOS companion app
 
-            This app is **ad-hoc signed but not notarized** (notarization requires a $99/yr Apple Developer account). macOS will block it on first launch.
-
-            **macOS 15 (Sequoia) / macOS 26 and later:**
-
-            1. Double-click `DoomCoder.app` — you'll see a warning. Click **Done**.
-            2. Open **System Settings → Privacy & Security**
-            3. Scroll down to the **Security** section — you'll see _"DoomCoder" was blocked_
-            4. Click **Open Anyway** → enter your password → click **Open**
-
-            You only need to do this **once**. After that, it opens normally forever.
-
-            **Alternative — Terminal method:**
-            ```bash
-            xattr -cr /Applications/DoomCoder.app
-            open /Applications/DoomCoder.app
-            ```
-            If the terminal method alone doesn't work, also follow the System Settings steps above.
-
-            **macOS 14 (Sonoma) and earlier:**
-            Right-click `DoomCoder.app` → **Open** → click **Open** at the warning dialog.
-
-            ## ✅ Verify it's working
-
-            After enabling Doom Coder, run this in Terminal:
-            ```bash
-            pmset -g assertions | grep DoomCoder
-            ```
-            You should see: `PreventUserIdleDisplaySleep named: "DoomCoder: Preventing sleep for AI coding session"`
+            Install **Doom Coder** from the App Store on your iPhone or iPad to track your coding agents with Live Activities, Dynamic Island, and rich notifications.
 
             ---
             Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/CHANGELOG.md)
+
+  ios-testflight:
+    name: iOS TestFlight Upload
+    runs-on: macos-26
+    needs: mac-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r _MAJOR _MINOR _PATCH <<< "$VERSION"
+          BUILD=$(( _MAJOR * 1000 + _MINOR * 100 + _PATCH ))
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD=${BUILD}" >> $GITHUB_ENV
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Import Apple Distribution certificate
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/ios_build.keychain"
+          CERT_PATH="$RUNNER_TEMP/ios_cert.p12"
+
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" \
+            -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
+
+      - name: Install provisioning profiles
+        env:
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_WIDGET_PROFILE_BASE64: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+        run: |
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+
+          echo "$IOS_APP_PROFILE_BASE64" | base64 --decode > /tmp/ios_app.mobileprovision
+          echo "$IOS_WIDGET_PROFILE_BASE64" | base64 --decode > /tmp/ios_widget.mobileprovision
+
+          APP_UUID=$(security cms -D -i /tmp/ios_app.mobileprovision \
+            | plutil -extract UUID raw -)
+          WIDGET_UUID=$(security cms -D -i /tmp/ios_widget.mobileprovision \
+            | plutil -extract UUID raw -)
+          APP_PROFILE_NAME=$(security cms -D -i /tmp/ios_app.mobileprovision \
+            | plutil -extract Name raw -)
+          WIDGET_PROFILE_NAME=$(security cms -D -i /tmp/ios_widget.mobileprovision \
+            | plutil -extract Name raw -)
+
+          cp /tmp/ios_app.mobileprovision "$PROFILE_DIR/${APP_UUID}.mobileprovision"
+          cp /tmp/ios_widget.mobileprovision "$PROFILE_DIR/${WIDGET_UUID}.mobileprovision"
+
+          echo "APP_PROFILE_NAME=${APP_PROFILE_NAME}" >> $GITHUB_ENV
+          echo "WIDGET_PROFILE_NAME=${WIDGET_PROFILE_NAME}" >> $GITHUB_ENV
+
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode \
+            > "$KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          chmod 600 "$KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoderiOS
+
+      - name: Archive iOS app
+        run: |
+          xcodebuild archive \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoderiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/DoomCoderiOS.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            "CODE_SIGN_IDENTITY=Apple Distribution" \
+            DEVELOPMENT_TEAM=A9P2388PHM \
+            MARKETING_VERSION="${{ env.VERSION }}" \
+            CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
+
+      - name: Create ExportOptions.plist
+        run: |
+          cat > ios_export_options.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>A9P2388PHM</string>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.doomcoder.ios</key>
+                  <string>${{ env.APP_PROFILE_NAME }}</string>
+                  <key>com.doomcoder.ios.widget</key>
+                  <string>${{ env.WIDGET_PROFILE_NAME }}</string>
+              </dict>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Export archive
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/DoomCoderiOS.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ios_export_options.plist
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          IPA=$(find build/export -name "*.ipa" | head -1)
+          echo "Uploading: ${IPA}"
+          xcrun altool --upload-app \
+            --type ios \
+            -f "${IPA}" \
+            --apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
+            --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"

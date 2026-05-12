@@ -11,7 +11,6 @@ final class CloudKitSubscriptionHandler {
 
     func registerAll() async {
         if defaults.bool(forKey: keyRegistered) { return }
-        let db = CloudKitClient.shared.db
         let subs: [CKSubscription] = [
             buildSubscription(recordType: CloudKitSchema.RecordType.sessionAggregate,
                               subscriptionId: "sub.sessionaggregate.v1",
@@ -24,7 +23,7 @@ final class CloudKitSubscriptionHandler {
                               options: [.firesOnRecordCreation, .firesOnRecordUpdate])
         ]
         do {
-            _ = try await db.modifySubscriptions(saving: subs, deleting: [])
+            try await CloudKitClient.shared.modifySubscriptions(saving: subs)
             defaults.set(true, forKey: keyRegistered)
         } catch {
             // Will retry on next launch
@@ -62,7 +61,7 @@ final class PushReceiver {
 
     private func routeChangedRecord(recordName: String, ck: [String: Any]) async {
         do {
-            let rec = try await CloudKitClient.shared.db.record(for: CKRecord.ID(recordName: recordName))
+            guard let rec = try await CloudKitClient.shared.record(for: CKRecord.ID(recordName: recordName)) else { return }
             switch rec.recordType {
             case CloudKitSchema.RecordType.sessionAggregate:
                 if let agg = decodeAggregate(rec) {

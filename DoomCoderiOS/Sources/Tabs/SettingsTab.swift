@@ -70,29 +70,16 @@ struct SettingsTab: View {
     }
 
     private func loadStatus() async {
-        do {
-            let status = try await CloudKitClient.shared.container.accountStatus()
-            switch status {
-            case .available: iCloudStatus = "Connected ✓"
-            case .noAccount: iCloudStatus = "No iCloud account"
-            case .restricted: iCloudStatus = "Restricted"
-            case .couldNotDetermine: iCloudStatus = "Unknown"
-            case .temporarilyUnavailable: iCloudStatus = "Temporarily unavailable"
-            @unknown default: iCloudStatus = "Unknown"
-            }
-        } catch {
-            iCloudStatus = "Error: \(error.localizedDescription)"
+        let status = await CloudKitClient.shared.accountStatus()
+        switch status {
+        case .available: iCloudStatus = "Connected ✓"
+        case .noAccount: iCloudStatus = "No iCloud account"
+        case .restricted: iCloudStatus = "Restricted"
+        case .couldNotDetermine: iCloudStatus = "Unknown"
+        case .temporarilyUnavailable: iCloudStatus = "Temporarily unavailable"
+        @unknown default: iCloudStatus = "Unknown"
         }
-        connectedMacs = await fetchMacCount()
-    }
-
-    private func fetchMacCount() async -> Int {
-        let pred = NSPredicate(format: "platform == %@", "macOS")
-        let q = CKQuery(recordType: CloudKitSchema.RecordType.devicePresence, predicate: pred)
-        do {
-            let (results, _) = try await CloudKitClient.shared.db.records(matching: q, resultsLimit: 50)
-            return results.count
-        } catch { return 0 }
+        connectedMacs = await CloudKitClient.shared.fetchMacPresenceCount()
     }
 
     private func clearAll() async {

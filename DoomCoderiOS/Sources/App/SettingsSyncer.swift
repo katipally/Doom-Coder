@@ -52,7 +52,7 @@ final class SettingsSyncer {
 
     func pull() async {
         do {
-            let rec = try await CloudKitClient.shared.db.record(for: recordId)
+            guard let rec = try await CloudKitClient.shared.record(for: recordId) else { return }
             applyRemote(rec)
         } catch let err as CKError where err.code == .unknownItem {
             await pushLocal()
@@ -96,7 +96,7 @@ final class SettingsSyncer {
         let myUUID = DevicePresenceUpdater.shared.deviceUUID()
         let rec: CKRecord
         do {
-            rec = try await CloudKitClient.shared.db.record(for: recordId)
+            rec = try await CloudKitClient.shared.record(for: recordId) ?? CKRecord(recordType: CloudKitSchema.RecordType.userSettings, recordID: recordId)
         } catch {
             rec = CKRecord(recordType: CloudKitSchema.RecordType.userSettings, recordID: recordId)
         }
@@ -111,7 +111,7 @@ final class SettingsSyncer {
         rec["lastModifiedBy"] = myUUID as CKRecordValue
         rec["lastModifiedAt"] = now as CKRecordValue
         do {
-            _ = try await CloudKitClient.shared.db.save(rec)
+            _ = try await CloudKitClient.shared.save(rec)
             s.lastModifiedAt = now
             s.lastModifiedBy = myUUID
         } catch {

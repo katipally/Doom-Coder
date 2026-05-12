@@ -12,6 +12,15 @@ final class SparkleUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
     nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
 }
 
+/// Delegates Sparkle channel filtering to `FeatureFlags.joinBetaChannel`.
+/// Items tagged `<sparkle:channel>beta</sparkle:channel>` are only shown
+/// when the user has opted in; stable items (no channel tag) are always shown.
+final class SparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        FeatureFlags.joinBetaChannel ? ["beta"] : []
+    }
+}
+
 /// Wraps Sparkle's updater controller for SwiftUI observation.
 @Observable
 @MainActor
@@ -27,12 +36,18 @@ final class CheckForUpdatesViewModel {
     private let driverDelegate = SparkleUserDriverDelegate()
 
     @ObservationIgnored
+    private let updaterDelegate = SparkleUpdaterDelegate()
+
+    @ObservationIgnored
     private var cancellable: AnyCancellable?
+
+    @ObservationIgnored
+    private var betaObserver: NSObjectProtocol?
 
     init() {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: updaterDelegate,
             userDriverDelegate: driverDelegate
         )
         // Observe canCheckForUpdates via KVO so the button re-enables
@@ -41,8 +56,22 @@ final class CheckForUpdatesViewModel {
             .publisher(for: \.canCheckForUpdates)
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
-                self?.canCheckForUpdates = value
+                Task { @MainActor [weak self] in
+                    self?.canCheckForUpdates = value
+                }
             }
+        // Trigger a new check when beta preference changes so the user
+        // immediately sees beta items if they just opted in.
+        betaObserver = NotificationCenter.default.addObserver(
+            forName: .betaChannelDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.canCheckForUpdates else { return }
+                self.updaterController.updater.checkForUpdates()
+            }
+        }
     }
 
     func checkForUpdates() {

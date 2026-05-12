@@ -2,6 +2,7 @@ import AppIntents
 import ActivityKit
 import CloudKit
 import Foundation
+import UIKit
 
 @available(iOS 17.0, *)
 struct ApproveIntent: LiveActivityIntent {
@@ -17,6 +18,7 @@ struct ApproveIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         try? await ApprovalIntentHelper.write(requestId: requestId, decision: "approve")
+        await MainActor.run { UINotificationFeedbackGenerator().notificationOccurred(.success) }
         return .result()
     }
 }
@@ -35,6 +37,7 @@ struct DenyIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         try? await ApprovalIntentHelper.write(requestId: requestId, decision: "deny")
+        await MainActor.run { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
         return .result()
     }
 }
@@ -52,12 +55,11 @@ struct AlwaysAllowIntent: LiveActivityIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        if !tool.isEmpty && !agent.isEmpty {
-            var set = Set(UserDefaults.standard.stringArray(forKey: "approvals.alwaysAllow.v1") ?? [])
-            set.insert("\(agent)::\(tool)")
-            UserDefaults.standard.set(Array(set), forKey: "approvals.alwaysAllow.v1")
-        }
+        // Write "always" to CloudKit — macOS side honours the always-allow decision.
+        // UserDefaults.standard in the widget extension is isolated from the app sandbox,
+        // so we skip local storage here; the app's ApprovalResponder.AlwaysAllowStore handles persistence.
         try? await ApprovalIntentHelper.write(requestId: requestId, decision: "always")
+        await MainActor.run { UINotificationFeedbackGenerator().notificationOccurred(.success) }
         return .result()
     }
 }

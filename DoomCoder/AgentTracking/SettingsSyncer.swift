@@ -106,7 +106,7 @@ final class SettingsSyncer {
         }
     }
 
-    static func decode(_ rec: CKRecord) -> CKUserSettings? {
+    nonisolated static func decode(_ rec: CKRecord) -> CKUserSettings? {
         guard rec.recordType == CloudKitSchema.RecordType.userSettings else { return nil }
         guard let by = rec["lastModifiedBy"] as? String,
               let at = rec["lastModifiedAt"] as? Date else { return nil }

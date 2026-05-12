@@ -211,6 +211,7 @@ extension CKRecord {
         if let m = a.model { r["model"] = m as CKRecordValue }
         if let p = a.promptPreview { r["promptPreview"] = p as CKRecordValue }
         r["expiresAt"] = a.expiresAt as CKRecordValue
+        if let rid = a.pendingRequestId { r["pendingRequestId"] = rid as CKRecordValue }
         return r
     }
 }
@@ -224,7 +225,8 @@ enum Redactor {
             #"(?i)gh[poursu]_[A-Za-z0-9]{36,}"#,
             #"(?i)sk-[A-Za-z0-9]{20,}"#,
             #"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"#,
-            #"(?i)(?:bearer|authorization|api[_-]?key|token|secret)\s*[:=]\s*[A-Za-z0-9_+/=.-]{16,}"#
+            #"(?i)(?:bearer|authorization|api[_-]?key|token|secret)\s*[:=]\s*[A-Za-z0-9_+/=.-]{16,}"#,
+            #"(?i)bearer\s+[A-Za-z0-9_+/=.-]{16,}"#
         ]
         return raw.compactMap { try? NSRegularExpression(pattern: $0) }
     }()

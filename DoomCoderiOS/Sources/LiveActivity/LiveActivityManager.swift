@@ -17,7 +17,8 @@ final class LiveActivityManager {
             elapsedSec: elapsed,
             approvalPending: agg.status == .waitingApproval,
             toolArgsPreview: nil,
-            requestId: nil
+            requestId: agg.pendingRequestId,
+            toolDetail: agg.currentTool
         )
 
         switch agg.status {
@@ -37,7 +38,8 @@ final class LiveActivityManager {
         let attrs = DoomCoderActivityAttributes(
             sessionKey: agg.sessionKey,
             agent: agg.agent,
-            cwdBasename: agg.cwdBasename
+            cwdBasename: agg.cwdBasename,
+            agentColorHex: Self.brandColorHex(for: agg.agent)
         )
         do {
             let act = try Activity.request(attributes: attrs,
@@ -62,6 +64,19 @@ final class LiveActivityManager {
         for (key, act) in activities {
             await act.end(nil, dismissalPolicy: .immediate)
             activities.removeValue(forKey: key)
+        }
+    }
+
+    // Returns the brand hex color string for an agent (used by the widget for keylineTint).
+    static func brandColorHex(for agent: String) -> String {
+        switch agent {
+        case "claude":      return "#E06B37"
+        case "copilot_cli": return "#2088FF"
+        case "cursor":      return "#6B46C1"
+        case "windsurf":    return "#0FBBDD"
+        case "codex_cli":   return "#22C55E"
+        case "vscode":      return "#5A7FA6"
+        default:            return "#888888"
         }
     }
 }

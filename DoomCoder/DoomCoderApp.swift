@@ -44,6 +44,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     private var whatsNewWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Skip all heavy startup when running under XCTest (hosted unit tests).
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+
         // Prepare support dirs + SQLite store on main (cheap).
         AgentSupportDir.ensure()
         PauseFlag.clearOnLaunch()

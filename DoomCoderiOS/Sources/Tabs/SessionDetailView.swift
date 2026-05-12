@@ -1,11 +1,54 @@
 import SwiftUI
 
+// MARK: - EventDetailSheet
+
+private struct EventDetailSheet: View {
+    let event: CKAgentEvent
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let toolName = event.toolName {
+                        Label(toolName, systemImage: "wrench.and.screwdriver.fill")
+                            .font(.headline)
+                    }
+                    if let filePath = event.filePath {
+                        Label(filePath, systemImage: "doc.fill")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    Text(event.payloadJSON)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .padding()
+            }
+            .background(Color(white: 0.08).ignoresSafeArea())
+            .navigationTitle(event.hookPhase.capitalized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - SessionDetailView
+
 struct SessionDetailView: View {
     let sessionKey: String
     @State private var aggregate: CKSessionAggregate?
     @State private var events: [CKAgentEvent] = []
     @State private var loading = true
     @State private var loadError: String?
+    @State private var selectedEvent: CKAgentEvent?
 
     var body: some View {
         ScrollView {
@@ -26,53 +69,45 @@ struct SessionDetailView: View {
             }
         }
         .task { await load() }
+        .sheet(item: $selectedEvent) { EventDetailSheet(event: $0) }
     }
 
     private func header(_ agg: CKSessionAggregate) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(statusEmoji(agg.status)) \(agg.agent.capitalized)")
-                .font(.title2.bold())
-            Text(agg.cwdBasename).foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(agentBrandColor(agg.agent).opacity(0.18))
+                Image(systemName: agentSFSymbol(agg.agent))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(agentBrandColor(agg.agent))
+            }
+            .frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: statusSystemImage(agg.status))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(statusColor(agg.status))
+                    Text(agentDisplayName(agg.agent))
+                        .font(.title3.bold())
+                }
+                Text(agg.cwdBasename).font(.subheadline).foregroundStyle(.secondary)
+            }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     @ViewBuilder private var stats: some View {
         if let agg = aggregate {
             VStack(alignment: .leading, spacing: 6) {
-                statRow("Model", agg.model ?? "—")
-                statRow("Tools", "\(agg.totalToolCalls)")
-                statRow("Files edited", "\(agg.totalFilesEdited)")
-                statRow("Errors", "\(agg.totalErrors)")
-                statRow("Started", agg.startedAt.formatted(date: .abbreviated, time: .standard))
-            }
-            .padding(14)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-    }
-
-    private func statRow(_ k: String, _ v: String) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).font(.callout) }
-    }
-
-    @ViewBuilder private var timeline: some View {
-        if loading {
-            ProgressView().padding()
-        } else if let err = loadError {
-            Text("Error: \(err)").foregroundStyle(.red)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Timeline").font(.headline)
-                ForEach(events.indices, id: \.self) { idx in
-                    let e = events[idx]
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(e.occurredAt.formatted(date: .omitted, time: .standard))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Text(phaseGlyph(e.hookPhase))
-                        Text(e.hookPhase).font(.caption.bold())
-                        Spacer()
-                    }
-                    .padding(.vertical, 4)
+                if let model = agg.model { statRow("Model", model, systemImage: "cpu") }
+                statRow("Tools used", "\(agg.totalToolCalls)", systemImage: "wrench.and.screwdriver")
+                statRow("Files edited", "\(agg.totalFilesEdited)", systemImage: "doc.badge.plus")
+                statRow("Errors", "\(agg.totalErrors)", systemImage: "exclamationmark.triangle")
+                statRow("Started", agg.startedAt.formatted(date: .abbreviated, time: .standard), systemImage: "calendar.clock")
+                if let ended = agg.endedAt {
+                    let s = Int(ended.timeIntervalSince(agg.startedAt))
+                    statRow("Duration", "\(s / 60)m \(s % 60)s", systemImage: "timer")
                 }
             }
             .padding(14)
@@ -80,23 +115,138 @@ struct SessionDetailView: View {
         }
     }
 
-    private func phaseGlyph(_ phase: String) -> String {
-        switch phase.lowercased() {
-        case "sessionstart": return "▶"
-        case "sessionstop", "sessionend": return "■"
-        case "userprompt": return "💬"
-        case "pretool", "pretooluse": return "🛠"
-        case "posttool", "posttooluse": return "✓"
-        default: return "•"
+    private func statRow(_ k: String, _ v: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(k).foregroundStyle(.secondary)
+            Spacer()
+            Text(v).font(.callout)
         }
     }
 
-    private func statusEmoji(_ s: CKSessionAggregate.Status) -> String {
+    @ViewBuilder private var timeline: some View {
+        if loading {
+            ProgressView().padding().frame(maxWidth: .infinity)
+        } else if let err = loadError {
+            Label("Error: \(err)", systemImage: "exclamationmark.circle").foregroundStyle(.red)
+        } else if events.isEmpty {
+            Label("No events recorded", systemImage: "clock").foregroundStyle(.secondary).padding()
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Timeline").font(.headline).padding(.bottom, 4)
+                ForEach(events) { e in
+                    Button {
+                        selectedEvent = e
+                    } label: {
+                        HStack(alignment: .center, spacing: 10) {
+                            let (sym, col) = phaseGlyph(e.hookPhase)
+                            Image(systemName: sym)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(col)
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(e.hookPhase.capitalized)
+                                    .font(.caption.bold())
+                                if let tool = e.toolName {
+                                    Text(tool)
+                                        .font(.caption.monospaced())
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                if let path = e.filePath {
+                                    Text(path)
+                                        .font(.system(size: 10).monospaced())
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            Text(e.occurredAt.formatted(date: .omitted, time: .shortened))
+                                .font(.system(size: 9).monospaced())
+                                .foregroundStyle(.quaternary)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(.white.opacity(0.05))
+                            .frame(height: 1)
+                    }
+                }
+            }
+            .padding(14)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+    }
+
+    private func phaseGlyph(_ phase: String) -> (String, Color) {
+        switch phase.lowercased() {
+        case "sessionstart":           return ("play.circle.fill", .green)
+        case "sessionstop", "sessionend": return ("stop.circle.fill", .gray)
+        case "userprompt":             return ("message.fill", .blue)
+        case "pretool", "pretooluse":  return ("hammer.fill", .orange)
+        case "posttool", "posttooluse": return ("checkmark.circle.fill", .teal)
+        default:                       return ("circle", .secondary)
+        }
+    }
+
+    private func agentSFSymbol(_ agent: String) -> String {
+        switch agent {
+        case "claude":      return "c.circle.fill"
+        case "cursor":      return "cursorarrow.rays"
+        case "vscode":      return "chevron.left.forwardslash.chevron.right"
+        case "copilot_cli": return "terminal.fill"
+        case "windsurf":    return "wind"
+        case "codex_cli":   return "sparkles.rectangle.stack"
+        default:            return "cpu.fill"
+        }
+    }
+
+    private func agentDisplayName(_ agent: String) -> String {
+        switch agent {
+        case "claude":      return "Claude Code"
+        case "cursor":      return "Cursor"
+        case "vscode":      return "VS Code"
+        case "copilot_cli": return "Copilot CLI"
+        case "windsurf":    return "Windsurf"
+        case "codex_cli":   return "Codex CLI"
+        default:            return agent.capitalized
+        }
+    }
+
+    private func agentBrandColor(_ agent: String) -> Color {
+        switch agent {
+        case "claude":      return Color(red: 0.878, green: 0.420, blue: 0.216)
+        case "copilot_cli": return Color(red: 0.128, green: 0.533, blue: 1.000)
+        case "cursor":      return Color(red: 0.420, green: 0.275, blue: 0.757)
+        case "windsurf":    return Color(red: 0.059, green: 0.733, blue: 0.867)
+        case "codex_cli":   return Color(red: 0.133, green: 0.773, blue: 0.333)
+        case "vscode":      return Color(red: 0.353, green: 0.498, blue: 0.651)
+        default:            return .gray
+        }
+    }
+
+    private func statusSystemImage(_ s: CKSessionAggregate.Status) -> String {
         switch s {
-        case .running: return "🟢"
-        case .waitingApproval: return "🟠"
-        case .completed: return "✅"
-        case .failed: return "🔴"
+        case .running:         return "circle.fill"
+        case .waitingApproval: return "exclamationmark.circle.fill"
+        case .completed:       return "checkmark.circle.fill"
+        case .failed:          return "xmark.circle.fill"
+        }
+    }
+
+    private func statusColor(_ s: CKSessionAggregate.Status) -> Color {
+        switch s {
+        case .running:         return .green
+        case .waitingApproval: return .orange
+        case .completed:       return .gray
+        case .failed:          return .red
         }
     }
 
@@ -129,6 +279,8 @@ struct SessionDetailView: View {
     }
 }
 
-#if canImport(UIKit)
-import UIKit
-#endif
+// MARK: - CKAgentEvent Identifiable
+
+extension CKAgentEvent: Identifiable {
+    public var id: String { recordName }
+}

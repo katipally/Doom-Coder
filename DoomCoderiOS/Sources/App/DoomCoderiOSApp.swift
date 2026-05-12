@@ -28,6 +28,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        NotificationDispatcher.registerCategories()
+        // Skip heavy CloudKit/notification setup when running under XCTest.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return true }
         Task { @MainActor in
             await NotificationPermissions.request()
             await CloudKitSubscriptionHandler.shared.registerAll()

@@ -6,8 +6,33 @@ struct HistoryTab: View {
     @State private var filter: AgentFilter = .all
 
     enum AgentFilter: String, CaseIterable, Identifiable {
-        case all, claude, codex, cursor, copilot, windsurf
+        case all, claude, cursor, vscode, copilotCLI, codexCLI, windsurf
         var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .all:        return "All"
+            case .claude:     return "Claude"
+            case .cursor:     return "Cursor"
+            case .vscode:     return "VS Code"
+            case .copilotCLI: return "Copilot CLI"
+            case .codexCLI:   return "Codex CLI"
+            case .windsurf:   return "Windsurf"
+            }
+        }
+
+        // Raw values that TrackedAgent uses for these agents.
+        var trackedAgentRawValues: [String] {
+            switch self {
+            case .all:        return []
+            case .claude:     return ["claude"]
+            case .cursor:     return ["cursor"]
+            case .vscode:     return ["vscode"]
+            case .copilotCLI: return ["copilot_cli"]
+            case .codexCLI:   return ["codex_cli"]
+            case .windsurf:   return ["windsurf"]
+            }
+        }
     }
 
     var body: some View {
@@ -24,9 +49,13 @@ struct HistoryTab: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(AgentFilter.allCases) { f in
-                            Button(f.rawValue.capitalized) { filter = f }
+                            Button(f.displayName) { filter = f }
                         }
-                    } label: { Image(systemName: "line.3.horizontal.decrease.circle") }
+                    } label: {
+                        Image(systemName: filter == .all
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
+                    }
                 }
             }
             .task { await refresh() }
@@ -36,6 +65,9 @@ struct HistoryTab: View {
     @ViewBuilder private var list: some View {
         if filteredRows.isEmpty {
             VStack(spacing: 10) {
+                Image(systemName: "clock.badge.xmark")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.tertiary)
                 Text("No history yet").font(.title3.bold())
                 Text("Older than 7 days is auto-pruned.")
                     .foregroundStyle(.secondary)
@@ -60,7 +92,8 @@ struct HistoryTab: View {
 
     private var filteredRows: [SessionStore.SessionRow] {
         store.history.filter { row in
-            let matchesAgent = (filter == .all) || row.agent.lowercased() == filter.rawValue
+            let matchesAgent = filter == .all ||
+                filter.trackedAgentRawValues.contains(row.agent.lowercased())
             let matchesSearch = search.isEmpty ||
                 row.cwdBasename.localizedCaseInsensitiveContains(search) ||
                 row.agent.localizedCaseInsensitiveContains(search) ||
@@ -96,24 +129,54 @@ struct HistoryTab: View {
 
 private extension SessionStore.SessionRow {
     var cellView: some View {
-        HStack {
-            Text(statusEmoji)
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(cellStatusColor.opacity(0.15))
+                    .frame(width: 28, height: 28)
+                Image(systemName: cellStatusSystemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(cellStatusColor)
+            }
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(agent.capitalized) · \(cwdBasename)").font(.subheadline.bold())
-                Text("\(totalToolCalls) tools · \(durationString)")
+                Text(cellAgentDisplayName).font(.subheadline.bold())
+                Text("\(cwdBasename) · \(totalToolCalls) tools · \(durationString)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
-    var statusEmoji: String {
-        switch status {
-        case .completed: return "✅"
-        case .failed: return "❌"
-        case .running: return "🟢"
-        case .waitingApproval: return "🟠"
+
+    var cellAgentDisplayName: String {
+        switch agent {
+        case "claude":      return "Claude Code"
+        case "cursor":      return "Cursor"
+        case "vscode":      return "VS Code"
+        case "copilot_cli": return "Copilot CLI"
+        case "windsurf":    return "Windsurf"
+        case "codex_cli":   return "Codex CLI"
+        default:            return agent.capitalized
         }
     }
+
+    var cellStatusSystemImage: String {
+        switch status {
+        case .completed:       return "checkmark.circle.fill"
+        case .failed:          return "xmark.circle.fill"
+        case .running:         return "circle.fill"
+        case .waitingApproval: return "exclamationmark.circle.fill"
+        }
+    }
+
+    var cellStatusColor: Color {
+        switch status {
+        case .completed:       return .gray
+        case .failed:          return .red
+        case .running:         return .green
+        case .waitingApproval: return .orange
+        }
+    }
+
     var durationString: String {
         let end = endedAt ?? lastEventAt
         let s = Int(end.timeIntervalSince(startedAt))

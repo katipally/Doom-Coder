@@ -50,7 +50,7 @@ final class ApprovalCoordinator {
         let now = Date()
         let req = CKApprovalRequest(
             requestId: requestId,
-            sessionKey: deriveSessionKey(env: env),
+            sessionKey: ApprovalCoordinator.deriveSessionKey(env: env),
             agent: env.agent,
             toolName: toolName,
             toolArgsJSON: argsJSON,
@@ -67,7 +67,7 @@ final class ApprovalCoordinator {
         while Date() < deadline {
             try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
             if let resp = await fetchResponse(requestId: requestId) {
-                writeDecisionFile(requestId: requestId, decision: resp.decision.rawValue)
+                ApprovalCoordinator.writeDecisionFile(requestId: requestId, decision: resp.decision.rawValue)
                 logger.info("approval \(requestId, privacy: .public) → \(resp.decision.rawValue, privacy: .public)")
                 return
             }
@@ -119,17 +119,21 @@ final class ApprovalCoordinator {
         }
     }
 
-    private func writeDecisionFile(requestId: String, decision: String) {
-        let dir = AgentSupportDir.url.appendingPathComponent("approvals", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("\(requestId).json")
+    private static nonisolated func writeDecisionFile(requestId: String, decision: String) {
+        writeDecisionFile(requestId: requestId, decision: decision,
+                          in: AgentSupportDir.url.appendingPathComponent("approvals", isDirectory: true))
+    }
+
+    static nonisolated func writeDecisionFile(requestId: String, decision: String, in directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(requestId).json")
         let payload: [String: Any] = ["decision": decision, "ts": Date().timeIntervalSince1970]
         if let data = try? JSONSerialization.data(withJSONObject: payload) {
             try? data.write(to: url)
         }
     }
 
-    private func deriveSessionKey(env: HookEnvelope) -> String {
+    static nonisolated func deriveSessionKey(env: HookEnvelope) -> String {
         let host = env.macHostname ?? ProcessInfo.processInfo.hostName
         let suffix = env.cwdHashSuffix ?? CloudKitHash.fnv1a6(env.cwd)
         return "\(host)::\(env.agent)::\(suffix)"

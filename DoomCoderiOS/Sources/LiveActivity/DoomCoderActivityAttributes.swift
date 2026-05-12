@@ -10,9 +10,11 @@ struct DoomCoderActivityAttributes: ActivityAttributes {
         var approvalPending: Bool
         var toolArgsPreview: String?
         var requestId: String?
+        var toolDetail: String?
     }
 
     var sessionKey: String
     var agent: String
     var cwdBasename: String
+    var agentColorHex: String
 }

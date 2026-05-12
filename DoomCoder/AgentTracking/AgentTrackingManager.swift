@@ -269,7 +269,8 @@ final class AgentTrackingManager {
             totalErrors: s.errorCount,
             model: nil,
             promptPreview: nil,
-            expiresAt: s.updatedAt.addingTimeInterval(7 * 24 * 3600)
+            expiresAt: s.updatedAt.addingTimeInterval(7 * 24 * 3600),
+            pendingRequestId: status == .waitingApproval ? env.requestId : nil
         )
 
         CloudKitPublisher.shared.publish(event: event, aggregate: aggregate)

@@ -445,6 +445,18 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
 // MARK: - Normalizer registry
 
 enum EventNormalizerRegistry {
+    // Maps alternate dc-hook agent name spellings to canonical TrackedAgent.
+    // All keys are lowercased; lookup is case-insensitive.
+    private static let aliases: [String: TrackedAgent] = [
+        "claude_code": .claude, "claude-code": .claude, "anthropic": .claude,
+        "cursor_tab": .cursor, "cursor_ai": .cursor,
+        "copilot": .copilotCLI, "github-copilot": .copilotCLI,
+        "github_copilot": .copilotCLI, "gh-copilot": .copilotCLI,
+        "codex": .codexCLI, "codex-cli": .codexCLI, "openai-codex": .codexCLI,
+        "windsurf-editor": .windsurf, "codeium": .windsurf,
+        "vscode-copilot": .vscode, "vs-code": .vscode, "vscodium": .vscode,
+    ]
+
     private static let normalizers: [TrackedAgent: any AgentEventNormalizer] = [
         .claude:     ClaudeEventNormalizer(),
         .cursor:     CursorEventNormalizer(),
@@ -455,7 +467,12 @@ enum EventNormalizerRegistry {
     ]
 
     static func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
-        guard let agent = TrackedAgent(rawValue: envelope.agent) else { return nil }
+        let lower = envelope.agent.lowercased()
+        // 1. Case-insensitive match on TrackedAgent.rawValue
+        let agent = TrackedAgent.allCases.first { $0.rawValue == lower }
+            // 2. Fall back to alias table (keys are already lowercased)
+            ?? aliases[lower]
+        guard let agent else { return nil }
         return normalizers[agent]?.normalize(envelope: envelope)
     }
 }

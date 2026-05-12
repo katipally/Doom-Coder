@@ -10,6 +10,7 @@ struct RootTabView: View {
         TabView(selection: $selection) {
             LiveTab()
                 .tabItem { Label("Live", systemImage: "dot.radiowaves.left.and.right") }
+                .badge(store.liveSessions.count)
                 .tag(Tab.live)
             HistoryTab()
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }

@@ -27,6 +27,7 @@ final class SessionStore: ObservableObject {
         var totalErrors: Int
         var model: String?
         var promptPreview: String?
+        var pendingRequestId: String?
     }
 
     private init() {}
@@ -47,7 +48,8 @@ final class SessionStore: ObservableObject {
             totalFilesEdited: agg.totalFilesEdited,
             totalErrors: agg.totalErrors,
             model: agg.model,
-            promptPreview: agg.promptPreview
+            promptPreview: agg.promptPreview,
+            pendingRequestId: agg.pendingRequestId
         )
         if agg.status == .running || agg.status == .waitingApproval {
             if let idx = liveSessions.firstIndex(where: { $0.id == row.id }) {

@@ -27,6 +27,20 @@ struct CKAgentEvent: Codable, Sendable {
     let expiresAt: Date
 
     var recordName: String { "\(sessionKey)::\(hookPhase)::\(Int(occurredAt.timeIntervalSince1970 * 1000))" }
+
+    var toolName: String? {
+        guard let data = payloadJSON.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (dict["tool_name"] as? String) ?? (dict["tool"] as? String)
+    }
+
+    var filePath: String? {
+        guard let data = payloadJSON.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (dict["file_path"] as? String)
+            ?? ((dict["input"] as? [String: Any])?["file_path"] as? String)
+            ?? (dict["path"] as? String)
+    }
 }
 
 struct CKSessionAggregate: Codable, Sendable {
@@ -51,6 +65,7 @@ struct CKSessionAggregate: Codable, Sendable {
     var model: String?
     var promptPreview: String?
     var expiresAt: Date
+    var pendingRequestId: String?
 
     var recordName: String { sessionKey }
 }

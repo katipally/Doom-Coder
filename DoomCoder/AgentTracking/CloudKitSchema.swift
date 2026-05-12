@@ -51,6 +51,7 @@ struct CKSessionAggregate: Codable, Sendable {
     var model: String?
     var promptPreview: String?
     var expiresAt: Date
+    var pendingRequestId: String?
 
     var recordName: String { sessionKey }
 }
