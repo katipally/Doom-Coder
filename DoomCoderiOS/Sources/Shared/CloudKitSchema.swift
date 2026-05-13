@@ -11,7 +11,20 @@ enum CloudKitSchema {
         static let approvalResponse = "ApprovalResponse"
         static let devicePresence = "DevicePresence"
         static let userSettings = "UserSettings"
+        static let pushNotification = "PushNotification"
     }
+}
+
+struct CKPushNotification: Codable, Sendable {
+    let sessionKey: String
+    let agent: String
+    let title: String
+    let body: String
+    let phase: String
+    let occurredAt: Date
+    let expiresAt: Date
+
+    var recordName: String { "\(sessionKey)::notify::\(Int(occurredAt.timeIntervalSince1970 * 1000))" }
 }
 
 struct CKAgentEvent: Codable, Sendable {

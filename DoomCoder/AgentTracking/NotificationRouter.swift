@@ -127,6 +127,20 @@ final class NotificationRouter {
                 title: title, body: body, channel: "macOS", success: true, ts: ts
             )
         }
+
+        if channels.iosCompanion {
+            let now = Date()
+            let notification = CKPushNotification(
+                sessionKey: ev.sessionKey,
+                agent: ev.agent.rawValue,
+                title: title,
+                body: body,
+                phase: ev.phase.rawValue,
+                occurredAt: now,
+                expiresAt: now.addingTimeInterval(3600)
+            )
+            CloudKitPublisher.shared.publishNotification(notification)
+        }
     }
 
     /// Sends a test macOS notification, bypassing dedupe. Returns true on success.

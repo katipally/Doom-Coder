@@ -9,7 +9,7 @@ private let ckLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "DoomCoder
 final class CloudKitSubscriptionHandler {
     static let shared = CloudKitSubscriptionHandler()
     private let defaults = UserDefaults.standard
-    private let keyRegistered = "ck.subscriptions.registered.v4"
+    private let keyRegistered = "ck.subscriptions.registered.v5"
     private init() {}
 
     func registerAll() async {
@@ -21,6 +21,7 @@ final class CloudKitSubscriptionHandler {
         let subs: [CKSubscription] = [
             buildAggregateAlertSubscription(),
             buildAggregateSilentSubscription(),
+            buildPushNotificationAlertSubscription(),
             buildSubscription(recordType: CloudKitSchema.RecordType.approvalRequest,
                               subscriptionId: "sub.approvalrequest.v4",
                               desiredKeys: ["agent", "cwdBasename", "toolName", "toolArgsJSON", "sessionKey"]),
@@ -89,6 +90,25 @@ final class CloudKitSubscriptionHandler {
         return sub
     }
 
+    /// Alert subscription for `PushNotification` records written by macOS NotificationRouter.
+    /// Fires an alert push for every agent notification the Mac would show locally.
+    /// NSE intercepts and renders title/body with default sound.
+    private func buildPushNotificationAlertSubscription() -> CKQuerySubscription {
+        let sub = CKQuerySubscription(
+            recordType: CloudKitSchema.RecordType.pushNotification,
+            predicate: NSPredicate(value: true),
+            subscriptionID: "sub.pushnotification.alert.v5",
+            options: [.firesOnRecordCreation])
+        let info = CKSubscription.NotificationInfo()
+        info.alertBody = "Agent update"         // NSE overwrites this
+        info.shouldSendMutableContent = true    // allows NSE to intercept
+        info.shouldSendContentAvailable = false // pure alert push, no background wake needed
+        info.shouldBadge = false
+        info.desiredKeys = ["title", "body", "agent", "phase", "sessionKey"]
+        sub.notificationInfo = info
+        return sub
+    }
+
     private func buildSubscription(recordType: String,
                                    subscriptionId: String,
                                    desiredKeys: [String]?) -> CKQuerySubscription {
@@ -124,6 +144,11 @@ final class PushReceiver {
         do {
             guard let rec = try await CloudKitClient.shared.record(for: CKRecord.ID(recordName: recordName)) else { return }
             switch rec.recordType {
+            case CloudKitSchema.RecordType.pushNotification:
+                // App is in the foreground — NSE won't fire. Show the notification directly.
+                if let title = rec["title"] as? String, let body = rec["body"] as? String {
+                    await NotificationDispatcher.shared.deliverGeneric(title: title, body: body)
+                }
             case CloudKitSchema.RecordType.sessionAggregate:
                 if let agg = decodeAggregate(rec) {
                     // Capture previous status before upsert so we can detect transitions.

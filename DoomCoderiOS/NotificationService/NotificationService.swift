@@ -40,7 +40,20 @@ final class NotificationService: UNNotificationServiceExtension {
             let recordName = qry["rid"] as? String ?? ""
             let fields = qry["fo"] as? [String: Any] ?? [:]
             nseLog.info("CK record \(recordName, privacy: .public), fields: \(fields.keys.joined(separator: ", "), privacy: .public)")
-            enrichContent(content, recordName: recordName, fields: fields)
+
+            // PushNotification records carry pre-rendered title + body from macOS NotificationRouter.
+            // Detect them by the presence of both "title" and "body" fields (unique to this type).
+            if let title = fields["title"] as? String, let body = fields["body"] as? String {
+                content.title = title
+                content.body = body
+                content.sound = .default
+                content.interruptionLevel = .active
+                if let sessionKey = fields["sessionKey"] as? String {
+                    content.threadIdentifier = sessionKey
+                }
+            } else {
+                enrichContent(content, recordName: recordName, fields: fields)
+            }
         } else {
             // Fallback: no embedded fields — show a generic useful notification.
             content.title = "DoomCoder"

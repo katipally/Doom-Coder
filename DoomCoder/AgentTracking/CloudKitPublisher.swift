@@ -13,6 +13,7 @@ final class CloudKitPublisher {
     private let debounceInterval: TimeInterval = 0.2
     private var pendingEvents: [CKAgentEvent] = []
     private var pendingAggregates: [String: CKSessionAggregate] = [:]
+    private var pendingNotifications: [CKPushNotification] = []
     private var flushTask: Task<Void, Never>?
     private let monitor = NWPathMonitor()
     private var online = true
@@ -38,6 +39,12 @@ final class CloudKitPublisher {
         let a = Redactor.redact(aggregate: aggregate, minimal: FeatureFlags.minimalMode)
         pendingEvents.append(e)
         pendingAggregates[a.sessionKey] = a
+        scheduleFlush()
+    }
+
+    func publishNotification(_ n: CKPushNotification) {
+        guard FeatureFlags.cloudKitEnabled else { return }
+        pendingNotifications.append(n)
         scheduleFlush()
     }
 
@@ -72,20 +79,22 @@ final class CloudKitPublisher {
     private func flush() async {
         let events = pendingEvents
         let aggregates = Array(pendingAggregates.values)
+        let notifications = pendingNotifications
         pendingEvents.removeAll()
         pendingAggregates.removeAll()
-        guard !events.isEmpty || !aggregates.isEmpty else { return }
+        pendingNotifications.removeAll()
+        guard !events.isEmpty || !aggregates.isEmpty || !notifications.isEmpty else { return }
 
         guard online else {
             spool(events: events, aggregates: aggregates)
             return
         }
 
-        let records = events.map(CKRecord.from(_:)) + aggregates.map(CKRecord.from(_:))
+        let records = events.map(CKRecord.from(_:)) + aggregates.map(CKRecord.from(_:)) + notifications.map(CKRecord.from(_:))
         do {
             try await modify(records)
             backoff = 0
-            logger.debug("flushed \(events.count, privacy: .public) events, \(aggregates.count, privacy: .public) aggregates")
+            logger.debug("flushed \(events.count, privacy: .public) events, \(aggregates.count, privacy: .public) aggregates, \(notifications.count, privacy: .public) push notifications")
         } catch let err as CKError where err.code == .requestRateLimited || err.code == .serviceUnavailable {
             let retry = (err.userInfo[CKErrorRetryAfterKey] as? TimeInterval) ?? 5
             backoff = min(max(retry, backoff * 2 + 1), 300)
@@ -188,6 +197,19 @@ extension CKRecord {
         r["occurredAt"] = e.occurredAt as CKRecordValue
         r["payloadJSON"] = e.payloadJSON as CKRecordValue
         r["expiresAt"] = e.expiresAt as CKRecordValue
+        return r
+    }
+
+    static func from(_ n: CKPushNotification) -> CKRecord {
+        let r = CKRecord(recordType: CloudKitSchema.RecordType.pushNotification,
+                         recordID: CKRecord.ID(recordName: n.recordName))
+        r["sessionKey"] = n.sessionKey as CKRecordValue
+        r["agent"] = n.agent as CKRecordValue
+        r["title"] = n.title as CKRecordValue
+        r["body"] = n.body as CKRecordValue
+        r["phase"] = n.phase as CKRecordValue
+        r["occurredAt"] = n.occurredAt as CKRecordValue
+        r["expiresAt"] = n.expiresAt as CKRecordValue
         return r
     }
 

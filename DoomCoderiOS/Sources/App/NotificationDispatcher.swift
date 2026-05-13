@@ -90,6 +90,19 @@ final class NotificationDispatcher {
         try? await UNUserNotificationCenter.current().add(req)
     }
 
+    /// Mirror of a macOS NotificationRouter push — shown when app is in foreground
+    /// (NSE doesn't fire while foregrounded; PushReceiver handles it instead).
+    func deliverGeneric(title: String, body: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.interruptionLevel = .active
+        content.relevanceScore = 0.6
+        let req = UNNotificationRequest(identifier: "generic.\(UUID().uuidString)", content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(req)
+    }
+
     // MARK: - Helpers
 
     private func agentDisplayName(_ agent: String) -> String {
