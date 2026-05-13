@@ -111,21 +111,36 @@ jobs:
           NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
           NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
         run: |
-          # Create a ZIP for notarization submission
+          # Zip the app for submission (notarytool requires a zip/pkg, not .app directly)
           ditto -c -k --sequesterRsrc --keepParent \
             "build/export/DoomCoder.app" \
             "build/DoomCoder-notarize.zip"
 
-          # Decode API key to temp file (notarytool requires a file path, not inline)
           echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
 
-          # Submit and wait — blocks until Apple approves (typically 2-10 min)
-          xcrun notarytool submit "build/DoomCoder-notarize.zip" \
+          # Submit without --wait so we get a submission ID immediately
+          SUBMISSION_OUTPUT=$(xcrun notarytool submit "build/DoomCoder-notarize.zip" \
             --key /tmp/AuthKey.p8 \
             --key-id "${NOTARIZE_KEY_ID}" \
             --issuer "${NOTARIZE_ISSUER_ID}" \
-            --wait \
-            --timeout 30m
+            --no-wait \
+            --output-format json)
+          echo "Submit response: ${SUBMISSION_OUTPUT}"
+          SUBMISSION_ID=$(echo "${SUBMISSION_OUTPUT}" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          echo "Submission ID: ${SUBMISSION_ID}"
+
+          # Wait up to 90 minutes — Apple's service is usually 2-10 min but can spike
+          xcrun notarytool wait "${SUBMISSION_ID}" \
+            --key /tmp/AuthKey.p8 \
+            --key-id "${NOTARIZE_KEY_ID}" \
+            --issuer "${NOTARIZE_ISSUER_ID}" \
+            --timeout 90m
+
+          # Always fetch the log to help debug any future issues
+          xcrun notarytool log "${SUBMISSION_ID}" \
+            --key /tmp/AuthKey.p8 \
+            --key-id "${NOTARIZE_KEY_ID}" \
+            --issuer "${NOTARIZE_ISSUER_ID}" || true
 
           rm -f /tmp/AuthKey.p8
 
@@ -149,29 +164,12 @@ jobs:
             "DoomCoder-${{ env.VERSION }}.dmg" \
             "build/export/"
 
-          # Sign the DMG with our Developer ID
+          # Sign the DMG with Developer ID — the .app inside is already notarized+stapled,
+          # so macOS will trust it. The DMG itself just needs a Developer ID signature.
           codesign \
             --sign "Developer ID Application" \
             --timestamp \
             "DoomCoder-${{ env.VERSION }}.dmg"
-
-      - name: Notarize and staple DMG
-        env:
-          NOTARIZE_KEY_P8: ${{ secrets.NOTARIZE_KEY_P8 }}
-          NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
-          NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
-        run: |
-          echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
-
-          xcrun notarytool submit "DoomCoder-${{ env.VERSION }}.dmg" \
-            --key /tmp/AuthKey.p8 \
-            --key-id "${NOTARIZE_KEY_ID}" \
-            --issuer "${NOTARIZE_ISSUER_ID}" \
-            --wait \
-            --timeout 30m
-
-          rm -f /tmp/AuthKey.p8
-          xcrun stapler staple "DoomCoder-${{ env.VERSION }}.dmg"
 
       - name: Create distribution ZIP
         run: |
