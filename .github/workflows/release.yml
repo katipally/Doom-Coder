@@ -124,6 +124,45 @@ jobs:
           xcrun stapler staple "build/export/DoomCoder.app"
           xcrun stapler validate "build/export/DoomCoder.app"
 
+      - name: Create DMG
+        run: |
+          brew install create-dmg 2>/dev/null || true
+
+          create-dmg \
+            --volname "DoomCoder" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 128 \
+            --icon "DoomCoder.app" 175 190 \
+            --hide-extension "DoomCoder.app" \
+            --app-drop-link 425 185 \
+            "DoomCoder-${{ env.VERSION }}.dmg" \
+            "build/export/"
+
+          # Sign the DMG with our Developer ID
+          codesign \
+            --sign "Developer ID Application" \
+            --timestamp \
+            "DoomCoder-${{ env.VERSION }}.dmg"
+
+      - name: Notarize and staple DMG
+        env:
+          NOTARIZE_KEY_P8: ${{ secrets.NOTARIZE_KEY_P8 }}
+          NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
+          NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
+        run: |
+          echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
+
+          xcrun notarytool submit "DoomCoder-${{ env.VERSION }}.dmg" \
+            --key /tmp/AuthKey.p8 \
+            --key-id "${NOTARIZE_KEY_ID}" \
+            --issuer "${NOTARIZE_ISSUER_ID}" \
+            --wait \
+            --timeout 30m
+
+          rm -f /tmp/AuthKey.p8
+          xcrun stapler staple "DoomCoder-${{ env.VERSION }}.dmg"
+
       - name: Create distribution ZIP
         run: |
           # Use ditto (Apple-recommended) to produce the final signed + stapled ZIP
@@ -217,20 +256,30 @@ jobs:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           name: "Doom Coder ${{ env.TAG }}"
-          files: DoomCoder-${{ env.VERSION }}.zip
+          files: |
+            DoomCoder-${{ env.VERSION }}.dmg
+            DoomCoder-${{ env.VERSION }}.zip
           generate_release_notes: true
           body: |
             ## 📦 Installation
 
-            1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
-            2. Unzip and drag **`DoomCoder.app`** to your `/Applications` folder
-            3. Double-click to open — no extra steps required
+            **Option A — DMG (recommended for new installs):**
+            1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
+            2. Open it and drag **DoomCoder** into your Applications folder
+            3. Double-click to launch — no extra steps
 
-            DoomCoder is **signed with a Developer ID and notarized by Apple**. macOS trusts it out of the box.
+            **Option B — ZIP:**
+            1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
+            2. Unzip and move **`DoomCoder.app`** to `/Applications`
+            3. Double-click to launch
+
+            DoomCoder is **signed with a Developer ID and notarized by Apple**. macOS trusts it out of the box — no Gatekeeper warnings.
+
+            > Existing users receive updates automatically via the built-in updater (Sparkle).
 
             ## ✅ Verify it's working
 
-            After enabling Doom Coder, run this in Terminal:
+            After enabling DoomCoder, run this in Terminal:
             ```bash
             pmset -g assertions | grep DoomCoder
             ```
