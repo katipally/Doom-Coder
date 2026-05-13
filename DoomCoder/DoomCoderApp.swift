@@ -52,8 +52,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         PauseFlag.clearOnLaunch()
         EventStore.shared.open()
 
-        // Re-apply curated notification defaults for users upgrading from
-        // v4.0 (some of whom had legacy "notify every tool call" prefs).
+        // Migrate notification channel config (ntfy → iosCompanion) and
+        // re-apply curated notification defaults for v4.0 upgraders.
+        ChannelStore.migrateV2toV3IfNeeded()
         ChannelStore.migratePrefsIfNeeded()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.

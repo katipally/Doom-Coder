@@ -145,52 +145,30 @@ final class PushReceiver {
             guard let rec = try await CloudKitClient.shared.record(for: CKRecord.ID(recordName: recordName)) else { return }
             switch rec.recordType {
             case CloudKitSchema.RecordType.pushNotification:
-                // App is in the foreground — NSE won't fire. Show the notification directly.
-                if let title = rec["title"] as? String, let body = rec["body"] as? String {
-                    await NotificationDispatcher.shared.deliverGeneric(
-                        title: title, body: body, sessionKey: rec["sessionKey"] as? String)
-                }
+                // NSE already built and presented this notification (it runs even in foreground
+                // for mutable-content pushes; willPresent shows it as a banner). Nothing to do here.
+                break
+
             case CloudKitSchema.RecordType.sessionAggregate:
                 if let agg = decodeAggregate(rec) {
-                    // Capture previous status before upsert so we can detect transitions.
-                    let prevStatus = SessionStore.shared.liveSessions.first { $0.id == agg.sessionKey }?.status
+                    // NSE owns notification display for sessionAggregate alert pushes.
+                    // PushReceiver only updates data stores + Live Activity.
                     SessionStore.shared.upsert(agg)
                     await LiveActivityManager.shared.update(with: agg)
-                    await dispatchStatusNotification(agg: agg, previousStatus: prevStatus)
                 }
+
             case CloudKitSchema.RecordType.approvalRequest:
-                // macOS does not write ApprovalRequest CKRecords; approvals come via sessionAggregate.
-                // Kept here for forward-compatibility.
+                // ApprovalRequest uses a content-available-only subscription (no alertBody),
+                // so NSE does not run. Deliver the notification locally here.
                 await NotificationDispatcher.shared.deliverApproval(recordName: recordName, record: rec)
+
             case CloudKitSchema.RecordType.userSettings:
                 SettingsSyncer.shared.applyRemote(rec)
+
             default: break
             }
         } catch {
             ckLog.debug("Push record fetch failed (likely already deleted): \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private func dispatchStatusNotification(agg: CKSessionAggregate,
-                                            previousStatus: CKSessionAggregate.Status?) async {
-        let settings = IOSUserSettings.shared
-        switch agg.status {
-        case .waitingApproval where previousStatus != .waitingApproval:
-            guard settings.notifyApprovals else { return }
-            await NotificationDispatcher.shared.deliverApprovalFromAggregate(agg)
-        case .failed where previousStatus == .running || previousStatus == .waitingApproval:
-            guard settings.notifyFailures else { return }
-            let durationMs = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt) * 1000)
-            await NotificationDispatcher.shared.deliverFailure(
-                agent: agg.agent, sessionKey: agg.sessionKey, cwd: agg.cwdBasename,
-                tool: agg.currentTool ?? "unknown", exitCode: -1, durationMs: durationMs)
-        case .completed where previousStatus == .running || previousStatus == .waitingApproval:
-            guard settings.notifySessionSummaries else { return }
-            let durationSec = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt))
-            await NotificationDispatcher.shared.deliverSummary(
-                agent: agg.agent, sessionKey: agg.sessionKey, cwd: agg.cwdBasename,
-                toolCalls: agg.totalToolCalls, filesEdited: agg.totalFilesEdited, durationSec: durationSec)
-        default: break
         }
     }
 

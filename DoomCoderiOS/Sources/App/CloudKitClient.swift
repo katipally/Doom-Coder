@@ -188,6 +188,7 @@ final class CloudKitClient {
             totalErrors: (rec["totalErrors"] as? Int) ?? 0,
             model: rec["model"] as? String,
             promptPreview: rec["promptPreview"] as? String,
+            toolArgsPreview: rec["toolArgsPreview"] as? String,
             expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400),
             pendingRequestId: rec["pendingRequestId"] as? String
         )

@@ -3,7 +3,7 @@ import SwiftUI
 // One-time "What's New" sheets, one struct per release, gated by UserDefaults.
 // Hosted in an NSWindow owned by the AppDelegate (MenuBarExtra can't host sheets).
 
-// Shared helper used by both WhatsNewSheetV2 and WhatsNewSheet.
+// Shared helper for What's New sheets.
 @ViewBuilder
 private func featureRow(icon: String, title: String, body: String) -> some View {
     HStack(alignment: .top, spacing: 12) {
