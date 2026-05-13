@@ -7,9 +7,7 @@
 	<key>teamID</key>
 	<string>A9P2388PHM</string>
 	<key>signingStyle</key>
-	<string>manual</string>
-	<key>signingCertificate</key>
-	<string>Developer ID Application</string>
+	<string>automatic</string>
 	<key>stripSwiftSymbols</key>
 	<true/>
 </dict>
