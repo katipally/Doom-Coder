@@ -60,6 +60,41 @@ struct WhatsNewSheetV2: View {
     }
 }
 
+// MARK: - v2.2.0 — Signed & notarized, bundled icons, privacy manifest
+
+struct WhatsNewSheet220: View {
+    static let defaultsKey = "whats_new_v2_2_0_shown"
+
+    var onDismiss: () -> Void = {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("What's new in DoomCoder 2.2", systemImage: "sparkles")
+                .font(.title2.bold())
+
+            featureRow(icon: "checkmark.seal.fill", title: "Official signed & notarized app",
+                       body: "DoomCoder is now signed with a Developer ID and notarized by Apple. No more Gatekeeper prompts — just double-click to install.")
+            featureRow(icon: "photo.on.rectangle.angled", title: "Bundled agent icons",
+                       body: "Claude, Codex, and Copilot CLI icons are built right into the app. They appear instantly in notifications and the menu, even without an internet connection.")
+            featureRow(icon: "hand.raised.fill", title: "Privacy manifest",
+                       body: "DoomCoder now ships a PrivacyInfo.xcprivacy declaring exactly which system APIs it uses. No data is collected or shared.")
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Got it") {
+                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
+                    onDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 420, alignment: .topLeading)
+    }
+}
+
 // MARK: - v1.9.0 (legacy — keep for users who haven't seen it)
 
 // One-time "What's New in 1.9.0" sheet. Gated by a UserDefaults flag.

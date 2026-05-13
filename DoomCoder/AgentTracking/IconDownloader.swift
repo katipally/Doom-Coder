@@ -5,6 +5,8 @@ import OSLog
 // Downloads real agent icons from the lobehub @lobehub/icons-static-png CDN
 // and caches them in ~/Library/Application Support/DoomCoder/icons/cdn-{agent}.png.
 // Only fetches once per agent; network errors silently fall back to SF Symbols.
+// Bundled xcassets icons (added in v2.2.0) take priority — CDN acts as an
+// optional update/refresh path.
 enum IconDownloader {
     private static let cdnBase =
         "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@1.90.0/light"
@@ -19,6 +21,14 @@ enum IconDownloader {
         .copilotCLI: "githubcopilot.png",
         .cursor:     "cursor.png",
         .windsurf:   "windsurf.png",
+    ]
+
+    // Maps CLI agents to their xcassets image names bundled in the app.
+    // When a bundled asset is present, CDN download is skipped.
+    private static let bundledAssetNames: [TrackedAgent: String] = [
+        .claude:     "agent-claude",
+        .codexCLI:   "agent-codex",
+        .copilotCLI: "agent-copilot-cli",
     ]
 
     // MARK: - Public API
@@ -39,9 +49,10 @@ enum IconDownloader {
     }
 
     /// Kicks off background downloads for all agents that have CDN icons and
-    /// whose cache file does not yet exist. Safe to call on every app launch —
-    /// already-downloaded icons are skipped. Posts .doomCoderIconsRefreshed on
-    /// MainActor after all downloads complete so icon-displaying views can refresh.
+    /// whose cache file does not yet exist. Agents already covered by a bundled
+    /// xcassets icon are skipped — CDN fetch is unnecessary when icons ship in
+    /// the app bundle. Posts .doomCoderIconsRefreshed on MainActor after all
+    /// downloads complete so icon-displaying views can refresh.
     static func prefetch() {
         Task.detached(priority: .utility) {
             let iconsDir = AgentSupportDir.url.appendingPathComponent("icons", isDirectory: true)
@@ -50,15 +61,17 @@ enum IconDownloader {
 
             await withTaskGroup(of: Void.self) { group in
                 for (agent, filename) in cdnFilenames {
+                    // Skip CDN download for agents whose icon is already bundled.
+                    if let assetName = bundledAssetNames[agent],
+                       NSImage(named: assetName) != nil {
+                        continue
+                    }
                     let dest = cdnCacheURL(for: agent)
                     guard !FileManager.default.fileExists(atPath: dest.path) else { continue }
                     group.addTask { await download(filename: filename, to: dest) }
                 }
             }
 
-            // Notify icon-displaying views so they can refresh immediately after
-            // CDN icons land — otherwise cached icons only appear on the next
-            // natural re-render (e.g. toggle or timer tick).
             await MainActor.run {
                 NotificationCenter.default.post(name: .doomCoderIconsRefreshed, object: nil)
             }
