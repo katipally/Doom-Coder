@@ -23,9 +23,6 @@ jobs:
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Compute monotonic build number: major*1000 + minor*100 + patch
-          # e.g. 1.9.0 → 1900, 1.9.1 → 1901, 1.10.0 → 2000
-          # (tr -d '.' would give 190 for 1.9.0 < 1810 for 1.8.10 — wrong)
           IFS='.' read -r _MAJOR _MINOR _PATCH <<< "$VERSION"
           BUILD=$(( _MAJOR * 1000 + _MINOR * 100 + _PATCH ))
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
@@ -34,7 +31,6 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Pick Xcode.app symlink if present, otherwise latest versioned Xcode
           if [ -d /Applications/Xcode.app ]; then
             sudo xcode-select -s /Applications/Xcode.app
           else
@@ -55,29 +51,31 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # Decode the base64-encoded .p12 certificate
-          echo "${APPLE_CERTIFICATE}" | base64 --decode -o certificate.p12
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > certificate.p12
 
-          # Create a temporary CI keychain
           security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
+          security set-keychain-settings -t 7200 -u build.keychain
 
-          # Import the certificate — T flags allow codesign to access without prompts
+          # Import cert — allow codesign, xcodebuild, and security to use it
           security import certificate.p12 \
             -k build.keychain \
             -P "${APPLE_CERTIFICATE_PASSWORD}" \
             -T /usr/bin/codesign \
+            -T /usr/bin/xcodebuild \
             -T /usr/bin/security
+
+          # Allow all Apple tools to use the key without prompts
           security set-key-partition-list \
-            -S apple-tool:,apple: \
+            -S apple-tool:,apple:,codesign: \
             -s -k "${KEYCHAIN_PASSWORD}" build.keychain
 
-          # Add build.keychain to the search list so Xcode can find the cert
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          # Add build.keychain to the search list (default-keychain ≠ search list)
+          security list-keychains -d user -s \
+            build.keychain \
+            ~/Library/Keychains/login.keychain-db
 
-          # Verify certificate is imported
           security find-identity -v -p codesigning build.keychain
 
       - name: Resolve Swift Packages
@@ -109,80 +107,86 @@ jobs:
             -exportPath build/export \
             -exportOptionsPlist scripts/ExportOptions.plist
 
-      - name: Re-sign embedded frameworks
+      - name: Re-sign all embedded code (inside-out)
         run: |
           APP="build/export/DoomCoder.app"
           IDENTITY="Developer ID Application"
+          ENTS="DoomCoder/DoomCoder.entitlements"
 
-          # Sign every Mach-O binary inside the bundle BEFORE signing the bundle itself.
-          # Order: deepest paths first (XPC services, nested .apps, frameworks, dylibs,
-          # then plain binaries like dc-hook and Sparkle's Autoupdate helper).
-          #
-          # Why: notarization scans every binary in the bundle — any binary signed with
-          # the wrong identity (e.g. Sparkle's own cert) causes Apple to stall or fail.
+          # Fail loudly if the app wasn't exported where we expect
+          if [ ! -d "$APP" ]; then
+            echo "::error::Exported app not found at $APP — contents of build/export/:"
+            ls -laR build/export/ || true
+            exit 1
+          fi
 
-          echo "=== Signing all Mach-O binaries (deepest first) ==="
-          # Sort by path depth (most slashes = deepest = sign first) using tab-delimited cut
-          find "$APP" -type f | \
-            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
-            while IFS= read -r f; do
-              if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
-                echo "  Signing: $f"
-                codesign --force \
-                  --sign "$IDENTITY" \
-                  --timestamp \
-                  --options runtime \
-                  "$f"
-              fi
-            done
+          sign_file() {
+            echo "  → $(basename "$1")"
+            codesign --force --sign "$IDENTITY" --timestamp --options runtime "$1"
+          }
 
-          echo "=== Signing XPC service bundles ==="
-          find "$APP" -type d -name "*.xpc" | \
-            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
-            while IFS= read -r xpc; do
-              echo "  Signing: $xpc"
-              codesign --force \
-                --sign "$IDENTITY" \
-                --timestamp \
-                --options runtime \
-                "$xpc"
-            done
+          # ── Pass 1: every Mach-O binary (deepest path first) ──────────────
+          # Use process substitution (<) so the while loop runs in the CURRENT
+          # shell — pipe-to-while runs in a subshell where errors are swallowed.
+          echo "=== Pass 1: Mach-O binaries ==="
+          FAIL=0
+          while IFS= read -r f; do
+            if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
+              sign_file "$f" || FAIL=1
+            fi
+          done < <(find "$APP" -type f \
+            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
+            | sort -rn | cut -f2-)
+          [ "$FAIL" -eq 0 ] || { echo "::error::One or more Mach-O binaries failed to sign"; exit 1; }
 
-          echo "=== Signing nested .app bundles ==="
-          find "$APP" -mindepth 2 -type d -name "*.app" | \
-            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
-            while IFS= read -r nested; do
-              echo "  Signing: $nested"
-              codesign --force \
-                --sign "$IDENTITY" \
-                --timestamp \
-                --options runtime \
-                "$nested"
-            done
+          # ── Pass 2: XPC service bundles ────────────────────────────────────
+          echo "=== Pass 2: XPC service bundles ==="
+          while IFS= read -r xpc; do
+            sign_file "$xpc"
+          done < <(find "$APP" -type d -name "*.xpc" \
+            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
+            | sort -rn | cut -f2-)
 
-          echo "=== Signing frameworks ==="
-          find "$APP" -type d -name "*.framework" | \
-            awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' | sort -rn | cut -f2- | \
-            while IFS= read -r fw; do
-              echo "  Signing: $fw"
-              codesign --force \
-                --sign "$IDENTITY" \
-                --timestamp \
-                --options runtime \
-                "$fw"
-            done
+          # ── Pass 3: nested .app bundles (e.g. Sparkle's Updater.app) ──────
+          echo "=== Pass 3: nested .app bundles ==="
+          while IFS= read -r nested; do
+            sign_file "$nested"
+          done < <(find "$APP" -mindepth 2 -type d -name "*.app" \
+            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
+            | sort -rn | cut -f2-)
 
-          echo "=== Signing main app bundle (with entitlements) ==="
-          codesign --force \
-            --sign "$IDENTITY" \
-            --timestamp \
-            --options runtime \
-            --entitlements "DoomCoder/DoomCoder.entitlements" \
-            "$APP"
+          # ── Pass 4: frameworks ─────────────────────────────────────────────
+          echo "=== Pass 4: frameworks ==="
+          while IFS= read -r fw; do
+            sign_file "$fw"
+          done < <(find "$APP" -type d -name "*.framework" \
+            | awk '{ printf "%d\t%s\n", gsub("/","/"), $0 }' \
+            | sort -rn | cut -f2-)
 
-          echo "=== Verifying ==="
+          # ── Pass 5: main app bundle (with entitlements, always last) ───────
+          echo "=== Pass 5: main app ==="
+          codesign --force --sign "$IDENTITY" --timestamp --options runtime \
+            --entitlements "$ENTS" "$APP"
+
+          echo "=== Verify bundle ==="
           codesign --verify --deep --strict --verbose=2 "$APP"
-          echo "✅ All binaries signed and verified"
+          echo "✅ Re-sign complete"
+
+      - name: Audit all binary signatures
+        run: |
+          APP="build/export/DoomCoder.app"
+          echo "=== Signing identity for every Mach-O in the bundle ==="
+          find "$APP" -type f | while IFS= read -r f; do
+            if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
+              AUTHORITY=$(codesign -dv "$f" 2>&1 | grep "^Authority=" | head -1 || echo "UNSIGNED")
+              printf "  %-60s  %s\n" "$(basename "$f")" "$AUTHORITY"
+            fi
+          done
+
+          echo ""
+          echo "=== spctl assessment ==="
+          # spctl may fail on CI runners — that's expected; log it for debugging only
+          spctl --assess --type execute --verbose "$APP" 2>&1 || true
 
       - name: Notarize app
         env:
@@ -193,53 +197,91 @@ jobs:
           echo "${NOTARIZE_KEY_P8}" | base64 --decode > /tmp/AuthKey.p8
           chmod 600 /tmp/AuthKey.p8
 
-          # Zip the app for submission (notarytool requires a zip, not .app directly)
+          # Create the ZIP Apple requires for submission
           ditto -c -k --sequesterRsrc --keepParent \
             "build/export/DoomCoder.app" \
             "build/DoomCoder-notarize.zip"
 
-          # Submit without --wait so we get an ID immediately and can monitor
+          # ── Submit (no-wait — just upload and get an ID) ───────────────────
           echo "Submitting to Apple notarization..."
-          SUBMISSION_OUTPUT=$(xcrun notarytool submit "build/DoomCoder-notarize.zip" \
+          SUBMIT_JSON=$(xcrun notarytool submit "build/DoomCoder-notarize.zip" \
             --key /tmp/AuthKey.p8 \
-            --key-id "${NOTARIZE_KEY_ID}" \
-            --issuer "${NOTARIZE_ISSUER_ID}" \
+            --key-id  "${NOTARIZE_KEY_ID}" \
+            --issuer  "${NOTARIZE_ISSUER_ID}" \
             --no-wait \
             --output-format json)
-          echo "Submit response: ${SUBMISSION_OUTPUT}"
+          echo "Submit response: ${SUBMIT_JSON}"
 
-          SUBMISSION_ID=$(echo "${SUBMISSION_OUTPUT}" | \
-            python3 -c "import json,sys; d=json.load(sys.stdin); print(d['id'])")
+          SUBMISSION_ID=$(echo "${SUBMIT_JSON}" | \
+            python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
           echo "Submission ID: ${SUBMISSION_ID}"
 
-          # Wait for Apple to finish — typically 2-10 min, up to 30 on a bad day.
-          # We use || to prevent set -e from killing us before we can print the log.
-          NOTARIZE_OK=0
-          xcrun notarytool wait "${SUBMISSION_ID}" \
-            --key /tmp/AuthKey.p8 \
-            --key-id "${NOTARIZE_KEY_ID}" \
-            --issuer "${NOTARIZE_ISSUER_ID}" \
-            --timeout 60m || NOTARIZE_OK=1
+          # ── Poll with notarytool info (every 30 s, max 40 polls = 20 min) ──
+          # We use short-lived `notarytool info` calls instead of the long-running
+          # `notarytool wait`, which can hang indefinitely on beta runners when
+          # the underlying HTTP connection drops or the response is delayed.
+          # Each info call is wrapped with `timeout 60` so a hung TLS handshake
+          # cannot block us for more than 60 seconds.
+          echo "Polling notarization status (up to 20 min)..."
+          FINAL_STATUS="in_progress"
+          for ATTEMPT in $(seq 1 40); do
+            sleep 30
 
-          # Always print the full Apple notarization log (essential for debugging)
-          echo "=== Apple Notarization Log ==="
-          xcrun notarytool log "${SUBMISSION_ID}" \
-            --key /tmp/AuthKey.p8 \
-            --key-id "${NOTARIZE_KEY_ID}" \
-            --issuer "${NOTARIZE_ISSUER_ID}" || true
+            INFO_JSON=$(timeout 60 xcrun notarytool info "${SUBMISSION_ID}" \
+              --key /tmp/AuthKey.p8 \
+              --key-id  "${NOTARIZE_KEY_ID}" \
+              --issuer  "${NOTARIZE_ISSUER_ID}" \
+              --output-format json 2>/dev/null \
+              || echo '{"status":"poll_error"}')
+
+            FINAL_STATUS=$(echo "${INFO_JSON}" | \
+              python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" \
+              2>/dev/null || echo "parse_error")
+
+            echo "  [$(printf '%02d' $ATTEMPT)/40] $(date -u '+%H:%M:%S UTC') — ${FINAL_STATUS}"
+
+            case "${FINAL_STATUS}" in
+              Accepted)
+                echo "✅ Notarization accepted by Apple"
+                break
+                ;;
+              Invalid)
+                echo "❌ Apple rejected the submission"
+                echo "=== Apple Notarization Log ==="
+                xcrun notarytool log "${SUBMISSION_ID}" \
+                  --key /tmp/AuthKey.p8 \
+                  --key-id  "${NOTARIZE_KEY_ID}" \
+                  --issuer  "${NOTARIZE_ISSUER_ID}" || true
+                rm -f /tmp/AuthKey.p8
+                exit 1
+                ;;
+              # "in_progress" | "poll_error" | "parse_error" → keep polling
+            esac
+          done
+
+          # ── Final verdict ──────────────────────────────────────────────────
+          if [ "${FINAL_STATUS}" != "Accepted" ]; then
+            echo "::error::Notarization did not complete within 20 min. Final status: ${FINAL_STATUS}"
+            echo "=== Apple Notarization Log ==="
+            xcrun notarytool log "${SUBMISSION_ID}" \
+              --key /tmp/AuthKey.p8 \
+              --key-id  "${NOTARIZE_KEY_ID}" \
+              --issuer  "${NOTARIZE_ISSUER_ID}" || true
+            rm -f /tmp/AuthKey.p8
+            exit 1
+          fi
 
           rm -f /tmp/AuthKey.p8
-
-          [ "${NOTARIZE_OK}" -eq 0 ] || { echo "::error::Notarization failed — see log above"; exit 1; }
 
       - name: Staple notarization ticket
         run: |
           xcrun stapler staple "build/export/DoomCoder.app"
           xcrun stapler validate "build/export/DoomCoder.app"
+          echo "✅ Notarization ticket stapled"
 
       - name: Create DMG
         run: |
-          brew install create-dmg 2>/dev/null || true
+          brew install create-dmg --quiet 2>/dev/null || true
 
           create-dmg \
             --volname "DoomCoder" \
@@ -252,27 +294,25 @@ jobs:
             "DoomCoder-${{ env.VERSION }}.dmg" \
             "build/export/"
 
-          # Sign the DMG with Developer ID — the .app inside is already notarized+stapled,
-          # so macOS will trust it. The DMG itself just needs a Developer ID signature.
-          codesign \
-            --sign "Developer ID Application" \
-            --timestamp \
+          codesign --sign "Developer ID Application" --timestamp \
             "DoomCoder-${{ env.VERSION }}.dmg"
+          echo "✅ DMG created and signed"
 
       - name: Create distribution ZIP
         run: |
-          # Use ditto (Apple-recommended) to produce the final signed + stapled ZIP
           ditto -c -k --sequesterRsrc --keepParent \
             "build/export/DoomCoder.app" \
             "DoomCoder-${{ env.VERSION }}.zip"
-          echo "ZIP_SIZE=$(stat -f%z 'DoomCoder-${{ env.VERSION }}.zip')" >> $GITHUB_ENV
+          ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
+          echo "ZIP_SIZE=${ZIP_SIZE}" >> $GITHUB_ENV
+          echo "ZIP: ${ZIP_SIZE} bytes"
 
       - name: Download Sparkle tools
         run: |
           SPARKLE_VER="2.9.1"
           curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VER}/Sparkle-${SPARKLE_VER}.tar.xz" \
             -o sparkle.tar.xz
-          mkdir sparkle-tools
+          mkdir -p sparkle-tools
           tar xf sparkle.tar.xz -C sparkle-tools
           chmod +x sparkle-tools/bin/*
 
@@ -280,13 +320,10 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          # Pipe key via stdin — correct Sparkle 2.x API (env var not supported)
-          # -p flag outputs ONLY the base64 signature, no parsing needed
           SPARKLE_SIG=$(echo "${SPARKLE_PRIVATE_KEY}" | \
-            sparkle-tools/bin/sign_update --ed-key-file - -p "DoomCoder-${{ env.VERSION }}.zip")
-
-          echo "Signature: $SPARKLE_SIG"
-          echo "Zip size:  ${{ env.ZIP_SIZE }}"
+            sparkle-tools/bin/sign_update --ed-key-file - -p \
+            "DoomCoder-${{ env.VERSION }}.zip")
+          echo "Signature: ${SPARKLE_SIG}"
           echo "SPARKLE_SIG=${SPARKLE_SIG}" >> $GITHUB_ENV
 
       - name: Update appcast.xml
@@ -303,28 +340,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Retry up to 5 times in case main moves between fetch and push.
-          # Strategy: stash our generated changes, rebase onto latest main,
-          # re-apply, then push. Non-fast-forward pushes are retried with
-          # a fresh appcast regeneration in case main already advanced.
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
             git add -A
             if ! git diff --cached --quiet; then
               git commit -m "chore: update appcast.xml for ${{ env.TAG }}"
-            else
-              echo "No changes to commit on attempt ${attempt}"
             fi
 
             git fetch origin main
 
-            # Prefer our generated appcast.xml & Info.plist bumps on conflict —
-            # they are deterministic from the tag and always correct.
             if ! git pull --rebase -X theirs origin main; then
-              echo "Rebase failed, aborting and retrying with regenerated appcast"
               git rebase --abort || true
               git reset --hard "origin/main"
-              # Re-apply the generated appcast entry on top of fresh main
               python3 scripts/update_appcast.py \
                 --version "${{ env.VERSION }}" \
                 --build "${{ env.BUILD }}" \
@@ -339,11 +366,10 @@ jobs:
               exit 0
             fi
 
-            echo "Push rejected, sleeping before retry"
             sleep $((attempt * 2))
           done
 
-          echo "::error::Failed to push appcast.xml update after 5 attempts"
+          echo "::error::Failed to push appcast.xml after 5 attempts"
           exit 1
 
       - name: Create GitHub Release
@@ -359,27 +385,17 @@ jobs:
           body: |
             ## 📦 Installation
 
-            **Option A — DMG (recommended for new installs):**
+            **DMG (recommended):**
             1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
             2. Open it and drag **DoomCoder** into your Applications folder
-            3. Double-click to launch — no extra steps
+            3. Launch — no Gatekeeper warnings, no "unidentified developer" prompts
 
-            **Option B — ZIP:**
-            1. Download **`DoomCoder-${{ env.VERSION }}.zip`** below
-            2. Unzip and move **`DoomCoder.app`** to `/Applications`
-            3. Double-click to launch
+            **ZIP:**
+            1. Download **`DoomCoder-${{ env.VERSION }}.zip`**
+            2. Unzip and move `DoomCoder.app` to `/Applications`
 
-            DoomCoder is **signed with a Developer ID and notarized by Apple**. macOS trusts it out of the box — no Gatekeeper warnings.
-
-            > Existing users receive updates automatically via the built-in updater (Sparkle).
-
-            ## ✅ Verify it's working
-
-            After enabling DoomCoder, run this in Terminal:
-            ```bash
-            pmset -g assertions | grep DoomCoder
-            ```
-            You should see: `PreventUserIdleDisplaySleep named: "DoomCoder: Preventing sleep for AI coding session"`
+            DoomCoder is **signed with a Developer ID and notarized by Apple**.
+            Existing users receive automatic updates via the built-in Sparkle updater.
 
             ---
             Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/CHANGELOG.md)
@@ -388,5 +404,5 @@ jobs:
         if: always()
         run: |
           security delete-keychain build.keychain 2>/dev/null || true
-          rm -f certificate.p12
+          rm -f certificate.p12 /tmp/AuthKey.p8
 
