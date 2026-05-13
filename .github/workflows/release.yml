@@ -32,7 +32,16 @@ jobs:
           echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: |
+          # Pick Xcode.app symlink if present, otherwise latest versioned Xcode
+          if [ -d /Applications/Xcode.app ]; then
+            sudo xcode-select -s /Applications/Xcode.app
+          else
+            XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+            echo "Using Xcode at: ${XCODE_PATH}"
+            sudo xcode-select -s "${XCODE_PATH}"
+          fi
+          xcodebuild -version
 
       - name: Update version in project
         run: |
@@ -81,6 +90,7 @@ jobs:
             -configuration Release \
             -archivePath build/DoomCoder.xcarchive \
             archive \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             PROVISIONING_PROFILE_SPECIFIER="" \
