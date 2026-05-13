@@ -3,6 +3,27 @@
 All notable changes to Doom Coder will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+
+## [2.2.0] - 2025-05-13
+
+### Added
+- **Official signing & notarization**: DoomCoder is now signed with a Developer ID Application certificate and notarized by Apple. Users can double-click to install with no Gatekeeper prompts or Terminal workarounds.
+- **Bundled agent icons**: Claude Code, Codex CLI, and Copilot CLI icons are embedded in the app bundle via `Assets.xcassets`. They appear instantly in notifications and the menu without an internet connection.
+- **Privacy manifest** (`PrivacyInfo.xcprivacy`): Declares the two system APIs DoomCoder uses (UserDefaults, FileTimestamp) and confirms no user data is collected or shared.
+- **v2.2.0 What's New sheet**: Shown once on first launch after upgrade.
+
+### Changed
+- Release workflow completely rewritten: Developer ID cert import → `xcodebuild -exportArchive` with `method: developer-id` → `notarytool` notarization → `stapler` staple → `ditto` zip → Sparkle EdDSA signature → GitHub Release. Ad-hoc signing step removed.
+- Distribution artifact changed from `zip -r --symlinks` to `ditto` (Apple-recommended, preserves resource forks and extended attributes).
+- Release notes no longer include Gatekeeper workaround instructions.
+- README install section updated to reflect signed app and `.zip` download.
+- Icon priority for CLI agents (claude, codexCLI, copilotCLI): bundled xcassets image used first; CDN cache used as optional fallback/update path.
+
+### Removed
+- `DoomCoderiOS/` — empty directory with only `.DS_Store`
+- `Ref/Windsurf/` — saved reference HTML and vendor assets
+- 49 `.doomcoder-backup-*` files from `.github/hooks/`
+
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---

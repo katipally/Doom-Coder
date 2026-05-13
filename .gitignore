@@ -60,3 +60,5 @@ build/
 Doom-Coder-old/
 
 .github/
+# Hook backup files created by RulesInstaller
+*.doomcoder-backup-*

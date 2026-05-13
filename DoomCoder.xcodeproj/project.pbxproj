@@ -46,6 +46,7 @@
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
+		DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +91,7 @@
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
+		DC0000000000001000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +131,7 @@
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
 				DC0000000000001000000008 /* DoomCoder.entitlements */,
+				DC0000000000001000000103 /* PrivacyInfo.xcprivacy */,
 			);
 			path = DoomCoder;
 			sourceTree = "<group>";
@@ -265,6 +268,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DC0000000000002000000007 /* Assets.xcassets in Resources */,
+				DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -444,7 +448,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2002;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
@@ -468,7 +472,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2002;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;

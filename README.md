@@ -47,7 +47,9 @@ Doom Coder holds an `IOPMAssertion` — the same kernel-level flag used by Amphe
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), drag to `/Applications`, launch.
+Download the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip, drag `DoomCoder.app` to `/Applications`, and double-click to open.
+
+DoomCoder is **signed with an Apple Developer ID and notarized by Apple** — no Gatekeeper prompts, no extra steps.
 
 First launch: macOS may ask for Accessibility permission — only needed for the **⌥ Space** global shortcut. You can skip it if you don't need the hotkey.
 
