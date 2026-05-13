@@ -67,9 +67,6 @@ struct ConfigureAgentsViewV2: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermStatus()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
-            detectAll()
-        }
         .alert("Update Hook Configs", isPresented: $showMigrationAlert) {
             Button("Update All") {
                 MigrationManager.migrate(agents: migrationAgents)

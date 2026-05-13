@@ -232,6 +232,7 @@ extension CKRecord {
         r["totalErrors"] = a.totalErrors as CKRecordValue
         if let m = a.model { r["model"] = m as CKRecordValue }
         if let p = a.promptPreview { r["promptPreview"] = p as CKRecordValue }
+        if let tap = a.toolArgsPreview { r["toolArgsPreview"] = tap as CKRecordValue }
         r["expiresAt"] = a.expiresAt as CKRecordValue
         if let rid = a.pendingRequestId { r["pendingRequestId"] = rid as CKRecordValue }
         return r
@@ -284,8 +285,10 @@ enum Redactor {
             out.currentTool = nil
             out.model = nil
             out.promptPreview = nil
-        } else if let p = a.promptPreview {
-            out.promptPreview = redact(p)
+            out.toolArgsPreview = nil
+        } else {
+            if let p = a.promptPreview { out.promptPreview = redact(p) }
+            if let tap = a.toolArgsPreview { out.toolArgsPreview = redact(tap) }
         }
         return out
     }

@@ -484,6 +484,7 @@ struct AgentInstallerV2 {
         "Notification", "Stop", "StopFailure",
         "SubagentStart", "SubagentStop",
         "TaskCreated", "TaskCompleted",
+        "TeammateIdle", "UserPromptExpansion", "PostToolBatch", "Setup",
         "PreCompact", "PostCompact",
         "FileChanged", "CwdChanged", "ConfigChange",
         "InstructionsLoaded", "Elicitation", "ElicitationResult",
@@ -513,7 +514,8 @@ struct AgentInstallerV2 {
         "sessionStart", "sessionEnd",
         "userPromptSubmitted",
         "preToolUse", "postToolUse",
-        "errorOccurred"
+        "errorOccurred",
+        "subagentStart", "subagentStop"
     ]
 
     // All 12 Windsurf Cascade hook events — snake_case, no version field required.
@@ -532,14 +534,19 @@ struct AgentInstallerV2 {
     // feature flag in ~/.codex/config.toml.
     static let codexEvents = [
         "SessionStart", "PreToolUse", "PermissionRequest",
-        "PostToolUse", "UserPromptSubmit", "Stop"
+        "PostToolUse", "UserPromptSubmit", "Stop",
+        "StopFailure", "SubagentStart", "SubagentStop"
     ]
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {
         let exe = helperBinaryPath()
         // Shell-quote the path so spaces (e.g. "Application Support") are safe.
         let quoted = exe.contains(" ") ? "\"\(exe)\"" : exe
-        return "\(quoted) \(agent) \(event)"
+        // Blocking-capable events: --waitable makes dc-hook wait for a decision file.
+        // Failsafe: if decision is not written within 30s, dc-hook exits 0 (allow).
+        let waitable = (agent == "claude" && ["PreToolUse", "PermissionRequest", "UserPromptExpansion"].contains(event))
+            ? " --waitable" : ""
+        return "\(quoted) \(agent) \(event)\(waitable)"
     }
 
     // MARK: - Recursive dc-hook entry stripping (D2: path-based identification)

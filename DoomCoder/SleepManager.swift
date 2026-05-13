@@ -32,6 +32,7 @@ final class SleepManager {
     private(set) var isActive = false
     private(set) var elapsedTimeString = ""
     private(set) var thermalStateText = "Normal"
+    var elapsedSeconds: Int { activeSince.map { Int(Date().timeIntervalSince($0)) } ?? 0 }
     private(set) var sessionTimerRemainingText: String?
     private(set) var isScreenOff = false
     private(set) var screenOffCountdown: Int? = nil
@@ -43,6 +44,7 @@ final class SleepManager {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "doomcoder.mode")
             handleModeChange()
+            Task { await SettingsSyncer.shared.pushSleepState() }
         }
     }
 
@@ -50,11 +52,15 @@ final class SleepManager {
         didSet {
             UserDefaults.standard.set(sessionTimerHours, forKey: "doomcoder.sessionTimer")
             resetSessionTimer()
+            Task { await SettingsSyncer.shared.pushSleepState() }
         }
     }
 
     var screenOffRearmMinutes: Int {
-        didSet { UserDefaults.standard.set(screenOffRearmMinutes, forKey: "doomcoder.screenOffRearm") }
+        didSet {
+            UserDefaults.standard.set(screenOffRearmMinutes, forKey: "doomcoder.screenOffRearm")
+            Task { await SettingsSyncer.shared.pushSleepState() }
+        }
     }
 
     // MARK: - Launch at Login
@@ -165,6 +171,7 @@ final class SleepManager {
         startElapsedTimer()
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
+        Task { await SettingsSyncer.shared.pushSleepState() }
     }
 
     func disable() {
@@ -185,6 +192,7 @@ final class SleepManager {
         sessionEndDate = nil
         stopElapsedTimer()
         stopSessionTimer()
+        Task { await SettingsSyncer.shared.pushSleepState() }
     }
 
     func toggle() {

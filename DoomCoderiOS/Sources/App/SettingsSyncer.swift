@@ -16,6 +16,14 @@ final class IOSUserSettings: ObservableObject {
     @Published var lastModifiedBy: String = ""
     @Published var lastModifiedAt: Date = .distantPast
 
+    // Sleep status — reflects macOS state (read-only from iOS perspective)
+    @Published var sleepEnabled: Bool = false
+    @Published var sleepMode: String = "screenOn"
+    @Published var sleepElapsedSec: Int = 0
+    @Published var sleepScreenOffRearmMinutes: Int = 10
+    @Published var sleepSessionTimerHours: Int = 0
+    @Published var sleepThermalState: String = "Normal"
+
     private init() { load() }
 
     private func load() {
@@ -75,6 +83,13 @@ final class SettingsSyncer {
         if let v = rec["liveActivityMaxConcurrent"] as? Int { s.liveActivityMaxConcurrent = v }
         if let v = rec["liveActivityAutoDismissSec"] as? Int { s.liveActivityAutoDismissSec = v }
         if let v = rec["historyRetentionDays"] as? Int { s.historyRetentionDays = v }
+        // Sleep status from macOS (always apply these — no conflict with iOS writes)
+        if let v = rec["sleepEnabled"] as? Int { s.sleepEnabled = v != 0 }
+        if let v = rec["sleepMode"] as? String { s.sleepMode = v }
+        if let v = rec["sleepElapsedSec"] as? Int { s.sleepElapsedSec = v }
+        if let v = rec["sleepScreenOffRearmMinutes"] as? Int { s.sleepScreenOffRearmMinutes = v }
+        if let v = rec["sleepSessionTimerHours"] as? Int { s.sleepSessionTimerHours = v }
+        if let v = rec["sleepThermalState"] as? String { s.sleepThermalState = v }
         s.lastModifiedAt = remoteTs
         s.lastModifiedBy = remoteDevice
         s.persistLocal()

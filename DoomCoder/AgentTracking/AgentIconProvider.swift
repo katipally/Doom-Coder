@@ -2,56 +2,26 @@ import Foundation
 import AppKit
 
 // Provides agent icons. Priority order:
-//   1. NSWorkspace runtime icon from installed .app bundle (IDE agents only)
-//   2. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
-//   3. Bundled asset catalog image (user-supplied replacements)
-//   4. SF Symbol fallback (always available)
-//
-// CDN icons are fetched once at app launch by IconDownloader.prefetch().
+//   1. Bundled asset catalog PNG (always available, offline-capable)
+//   2. NSWorkspace runtime icon from installed .app bundle (IDE agents — better match to what user sees)
+//   3. SF Symbol fallback (always available)
 enum AgentIconProvider {
+
     /// Returns an NSImage for the given agent.
     static func icon(for agent: TrackedAgent, size: CGFloat = 32) -> NSImage {
-        switch agent {
-        case .claude:
-            if let cdn = IconDownloader.cachedIcon(for: .claude, size: size) { return cdn }
-            return bundledOrSymbol(name: "agent-claude", symbol: "c.circle.fill", size: size)
-        case .cursor:
-            if let appIcon = appIcon(bundleIds: ["com.todesktop.230313mzl4w4u92"],
-                                     paths: ["/Applications/Cursor.app",
-                                             NSHomeDirectory() + "/Applications/Cursor.app"],
-                                     size: size) { return appIcon }
-            if let cdn = IconDownloader.cachedIcon(for: .cursor, size: size) { return cdn }
-            return bundledOrSymbol(name: "agent-cursor", symbol: "cursorarrow.rays", size: size)
-        case .vscode:
-            // No lobehub icon for VS Code — use installed app icon only.
-            if let appIcon = appIcon(bundleIds: ["com.microsoft.VSCode",
-                                                 "com.microsoft.VSCodeInsiders"],
-                                     paths: ["/Applications/Visual Studio Code.app",
-                                             NSHomeDirectory() + "/Applications/Visual Studio Code.app",
-                                             "/Applications/Visual Studio Code - Insiders.app"],
-                                     size: size) { return appIcon }
-            return bundledOrSymbol(name: "agent-vscode",
-                                   symbol: "chevron.left.forwardslash.chevron.right", size: size)
-        case .copilotCLI:
-            if let cdn = IconDownloader.cachedIcon(for: .copilotCLI, size: size) {
-                return avatarWrapped(cdn, size: size, cornerFraction: 0.22)
-            }
-            return bundledOrSymbol(name: "agent-copilot-cli", symbol: "terminal.fill", size: size)
-        case .windsurf:
-            if let appIcon = appIcon(bundleIds: ["com.codeium.windsurf", "com.exafunction.windsurf"],
-                                     paths: ["/Applications/Windsurf.app",
-                                             NSHomeDirectory() + "/Applications/Windsurf.app"],
-                                     size: size) { return appIcon }
-            if let cdn = IconDownloader.cachedIcon(for: .windsurf, size: size) { return cdn }
-            return bundledOrSymbol(name: "agent-windsurf", symbol: "wind", size: size)
-        case .codexCLI:
-            if let cdn = IconDownloader.cachedIcon(for: .codexCLI, size: size) { return cdn }
-            return bundledOrSymbol(name: "agent-codex",
-                                   symbol: "sparkles.rectangle.stack", size: size)
+        // Bundled PNG first — shipped with app, always available
+        if let bundled = NSImage(named: bundledAssetName(for: agent)) {
+            return sized(bundled, size: size)
         }
+        // IDE agents: try installed .app icon as a nice bonus
+        if let appIcon = installedAppIcon(for: agent, size: size) {
+            return appIcon
+        }
+        // SF Symbol last resort
+        return sfSymbolImage(for: agent, size: size)
     }
 
-    /// System name for SF Symbol fallback per agent.
+    /// SF Symbol name per agent (for menus, toolbars, etc.)
     static func sfSymbol(for agent: TrackedAgent) -> String {
         switch agent {
         case .claude:     return "c.circle.fill"
@@ -65,24 +35,16 @@ enum AgentIconProvider {
 
     // MARK: - Notification attachment URL
 
-    /// Returns a file URL to a PNG of the agent icon suitable for
-    /// UNNotificationAttachment.
-    ///
-    /// Priority:
-    ///   1. CDN-downloaded icon (best quality, downloaded by IconDownloader.prefetch())
-    ///   2. Rendered fallback (SF Symbol / app icon rendered to PNG, cached on disk)
+    /// Returns a file URL to a PNG of the agent icon for UNNotificationAttachment.
+    /// Renders and caches the bundled icon on first call.
     static func iconFileURL(for agent: TrackedAgent) -> URL? {
         let cacheDir = AgentSupportDir.url.appendingPathComponent("icons", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
 
-        // Prefer the CDN icon if already cached.
-        let cdnURL = IconDownloader.cdnCacheURL(for: agent)
-        if FileManager.default.fileExists(atPath: cdnURL.path) { return cdnURL }
-
-        // Fall back to a locally rendered PNG (SF Symbol or app icon).
-        let rendered = cacheDir.appendingPathComponent("\(agent.rawValue)-render.png")
+        let rendered = cacheDir.appendingPathComponent("\(agent.rawValue)-icon.png")
         if FileManager.default.fileExists(atPath: rendered.path) { return rendered }
-        let image = icon(for: agent, size: 64)
+
+        let image = icon(for: agent, size: 128)
         guard let data = image.pngData() else { return nil }
         try? data.write(to: rendered)
         return rendered
@@ -90,50 +52,64 @@ enum AgentIconProvider {
 
     // MARK: - Private
 
+    private static func bundledAssetName(for agent: TrackedAgent) -> String {
+        switch agent {
+        case .claude:     return "agent-claude"
+        case .cursor:     return "agent-cursor"
+        case .vscode:     return "agent-vscode"
+        case .copilotCLI: return "agent-copilot"
+        case .windsurf:   return "agent-windsurf"
+        case .codexCLI:   return "agent-codex"
+        }
+    }
+
+    private static func installedAppIcon(for agent: TrackedAgent, size: CGFloat) -> NSImage? {
+        switch agent {
+        case .cursor:
+            return appIcon(bundleIds: ["com.todesktop.230313mzl4w4u92"],
+                           paths: ["/Applications/Cursor.app",
+                                   NSHomeDirectory() + "/Applications/Cursor.app"],
+                           size: size)
+        case .vscode:
+            return appIcon(bundleIds: ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"],
+                           paths: ["/Applications/Visual Studio Code.app",
+                                   NSHomeDirectory() + "/Applications/Visual Studio Code.app",
+                                   "/Applications/Visual Studio Code - Insiders.app"],
+                           size: size)
+        case .windsurf:
+            return appIcon(bundleIds: ["com.codeium.windsurf", "com.exafunction.windsurf"],
+                           paths: ["/Applications/Windsurf.app",
+                                   NSHomeDirectory() + "/Applications/Windsurf.app"],
+                           size: size)
+        default:
+            return nil
+        }
+    }
+
     private static func appIcon(bundleIds: [String], paths: [String], size: CGFloat) -> NSImage? {
-        // Try to get icon via NSWorkspace for each bundle ID
         for bid in bundleIds {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
-                let icon = NSWorkspace.shared.icon(forFile: url.path)
-                icon.size = NSSize(width: size, height: size)
-                return icon
+                return sized(NSWorkspace.shared.icon(forFile: url.path), size: size)
             }
         }
-        // Try direct paths
         for path in paths {
             if FileManager.default.fileExists(atPath: path) {
-                let icon = NSWorkspace.shared.icon(forFile: path)
-                icon.size = NSSize(width: size, height: size)
-                return icon
+                return sized(NSWorkspace.shared.icon(forFile: path), size: size)
             }
         }
         return nil
     }
 
-    private static func bundledOrSymbol(name: String, symbol: String, size: CGFloat) -> NSImage {
-        if let bundled = NSImage(named: name) {
-            bundled.size = NSSize(width: size, height: size)
-            return bundled
-        }
-        let config = NSImage.SymbolConfiguration(pointSize: size * 0.6, weight: .medium)
-        return NSImage(systemSymbolName: symbol, accessibilityDescription: name)?
-            .withSymbolConfiguration(config) ?? NSImage()
+    private static func sized(_ image: NSImage, size: CGFloat) -> NSImage {
+        image.size = NSSize(width: size, height: size)
+        return image
     }
 
-    /// Renders `icon` centred inside a rounded-square chip at `size × size`.
-    /// Mimics the @lobehub/icons Avatar style (white/dark background + rounded rect).
-    private static func avatarWrapped(_ icon: NSImage, size: CGFloat, cornerFraction: CGFloat) -> NSImage {
-        let result = NSImage(size: NSSize(width: size, height: size))
-        result.lockFocus()
-        let rect = NSRect(x: 0, y: 0, width: size, height: size)
-        let radius = size * cornerFraction
-        NSColor(calibratedWhite: 0.95, alpha: 1.0).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
-        let padding = size * 0.15
-        let inner = NSRect(x: padding, y: padding, width: size - padding * 2, height: size - padding * 2)
-        icon.draw(in: inner, from: .zero, operation: .sourceOver, fraction: 1.0)
-        result.unlockFocus()
-        return result
+    private static func sfSymbolImage(for agent: TrackedAgent, size: CGFloat) -> NSImage {
+        let sym = sfSymbol(for: agent)
+        let config = NSImage.SymbolConfiguration(pointSize: size * 0.6, weight: .medium)
+        return NSImage(systemSymbolName: sym, accessibilityDescription: sym)?
+            .withSymbolConfiguration(config) ?? NSImage()
     }
 }
 

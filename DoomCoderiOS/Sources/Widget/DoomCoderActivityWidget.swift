@@ -185,7 +185,7 @@ private struct AgentIconView: View {
 
 // MARK: - Expanded bottom row
 
-@available(iOS 17.0, *)
+
 private struct ExpandedBottomRow: View {
     let state: DoomCoderActivityAttributes.ContentState
     let attributes: DoomCoderActivityAttributes
@@ -222,27 +222,36 @@ private struct ExpandedBottomRow: View {
     }
 
     private var infoRow: some View {
-        HStack(spacing: 8) {
-            if let tool = state.currentTool {
-                Image(systemName: "wrench.and.screwdriver.fill")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                if let tool = state.currentTool {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(tool)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("\(state.toolCount) tools")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(tool)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(.tertiary)
             }
-            Spacer()
-            Text("\(state.toolCount) tools")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            if let preview = state.toolArgsPreview {
+                Text(preview)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 }
 
 // MARK: - Lock screen / StandBy view
 
-@available(iOS 17.0, *)
+
 struct LockScreenView: View {
     let state: DoomCoderActivityAttributes.ContentState
     let attributes: DoomCoderActivityAttributes
@@ -355,9 +364,15 @@ struct DoomCoderActivityWidget: Widget {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(agentDisplayName(context.attributes.agent))
                             .font(.caption.bold())
-                        Text(formatElapsed(context.state.elapsedSec))
-                            .font(.system(size: 10).monospaced())
-                            .foregroundStyle(.secondary)
+                        if let model = context.state.modelShortName {
+                            Text("\(model) · \(formatElapsed(context.state.elapsedSec))")
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(formatElapsed(context.state.elapsedSec))
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.trailing, 4)
                 }
@@ -379,11 +394,22 @@ struct DoomCoderActivityWidget: Widget {
                 )
             } compactTrailing: {
                 HStack(spacing: 3) {
-                    Image(systemName: statusSystemImage(context.state.status))
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(statusColor(context.state.status))
+                    Circle()
+                        .fill(statusColor(context.state.status))
+                        .frame(width: 5, height: 5)
+                    if let tool = context.state.currentTool, context.state.status == "running" {
+                        Text(tool.prefix(8) + (tool.count > 8 ? "…" : ""))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    } else if let model = context.state.modelShortName {
+                        Text(model)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
                     Text(formatElapsed(context.state.elapsedSec))
-                        .font(.system(size: 10).monospaced())
+                        .font(.system(size: 10).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             } minimal: {
@@ -397,7 +423,7 @@ struct DoomCoderActivityWidget: Widget {
 }
 
 @main
-@available(iOS 17.0, *)
+
 struct DoomCoderWidgetBundle: WidgetBundle {
     var body: some Widget {
         DoomCoderActivityWidget()

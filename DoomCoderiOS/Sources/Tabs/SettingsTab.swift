@@ -23,6 +23,42 @@ struct SettingsTab: View {
                         Text("\(connectedMacs)").foregroundStyle(.secondary)
                     }
                 }
+                Section("Keep Mac Awake") {
+                    sleepStatusRow
+                    Toggle("Enabled", isOn: Binding(
+                        get: { settings.sleepEnabled },
+                        set: { v in
+                            settings.sleepEnabled = v
+                            Task { try? await CloudKitClient.shared.writeSleepCommand(type: "toggle", enabled: v) }
+                        }
+                    ))
+                    Picker("Mode", selection: Binding(
+                        get: { settings.sleepMode },
+                        set: { v in
+                            settings.sleepMode = v
+                            Task { try? await CloudKitClient.shared.writeSleepCommand(type: "setMode", mode: v) }
+                        }
+                    )) {
+                        Text("Screen On").tag("screenOn")
+                        Text("Screen Off").tag("screenOff")
+                    }
+                    Stepper("Re-arm: \(settings.sleepScreenOffRearmMinutes) min",
+                            value: Binding(
+                                get: { settings.sleepScreenOffRearmMinutes },
+                                set: { v in
+                                    settings.sleepScreenOffRearmMinutes = v
+                                    Task { try? await CloudKitClient.shared.writeSleepCommand(type: "setRearmMinutes", rearmMinutes: v) }
+                                }
+                            ), in: 1...60)
+                    Stepper("Session timer: \(settings.sleepSessionTimerHours == 0 ? "Off" : "\(settings.sleepSessionTimerHours)h")",
+                            value: Binding(
+                                get: { settings.sleepSessionTimerHours },
+                                set: { v in
+                                    settings.sleepSessionTimerHours = v
+                                    Task { try? await CloudKitClient.shared.writeSleepCommand(type: "setTimerHours", timerHours: v) }
+                                }
+                            ), in: 0...24)
+                }
                 Section("Notifications") {
                     Toggle("Approvals", isOn: $settings.notifyApprovals)
                     Toggle("Failures", isOn: $settings.notifyFailures)
@@ -83,6 +119,24 @@ struct SettingsTab: View {
             .onChange(of: settings.liveActivityMaxConcurrent) { SettingsSyncer.shared.scheduleLocalPush() }
             .onChange(of: settings.liveActivityAutoDismissSec) { SettingsSyncer.shared.scheduleLocalPush() }
             .onChange(of: settings.historyRetentionDays) { SettingsSyncer.shared.scheduleLocalPush() }
+        }
+    }
+
+    private var sleepStatusRow: some View {
+        HStack {
+            Image(systemName: settings.sleepEnabled ? "moon.zzz.fill" : "moon")
+                .foregroundStyle(settings.sleepEnabled ? .yellow : .secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settings.sleepEnabled ? "Active" : "Inactive")
+                    .font(.subheadline.weight(.medium))
+                if settings.sleepEnabled {
+                    let mins = settings.sleepElapsedSec / 60
+                    let secs = settings.sleepElapsedSec % 60
+                    Text("\(mins)m \(secs)s · Thermal: \(settings.sleepThermalState)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
         }
     }
 

@@ -12,6 +12,7 @@ enum CloudKitSchema {
         static let devicePresence = "DevicePresence"
         static let userSettings = "UserSettings"
         static let pushNotification = "PushNotification"
+        static let sleepCommand = "SleepCommand"
     }
 }
 
@@ -63,6 +64,7 @@ struct CKSessionAggregate: Codable, Sendable {
     var totalErrors: Int
     var model: String?
     var promptPreview: String?
+    var toolArgsPreview: String?
     var expiresAt: Date
     var pendingRequestId: String?
 
@@ -120,5 +122,27 @@ struct CKUserSettings: Codable, Sendable {
     var lastModifiedBy: String
     var lastModifiedAt: Date
 
+    // Sleep status (written by macOS, read by iOS)
+    var sleepEnabled: Bool = false
+    var sleepMode: String = "screenOn"
+    var sleepElapsedSec: Int = 0
+    var sleepScreenOffRearmMinutes: Int = 10
+    var sleepSessionTimerHours: Int = 0
+    var sleepThermalState: String = "Normal"
+
     var recordName: String { "settings" }
+}
+
+struct CKSleepCommand: Codable, Sendable {
+    let commandId: String
+    let commandType: String   // "toggle" | "setMode" | "setRearmMinutes" | "setTimerHours"
+    let enabled: Int?         // 0 or 1 (for "toggle")
+    let mode: String?         // "screenOn" | "screenOff" (for "setMode")
+    let rearmMinutes: Int?    // for "setRearmMinutes"
+    let timerHours: Int?      // for "setTimerHours"
+    let issuedAt: Date
+    let expiresAt: Date
+
+    var recordName: String { commandId }
+    static let recordType = "SleepCommand"
 }

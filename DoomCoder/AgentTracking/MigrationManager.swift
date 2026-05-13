@@ -89,39 +89,6 @@ enum MigrationManager {
         UserDefaults.standard.set(true, forKey: migratedKey)
     }
 
-    // MARK: - 3.0 First-Launch Migration
-
-    private static let v3MigratedKey = "doomcoder.migration.v3.done"
-
-    /// Runs once on 3.0 first launch: migrates ChannelStore v2→v3,
-    /// purges all ntfy UserDefaults keys, and removes ntfy keychain entries.
-    static func migrateToV3IfNeeded() {
-        let ud = UserDefaults.standard
-        guard !ud.bool(forKey: v3MigratedKey) else { return }
-
-        // 1. Migrate ChannelStore v2 → v3 (ntfy → iosCompanion)
-        ChannelStore.migrateV2toV3IfNeeded()
-
-        // 2. Wipe ntfy UserDefaults keys
-        let ntfyKeys = [
-            "doomcoder.ntfy.topic",
-            "doomcoder.ntfy.server",
-            "doomcoder.ntfy.keychainMigrated.v1",
-            "doomcoder.channels.v2"
-        ]
-        for key in ntfyKeys { ud.removeObject(forKey: key) }
-
-        // 3. Remove ntfy keychain entry (service = "doomcoder.ntfy")
-        let keychainQuery: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
-            kSecAttrService: "doomcoder.ntfy" as CFString
-        ]
-        SecItemDelete(keychainQuery as CFDictionary)
-
-        ud.set(true, forKey: v3MigratedKey)
-        logger.info("3.0 migration complete — ntfy purged")
-    }
-
     // MARK: - Private
 
     private static func hasLegacyEntries(at path: String) -> Bool {

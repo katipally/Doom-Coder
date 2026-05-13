@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
+		DCCONST000000000000000001 /* DoomCoderConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCONST000000000000000000 /* DoomCoderConstants.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
@@ -45,7 +46,6 @@
 		DC0000000000002000000098 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000098 /* PrivacyInfo.xcprivacy */; };
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
-		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
 		DC0000000000002000000103 /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* FeatureFlags.swift */; };
 		DC0000000000002000000104 /* CloudKitSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* CloudKitSchema.swift */; };
 		DC0000000000002000000105 /* CloudKitPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000105 /* CloudKitPublisher.swift */; };
@@ -110,6 +110,7 @@ remoteInfo = DoomCoderNS;
 /* Begin PBXFileReference section */
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
+		DCCONST000000000000000000 /* DoomCoderConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderConstants.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -148,7 +149,6 @@ remoteInfo = DoomCoderNS;
 		DC0000000000001000000098 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
-		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
 		DC0000000000001000000103 /* FeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlags.swift; sourceTree = "<group>"; };
 		DC0000000000001000000104 /* CloudKitSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSchema.swift; sourceTree = "<group>"; };
 		DC0000000000001000000105 /* CloudKitPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPublisher.swift; sourceTree = "<group>"; };
@@ -242,6 +242,7 @@ DCNS000000000001FFFF000C /* NotificationService.entitlements */ = {isa = PBXFile
 			isa = PBXGroup;
 			children = (
 				DC0000000000001000000002 /* DoomCoderApp.swift */,
+				DCCONST000000000000000000 /* DoomCoderConstants.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
@@ -300,7 +301,6 @@ DCNS000000000001FFFF000C /* NotificationService.entitlements */ = {isa = PBXFile
 				DC0000000000001000000046 /* UIAnimations.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
-				DC0000000000001000000102 /* IconDownloader.swift */,
 				DC0000000000001000000103 /* FeatureFlags.swift */,
 				DC0000000000001000000104 /* CloudKitSchema.swift */,
 				DC0000000000001000000105 /* CloudKitPublisher.swift */,
@@ -572,6 +572,7 @@ productType = "com.apple.product-type.app-extension";
 			buildActionMask = 2147483647;
 			files = (
 				DC0000000000002000000002 /* DoomCoderApp.swift in Sources */,
+				DCCONST000000000000000001 /* DoomCoderConstants.swift in Sources */,
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
@@ -606,7 +607,6 @@ productType = "com.apple.product-type.app-extension";
 				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
-				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 				DC0000000000002000000103 /* FeatureFlags.swift in Sources */,
 				DC0000000000002000000104 /* CloudKitSchema.swift in Sources */,
 				DC0000000000002000000105 /* CloudKitPublisher.swift in Sources */,
@@ -1100,7 +1100,7 @@ CODE_SIGN_STYLE = Automatic;
 CURRENT_PROJECT_VERSION = 1;
 DEVELOPMENT_TEAM = A9P2388PHM;
 INFOPLIST_FILE = "DoomCoderiOS/NotificationService/Info.plist";
-IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 LD_RUNPATH_SEARCH_PATHS = (
 "$(inherited)",
 "@executable_path/Frameworks",
@@ -1125,7 +1125,7 @@ CODE_SIGN_STYLE = Automatic;
 CURRENT_PROJECT_VERSION = 1;
 DEVELOPMENT_TEAM = A9P2388PHM;
 INFOPLIST_FILE = "DoomCoderiOS/NotificationService/Info.plist";
-IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 LD_RUNPATH_SEARCH_PATHS = (
 "$(inherited)",
 "@executable_path/Frameworks",

@@ -41,6 +41,8 @@ final class NotificationService: UNNotificationServiceExtension {
             let fields = qry["fo"] as? [String: Any] ?? [:]
             nseLog.info("CK record \(recordName, privacy: .public), fields: \(fields.keys.joined(separator: ", "), privacy: .public)")
 
+            let rawAgent = fields["agent"] as? String ?? ""
+
             // PushNotification records carry pre-rendered title + body from macOS NotificationRouter.
             // Detect them by the presence of both "title" and "body" fields (unique to this type).
             if let title = fields["title"] as? String, let body = fields["body"] as? String {
@@ -53,6 +55,10 @@ final class NotificationService: UNNotificationServiceExtension {
                 }
             } else {
                 enrichContent(content, recordName: recordName, fields: fields)
+            }
+
+            if !rawAgent.isEmpty, let attachment = agentIconAttachment(for: rawAgent) {
+                content.attachments = [attachment]
             }
         } else {
             // Fallback: no embedded fields — show a generic useful notification.
@@ -164,6 +170,15 @@ final class NotificationService: UNNotificationServiceExtension {
         case "completed":       return 0.5
         default:                return 0.2
         }
+    }
+
+    private func agentIconAttachment(for rawAgent: String) -> UNNotificationAttachment? {
+        guard let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.doomcoder.ios"
+        ) else { return nil }
+        let iconURL = container.appendingPathComponent("icon-\(rawAgent.lowercased()).png")
+        guard FileManager.default.fileExists(atPath: iconURL.path) else { return nil }
+        return try? UNNotificationAttachment(identifier: "agent-icon", url: iconURL, options: nil)
     }
 
     private func registerCategoriesIfNeeded() {

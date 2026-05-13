@@ -12,7 +12,22 @@ enum CloudKitSchema {
         static let devicePresence = "DevicePresence"
         static let userSettings = "UserSettings"
         static let pushNotification = "PushNotification"
+        static let sleepCommand = "SleepCommand"
     }
+}
+
+struct CKSleepCommand: Codable, Sendable {
+    let commandId: String
+    let commandType: String   // "toggle" | "setMode" | "setRearmMinutes" | "setTimerHours"
+    let enabled: Int?         // 0 or 1 (for "toggle")
+    let mode: String?         // "screenOn" | "screenOff" (for "setMode")
+    let rearmMinutes: Int?    // for "setRearmMinutes"
+    let timerHours: Int?      // for "setTimerHours"
+    let issuedAt: Date
+    let expiresAt: Date
+
+    var recordName: String { commandId }
+    static let recordType = "SleepCommand"
 }
 
 struct CKPushNotification: Codable, Sendable {
@@ -77,6 +92,7 @@ struct CKSessionAggregate: Codable, Sendable {
     var totalErrors: Int
     var model: String?
     var promptPreview: String?
+    var toolArgsPreview: String?
     var expiresAt: Date
     var pendingRequestId: String?
 

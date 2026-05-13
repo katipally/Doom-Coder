@@ -16,15 +16,19 @@ final class LiveActivityManager {
             toolCount: agg.totalToolCalls,
             elapsedSec: elapsed,
             approvalPending: agg.status == .waitingApproval,
-            toolArgsPreview: nil,
+            toolArgsPreview: agg.toolArgsPreview,
             requestId: agg.pendingRequestId,
-            toolDetail: agg.currentTool
+            toolDetail: agg.currentTool,
+            modelShortName: agg.model
         )
+
+        let staleDate: Date? = [CKSessionAggregate.Status.running, .waitingApproval].contains(agg.status)
+            ? Date().addingTimeInterval(180) : nil
 
         switch agg.status {
         case .running, .waitingApproval:
             if let activity = activities[agg.sessionKey] {
-                await activity.update(ActivityContent(state: state, staleDate: nil))
+                await activity.update(ActivityContent(state: state, staleDate: staleDate))
             } else if activities.count < maxConcurrent {
                 await start(agg: agg, initialState: state)
             }
@@ -39,7 +43,7 @@ final class LiveActivityManager {
             sessionKey: agg.sessionKey,
             agent: agg.agent,
             cwdBasename: agg.cwdBasename,
-            agentColorHex: Self.brandColorHex(for: agg.agent)
+            agentColorHex: AgentBrand(rawAgent: agg.agent).colorHexString
         )
         do {
             let act = try Activity.request(attributes: attrs,
@@ -67,16 +71,4 @@ final class LiveActivityManager {
         }
     }
 
-    // Returns the brand hex color string for an agent (used by the widget for keylineTint).
-    static func brandColorHex(for agent: String) -> String {
-        switch agent {
-        case "claude":      return "#E06B37"
-        case "copilot_cli": return "#2088FF"
-        case "cursor":      return "#6B46C1"
-        case "windsurf":    return "#0FBBDD"
-        case "codex_cli":   return "#22C55E"
-        case "vscode":      return "#5A7FA6"
-        default:            return "#888888"
-        }
-    }
 }

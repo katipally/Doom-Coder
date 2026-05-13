@@ -147,7 +147,8 @@ final class PushReceiver {
             case CloudKitSchema.RecordType.pushNotification:
                 // App is in the foreground — NSE won't fire. Show the notification directly.
                 if let title = rec["title"] as? String, let body = rec["body"] as? String {
-                    await NotificationDispatcher.shared.deliverGeneric(title: title, body: body)
+                    await NotificationDispatcher.shared.deliverGeneric(
+                        title: title, body: body, sessionKey: rec["sessionKey"] as? String)
                 }
             case CloudKitSchema.RecordType.sessionAggregate:
                 if let agg = decodeAggregate(rec) {
@@ -181,13 +182,13 @@ final class PushReceiver {
             guard settings.notifyFailures else { return }
             let durationMs = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt) * 1000)
             await NotificationDispatcher.shared.deliverFailure(
-                agent: agg.agent, cwd: agg.cwdBasename,
+                agent: agg.agent, sessionKey: agg.sessionKey, cwd: agg.cwdBasename,
                 tool: agg.currentTool ?? "unknown", exitCode: -1, durationMs: durationMs)
         case .completed where previousStatus == .running || previousStatus == .waitingApproval:
             guard settings.notifySessionSummaries else { return }
             let durationSec = Int(agg.lastEventAt.timeIntervalSince(agg.startedAt))
             await NotificationDispatcher.shared.deliverSummary(
-                agent: agg.agent, cwd: agg.cwdBasename,
+                agent: agg.agent, sessionKey: agg.sessionKey, cwd: agg.cwdBasename,
                 toolCalls: agg.totalToolCalls, filesEdited: agg.totalFilesEdited, durationSec: durationSec)
         default: break
         }
@@ -219,6 +220,7 @@ final class PushReceiver {
             totalErrors: (rec["totalErrors"] as? Int) ?? 0,
             model: rec["model"] as? String,
             promptPreview: rec["promptPreview"] as? String,
+            toolArgsPreview: rec["toolArgsPreview"] as? String,
             expiresAt: (rec["expiresAt"] as? Date) ?? Date().addingTimeInterval(7 * 86400),
             pendingRequestId: rec["pendingRequestId"] as? String
         )

@@ -190,41 +190,9 @@ struct SessionDetailView: View {
         }
     }
 
-    private func agentSFSymbol(_ agent: String) -> String {
-        switch agent {
-        case "claude":      return "c.circle.fill"
-        case "cursor":      return "cursorarrow.rays"
-        case "vscode":      return "chevron.left.forwardslash.chevron.right"
-        case "copilot_cli": return "terminal.fill"
-        case "windsurf":    return "wind"
-        case "codex_cli":   return "sparkles.rectangle.stack"
-        default:            return "cpu.fill"
-        }
-    }
-
-    private func agentDisplayName(_ agent: String) -> String {
-        switch agent {
-        case "claude":      return "Claude Code"
-        case "cursor":      return "Cursor"
-        case "vscode":      return "VS Code"
-        case "copilot_cli": return "Copilot CLI"
-        case "windsurf":    return "Windsurf"
-        case "codex_cli":   return "Codex CLI"
-        default:            return agent.capitalized
-        }
-    }
-
-    private func agentBrandColor(_ agent: String) -> Color {
-        switch agent {
-        case "claude":      return Color(red: 0.878, green: 0.420, blue: 0.216)
-        case "copilot_cli": return Color(red: 0.128, green: 0.533, blue: 1.000)
-        case "cursor":      return Color(red: 0.420, green: 0.275, blue: 0.757)
-        case "windsurf":    return Color(red: 0.059, green: 0.733, blue: 0.867)
-        case "codex_cli":   return Color(red: 0.133, green: 0.773, blue: 0.333)
-        case "vscode":      return Color(red: 0.353, green: 0.498, blue: 0.651)
-        default:            return .gray
-        }
-    }
+    private func agentSFSymbol(_ agent: String) -> String { AgentBrand(rawAgent: agent).sfSymbolName }
+    private func agentDisplayName(_ agent: String) -> String { AgentBrand(rawAgent: agent).fullDisplayName }
+    private func agentBrandColor(_ agent: String) -> Color { AgentBrand(rawAgent: agent).primaryColor }
 
     private func statusSystemImage(_ s: CKSessionAggregate.Status) -> String {
         switch s {

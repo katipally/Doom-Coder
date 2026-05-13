@@ -11,6 +11,7 @@ struct DoomCoderActivityAttributes: ActivityAttributes {
         var toolArgsPreview: String?
         var requestId: String?
         var toolDetail: String?
+        var modelShortName: String?
     }
 
     var sessionKey: String

@@ -90,6 +90,23 @@ final class CloudKitClient {
         _ = try await db.save(rec)
     }
 
+    func writeSleepCommand(type: String, enabled: Bool? = nil, mode: String? = nil,
+                           rearmMinutes: Int? = nil, timerHours: Int? = nil) async throws {
+        let commandId = UUID().uuidString
+        let id = CKRecord.ID(recordName: commandId)
+        let rec = CKRecord(recordType: CloudKitSchema.RecordType.sleepCommand, recordID: id)
+        rec["commandId"] = commandId as CKRecordValue
+        rec["commandType"] = type as CKRecordValue
+        let now = Date()
+        rec["issuedAt"] = now as CKRecordValue
+        rec["expiresAt"] = now.addingTimeInterval(300) as CKRecordValue  // 5 min TTL
+        if let v = enabled { rec["enabled"] = (v ? 1 : 0) as CKRecordValue }
+        if let v = mode { rec["mode"] = v as CKRecordValue }
+        if let v = rearmMinutes { rec["rearmMinutes"] = v as CKRecordValue }
+        if let v = timerHours { rec["timerHours"] = v as CKRecordValue }
+        _ = try await db.save(rec)
+    }
+
     func writeDevicePresence(uuid: String, name: String, appVersion: String) async throws {
         guard let container = _container else { return }
         let id = CKRecord.ID(recordName: uuid)

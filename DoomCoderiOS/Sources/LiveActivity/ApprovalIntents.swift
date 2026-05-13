@@ -4,7 +4,6 @@ import CloudKit
 import Foundation
 import UIKit
 
-@available(iOS 17.0, *)
 struct ApproveIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Approve"
     @Parameter(title: "Request ID") var requestId: String
@@ -18,12 +17,14 @@ struct ApproveIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         try? await ApprovalIntentHelper.write(requestId: requestId, decision: "approve")
-        await MainActor.run { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        await MainActor.run {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
         return .result()
     }
 }
 
-@available(iOS 17.0, *)
 struct DenyIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Deny"
     @Parameter(title: "Request ID") var requestId: String
@@ -37,12 +38,14 @@ struct DenyIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         try? await ApprovalIntentHelper.write(requestId: requestId, decision: "deny")
-        await MainActor.run { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+        await MainActor.run {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        }
         return .result()
     }
 }
 
-@available(iOS 17.0, *)
 struct AlwaysAllowIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Always Allow"
     @Parameter(title: "Request ID") var requestId: String

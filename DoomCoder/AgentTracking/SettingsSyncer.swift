@@ -2,6 +2,8 @@ import CloudKit
 import Foundation
 import OSLog
 
+// MARK: - SettingsSyncer (macOS)
+
 /// Mirrors local `UserSettings` to/from the CloudKit `CKUserSettings` record,
 /// providing bidirectional cross-device sync. Last-write-wins on lastModifiedAt.
 ///
@@ -17,6 +19,8 @@ final class SettingsSyncer {
     private var lastPushAt: Date = .distantPast
     private let minPushInterval: TimeInterval = 1.0
     private var pending: Task<Void, Never>?
+    private var sleepPollTask: Task<Void, Never>?
+    private var lastSleepCommandCheckAt: Date = .distantPast
 
     private init() {
         container = CKContainer(identifier: CloudKitSchema.containerIdentifier)
@@ -53,6 +57,74 @@ final class SettingsSyncer {
                     cont.resume()
                 }
             }
+        }
+    }
+
+    // MARK: - Sleep sync
+
+    func startSleepSync() {
+        guard sleepPollTask == nil else { return }
+        sleepPollTask = Task { @MainActor in
+            while !Task.isCancelled {
+                await pushSleepState()
+                await pollSleepCommands()
+                try? await Task.sleep(for: .seconds(DoomCoderConstants.sleepSyncIntervalSeconds))
+            }
+        }
+    }
+
+    func pushSleepState() async {
+        let sm = SleepManager.shared
+        let rid = CKRecord.ID(recordName: "settings")
+        let rec = CKRecord(recordType: CloudKitSchema.RecordType.userSettings, recordID: rid)
+        rec["sleepEnabled"] = (sm.isActive ? 1 : 0) as CKRecordValue
+        rec["sleepMode"] = sm.mode.rawValue as CKRecordValue
+        rec["sleepElapsedSec"] = sm.elapsedSeconds as CKRecordValue
+        rec["sleepScreenOffRearmMinutes"] = sm.screenOffRearmMinutes as CKRecordValue
+        rec["sleepSessionTimerHours"] = sm.sessionTimerHours as CKRecordValue
+        rec["sleepThermalState"] = sm.thermalStateText as CKRecordValue
+        let op = CKModifyRecordsOperation(recordsToSave: [rec], recordIDsToDelete: nil)
+        op.savePolicy = .changedKeys
+        op.modifyRecordsResultBlock = { _ in }
+        db.add(op)
+    }
+
+    private func pollSleepCommands() async {
+        let since = lastSleepCommandCheckAt
+        lastSleepCommandCheckAt = Date()
+        let pred = NSPredicate(format: "issuedAt > %@", since as CVarArg)
+        let q = CKQuery(recordType: CloudKitSchema.RecordType.sleepCommand, predicate: pred)
+        let (results, _) = (try? await db.records(matching: q, resultsLimit: 10)) ?? ([], nil)
+        var toDelete: [CKRecord.ID] = []
+        for (_, res) in results {
+            if case .success(let rec) = res {
+                applySleepCommand(rec)
+                toDelete.append(rec.recordID)
+            }
+        }
+        if !toDelete.isEmpty {
+            let deleteOp = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: toDelete)
+            db.add(deleteOp)
+        }
+    }
+
+    private func applySleepCommand(_ rec: CKRecord) {
+        let sm = SleepManager.shared
+        let type = rec["commandType"] as? String ?? ""
+        switch type {
+        case "toggle":
+            let on = (rec["enabled"] as? Int ?? 0) != 0
+            if on { sm.enable() } else { sm.disable() }
+        case "setMode":
+            if let modeStr = rec["mode"] as? String,
+               let mode = DoomCoderMode(rawValue: modeStr) {
+                sm.mode = mode
+            }
+        case "setRearmMinutes":
+            if let v = rec["rearmMinutes"] as? Int { sm.screenOffRearmMinutes = v }
+        case "setTimerHours":
+            if let v = rec["timerHours"] as? Int { sm.sessionTimerHours = v }
+        default: break
         }
     }
 

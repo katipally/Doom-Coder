@@ -34,6 +34,9 @@ struct NormalizedHookEvent: Sendable {
     let summary: String
     let isFatal: Bool
     let payloadRaw: Data?
+    let toolArgsPreview: String?
+    let modelShortName: String?
+    let subagentType: String?
 }
 
 // MARK: - Per-agent normalizer protocol
@@ -94,6 +97,9 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         "TaskCreated":        .other,
         "TaskCompleted":      .sessionEnd,
         "TeammateIdle":       .other,
+        "Setup":              .other,
+        "UserPromptExpansion": .permissionNeeded,
+        "PostToolBatch":      .other,
         "PreCompact":         .other,
         "PostCompact":        .other,
         "FileChanged":        .fileChanged,
@@ -126,6 +132,9 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
         let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
+        let toolArgsPreview = phase == .toolStart ? extractToolArgsPreview(from: payload) : nil
+        let modelShortName = envelope.event == "Stop" ? claudeModelShortName(from: payload) : nil
+        let subagentType = phase == .subagentStart ? (payload["agent_type"] as? String) : nil
 
         return NormalizedHookEvent(
             agent: agent,
@@ -138,7 +147,10 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: envelope.event == "StopFailure",
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: toolArgsPreview,
+            modelShortName: modelShortName,
+            subagentType: subagentType
         )
     }
 }
@@ -201,7 +213,10 @@ struct CursorEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: false,
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: phase == .toolStart ? extractToolArgsPreview(from: payload) : nil,
+            modelShortName: nil,
+            subagentType: nil
         )
     }
 }
@@ -252,7 +267,10 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: false,
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: phase == .toolStart ? extractToolArgsPreview(from: payload) : nil,
+            modelShortName: nil,
+            subagentType: nil
         )
     }
 }
@@ -269,6 +287,8 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
         "preToolUse":           .toolStart,
         "postToolUse":          .toolEnd,
         "errorOccurred":        .error,
+        "subagentStart":        .subagentStart,
+        "subagentStop":         .subagentEnd,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -315,7 +335,10 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: isFatal,
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: phase == .toolStart ? extractToolArgsPreview(from: payload) : nil,
+            modelShortName: nil,
+            subagentType: nil
         )
     }
 }
@@ -370,7 +393,10 @@ struct WindsurfEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: false,
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: effectivePhase == .toolStart ? (toolInfo["file_path"] as? String ?? toolInfo["command_line"] as? String).map { String($0.prefix(80)) } : nil,
+            modelShortName: nil,
+            subagentType: nil
         )
     }
 
@@ -406,6 +432,9 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
         "PostToolUse":        .toolEnd,
         "PermissionRequest":  .permissionNeeded,
         "Stop":               .sessionEnd,
+        "StopFailure":        .error,
+        "SubagentStart":      .subagentStart,
+        "SubagentStop":       .subagentEnd,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -437,7 +466,10 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
             isFatal: phase == .error,
-            payloadRaw: envelope.payloadRaw
+            payloadRaw: envelope.payloadRaw,
+            toolArgsPreview: phase == .toolStart ? extractToolArgsPreview(from: payload) : nil,
+            modelShortName: nil,
+            subagentType: nil
         )
     }
 }
@@ -482,6 +514,27 @@ enum EventNormalizerRegistry {
 private func extractFilePath(from payload: [String: Any]) -> String? {
     (payload["file_path"] as? String)
     ?? (payload["input"] as? [String: Any])?["file_path"] as? String
+}
+
+private func extractToolArgsPreview(from payload: [String: Any]) -> String? {
+    let args: [String: Any]? = payload["tool_input"] as? [String: Any]
+        ?? payload["input"] as? [String: Any]
+        ?? payload["arguments"] as? [String: Any]
+    guard let args else { return nil }
+    for key in ["file_path", "path", "cmd", "command", "query", "message", "description"] {
+        if let v = args[key] as? String, !v.isEmpty {
+            return String(v.prefix(80))
+        }
+    }
+    return nil
+}
+
+private func claudeModelShortName(from payload: [String: Any]) -> String? {
+    guard let model = payload["model"] as? String else { return nil }
+    if model.contains("opus")   { return "Opus" }
+    if model.contains("sonnet") { return "Sonnet" }
+    if model.contains("haiku")  { return "Haiku" }
+    return String(model.prefix(12))
 }
 
 private func buildSummary(event: String, tool: String?, payload: [String: Any]) -> String {

@@ -66,24 +66,19 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
         // Pull synced settings from iCloud on launch (no-op if cloudKitEnabled=false).
         Task { @MainActor in await SettingsSyncer.shared.pull() }
+        // Start sleep state sync — pushes macOS sleep status and polls for iOS sleep commands.
+        Task { @MainActor in SettingsSyncer.shared.startSleepSync() }
 
         // Path-heal any installed hooks off the main thread (JSON I/O).
         Task.detached(priority: .utility) {
             AgentInstallerV2.healAllPaths()
         }
 
-        // Download agent icons from lobehub CDN in the background.
-        // No-op if already cached; silent fallback on network failure.
-        IconDownloader.prefetch()
-
         // Set notification delegate BEFORE requesting permission so
         // foreground banners are enabled from the very first grant.
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         NotificationRouter.shared.requestPermission()
-
-        // Run 3.0 first-launch migration (ntfy → iosCompanion, keychain cleanup).
-        MigrationManager.migrateToV3IfNeeded()
 
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()
@@ -115,11 +110,8 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             }
         }
 
-        // Show the most recent What's New sheet (checked newest-first).
         if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
             Task { @MainActor in self.showWhatsNewV2() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew() }
         }
     }
 
@@ -166,41 +158,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         window.isReleasedWhenClosed = false
         window.center()
         window.level = .floating
-        // Also mark v1.9 as seen — users upgrading past v2 shouldn't see the
-        // older sheet on their next launch after dismissing this one.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         whatsNewWindow = window
     }
 
-    @MainActor
-    func showWhatsNew() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        // Empty sizingOptions disables ALL SwiftUI → window size coupling
-        // (no preferredContentSize getter, no min/max extrema). This breaks
-        // the infinite updateConstraints → sizeThatFits → setNeedsUpdate loop.
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 440)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
 }
 
 

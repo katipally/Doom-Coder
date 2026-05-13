@@ -14,11 +14,8 @@ final class AgentTrackingManager {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "agents")
 
-    /// Stale threshold: sessions with no events for this long are considered stale.
-    var staleThreshold: TimeInterval = 900  // 15 minutes
-
-    /// Auto-eviction delay after a session reaches terminal state.
-    var evictionDelay: TimeInterval = 1800  // 30 minutes
+    var staleThreshold: TimeInterval = DoomCoderConstants.staleSessionThreshold
+    var evictionDelay: TimeInterval  = DoomCoderConstants.evictionDelay
 
     // MARK: - Session aggregate model
 
@@ -33,6 +30,9 @@ final class AgentTrackingManager {
         var lastPhase: NormalizedEventPhase = .sessionStart
         var toolCounts: [String: Int] = [:]
         var lastTool: String?
+        var lastToolArgsPreview: String?
+        var modelShortName: String?
+        var lastSubagentType: String?
         var cwd: String
         var startedAt: Date
         var updatedAt: Date
@@ -78,6 +78,11 @@ final class AgentTrackingManager {
                 toolCounts[tool, default: 0] += 1
                 lastTool = tool
             }
+            if event.phase == .toolStart, let preview = event.toolArgsPreview {
+                lastToolArgsPreview = preview
+            }
+            if let name = event.modelShortName { modelShortName = name }
+            if let st = event.subagentType { lastSubagentType = st }
 
             switch event.phase {
             case .toolStart:
@@ -267,8 +272,9 @@ final class AgentTrackingManager {
             totalToolCalls: s.toolCallCount,
             totalFilesEdited: filesEdited,
             totalErrors: s.errorCount,
-            model: nil,
+            model: s.modelShortName,
             promptPreview: nil,
+            toolArgsPreview: s.lastToolArgsPreview,
             expiresAt: s.updatedAt.addingTimeInterval(7 * 24 * 3600),
             pendingRequestId: status == .waitingApproval ? env.requestId : nil
         )

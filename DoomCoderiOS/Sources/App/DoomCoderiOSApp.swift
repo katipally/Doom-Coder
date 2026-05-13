@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         NotificationDispatcher.registerCategories()
         // Skip heavy CloudKit/notification setup when running under XCTest.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return true }
+        writeAgentIconsToAppGroup()
         Task { @MainActor in
             await NotificationPermissions.request()
             await CloudKitSubscriptionHandler.shared.registerAll()
@@ -39,6 +40,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         application.registerForRemoteNotifications()
         return true
+    }
+
+    private func writeAgentIconsToAppGroup() {
+        guard let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.doomcoder.ios"
+        ) else { return }
+        for brand in AgentBrand.allKnown {
+            let dest = container.appendingPathComponent("icon-\(brand.agentKey).png")
+            guard !FileManager.default.fileExists(atPath: dest.path) else { continue }
+            guard let image = UIImage(named: brand.iconAssetName),
+                  let data = image.pngData() else { continue }
+            try? data.write(to: dest, options: .atomic)
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,

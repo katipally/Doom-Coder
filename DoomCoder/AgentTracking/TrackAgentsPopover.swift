@@ -48,9 +48,6 @@ struct TrackAgentsView: View {
             refreshTask?.cancel()
             refreshTask = nil
         }
-        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
-            reload()
-        }
     }
 
     // MARK: - Pieces
@@ -244,9 +241,6 @@ struct TrackAccordion: View {
         .onDisappear {
             refreshTask?.cancel()
             refreshTask = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
-            reload()
         }
     }
 
