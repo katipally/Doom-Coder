@@ -22,6 +22,10 @@ struct HookEnvelope: Sendable {
         guard let v = obj["v"] as? String,
               let agent = obj["agent"] as? String,
               let event = obj["event"] as? String else { return nil }
+        // v2.3.0: accept both "1" and "2" so dc-hook binaries from older
+        // installs keep working until the user re-installs hooks. v1 path
+        // will be removed in v2.4.0; any unrecognised version is dropped.
+        guard v == "1" || v == "2" else { return nil }
         let cwd = (obj["cwd"] as? String) ?? ""
         let pid = (obj["pid"] as? Int) ?? 0
         let ts = (obj["ts"] as? TimeInterval) ?? Date().timeIntervalSince1970
