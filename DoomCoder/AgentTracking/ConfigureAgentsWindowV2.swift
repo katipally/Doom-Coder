@@ -32,6 +32,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var permStatus: String = "…"
     // Notification event preferences
     @State private var notifPrefs = ChannelStore.loadPrefs()
+    // Per-agent notification preference overrides (keyed by agent rawValue)
+    @State private var agentNotifPrefs: [String: ChannelStore.NotificationPrefs] = ChannelStore.loadPerAgentPrefs()
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -141,6 +143,7 @@ struct ConfigureAgentsViewV2: View {
         let isInst = installedCache[agent] ?? false
         let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
         let hasWarning = hookWarnings[agent] != nil
+        let isActiveNow = AgentTrackingManager.shared.isActive(agent)
         HStack(spacing: 8) {
             Image(nsImage: AgentIconProvider.icon(for: agent, size: 24))
                 .resizable()
@@ -158,9 +161,10 @@ struct ConfigureAgentsViewV2: View {
                     .foregroundStyle(.yellow)
                     .font(.caption)
             } else if isInst {
-                // Health dot: green if events in last hour, grey otherwise
+                // Health dot: bright green + pulse if agent sent a hook in last 60s,
+                // dim green if active in last hour, grey if no recent activity.
                 Circle()
-                    .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
+                    .fill(isActiveNow ? Color.green : (eventCount > 0 ? Color.green.opacity(0.55) : Color.secondary.opacity(0.3)))
                     .frame(width: 8, height: 8)
             } else if d?.installed == true {
                 // Agent detected but hooks not installed: nudge
@@ -425,6 +429,65 @@ struct ConfigureAgentsViewV2: View {
                     }
                 } label: {
                     Label("Channel Overrides", systemImage: "bell.badge")
+                }
+
+                // Per-agent notification event preferences
+                GroupBox {
+                    let hasAgentPrefs = ChannelStore.hasPrefsOverride(for: agent)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Customize notifications for \(agent.displayName)", isOn: Binding(
+                            get: { hasAgentPrefs },
+                            set: { on in
+                                if on {
+                                    ChannelStore.setPrefs(ChannelStore.loadPrefs(), for: agent)
+                                } else {
+                                    ChannelStore.setPrefs(nil, for: agent)
+                                }
+                                agentNotifPrefs = ChannelStore.loadPerAgentPrefs()
+                            }
+                        ))
+
+                        if hasAgentPrefs {
+                            Divider()
+                            let ep = agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs()
+                            Group {
+                                Toggle("Session completed", isOn: Binding(
+                                    get: { ep.sessionEnd },
+                                    set: { v in var p = ep; p.sessionEnd = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Toggle("Errors", isOn: Binding(
+                                    get: { ep.error },
+                                    set: { v in var p = ep; p.error = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Toggle("Permission requests", isOn: Binding(
+                                    get: { ep.permissionNeeded },
+                                    set: { v in var p = ep; p.permissionNeeded = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Toggle("Agent responses", isOn: Binding(
+                                    get: { ep.agentResponse },
+                                    set: { v in var p = ep; p.agentResponse = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Divider()
+                                Toggle("Session started", isOn: Binding(
+                                    get: { ep.sessionStart },
+                                    set: { v in var p = ep; p.sessionStart = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Toggle("Sub-agent activity", isOn: Binding(
+                                    get: { ep.subagentStart },
+                                    set: { v in var p = ep; p.subagentStart = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                                Toggle("Tool usage", isOn: Binding(
+                                    get: { ep.toolUse },
+                                    set: { v in var p = ep; p.toolUse = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
+                                )).toggleStyle(.checkbox).font(.callout)
+                            }
+                        } else {
+                            Text("Using global notification preferences.")
+                                .font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
+                } label: {
+                    Label("Notification Events", systemImage: "bell.and.waves.left.and.right")
                 }
 
                 // Status

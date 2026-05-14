@@ -22,10 +22,9 @@ struct HookEnvelope: Sendable {
         guard let v = obj["v"] as? String,
               let agent = obj["agent"] as? String,
               let event = obj["event"] as? String else { return nil }
-        // v2.3.0: accept both "1" and "2" so dc-hook binaries from older
-        // installs keep working until the user re-installs hooks. v1 path
-        // will be removed in v2.4.0; any unrecognised version is dropped.
-        guard v == "1" || v == "2" else { return nil }
+        // v2.3.0+: only v=="2" envelopes are accepted. dc-hook binaries older
+        // than v2 must be re-installed. Unknown versions are silently dropped.
+        guard v == "2" else { return nil }
         let cwd = (obj["cwd"] as? String) ?? ""
         let pid = (obj["pid"] as? Int) ?? 0
         let ts = (obj["ts"] as? TimeInterval) ?? Date().timeIntervalSince1970
@@ -66,17 +65,10 @@ struct TimelineEvent: Identifiable, Sendable {
 /// apply.
 enum NotificationPolicy {
     /// Per-agent decision: looks up agent-specific NotificationPrefs first,
-    /// then falls back to the global default. This is the path call sites
-    /// should prefer now that per-agent prefs exist.
+    /// then falls back to the global default. This is the only call path —
+    /// the legacy global-only overload was removed in v2.3.0.
     static func isNotifiable(agent: TrackedAgent, phase: NormalizedEventPhase) -> Bool {
         let prefs = ChannelStore.loadPrefs(for: agent)
-        return prefs.shouldNotify(phase: phase.rawValue)
-    }
-
-    /// Global-only decision. Kept for call sites that haven't routed an
-    /// agent in yet (e.g. quit-time sweeps); prefer the per-agent overload.
-    static func isNotifiable(phase: NormalizedEventPhase) -> Bool {
-        let prefs = ChannelStore.loadPrefs()
         return prefs.shouldNotify(phase: phase.rawValue)
     }
 

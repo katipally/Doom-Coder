@@ -115,6 +115,18 @@ final class AgentTrackingManager {
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
+    // MARK: - Active-state tracking (60-second recency window)
+
+    /// Timestamp of the last successfully ingested hook event per agent.
+    /// Used to derive AgentRunState.active without re-probing NSWorkspace.
+    private(set) var lastHookAt: [String: Date] = [:]
+
+    /// Returns true if the agent sent a hook event in the last 60 seconds.
+    func isActive(_ agent: TrackedAgent) -> Bool {
+        guard let last = lastHookAt[agent.rawValue] else { return false }
+        return Date().timeIntervalSince(last) < 60
+    }
+
     // MARK: - Entry point (called from socket listener)
 
     func ingest(_ env: HookEnvelope) {
@@ -163,6 +175,9 @@ final class AgentTrackingManager {
         // mutation (prior approach risked NSHostingView constraint loops when
         // hosted under MenuBarExtra(.window)).
         sessions[sessionKey] = s
+
+        // Record last hook timestamp for AgentRunState.active upgrade
+        lastHookAt[normalized.agent.rawValue] = Date()
 
         // Persist to SQLite (with raw JSON payload for Logs detail view)
         let payloadString: String?
