@@ -1,5 +1,11 @@
 name: Release
 
+# Total wall time is dominated by Apple-side notarization (~40 min queue wait
+# on average, with occasional 60 min outliers — see the poll loop in
+# "Submit for notarization"). The actual build + sign + DMG steps are ~5 min.
+# A 45-60 min runtime is expected and normal; do not try to shorten the
+# notarization poll cap below 60 min or short submissions will fail flaky.
+
 on:
   push:
     tags:
@@ -299,6 +305,14 @@ jobs:
         run: |
           brew install create-dmg --quiet 2>/dev/null || true
 
+          # Stage just DoomCoder.app into a clean directory so create-dmg picks up
+          # only the .app — without this, the DMG was including xcodebuild
+          # side-files like DistributionSummary.plist, ExportOptions.plist, and
+          # Packaging.log that sit alongside DoomCoder.app inside build/export/.
+          rm -rf build/dmg-stage
+          mkdir -p build/dmg-stage
+          cp -R build/export/DoomCoder.app build/dmg-stage/
+
           create-dmg \
             --volname "DoomCoder" \
             --window-pos 200 120 \
@@ -306,9 +320,9 @@ jobs:
             --icon-size 128 \
             --icon "DoomCoder.app" 175 190 \
             --hide-extension "DoomCoder.app" \
-            --app-drop-link 425 185 \
+            --app-drop-link 425 190 \
             "DoomCoder-${{ env.VERSION }}.dmg" \
-            "build/export/"
+            "build/dmg-stage/"
 
           codesign --sign "Developer ID Application" --timestamp \
             "DoomCoder-${{ env.VERSION }}.dmg"
@@ -404,13 +418,12 @@ jobs:
             **DMG (recommended):**
             1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
             2. Open it and drag **DoomCoder** into your Applications folder
-            3. Launch — no Gatekeeper warnings, no "unidentified developer" prompts
+            3. Launch
 
             **ZIP:**
             1. Download **`DoomCoder-${{ env.VERSION }}.zip`**
             2. Unzip and move `DoomCoder.app` to `/Applications`
 
-            DoomCoder is **signed with a Developer ID and notarized by Apple**.
             Existing users receive automatic updates via the built-in Sparkle updater.
 
             ---
