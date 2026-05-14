@@ -370,6 +370,10 @@ struct PanelRootView: View {
             }
             .disabled(!updaterViewModel.canCheckForUpdates)
             .opacity(updaterViewModel.canCheckForUpdates ? 1 : 0.4)
+            footerItem("map", label: "Map") {
+                NSApplication.shared.activate()
+                SessionMapWindowController.shared.show()
+            }
             footerItem("power", label: "Quit") {
                 sleepManager.disable()
                 NSApplication.shared.terminate(nil)

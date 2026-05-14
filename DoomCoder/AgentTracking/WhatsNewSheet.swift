@@ -15,7 +15,61 @@ private func featureRow(icon: String, title: String, body: String) -> some View 
     }
 }
 
-// MARK: - v2.0.0 — Windsurf, notification polish, false-positive fix
+// MARK: - v2.3.0 — Session Map, per-agent actors, FM judge, active window
+
+struct WhatsNewSheet230: View {
+    static let defaultsKey = "whats_new_v2_3_0_shown"
+
+    var onDismiss: () -> Void = {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("What's new in DoomCoder 2.3", systemImage: "sparkles")
+                .font(.title2.bold())
+
+            featureRow(
+                icon: "map.fill",
+                title: "Session Map",
+                body: "A live 2D canvas shows every session, prompt cycle, and tool event across all agents — grouped by project, click any node to inspect its raw payload."
+            )
+            featureRow(
+                icon: "slider.horizontal.3",
+                title: "Per-agent processing",
+                body: "Each agent now runs on its own isolated background actor. A slow Windsurf burst can no longer stall Claude Code event processing."
+            )
+            featureRow(
+                icon: "brain",
+                title: "On-device AI notifications",
+                body: "For agents with limited hooks (Windsurf, Copilot CLI, Codex), an on-device Apple Intelligence model judges events and sends done/waiting/error notifications."
+            )
+            featureRow(
+                icon: "macwindow.on.rectangle",
+                title: "Active Window tracking",
+                body: "Grant Accessibility to let DoomCoder detect which IDE window is frontmost and badge the matching session in the panel and Session Map."
+            )
+
+            Divider()
+
+            HStack {
+                Button("Open Session Map") {
+                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
+                    SessionMapWindowController.shared.show()
+                    onDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                Spacer()
+                Button("Got it") {
+                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
+                    onDismiss()
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 460, alignment: .topLeading)
+    }
+}
+
+// MARK: - v2.2.0 — Signed & notarized, bundled icons, privacy manifest
 
 struct WhatsNewSheetV2: View {
     static let defaultsKey = "whats_new_v2_0_0_shown"

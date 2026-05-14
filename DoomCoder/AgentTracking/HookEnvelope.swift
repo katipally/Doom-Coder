@@ -42,18 +42,24 @@ struct HookEnvelope: Sendable {
 struct TimelineEvent: Identifiable, Sendable {
     let id: UUID
     let event: String
+    let phase: NormalizedEventPhase
     let tool: String?
     let path: String?
     let timestamp: Date
     let summary: String
+    let rawPayload: String?
 
-    init(event: String, tool: String? = nil, path: String? = nil, timestamp: Date = .now, summary: String = "") {
+    init(event: String, phase: NormalizedEventPhase = .other, tool: String? = nil,
+         path: String? = nil, timestamp: Date = .now, summary: String = "",
+         rawPayload: String? = nil) {
         self.id = UUID()
         self.event = event
+        self.phase = phase
         self.tool = tool
         self.path = path
         self.timestamp = timestamp
         self.summary = summary
+        self.rawPayload = rawPayload
     }
 }
 

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Bindable var sleepManager: SleepManager
     @Environment(\.openWindow) private var openWindow
     @State private var ntfyRegenerated = false
+    @State private var axTrusted: Bool = AccessibilityPermission.isTrusted()
 
     var body: some View {
         Form {
@@ -76,11 +77,39 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.bordered)
             }
+
+            Section("Active Window Tracking") {
+                LabeledContent("Accessibility") {
+                    HStack(spacing: 8) {
+                        Image(systemName: axTrusted ? "checkmark.circle.fill" : "xmark.circle")
+                            .foregroundStyle(axTrusted ? .green : .secondary)
+                        Text(axTrusted ? "Granted" : "Not granted")
+                            .foregroundStyle(axTrusted ? .primary : .secondary)
+                    }
+                }
+                if !axTrusted {
+                    Text("Grant Accessibility to let DoomCoder read the frontmost IDE window's working directory and highlight the active session.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Open System Settings") {
+                            AccessibilityPermission.openSystemSettings()
+                            AccessibilityPermission.pollUntilTrusted { ok in axTrusted = ok }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Text("DoomCoder can detect which IDE window is frontmost and match it to active sessions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.bottom, 8)
+        .onAppear { axTrusted = AccessibilityPermission.isTrusted() }
     }
 }

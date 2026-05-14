@@ -43,6 +43,15 @@
 		DC0000000000002000000154 /* WindsurfTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000154 /* WindsurfTracker.swift */; };
 		DC0000000000002000000155 /* CodexCLITracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000155 /* CodexCLITracker.swift */; };
 		DC0000000000002000000156 /* AgentEventCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000156 /* AgentEventCatalog.swift */; };
+		DC0000000000002000000157 /* PerAgentPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000157 /* PerAgentPipeline.swift */; };
+		DC0000000000002000000158 /* FoundationModelJudge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000158 /* FoundationModelJudge.swift */; };
+		DC0000000000002000000159 /* ActiveAppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000159 /* ActiveAppMonitor.swift */; };
+		DC0000000000002000000160 /* SessionMapModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000160 /* SessionMapModel.swift */; };
+		DC0000000000002000000161 /* SessionMapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000161 /* SessionMapViewModel.swift */; };
+		DC0000000000002000000162 /* SessionMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000162 /* SessionMapCanvas.swift */; };
+		DC0000000000002000000163 /* NodeDetailPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000163 /* NodeDetailPanel.swift */; };
+		DC0000000000002000000164 /* SessionMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000164 /* SessionMapView.swift */; };
+		DC0000000000002000000165 /* SessionMapWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000165 /* SessionMapWindowController.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
 		DC0000000000002000000046 /* UIAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000046 /* UIAnimations.swift */; };
 		DC0000000000002000000047 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000047 /* FloatingPanelController.swift */; };
@@ -95,6 +104,15 @@
 		DC0000000000001000000154 /* WindsurfTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindsurfTracker.swift; sourceTree = "<group>"; };
 		DC0000000000001000000155 /* CodexCLITracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCLITracker.swift; sourceTree = "<group>"; };
 		DC0000000000001000000156 /* AgentEventCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventCatalog.swift; sourceTree = "<group>"; };
+		DC0000000000001000000157 /* PerAgentPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAgentPipeline.swift; sourceTree = "<group>"; };
+		DC0000000000001000000158 /* FoundationModelJudge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelJudge.swift; sourceTree = "<group>"; };
+		DC0000000000001000000159 /* ActiveAppMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveAppMonitor.swift; sourceTree = "<group>"; };
+		DC0000000000001000000160 /* SessionMapModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMapModel.swift; sourceTree = "<group>"; };
+		DC0000000000001000000161 /* SessionMapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMapViewModel.swift; sourceTree = "<group>"; };
+		DC0000000000001000000162 /* SessionMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMapCanvas.swift; sourceTree = "<group>"; };
+		DC0000000000001000000163 /* NodeDetailPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeDetailPanel.swift; sourceTree = "<group>"; };
+		DC0000000000001000000164 /* SessionMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMapView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000165 /* SessionMapWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMapWindowController.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000046 /* UIAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAnimations.swift; sourceTree = "<group>"; };
 		DC0000000000001000000047 /* FloatingPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelController.swift; sourceTree = "<group>"; };
@@ -141,6 +159,12 @@
 				DC0000000000001000000049 /* GlobalHotkey.swift */,
 				DC0000000000001000000050 /* AccessibilityPermission.swift */,
 				DC0000000000001000000051 /* PanelRootView.swift */,
+				DC0000000000001000000160 /* SessionMapModel.swift */,
+				DC0000000000001000000161 /* SessionMapViewModel.swift */,
+				DC0000000000001000000162 /* SessionMapCanvas.swift */,
+				DC0000000000001000000163 /* NodeDetailPanel.swift */,
+				DC0000000000001000000164 /* SessionMapView.swift */,
+				DC0000000000001000000165 /* SessionMapWindowController.swift */,
 				DC0000000000003000000004 /* AgentTracking */,
 				DC0000000000001000000007 /* Assets.xcassets */,
 				DC0000000000001000000006 /* Info.plist */,
@@ -182,6 +206,9 @@
 				DC0000000000001000000154 /* WindsurfTracker.swift */,
 				DC0000000000001000000155 /* CodexCLITracker.swift */,
 				DC0000000000001000000156 /* AgentEventCatalog.swift */,
+				DC0000000000001000000157 /* PerAgentPipeline.swift */,
+				DC0000000000001000000158 /* FoundationModelJudge.swift */,
+				DC0000000000001000000159 /* ActiveAppMonitor.swift */,
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
 				DC0000000000001000000046 /* UIAnimations.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
@@ -334,6 +361,15 @@
 				DC0000000000002000000154 /* WindsurfTracker.swift in Sources */,
 				DC0000000000002000000155 /* CodexCLITracker.swift in Sources */,
 				DC0000000000002000000156 /* AgentEventCatalog.swift in Sources */,
+				DC0000000000002000000157 /* PerAgentPipeline.swift in Sources */,
+				DC0000000000002000000158 /* FoundationModelJudge.swift in Sources */,
+				DC0000000000002000000159 /* ActiveAppMonitor.swift in Sources */,
+				DC0000000000002000000160 /* SessionMapModel.swift in Sources */,
+				DC0000000000002000000161 /* SessionMapViewModel.swift in Sources */,
+				DC0000000000002000000162 /* SessionMapCanvas.swift in Sources */,
+				DC0000000000002000000163 /* NodeDetailPanel.swift in Sources */,
+				DC0000000000002000000164 /* SessionMapView.swift in Sources */,
+				DC0000000000002000000165 /* SessionMapWindowController.swift in Sources */,
 				DC0000000000002000000045 /* LiveEventsStore.swift in Sources */,
 				DC0000000000002000000046 /* UIAnimations.swift in Sources */,
 				DC0000000000002000000047 /* FloatingPanelController.swift in Sources */,
@@ -475,7 +511,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
+				CURRENT_PROJECT_VERSION = 2300;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -484,7 +520,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -499,7 +535,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
+				CURRENT_PROJECT_VERSION = 2300;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -508,7 +544,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

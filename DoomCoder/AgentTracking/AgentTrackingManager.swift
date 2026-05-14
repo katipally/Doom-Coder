@@ -3,16 +3,23 @@ import Observation
 import OSLog
 import SwiftUI
 
-// Central event hub. Consumes HookEnvelope from the socket listener,
-// normalizes via per-agent normalizers, maintains SessionAggregate
-// instances with counters/flags, emits notifications for milestone
-// events, and persists raw events to EventStore.
+// Central event hub. Routes raw HookEnvelopes to per-agent pipeline actors
+// for normalization and SQLite persistence (off the main actor), then applies
+// results here on @MainActor for UI state and notification dispatch.
+//
+// Each TrackedAgent gets its own PerAgentPipeline actor, so a slow hook
+// burst from one agent never stalls another agent's processing.
 @Observable
 @MainActor
 final class AgentTrackingManager {
     static let shared = AgentTrackingManager()
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "agents")
+
+    // One background actor per agent — normalization + SQLite run independently.
+    private let pipelines: [TrackedAgent: PerAgentPipeline] = {
+        Dictionary(uniqueKeysWithValues: TrackedAgent.allCases.map { ($0, PerAgentPipeline(agent: $0)) })
+    }()
 
     /// Stale threshold: sessions with no events for this long are considered stale.
     var staleThreshold: TimeInterval = 900  // 15 minutes
@@ -47,6 +54,7 @@ final class AgentTrackingManager {
         var awaitingPermission: Bool = false
         var hasEnded: Bool = false
         var hasFailed: Bool = false
+        var isActiveWindow: Bool = false
 
         /// Whether the session is still active (not terminal).
         var isLive: Bool { !hasEnded && !hasFailed }
@@ -113,7 +121,45 @@ final class AgentTrackingManager {
     }
 
     private(set) var sessions: [String: Session] = [:]
+    private(set) var eventSequence: Int = 0
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
+
+    // MARK: - Active-window observation
+
+    /// Start observing ActiveAppMonitor so session.isActiveWindow stays current.
+    func startActiveWindowObservation() {
+        observeActiveWindow()
+    }
+
+    private func observeActiveWindow() {
+        withObservationTracking {
+            _ = ActiveAppMonitor.shared.frontmost
+        } onChange: {
+            Task { @MainActor [weak self] in
+                self?.updateActiveWindows()
+                self?.observeActiveWindow()
+            }
+        }
+    }
+
+    private func updateActiveWindows() {
+        let entry = ActiveAppMonitor.shared.frontmost
+        for key in sessions.keys {
+            guard let session = sessions[key] else { continue }
+            var active = false
+            if let e = entry, e.agent == session.agent {
+                if e.cwd.isEmpty {
+                    active = true
+                } else {
+                    let sCwd = session.cwd
+                    active = sCwd.hasPrefix(e.cwd) || e.cwd.hasPrefix(sCwd)
+                }
+            }
+            if sessions[key]?.isActiveWindow != active {
+                sessions[key]?.isActiveWindow = active
+            }
+        }
+    }
 
     // MARK: - Active-state tracking (60-second recency window)
 
@@ -137,24 +183,44 @@ final class AgentTrackingManager {
             return
         }
 
-        // Always capture raw envelope for Live Events — even if normalization fails.
+        // Always capture raw envelope for Live Events before routing.
         LiveEventsStore.shared.append(env)
 
-        // Normalize via per-agent normalizer
-        guard let normalized = AgentTrackerRegistry.normalize(envelope: env) else {
-            logger.notice("drop: normalization failed for agent=\(env.agent, privacy: .public) event=\(env.event, privacy: .public)")
+        guard let agent = TrackedAgent(rawValue: env.agent),
+              let pipeline = pipelines[agent] else {
+            logger.notice("drop: unknown agent '\(env.agent, privacy: .public)'")
             return
         }
 
+        // Stamp last-hook time immediately (on main actor) for AgentRunState.active.
+        lastHookAt[agent.rawValue] = Date()
+
+        // Off-load normalization + SQLite write to the per-agent pipeline actor.
+        // The pipeline runs on its own isolated queue, so multiple agents process
+        // concurrently without serialising on the main actor.
+        Task { [weak self, env, pipeline] in
+            let normalized = await pipeline.process(env)
+            // Apply UI state and notification dispatch back on the main actor.
+            await MainActor.run { [weak self] in
+                self?.apply(normalized: normalized, envelope: env)
+            }
+        }
+    }
+
+    // MARK: - Main-actor session state + notification dispatch
+
+    private func apply(normalized: NormalizedHookEvent, envelope: HookEnvelope) {
         let sessionKey = "\(normalized.agent.rawValue)::\(normalized.sessionId)"
 
-        // Build timeline entry (raw event log)
+        let payloadStr: String? = envelope.payloadRaw.flatMap { String(data: $0, encoding: .utf8) }
         let timelineEvent = TimelineEvent(
             event: normalized.rawEvent,
+            phase: normalized.phase,
             tool: normalized.toolName,
             path: normalized.filePath ?? normalized.cwd,
             timestamp: normalized.timestamp,
-            summary: normalized.summary
+            summary: normalized.summary,
+            rawPayload: payloadStr
         )
 
         var s = sessions[sessionKey] ?? Session(
@@ -169,40 +235,18 @@ final class AgentTrackingManager {
         s.events.append(timelineEvent)
         s.apply(normalized)
 
-        // Assign without wrapping in withAnimation. Animation is applied at
-        // the view layer via .animation(value:) on the sessions list, which
-        // is safer than driving SwiftUI transactions from a socket-delivered
-        // mutation (prior approach risked NSHostingView constraint loops when
-        // hosted under MenuBarExtra(.window)).
+        // Assign without withAnimation — animation applied at the view layer
+        // via .animation(value:) to avoid NSHostingView constraint loops.
         sessions[sessionKey] = s
+        eventSequence &+= 1
 
-        // Record last hook timestamp for AgentRunState.active upgrade
-        lastHookAt[normalized.agent.rawValue] = Date()
-
-        // Persist to SQLite (with raw JSON payload for Logs detail view)
-        let payloadString: String?
-        if let raw = env.payloadRaw {
-            payloadString = String(data: raw, encoding: .utf8)
-        } else {
-            payloadString = nil
-        }
-        EventStore.shared.insert(
-            sessionKey: sessionKey, agent: normalized.agent.rawValue,
-            event: normalized.rawEvent,
-            tool: normalized.toolName, path: normalized.cwd,
-            state: normalized.phase.rawValue, ts: env.ts,
-            payload: payloadString
-        )
-
-        // Notification dispatch — uses user-configurable phase preferences
-        // Suppress sessionEnd notifications when the agent PID is dead — this
-        // means the user already quit (Cmd+Q) before the final Stop/sessionEnd
-        // hook arrived. Timeline entry is still recorded above.
+        // Suppress sessionEnd when the agent PID is already dead (user quit
+        // before the final Stop hook arrived). Timeline entry is still recorded.
         let isQuitInitiatedEnd = normalized.phase == .sessionEnd
-            && !PIDLiveness.isAlive(pid_t(env.pid))
+            && !PIDLiveness.isAlive(pid_t(envelope.pid))
         let shouldNotify = NotificationPolicy.isNotifiable(agent: normalized.agent, phase: normalized.phase)
             && !isQuitInitiatedEnd
-        logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
+        logger.info("apply agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
         if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
                 sessionKey: sessionKey, agent: normalized.agent,
@@ -210,7 +254,7 @@ final class AgentTrackingManager {
             ))
         }
 
-        // Evict terminal sessions after configured delay
+        // Evict terminal sessions after configured delay.
         if !s.isLive {
             let delay = evictionDelay
             Task { [sessionKey] in
