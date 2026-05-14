@@ -59,5 +59,10 @@ build/
 
 Doom-Coder-old/
 
-# Hook backup files created by RulesInstaller
+# Hook backup files created by RulesInstaller (legacy; new backups go to Application Support)
 *.doomcoder-backup-*
+
+# Copilot CLI hook config (per-repo). DoomCoder installs this when the user hooks
+# the local repo against itself; it's never meant to be committed.
+.github/hooks/doomcoder.json
+.github/hooks/*.doomcoder-backup-*

@@ -16,6 +16,12 @@ enum CopilotCLIFolderManager {
     }
 
     static func addFolder(_ url: URL) {
+        // Defense in depth: refuse to register excluded folders (most importantly
+        // the DoomCoder dev repo itself, which would pollute `.github/hooks/`).
+        if AgentInstallerV2.isExcludedFolder(url) {
+            logger.notice("addFolder refused (excluded): \(url.path, privacy: .public)")
+            return
+        }
         var paths = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
         let p = url.path
         guard !paths.contains(p) else { return }
@@ -158,6 +164,6 @@ enum CopilotCLIFolderManager {
             }
         }
 
-        return Array(results.prefix(20))
+        return Array(results.prefix(20).filter { !AgentInstallerV2.isExcludedFolder($0) })
     }
 }

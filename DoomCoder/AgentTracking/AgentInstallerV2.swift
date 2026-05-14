@@ -14,6 +14,50 @@ import CryptoKit
 struct AgentInstallerV2 {
     private static let logger = Logger(subsystem: "com.doomcoder", category: "installer")
 
+    // MARK: - Folder exclusion (Copilot CLI)
+
+    /// UserDefaults key holding paths the user has explicitly excluded.
+    private static let excludedFoldersKey = "doomcoder.copilotcli.excluded_folders"
+
+    /// Folders the user has explicitly opted out of for Copilot CLI hook installation.
+    static var userExcludedFolders: [URL] {
+        get {
+            (UserDefaults.standard.stringArray(forKey: excludedFoldersKey) ?? [])
+                .map { URL(fileURLWithPath: $0) }
+        }
+        set {
+            UserDefaults.standard.set(newValue.map { $0.path }, forKey: excludedFoldersKey)
+        }
+    }
+
+    static func excludeFolder(_ url: URL) {
+        var list = userExcludedFolders
+        guard !list.contains(where: { $0.path == url.path }) else { return }
+        list.append(url)
+        userExcludedFolders = list
+        logger.info("excluded folder: \(url.path, privacy: .public)")
+    }
+
+    static func unexcludeFolder(_ url: URL) {
+        userExcludedFolders = userExcludedFolders.filter { $0.path != url.path }
+    }
+
+    /// True when DoomCoder must NOT install Copilot CLI hooks into this folder.
+    /// Combines two signals:
+    ///   1. Self-detection — folder contains `DoomCoder.xcodeproj` (we are the
+    ///      dev repo). Installing into ourselves writes `.github/hooks/doomcoder.json`
+    ///      into our own working tree which then shows up in `git status`.
+    ///   2. User-configured exclusion list (UserDefaults).
+    static func isExcludedFolder(_ url: URL) -> Bool {
+        let path = url.path
+        // Self-repo detection
+        if FileManager.default.fileExists(atPath: path + "/DoomCoder.xcodeproj") {
+            return true
+        }
+        // User opt-out list
+        return userExcludedFolders.contains { $0.path == path }
+    }
+
     // MARK: - Helper binary path
 
     /// Stable path inside Application Support — survives Xcode rebuilds.
@@ -77,6 +121,14 @@ struct AgentInstallerV2 {
         // Pre-flight: ensure dc-hook binary is available
         guard ensureStableHelper() || FileManager.default.fileExists(atPath: helperBinaryPath()) else {
             return .failure(VerifyError.helperBinaryMissing)
+        }
+
+        // Pre-flight: refuse to install Copilot CLI hooks into excluded folders
+        // (most importantly DoomCoder's own dev repo — installing into ourselves
+        // pollutes git status with .github/hooks/doomcoder.json + backup files).
+        if agent == .copilotCLI, let f = folder, isExcludedFolder(f) {
+            logger.notice("installer op=install agent=copilot_cli folder=\(f.path, privacy: .public) outcome=skipped reason=excluded_folder")
+            return .failure(VerifyError.folderExcluded(f))
         }
 
         let path = configPath(for: agent, folder: folder)
@@ -660,6 +712,8 @@ struct AgentInstallerV2 {
         case configPermissionDenied(String)
         case agentNotInstalled(TrackedAgent)
         case helperBinaryMissing
+        case folderExcluded(URL)
+        case backupFailed(String)
         /// Integrity drift detected by a post-install verification.
         /// `missing` are expected events that are not mapped in the
         /// config; `wrongPath` are helper binary paths referenced in the
@@ -687,6 +741,13 @@ struct AgentInstallerV2 {
                 return "\(a.displayName) does not appear to be installed on this system."
             case .helperBinaryMissing:
                 return "dc-hook binary not found in the app bundle. Try reinstalling DoomCoder."
+            case .folderExcluded(let url):
+                if FileManager.default.fileExists(atPath: url.path + "/DoomCoder.xcodeproj") {
+                    return "Refusing to install Copilot CLI hooks into the DoomCoder source repo (\(url.lastPathComponent)) — installing into ourselves pollutes the working tree."
+                }
+                return "Folder '\(url.lastPathComponent)' is on the exclusion list. Remove it from Settings → Excluded Folders to install hooks here."
+            case .backupFailed(let p):
+                return "Could not write backup to ~/Library/Application Support/DoomCoder/backups/. Check that the directory is writable. Source file: \(p)"
             case .integrityDrift(let missing, let wrongPath, let folder):
                 var parts: [String] = []
                 if let f = folder {
@@ -718,6 +779,10 @@ struct AgentInstallerV2 {
                 return "Fix file permissions in Terminal, then retry."
             case .agentNotInstalled:
                 return nil
+            case .folderExcluded:
+                return "Choose a different folder, or remove this folder from the exclusion list in Settings."
+            case .backupFailed:
+                return "Check disk space and permissions on ~/Library/Application Support/DoomCoder/."
             case .integrityDrift(_, _, let folder):
                 return folder == nil
                     ? "Use Repair to reinstall the hook config."
@@ -888,26 +953,32 @@ struct AgentInstallerV2 {
         try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
     }
 
+    /// Backup a config file to ~/Library/Application Support/DoomCoder/backups/.
+    /// NEVER falls back to a sibling file — sibling backups pollute the user's
+    /// working tree (e.g. `.github/hooks/doomcoder.json.doomcoder-backup-*`
+    /// inside their git repo). If the Application Support directory is
+    /// unwritable we return `nil` and the caller logs `backup=-`.
     @discardableResult
     static func backup(_ path: String) -> String? {
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         let ts = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let backupDir = AgentSupportDir.url.appendingPathComponent("backups", isDirectory: true)
-        try? FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
+        } catch {
+            logger.error("backup failed to create dir: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
         let name = (path as NSString).lastPathComponent
         let dst = backupDir.appendingPathComponent("\(name).\(ts)").path
         do {
             try FileManager.default.copyItem(atPath: path, toPath: dst)
-            // Keep only the 3 most recent backups for this filename.
             pruneBackups(in: backupDir.path, baseName: name, keep: 3)
             return dst
         } catch {
-            // Secondary fallback — sibling backup next to the file so we at
-            // least have something to revert from if the support-dir copy
-            // fails (e.g. sandboxed contexts).
-            let sibling = "\(path).doomcoder-backup-\(ts)"
-            try? FileManager.default.copyItem(atPath: path, toPath: sibling)
-            return FileManager.default.fileExists(atPath: sibling) ? sibling : nil
+            // Intentionally NO sibling fallback — would pollute user repos.
+            logger.error("backup failed (no sibling fallback): \(error.localizedDescription, privacy: .public) src=\(path, privacy: .public)")
+            return nil
         }
     }
 
