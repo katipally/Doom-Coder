@@ -1,7 +1,7 @@
 import Foundation
 
 // Claude Code tracker. Owns the full Claude hook surface:
-//   - 25 native events (PascalCase) — see AgentInstallerV2.claudeEvents
+//   - 29 native events (PascalCase) — see AgentInstallerV2.claudeEvents
 //   - Session identity via payload["session_id"] (fallback: pid-N)
 //   - Tool name via payload["tool_name"] or payload["tool"]
 //   - Interaction tools (AskUserQuestion/ExitPlanMode/Elicitation) mapped
@@ -31,32 +31,35 @@ struct ClaudeTracker: AgentTracker {
     ]
 
     private static let phaseMap: [String: NormalizedEventPhase] = [
-        "SessionStart":       .sessionStart,
-        "SessionEnd":         .sessionEnd,
-        "UserPromptSubmit":   .userPrompt,
-        "PreToolUse":         .toolStart,
-        "PostToolUse":        .toolEnd,
-        "PostToolUseFailure": .toolError,
-        "PermissionRequest":  .permissionNeeded,
-        "PermissionDenied":   .permissionNeeded,
-        "Notification":       .agentResponse,
-        "Stop":               .sessionEnd,
-        "StopFailure":        .error,
-        "SubagentStart":      .subagentStart,
-        "SubagentStop":       .subagentEnd,
-        "TaskCreated":        .other,
-        "TaskCompleted":      .sessionEnd,
-        "TeammateIdle":       .other,
-        "PreCompact":         .other,
-        "PostCompact":        .other,
-        "FileChanged":        .fileChanged,
-        "CwdChanged":         .other,
-        "ConfigChange":       .other,
-        "InstructionsLoaded": .other,
-        "Elicitation":        .permissionNeeded,
-        "ElicitationResult":  .other,
-        "WorktreeCreate":     .other,
-        "WorktreeRemove":     .other,
+        "SessionStart":         .sessionStart,
+        "Setup":                .sessionStart,
+        "SessionEnd":           .sessionEnd,
+        "UserPromptSubmit":     .userPrompt,
+        "UserPromptExpansion":  .userPrompt,
+        "PreToolUse":           .toolStart,
+        "PostToolUse":          .toolEnd,
+        "PostToolUseFailure":   .toolError,
+        "PostToolBatch":        .toolEnd,
+        "PermissionRequest":    .permissionNeeded,
+        "PermissionDenied":     .permissionNeeded,
+        "Notification":         .agentResponse,
+        "Stop":                 .sessionEnd,
+        "StopFailure":          .error,
+        "SubagentStart":        .subagentStart,
+        "SubagentStop":         .subagentEnd,
+        "TaskCreated":          .other,
+        "TaskCompleted":        .sessionEnd,
+        "TeammateIdle":         .other,
+        "PreCompact":           .other,
+        "PostCompact":          .other,
+        "FileChanged":          .fileChanged,
+        "CwdChanged":           .other,
+        "ConfigChange":         .other,
+        "InstructionsLoaded":   .other,
+        "Elicitation":          .permissionNeeded,
+        "ElicitationResult":    .other,
+        "WorktreeCreate":       .other,
+        "WorktreeRemove":       .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent {

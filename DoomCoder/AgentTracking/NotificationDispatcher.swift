@@ -137,6 +137,36 @@ final class NotificationDispatcher {
         }
     }
 
+    /// FM-judge-sourced notification. Title and body come pre-formed from the
+    /// on-device model; this bypasses the standard title/body copy templates.
+    func dispatchFMJudge(title: String, body: String, urgency: String,
+                          sessionKey: String, agent: TrackedAgent, event: String) {
+        let masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+        guard masterEnabled, TrackingStore.isEnabled(agent) else { return }
+
+        let key = "\(sessionKey)::fm::\(title)::\(body)"
+        if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow { return }
+        lastDispatchAt[key] = Date()
+
+        let channels = ChannelStore.effectiveChannels(for: agent)
+        let ts = Date().timeIntervalSince1970
+
+        if channels.macNotification {
+            postLocal(title: title, body: body, threadID: sessionKey, agent: agent)
+            EventStore.shared.insertNotification(
+                sessionKey: sessionKey, agent: agent.rawValue, event: event,
+                title: title, body: body, channel: "macOS(fm)", success: true, ts: ts
+            )
+        }
+        if channels.ntfy {
+            postNtfy(title: title, body: body)
+            EventStore.shared.insertNotification(
+                sessionKey: sessionKey, agent: agent.rawValue, event: event,
+                title: title, body: body, channel: "ntfy(fm)", success: true, ts: ts
+            )
+        }
+    }
+
     /// Sends a test notification on the chosen channel. Returns true if the
     /// request was successfully submitted (not a delivery guarantee).
     @discardableResult

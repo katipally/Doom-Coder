@@ -530,12 +530,13 @@ struct AgentInstallerV2 {
 
     /// Complete event lists per agent — single source of truth.
     static let claudeEvents = [
-        "SessionStart", "SessionEnd", "UserPromptSubmit",
-        "PreToolUse", "PostToolUse", "PostToolUseFailure",
+        "SessionStart", "Setup", "SessionEnd", "UserPromptSubmit", "UserPromptExpansion",
+        "PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch",
         "PermissionRequest", "PermissionDenied",
         "Notification", "Stop", "StopFailure",
         "SubagentStart", "SubagentStop",
         "TaskCreated", "TaskCompleted",
+        "TeammateIdle",
         "PreCompact", "PostCompact",
         "FileChanged", "CwdChanged", "ConfigChange",
         "InstructionsLoaded", "Elicitation", "ElicitationResult",
