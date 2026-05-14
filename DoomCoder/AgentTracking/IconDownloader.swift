@@ -20,15 +20,18 @@ enum IconDownloader {
         .copilotCLI: "githubcopilot.png",
         .cursor:     "cursor.png",
         .windsurf:   "windsurf.png",
-        .vscode:     "vscode-color.png",
+        .vscode:     "copilot-color.png",
     ]
 
-    // Maps CLI agents to their xcassets image names bundled in the app.
+    // Maps agents to their xcassets image names bundled in the app.
     // When a bundled asset is present, CDN download is skipped.
     private static let bundledAssetNames: [TrackedAgent: String] = [
         .claude:     "agent-claude",
         .codexCLI:   "agent-codex",
         .copilotCLI: "agent-copilot-cli",
+        .cursor:     "agent-cursor",
+        .windsurf:   "agent-windsurf",
+        .vscode:     "agent-vscode",
     ]
 
     // MARK: - Public API

@@ -2,9 +2,9 @@ import Foundation
 import AppKit
 
 // Provides agent icons. Priority order:
-//   1. NSWorkspace runtime icon from installed .app bundle (IDE agents only)
-//   2. Bundled xcassets icon — instant, no network (CLI agents)
-//   3. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
+//   1. Bundled xcassets icon — instant, no network (all agents)
+//   2. Cached CDN icon downloaded from lobehub @lobehub/icons-static-png
+//   3. NSWorkspace runtime icon from installed .app bundle (IDE agents, bonus fidelity)
 //   4. SF Symbol fallback (always available)
 //
 // Bundled icons are embedded in the app at build time. CDN fetch via
@@ -22,20 +22,28 @@ enum AgentIconProvider {
             if let cdn = IconDownloader.cachedIcon(for: .claude, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-claude", symbol: "c.circle.fill", size: size)
         case .cursor:
+            if let bundled = NSImage(named: "agent-cursor") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
+            if let cdn = IconDownloader.cachedIcon(for: .cursor, size: size) { return cdn }
             if let appIcon = appIcon(bundleIds: ["com.todesktop.230313mzl4w4u92"],
                                      paths: ["/Applications/Cursor.app",
                                              NSHomeDirectory() + "/Applications/Cursor.app"],
                                      size: size) { return appIcon }
-            if let cdn = IconDownloader.cachedIcon(for: .cursor, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-cursor", symbol: "cursorarrow.rays", size: size)
         case .vscode:
+            if let bundled = NSImage(named: "agent-vscode") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
+            if let cdn = IconDownloader.cachedIcon(for: .vscode, size: size) { return cdn }
             if let appIcon = appIcon(bundleIds: ["com.microsoft.VSCode",
                                                  "com.microsoft.VSCodeInsiders"],
                                      paths: ["/Applications/Visual Studio Code.app",
                                              NSHomeDirectory() + "/Applications/Visual Studio Code.app",
                                              "/Applications/Visual Studio Code - Insiders.app"],
                                      size: size) { return appIcon }
-            if let cdn = IconDownloader.cachedIcon(for: .vscode, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-vscode",
                                    symbol: "chevron.left.forwardslash.chevron.right", size: size)
         case .copilotCLI:
@@ -49,11 +57,15 @@ enum AgentIconProvider {
             }
             return bundledOrSymbol(name: "agent-copilot-cli", symbol: "terminal.fill", size: size)
         case .windsurf:
+            if let bundled = NSImage(named: "agent-windsurf") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
+            if let cdn = IconDownloader.cachedIcon(for: .windsurf, size: size) { return cdn }
             if let appIcon = appIcon(bundleIds: ["com.codeium.windsurf", "com.exafunction.windsurf"],
                                      paths: ["/Applications/Windsurf.app",
                                              NSHomeDirectory() + "/Applications/Windsurf.app"],
                                      size: size) { return appIcon }
-            if let cdn = IconDownloader.cachedIcon(for: .windsurf, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-windsurf", symbol: "wind", size: size)
         case .codexCLI:
             // Bundled first — available without network on first launch.
