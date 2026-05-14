@@ -74,7 +74,7 @@ enum NotificationPolicy {
             cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
             synthetic: false, payloadRaw: nil
         )
-        if let normalized = EventNormalizerRegistry.normalize(envelope: envelope) {
+        if let normalized = AgentTrackerRegistry.normalize(envelope: envelope) {
             return isNotifiable(phase: normalized.phase)
         }
         return false

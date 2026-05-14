@@ -11,7 +11,7 @@ import Foundation
 import Darwin
 #endif
 
-let kVersion = "1"
+let kVersion = "2"
 let kSocketName = "hook.sock"
 let kSupportDirName = "DoomCoder"
 let kHardTimeoutSeconds: UInt32 = 5

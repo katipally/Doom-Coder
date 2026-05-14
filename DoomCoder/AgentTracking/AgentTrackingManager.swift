@@ -129,7 +129,7 @@ final class AgentTrackingManager {
         LiveEventsStore.shared.append(env)
 
         // Normalize via per-agent normalizer
-        guard let normalized = EventNormalizerRegistry.normalize(envelope: env) else {
+        guard let normalized = AgentTrackerRegistry.normalize(envelope: env) else {
             logger.notice("drop: normalization failed for agent=\(env.agent, privacy: .public) event=\(env.event, privacy: .public)")
             return
         }
