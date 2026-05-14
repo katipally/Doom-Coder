@@ -29,13 +29,13 @@ enum AgentIconProvider {
             if let cdn = IconDownloader.cachedIcon(for: .cursor, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-cursor", symbol: "cursorarrow.rays", size: size)
         case .vscode:
-            // No lobehub icon for VS Code — use installed app icon only.
             if let appIcon = appIcon(bundleIds: ["com.microsoft.VSCode",
                                                  "com.microsoft.VSCodeInsiders"],
                                      paths: ["/Applications/Visual Studio Code.app",
                                              NSHomeDirectory() + "/Applications/Visual Studio Code.app",
                                              "/Applications/Visual Studio Code - Insiders.app"],
                                      size: size) { return appIcon }
+            if let cdn = IconDownloader.cachedIcon(for: .vscode, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-vscode",
                                    symbol: "chevron.left.forwardslash.chevron.right", size: size)
         case .copilotCLI:

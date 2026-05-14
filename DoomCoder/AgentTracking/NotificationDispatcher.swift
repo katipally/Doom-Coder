@@ -256,8 +256,7 @@ final class NotificationDispatcher {
                let attachment = try? UNNotificationAttachment(
                    identifier: "agent-icon",
                    url: iconURL,
-                   options: [UNNotificationAttachmentOptionsThumbnailClippingRectKey:
-                               CGRect(x: 0, y: 0, width: 1, height: 1) as AnyObject]
+                   options: nil
                ) {
                 content.attachments = [attachment]
             }

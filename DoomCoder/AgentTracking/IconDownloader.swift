@@ -14,13 +14,13 @@ enum IconDownloader {
     private static let logger = Logger(subsystem: "com.doomcoder", category: "icons")
 
     // Maps each CLI/IDE agent to its lobehub filename.
-    // .vscode has no lobehub entry — its icon comes from the installed .app bundle.
     private static let cdnFilenames: [TrackedAgent: String] = [
         .claude:     "claudecode-color.png",
         .codexCLI:   "codex-color.png",
         .copilotCLI: "githubcopilot.png",
         .cursor:     "cursor.png",
         .windsurf:   "windsurf.png",
+        .vscode:     "vscode-color.png",
     ]
 
     // Maps CLI agents to their xcassets image names bundled in the app.

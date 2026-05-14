@@ -433,7 +433,7 @@ struct ConfigureAgentsViewV2: View {
 
                 // Per-agent notification event preferences
                 GroupBox {
-                    let hasAgentPrefs = ChannelStore.hasPrefsOverride(for: agent)
+                    let hasAgentPrefs = agentNotifPrefs[agent.rawValue] != nil
                     VStack(alignment: .leading, spacing: 6) {
                         Toggle("Customize notifications for \(agent.displayName)", isOn: Binding(
                             get: { hasAgentPrefs },
@@ -449,37 +449,44 @@ struct ConfigureAgentsViewV2: View {
 
                         if hasAgentPrefs {
                             Divider()
-                            let ep = agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs()
-                            Group {
-                                Toggle("Session completed", isOn: Binding(
-                                    get: { ep.sessionEnd },
-                                    set: { v in var p = ep; p.sessionEnd = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Toggle("Errors", isOn: Binding(
-                                    get: { ep.error },
-                                    set: { v in var p = ep; p.error = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Toggle("Permission requests", isOn: Binding(
-                                    get: { ep.permissionNeeded },
-                                    set: { v in var p = ep; p.permissionNeeded = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Toggle("Agent responses", isOn: Binding(
-                                    get: { ep.agentResponse },
-                                    set: { v in var p = ep; p.agentResponse = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Divider()
-                                Toggle("Session started", isOn: Binding(
-                                    get: { ep.sessionStart },
-                                    set: { v in var p = ep; p.sessionStart = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Toggle("Sub-agent activity", isOn: Binding(
-                                    get: { ep.subagentStart },
-                                    set: { v in var p = ep; p.subagentStart = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
-                                Toggle("Tool usage", isOn: Binding(
-                                    get: { ep.toolUse },
-                                    set: { v in var p = ep; p.toolUse = v; ChannelStore.setPrefs(p, for: agent); agentNotifPrefs[agent.rawValue] = p }
-                                )).toggleStyle(.checkbox).font(.callout)
+                            Text("Notify when:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 5) {
+                                ForEach(AgentEventCatalog.sections(for: agent)) { section in
+                                    let kp = section.keyPath
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Toggle(section.label, isOn: Binding(
+                                            get: { (agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs())[keyPath: kp] },
+                                            set: { v in
+                                                var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs()
+                                                p[keyPath: kp] = v
+                                                ChannelStore.setPrefs(p, for: agent)
+                                                agentNotifPrefs[agent.rawValue] = p
+                                            }
+                                        ))
+                                        .toggleStyle(.checkbox)
+                                        .font(.callout)
+                                        ForEach(section.entries) { entry in
+                                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                                Text("·")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.tertiary)
+                                                    .frame(width: 8, alignment: .center)
+                                                VStack(alignment: .leading, spacing: 0) {
+                                                    Text(entry.rawEvent)
+                                                        .font(.caption)
+                                                        .fontDesign(.monospaced)
+                                                        .foregroundStyle(.secondary)
+                                                    Text(entry.note)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.tertiary)
+                                                }
+                                            }
+                                            .padding(.leading, 18)
+                                        }
+                                    }
+                                }
                             }
                         } else {
                             Text("Using global notification preferences.")

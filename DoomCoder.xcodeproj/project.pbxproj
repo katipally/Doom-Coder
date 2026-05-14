@@ -42,6 +42,7 @@
 		DC0000000000002000000153 /* CopilotCLITracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000153 /* CopilotCLITracker.swift */; };
 		DC0000000000002000000154 /* WindsurfTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000154 /* WindsurfTracker.swift */; };
 		DC0000000000002000000155 /* CodexCLITracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000155 /* CodexCLITracker.swift */; };
+		DC0000000000002000000156 /* AgentEventCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000156 /* AgentEventCatalog.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
 		DC0000000000002000000046 /* UIAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000046 /* UIAnimations.swift */; };
 		DC0000000000002000000047 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000047 /* FloatingPanelController.swift */; };
@@ -93,6 +94,7 @@
 		DC0000000000001000000153 /* CopilotCLITracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCLITracker.swift; sourceTree = "<group>"; };
 		DC0000000000001000000154 /* WindsurfTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindsurfTracker.swift; sourceTree = "<group>"; };
 		DC0000000000001000000155 /* CodexCLITracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCLITracker.swift; sourceTree = "<group>"; };
+		DC0000000000001000000156 /* AgentEventCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventCatalog.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000046 /* UIAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAnimations.swift; sourceTree = "<group>"; };
 		DC0000000000001000000047 /* FloatingPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelController.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 				DC0000000000001000000153 /* CopilotCLITracker.swift */,
 				DC0000000000001000000154 /* WindsurfTracker.swift */,
 				DC0000000000001000000155 /* CodexCLITracker.swift */,
+				DC0000000000001000000156 /* AgentEventCatalog.swift */,
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
 				DC0000000000001000000046 /* UIAnimations.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
@@ -330,6 +333,7 @@
 				DC0000000000002000000153 /* CopilotCLITracker.swift in Sources */,
 				DC0000000000002000000154 /* WindsurfTracker.swift in Sources */,
 				DC0000000000002000000155 /* CodexCLITracker.swift in Sources */,
+				DC0000000000002000000156 /* AgentEventCatalog.swift in Sources */,
 				DC0000000000002000000045 /* LiveEventsStore.swift in Sources */,
 				DC0000000000002000000046 /* UIAnimations.swift in Sources */,
 				DC0000000000002000000047 /* FloatingPanelController.swift in Sources */,
