@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OSLog
 
 struct AgentDetection: Equatable, Sendable {
@@ -6,6 +7,17 @@ struct AgentDetection: Equatable, Sendable {
     let installed: Bool
     let version: String?
     let details: String?
+    let runState: AgentRunState
+
+    init(agent: TrackedAgent, installed: Bool, version: String?, details: String?, runState: AgentRunState? = nil) {
+        self.agent = agent
+        self.installed = installed
+        self.version = version
+        self.details = details
+        // Default: if we know it's installed but haven't probed runState
+        // separately, expose `.installed`; if not installed, `.notInstalled`.
+        self.runState = runState ?? (installed ? .installed : .notInstalled)
+    }
 }
 
 enum AgentDetector {
@@ -14,14 +26,74 @@ enum AgentDetector {
     static func detectAll() -> [AgentDetection] { TrackedAgent.allCases.map(detect) }
 
     static func detect(_ agent: TrackedAgent) -> AgentDetection {
+        let base: AgentDetection = {
+            switch agent {
+            case .claude:      return detectClaude()
+            case .cursor:      return detectCursor()
+            case .vscode:      return detectVSCode()
+            case .copilotCLI:  return detectCopilotCLI()
+            case .windsurf:    return detectWindsurf()
+            case .codexCLI:    return detectCodexCLI()
+            }
+        }()
+        guard base.installed else { return base }
+        let rs = probeRunState(agent)
+        return AgentDetection(agent: base.agent, installed: base.installed,
+                              version: base.version, details: base.details,
+                              runState: rs)
+    }
+
+    // MARK: - Run-state probe
+    //
+    // .app-based agents: probed via NSWorkspace bundle ID match (cheap,
+    // accurate, no spawning processes).
+    // CLI agents: probed via `pgrep -fl <pattern>` in a login shell so we
+    // pick up CLIs launched from anywhere in PATH. Pattern matches both
+    // the binary name and common Node-shim invocations (`node .../copilot`).
+    //
+    // We do NOT yet upgrade to `.active` here — that requires the
+    // last-hook-event-recency check, which lives in AgentTrackingManager
+    // where the event store is reachable. v2.3.0 ships the binary
+    // installed/running signal; recency-upgrade can be wired in a later
+    // pass without rev'ing this API.
+
+    static func probeRunState(_ agent: TrackedAgent) -> AgentRunState {
         switch agent {
-        case .claude:      return detectClaude()
-        case .cursor:      return detectCursor()
-        case .vscode:      return detectVSCode()
-        case .copilotCLI:  return detectCopilotCLI()
-        case .windsurf:    return detectWindsurf()
-        case .codexCLI:    return detectCodexCLI()
+        case .cursor:
+            return isAppRunning(bundleIDs: ["com.todesktop.230313mzl4w4u92"]) ? .running : .installed
+        case .vscode:
+            return isAppRunning(bundleIDs: ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"]) ? .running : .installed
+        case .windsurf:
+            return isAppRunning(bundleIDs: ["com.exafunction.windsurf", "com.codeium.windsurf"]) ? .running : .installed
+        case .claude:
+            return isCLIRunning(patterns: ["claude"]) ? .running : .installed
+        case .copilotCLI:
+            return isCLIRunning(patterns: ["copilot", "gh copilot"]) ? .running : .installed
+        case .codexCLI:
+            return isCLIRunning(patterns: ["codex"]) ? .running : .installed
         }
+    }
+
+    private static func isAppRunning(bundleIDs: [String]) -> Bool {
+        let running = NSWorkspace.shared.runningApplications
+        return running.contains { app in
+            guard let id = app.bundleIdentifier else { return false }
+            return bundleIDs.contains(id)
+        }
+    }
+
+    /// Match by command-name (basename) to avoid spurious hits on file
+    /// paths or grep itself. Uses pgrep -x where possible.
+    private static func isCLIRunning(patterns: [String]) -> Bool {
+        for p in patterns {
+            // -x is exact match on the command name. Falls back to -f if
+            // multi-word (`gh copilot`).
+            let cmd = p.contains(" ")
+                ? "pgrep -fl '\(p)' 2>/dev/null | grep -v pgrep | head -1"
+                : "pgrep -x '\(p)' 2>/dev/null | head -1"
+            if let _ = runLoginShell(cmd) { return true }
+        }
+        return false
     }
 
     private static func detectClaude() -> AgentDetection {

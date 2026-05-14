@@ -185,7 +185,7 @@ final class AgentTrackingManager {
         // hook arrived. Timeline entry is still recorded above.
         let isQuitInitiatedEnd = normalized.phase == .sessionEnd
             && !PIDLiveness.isAlive(pid_t(env.pid))
-        let shouldNotify = NotificationPolicy.isNotifiable(phase: normalized.phase)
+        let shouldNotify = NotificationPolicy.isNotifiable(agent: normalized.agent, phase: normalized.phase)
             && !isQuitInitiatedEnd
         logger.info("ingest agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
         if shouldNotify {

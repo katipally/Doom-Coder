@@ -57,10 +57,20 @@ struct TimelineEvent: Identifiable, Sendable {
 // MARK: - Notification policy
 
 /// Determines whether an event should trigger a push notification.
-/// Uses user-configurable NotificationPrefs stored in ChannelStore.
-/// Falls back to normalized event phase for consistent cross-agent behavior.
+/// Uses user-configurable NotificationPrefs stored in ChannelStore. Each
+/// agent can have its own per-agent override; otherwise the global prefs
+/// apply.
 enum NotificationPolicy {
-    /// Check using normalized event phase (preferred path).
+    /// Per-agent decision: looks up agent-specific NotificationPrefs first,
+    /// then falls back to the global default. This is the path call sites
+    /// should prefer now that per-agent prefs exist.
+    static func isNotifiable(agent: TrackedAgent, phase: NormalizedEventPhase) -> Bool {
+        let prefs = ChannelStore.loadPrefs(for: agent)
+        return prefs.shouldNotify(phase: phase.rawValue)
+    }
+
+    /// Global-only decision. Kept for call sites that haven't routed an
+    /// agent in yet (e.g. quit-time sweeps); prefer the per-agent overload.
     static func isNotifiable(phase: NormalizedEventPhase) -> Bool {
         let prefs = ChannelStore.loadPrefs()
         return prefs.shouldNotify(phase: phase.rawValue)
@@ -68,14 +78,13 @@ enum NotificationPolicy {
 
     /// Legacy: check by raw agent + event name (for backward compat).
     static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
-        // Create a minimal envelope just for phase lookup
         let envelope = HookEnvelope(
-            v: "1", agent: agent.rawValue, event: event,
+            v: "2", agent: agent.rawValue, event: event,
             cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
             synthetic: false, payloadRaw: nil
         )
         if let normalized = AgentTrackerRegistry.normalize(envelope: envelope) {
-            return isNotifiable(phase: normalized.phase)
+            return isNotifiable(agent: agent, phase: normalized.phase)
         }
         return false
     }

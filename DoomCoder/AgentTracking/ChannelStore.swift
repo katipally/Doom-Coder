@@ -86,20 +86,28 @@ struct ChannelStore {
     }
 
     // MARK: - Notification preferences
+    //
+    // v2.3.0 introduces a per-agent prefs map keyed by TrackedAgent.rawValue.
+    // The global NotificationPrefs remains the fallback (and the curated
+    // default for new installs). Per-agent overrides let users silence one
+    // agent without disarming notifications globally.
 
-    /// Bumped when the default allowlist changes. Setting this flag to a new
-    /// value on launch overwrites older saved prefs so users pick up the new
-    /// curated defaults. Current defaults: 4-phase — sessionStart, sessionEnd,
-    /// error, permissionNeeded. agentResponse is intentionally OFF to prevent
-    /// notification spam from Claude's frequent Notification hook events.
-    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v5"
+    /// Bumped when the default allowlist changes. Current defaults: 4-phase
+    /// — sessionStart, sessionEnd, error, permissionNeeded. agentResponse is
+    /// intentionally OFF to prevent spam from Claude's Notification hooks.
+    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v6"
+
+    private static let perAgentPrefsKey = "doomcoder.notification.prefs.perAgent.v1"
 
     /// Run once at launch. If this build's migration flag hasn't been set,
     /// overwrite saved prefs with the curated defaults and record the flag.
+    /// v6 also wipes any stale per-agent prefs that pointed at the old
+    /// cross-agent NormalizedEventPhase taxonomy.
     static func migratePrefsIfNeeded() {
         let ud = UserDefaults.standard
         guard !ud.bool(forKey: prefsMigrationKey) else { return }
         savePrefs(NotificationPrefs())
+        ud.removeObject(forKey: perAgentPrefsKey)
         ud.set(true, forKey: prefsMigrationKey)
     }
 
@@ -114,5 +122,42 @@ struct ChannelStore {
         if let data = try? JSONEncoder().encode(prefs) {
             UserDefaults.standard.set(data, forKey: prefsKey)
         }
+    }
+
+    // MARK: - Per-agent prefs
+
+    static func loadPerAgentPrefs() -> [String: NotificationPrefs] {
+        guard let data = UserDefaults.standard.data(forKey: perAgentPrefsKey),
+              let decoded = try? JSONDecoder().decode([String: NotificationPrefs].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    static func savePerAgentPrefs(_ map: [String: NotificationPrefs]) {
+        if let data = try? JSONEncoder().encode(map) {
+            UserDefaults.standard.set(data, forKey: perAgentPrefsKey)
+        }
+    }
+
+    /// Resolve effective prefs for an agent: per-agent override if present,
+    /// else the global default.
+    static func loadPrefs(for agent: TrackedAgent) -> NotificationPrefs {
+        let map = loadPerAgentPrefs()
+        if let p = map[agent.rawValue] { return p }
+        return loadPrefs()
+    }
+
+    static func setPrefs(_ prefs: NotificationPrefs?, for agent: TrackedAgent) {
+        var map = loadPerAgentPrefs()
+        if let prefs {
+            map[agent.rawValue] = prefs
+        } else {
+            map.removeValue(forKey: agent.rawValue)
+        }
+        savePerAgentPrefs(map)
+    }
+
+    static func hasPrefsOverride(for agent: TrackedAgent) -> Bool {
+        loadPerAgentPrefs()[agent.rawValue] != nil
     }
 }

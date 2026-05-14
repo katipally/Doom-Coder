@@ -45,6 +45,24 @@ final class EventStore {
         // Enable WAL for better concurrent read/write behavior.
         exec("PRAGMA journal_mode=WAL;")
         exec("PRAGMA synchronous=NORMAL;")
+        // meta table holds a tiny key/value schema so we can detect when
+        // the on-disk events table predates the per-agent tracker rework
+        // and needs a clean-slate rebuild.
+        exec("""
+            CREATE TABLE IF NOT EXISTS meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+        """)
+        let currentSchema = readMetaInt("schema_version") ?? 1
+        if currentSchema < 2 {
+            // v2.3.0 clean-slate: the old `state` column carried the
+            // unified normalizer phase, which no longer maps 1:1. We drop
+            // history rather than try to back-fill from raw payloads.
+            // Logs tab simply starts empty for one boot.
+            exec("DROP TABLE IF EXISTS events;")
+            writeMeta(key: "schema_version", value: "2")
+        }
         exec("""
             CREATE TABLE IF NOT EXISTS events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +102,34 @@ final class EventStore {
         if !columnExists("events", column: "payload") {
             exec("ALTER TABLE events ADD COLUMN payload TEXT;")
         }
+    }
+
+    // MARK: - meta helpers
+
+    private func readMetaInt(_ key: String) -> Int? {
+        guard let db else { return nil }
+        let sql = "SELECT value FROM meta WHERE key = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, key, -1, T)
+        guard sqlite3_step(stmt) == SQLITE_ROW,
+              let cstr = sqlite3_column_text(stmt, 0)
+        else { return nil }
+        return Int(String(cString: cstr))
+    }
+
+    private func writeMeta(key: String, value: String) {
+        guard let db else { return }
+        let sql = "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, key, -1, T)
+        sqlite3_bind_text(stmt, 2, value, -1, T)
+        _ = sqlite3_step(stmt)
     }
 
     private func columnExists(_ table: String, column: String) -> Bool {
