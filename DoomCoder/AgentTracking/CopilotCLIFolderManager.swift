@@ -11,7 +11,15 @@ enum CopilotCLIFolderManager {
     static var folders: [URL] {
         get {
             let paths = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
-            return paths.map { URL(fileURLWithPath: $0) }
+            let all = paths.map { URL(fileURLWithPath: $0) }
+            // Drop any folder that has since become excluded (e.g. the DoomCoder
+            // dev repo, user opt-out list). Persist cleaned list so stale entries
+            // don't silently reappear and cause Repair failures.
+            let valid = all.filter { !AgentInstallerV2.isExcludedFolder($0) }
+            if valid.count != all.count {
+                UserDefaults.standard.set(valid.map(\.path), forKey: defaultsKey)
+            }
+            return valid
         }
     }
 

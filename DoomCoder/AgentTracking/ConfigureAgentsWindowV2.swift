@@ -387,50 +387,6 @@ struct ConfigureAgentsViewV2: View {
                 // Live Events
                 liveEventsSection(agent)
 
-                // Channel overrides
-                GroupBox {
-                    let hasOverride = ChannelStore.hasOverride(for: agent)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Use custom channels (override global)", isOn: Binding(
-                            get: { hasOverride },
-                            set: { on in
-                                if on {
-                                    ChannelStore.setPerAgent(agent, config: channelConfig.global)
-                                } else {
-                                    ChannelStore.clearOverride(for: agent)
-                                }
-                                channelConfig = ChannelStore.load()
-                            }
-                        ))
-
-                        if hasOverride {
-                            let override = channelConfig.perAgent[agent.rawValue] ?? channelConfig.global
-                            Toggle("macOS Notification", isOn: Binding(
-                                get: { override.macNotification },
-                                set: { v in
-                                    var c = override; c.macNotification = v
-                                    ChannelStore.setPerAgent(agent, config: c)
-                                    channelConfig = ChannelStore.load()
-                                    if v { NotificationDispatcher.shared.requestPermission() }
-                                }
-                            ))
-                            Toggle("ntfy", isOn: Binding(
-                                get: { override.ntfy },
-                                set: { v in
-                                    var c = override; c.ntfy = v
-                                    ChannelStore.setPerAgent(agent, config: c)
-                                    channelConfig = ChannelStore.load()
-                                }
-                            ))
-                        } else {
-                            Text("Using global channel settings.")
-                                .font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                } label: {
-                    Label("Channel Overrides", systemImage: "bell.badge")
-                }
-
                 // Per-agent notification event preferences
                 GroupBox {
                     let hasAgentPrefs = agentNotifPrefs[agent.rawValue] != nil

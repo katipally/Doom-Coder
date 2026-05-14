@@ -970,7 +970,8 @@ struct AgentInstallerV2 {
             return nil
         }
         let name = (path as NSString).lastPathComponent
-        let dst = backupDir.appendingPathComponent("\(name).\(ts)").path
+        let uid = String(UUID().uuidString.prefix(8))
+        let dst = backupDir.appendingPathComponent("\(name).\(ts)-\(uid)").path
         do {
             try FileManager.default.copyItem(atPath: path, toPath: dst)
             pruneBackups(in: backupDir.path, baseName: name, keep: 3)
