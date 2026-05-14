@@ -160,4 +160,17 @@ struct ChannelStore {
     static func hasPrefsOverride(for agent: TrackedAgent) -> Bool {
         loadPerAgentPrefs()[agent.rawValue] != nil
     }
+
+    /// Ensures every known agent has an explicit NotificationPrefs entry using
+    /// the global defaults. Called at launch so the per-agent UI always binds
+    /// to real stored prefs instead of falling back to the global.
+    static func initializeAllAgentPrefsIfNeeded() {
+        var map = loadPerAgentPrefs()
+        var changed = false
+        for agent in TrackedAgent.allCases where map[agent.rawValue] == nil {
+            map[agent.rawValue] = NotificationPrefs()
+            changed = true
+        }
+        if changed { savePerAgentPrefs(map) }
+    }
 }

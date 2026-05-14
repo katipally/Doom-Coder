@@ -52,6 +52,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
         ChannelStore.migratePrefsIfNeeded()
+        // Seed per-agent prefs for any agent that doesn't yet have explicit
+        // stored prefs, so the per-agent UI always shows real toggles.
+        ChannelStore.initializeAllAgentPrefsIfNeeded()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()

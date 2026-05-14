@@ -30,8 +30,6 @@ struct ConfigureAgentsViewV2: View {
     @State private var cliFailingFolders: [URL] = []
     // Permission status
     @State private var permStatus: String = "…"
-    // Notification event preferences
-    @State private var notifPrefs = ChannelStore.loadPrefs()
     // Per-agent notification preference overrides (keyed by agent rawValue)
     @State private var agentNotifPrefs: [String: ChannelStore.NotificationPrefs] = ChannelStore.loadPerAgentPrefs()
     // Periodic health refresh
@@ -387,66 +385,50 @@ struct ConfigureAgentsViewV2: View {
                 // Live Events
                 liveEventsSection(agent)
 
-                // Per-agent notification event preferences
+                // Per-agent notification event preferences — always visible, no gate toggle.
                 GroupBox {
-                    let hasAgentPrefs = agentNotifPrefs[agent.rawValue] != nil
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Customize notifications for \(agent.displayName)", isOn: Binding(
-                            get: { hasAgentPrefs },
-                            set: { on in
-                                if on {
-                                    ChannelStore.setPrefs(ChannelStore.loadPrefs(), for: agent)
-                                } else {
-                                    ChannelStore.setPrefs(nil, for: agent)
-                                }
-                                agentNotifPrefs = ChannelStore.loadPerAgentPrefs()
-                            }
-                        ))
-
-                        if hasAgentPrefs {
-                            Divider()
-                            Text("Notify when:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 5) {
-                                ForEach(AgentEventCatalog.sections(for: agent)) { section in
-                                    let kp = section.keyPath
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Toggle(section.label, isOn: Binding(
-                                            get: { (agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs())[keyPath: kp] },
-                                            set: { v in
-                                                var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.loadPrefs()
-                                                p[keyPath: kp] = v
-                                                ChannelStore.setPrefs(p, for: agent)
-                                                agentNotifPrefs[agent.rawValue] = p
-                                            }
-                                        ))
-                                        .toggleStyle(.checkbox)
-                                        .font(.callout)
-                                        ForEach(section.entries) { entry in
-                                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                                Text("·")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.tertiary)
-                                                    .frame(width: 8, alignment: .center)
-                                                VStack(alignment: .leading, spacing: 0) {
-                                                    Text(entry.rawEvent)
-                                                        .font(.caption)
-                                                        .fontDesign(.monospaced)
-                                                        .foregroundStyle(.secondary)
-                                                    Text(entry.note)
-                                                        .font(.caption2)
-                                                        .foregroundStyle(.tertiary)
-                                                }
-                                            }
-                                            .padding(.leading, 18)
+                    VStack(alignment: .leading, spacing: 5) {
+                        let sections = AgentEventCatalog.sections(for: agent)
+                        if sections.isEmpty {
+                            Text("No configurable notification events for this agent.")
+                                .font(.caption).foregroundStyle(.tertiary)
+                        } else {
+                            ForEach(sections) { section in
+                                let kp = section.keyPath
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Toggle(section.label, isOn: Binding(
+                                        get: {
+                                            (agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs())[keyPath: kp]
+                                        },
+                                        set: { v in
+                                            var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()
+                                            p[keyPath: kp] = v
+                                            ChannelStore.setPrefs(p, for: agent)
+                                            agentNotifPrefs[agent.rawValue] = p
                                         }
+                                    ))
+                                    .toggleStyle(.checkbox)
+                                    .font(.callout)
+                                    ForEach(section.entries) { entry in
+                                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                            Text("·")
+                                                .font(.caption)
+                                                .foregroundStyle(.tertiary)
+                                                .frame(width: 8, alignment: .center)
+                                            VStack(alignment: .leading, spacing: 0) {
+                                                Text(entry.rawEvent)
+                                                    .font(.caption)
+                                                    .fontDesign(.monospaced)
+                                                    .foregroundStyle(.secondary)
+                                                Text(entry.note)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                        .padding(.leading, 18)
                                     }
                                 }
                             }
-                        } else {
-                            Text("Using global notification preferences.")
-                                .font(.caption).foregroundStyle(.tertiary)
                         }
                     }
                 } label: {
@@ -830,22 +812,6 @@ struct ConfigureAgentsViewV2: View {
                     Label("ntfy", systemImage: "paperplane.fill")
                 }
 
-                // Notification event preferences
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        notifPrefToggle("Session completed", $notifPrefs.sessionEnd)
-                        notifPrefToggle("Errors", $notifPrefs.error)
-                        notifPrefToggle("Permission requests", $notifPrefs.permissionNeeded)
-                        notifPrefToggle("Agent responses", $notifPrefs.agentResponse)
-                        Divider()
-                        notifPrefToggle("Session started", $notifPrefs.sessionStart)
-                        notifPrefToggle("Sub-agent activity", $notifPrefs.subagentStart)
-                        notifPrefToggle("Tool usage", $notifPrefs.toolUse)
-                    }
-                } label: {
-                    Label("Notify me when…", systemImage: "bell.badge")
-                }
-
                 // Test result
                 if let (ok, msg) = testResult {
                     HStack {
@@ -1154,18 +1120,6 @@ struct ConfigureAgentsViewV2: View {
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         case .codexCLI:   return "~/.codex/hooks.json"
         }
-    }
-
-    private func notifPrefToggle(_ label: String, _ binding: Binding<Bool>) -> some View {
-        Toggle(label, isOn: Binding(
-            get: { binding.wrappedValue },
-            set: { v in
-                binding.wrappedValue = v
-                ChannelStore.savePrefs(notifPrefs)
-            }
-        ))
-        .toggleStyle(.checkbox)
-        .font(.callout)
     }
 
     private func resultMessage(_ r: Result<Void, Error>, verb: String) -> String {
