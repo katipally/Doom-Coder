@@ -13,14 +13,16 @@ enum IconDownloader {
 
     private static let logger = Logger(subsystem: "com.doomcoder", category: "icons")
 
-    // Maps each CLI/IDE agent to its lobehub filename.
+    // Maps each agent to its lobehub CDN filename (used as refresh/fallback path).
+    // Cursor, Windsurf, and VS Code prefer app-bundle icons; CDN is the fallback
+    // when the app is not installed. VS Code has no lobehub equivalent so it is
+    // omitted — the bundled xcassets icon is the only non-NSWorkspace source.
     private static let cdnFilenames: [TrackedAgent: String] = [
         .claude:     "claudecode-color.png",
         .codexCLI:   "codex-color.png",
         .copilotCLI: "githubcopilot.png",
         .cursor:     "cursor.png",
         .windsurf:   "windsurf.png",
-        .vscode:     "copilot-color.png",
     ]
 
     // Maps agents to their xcassets image names bundled in the app.
