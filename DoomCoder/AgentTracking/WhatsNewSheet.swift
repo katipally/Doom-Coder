@@ -15,7 +15,7 @@ private func featureRow(icon: String, title: String, body: String) -> some View 
     }
 }
 
-// MARK: - v2.3.0 — Session Map, per-agent actors, FM judge, active window
+// MARK: - v2.3.0 — Per-agent actors, FM judge, active window
 
 struct WhatsNewSheet230: View {
     static let defaultsKey = "whats_new_v2_3_0_shown"
@@ -27,11 +27,6 @@ struct WhatsNewSheet230: View {
             Label("What's new in DoomCoder 2.3", systemImage: "sparkles")
                 .font(.title2.bold())
 
-            featureRow(
-                icon: "map.fill",
-                title: "Session Map",
-                body: "A live 2D canvas shows every session, prompt cycle, and tool event across all agents — grouped by project, click any node to inspect its raw payload."
-            )
             featureRow(
                 icon: "slider.horizontal.3",
                 title: "Per-agent processing",
@@ -45,27 +40,22 @@ struct WhatsNewSheet230: View {
             featureRow(
                 icon: "macwindow.on.rectangle",
                 title: "Active Window tracking",
-                body: "Grant Accessibility to let DoomCoder detect which IDE window is frontmost and badge the matching session in the panel and Session Map."
+                body: "Grant Accessibility to let DoomCoder detect which IDE window is frontmost and badge the matching session in the panel."
             )
 
             Divider()
 
             HStack {
-                Button("Open Session Map") {
-                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
-                    SessionMapWindowController.shared.show()
-                    onDismiss()
-                }
-                .buttonStyle(.borderedProminent)
                 Spacer()
                 Button("Got it") {
                     UserDefaults.standard.set(true, forKey: Self.defaultsKey)
                     onDismiss()
                 }
+                .buttonStyle(.borderedProminent)
             }
         }
         .padding(24)
-        .frame(width: 520, height: 460, alignment: .topLeading)
+        .frame(width: 520, alignment: .topLeading)
     }
 }
 

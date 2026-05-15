@@ -14,7 +14,7 @@ final class NotificationDispatcher {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "notify")
     private var lastDispatchAt: [String: Date] = [:]
-    private let dedupeWindow: TimeInterval = 10
+    private let dedupeWindow: TimeInterval = 3
 
     // Cached permission status. Updated by `refreshPermissionStatus()` on
     // launch, on channel-toggle, and when the app becomes active.

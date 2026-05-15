@@ -99,10 +99,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         open.target = self
         menu.addItem(open)
 
-        let map = NSMenuItem(title: "Session Map", action: #selector(openSessionMap), keyEquivalent: "")
-        map.target = self
-        menu.addItem(map)
-
         menu.addItem(.separator())
 
         let configure = NSMenuItem(title: "Configure Agents…", action: #selector(openConfigure), keyEquivalent: "")
@@ -135,11 +131,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func openPanel() {
         FloatingPanelController.shared.recenter()
         FloatingPanelController.shared.show()
-    }
-
-    @objc private func openSessionMap() {
-        NSApp.activate()
-        SessionMapWindowController.shared.show()
     }
 
     @objc private func openConfigure() {

@@ -15,6 +15,12 @@ struct CodexCLITracker: AgentTracker {
 
     static let interactionTools: Set<String> = []
 
+    private static let errorEvents: Set<String> = [
+        "error", "Error", "fatal_error", "runtime_error",
+        "TypeError", "SyntaxError", "ReferenceError",
+        "crash", "Crash", "abort", "Abort",
+    ]
+
     private static let phaseMap: [String: NormalizedEventPhase] = [
         "SessionStart":       .sessionStart,
         "UserPromptSubmit":   .userPrompt,
@@ -33,7 +39,7 @@ struct CodexCLITracker: AgentTracker {
            Self.interactionTools.contains(toolName) {
             phase = .permissionNeeded
         }
-        if envelope.event.lowercased().contains("error") { phase = .error }
+        if Self.errorEvents.contains(envelope.event) { phase = .error }
 
         let sessionId = (payload["session_id"] as? String)
             ?? (payload["conversation_id"] as? String)

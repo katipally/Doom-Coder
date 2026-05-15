@@ -132,18 +132,18 @@ enum AgentEventCatalog {
 
     // MARK: Windsurf Cascade
     // Windsurf has no dedicated sessionStart, error, or sub-agent hooks.
+    // Both post_cascade_response variants map to sessionEnd — Windsurf may
+    // send either, so both must be in this section for correct notifications.
     private static let windsurfSections: [AgentPhaseSection] = [
         .init(id: "sessionEnd", label: "Session completed", keyPath: \.sessionEnd, entries: [
             .init(id: "ws-pcr", rawEvent: "post_cascade_response",
                   note: "Cascade finished responding for this turn"),
+            .init(id: "ws-pcrt", rawEvent: "post_cascade_response_with_transcript",
+                  note: "Cascade replied (includes full conversation transcript)"),
         ]),
         .init(id: "perm", label: "Permission requests", keyPath: \.permissionNeeded, entries: [
             .init(id: "ws-pmcp", rawEvent: "pre_mcp_tool_use",
                   note: "MCP tool requires approval before execution"),
-        ]),
-        .init(id: "agentResp", label: "Agent responses", keyPath: \.agentResponse, entries: [
-            .init(id: "ws-pcrt", rawEvent: "post_cascade_response_with_transcript",
-                  note: "Cascade replied (includes full conversation transcript)"),
         ]),
         .init(id: "toolUse", label: "Tool usage", keyPath: \.toolUse, entries: [
             .init(id: "ws-prc",   rawEvent: "pre_read_code",    note: "About to read source code"),
@@ -219,8 +219,14 @@ enum AgentEventCatalog {
             .init(id: "cx-stop", rawEvent: "Stop", note: "Codex session ended"),
         ]),
         .init(id: "error", label: "Errors", keyPath: \.error, entries: [
-            .init(id: "cx-err", rawEvent: "events whose name contains 'error'",
-                  note: "Any event with 'error' in its name (e.g. PostToolUseError)"),
+            .init(id: "cx-err-e",   rawEvent: "Error",         note: "Generic error event"),
+            .init(id: "cx-err-fe",  rawEvent: "fatal_error",   note: "Unrecoverable fatal error"),
+            .init(id: "cx-err-re",  rawEvent: "runtime_error", note: "Runtime execution error"),
+            .init(id: "cx-err-te",  rawEvent: "TypeError",     note: "Type mismatch error"),
+            .init(id: "cx-err-se",  rawEvent: "SyntaxError",   note: "Invalid syntax error"),
+            .init(id: "cx-err-ref", rawEvent: "ReferenceError",note: "Undefined reference error"),
+            .init(id: "cx-err-cr",  rawEvent: "crash",         note: "Process crash"),
+            .init(id: "cx-err-ab",  rawEvent: "abort",         note: "Abnormal process termination"),
         ]),
         .init(id: "perm", label: "Permission requests", keyPath: \.permissionNeeded, entries: [
             .init(id: "cx-pr",  rawEvent: "PermissionRequest",

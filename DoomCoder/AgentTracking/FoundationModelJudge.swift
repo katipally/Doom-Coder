@@ -54,7 +54,7 @@ actor FoundationModelJudge {
         }
 
         let prevRecent = Array(recent.suffix(maxRecent))
-        Task { [agent, sessionKey, prevRecent, envelope, logger] in
+        Task(priority: .background) { [agent, sessionKey, prevRecent, envelope, logger] in
             do {
                 try await FoundationModelJudge.run(
                     agent: agent,
@@ -99,8 +99,35 @@ actor FoundationModelJudge {
             recentEvents: recentEvents
         )
 
-        logger.debug("FM evaluating \(currentEvent.event, privacy: .public) for \(agent.rawValue, privacy: .public)")
-        _ = try await session.respond(to: prompt)
+        logger.info("[FMJudge] agent=\(agent.rawValue, privacy: .public) event=\(currentEvent.event, privacy: .public) → evaluating")
+        _ = try await withTimeout(seconds: 8, logger: logger, agent: agent, event: currentEvent.event) {
+            _ = try await session.respond(to: prompt)
+        }
+    }
+
+    // MARK: - Timeout helper
+
+    private static func withTimeout(
+        seconds: Double, logger: Logger, agent: TrackedAgent, event: String,
+        body: @escaping @Sendable () async throws -> Void
+    ) async throws {
+        try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                _ = try await body()
+                return true
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                return false
+            }
+            guard let finished = try await group.next() else { group.cancelAll(); return }
+            group.cancelAll()
+            if !finished {
+                logger.warning("[FMJudge] agent=\(agent.rawValue, privacy: .public) event=\(event, privacy: .public) → timed out after \(Int(seconds))s")
+            } else {
+                logger.info("[FMJudge] agent=\(agent.rawValue, privacy: .public) event=\(event, privacy: .public) → done")
+            }
+        }
     }
 
     // MARK: - Adaptive prompt builder
@@ -120,12 +147,13 @@ actor FoundationModelJudge {
             if #available(macOS 26.4, *) {
                 tokens = (try? await model.tokenCount(for: prompt)) ?? 0
             } else {
-                tokens = 0  // tokenCount unavailable; assume prompt fits
+                tokens = prompt.count / 4  // tokenCount unavailable; conservative char/4 estimate
             }
             if tokens <= 3200 || count == 0 {
                 return prompt
             }
         }
+        // Fallback: macOS pre-26.4 or unexpected path — use minimal prompt
         return assemblePrompt(currentPayload: fullPayload, recentEvents: [])
     }
 

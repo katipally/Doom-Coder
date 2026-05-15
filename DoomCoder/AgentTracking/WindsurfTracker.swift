@@ -6,9 +6,9 @@ import Foundation
 //     NOT execution_id (a single turn)
 //   - Tool metadata nested under payload["tool_info"]
 //   - Both post_cascade_response and post_cascade_response_with_transcript
-//     fire at end-of-turn. We treat the former as `.sessionEnd` (so a
-//     "done" notification fires) and the latter stays as `.agentResponse`
-//     so it doesn't generate a duplicate notification.
+//     fire at end-of-turn. Both map to `.sessionEnd` so a "done" notification
+//     fires regardless of which variant Windsurf sends. Users can disable
+//     either event independently via per-event notification toggles.
 //   - pre_mcp_tool_use can require user approval per Windsurf docs — we
 //     map it to `.permissionNeeded` for safety. If the user has rule-
 //     approved an MCP tool, no UI surfaces; the notification toggle in
@@ -29,8 +29,8 @@ struct WindsurfTracker: AgentTracker {
         "pre_mcp_tool_use":                        .permissionNeeded,
         "post_mcp_tool_use":                       .toolEnd,
         "pre_user_prompt":                         .userPrompt,
-        "post_cascade_response":                   .agentResponse,
-        "post_cascade_response_with_transcript":   .agentResponse,
+        "post_cascade_response":                   .sessionEnd,
+        "post_cascade_response_with_transcript":   .sessionEnd,
         "post_setup_worktree":                     .other,
     ]
 
@@ -61,15 +61,9 @@ struct WindsurfTracker: AgentTracker {
         let tool = toolName(event: envelope.event, toolInfo: toolInfo)
         let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
-        // post_cascade_response → sessionEnd ("done" notification).
-        // post_cascade_response_with_transcript stays as agentResponse to
-        // prevent a duplicate "done" alert.
-        let effectivePhase: NormalizedEventPhase =
-            (envelope.event == "post_cascade_response") ? .sessionEnd : phase
-
         return NormalizedHookEvent(
             agent: agent,
-            phase: effectivePhase,
+            phase: phase,
             rawEvent: envelope.event,
             sessionId: sessionId,
             toolName: tool,
