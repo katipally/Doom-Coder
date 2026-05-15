@@ -108,6 +108,12 @@ struct ChannelStore {
     /// intentionally OFF to prevent spam from Claude's Notification hooks.
     private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v7"
 
+    /// v8: patches Cursor's agentResponse=true without wiping other prefs.
+    /// afterAgentResponse is Cursor's primary "I finished responding" signal —
+    /// unlike Claude which has explicit Notification hooks, Cursor relies on
+    /// afterAgentResponse to signal turn completion.
+    private static let prefsMigrationKeyV8 = "doomcoder.notification.prefs.migrated.v8"
+
     private static let perAgentPrefsKey = "doomcoder.notification.prefs.perAgent.v1"
 
     /// Run once at launch. If this build's migration flag hasn't been set,
@@ -120,6 +126,23 @@ struct ChannelStore {
         savePrefs(NotificationPrefs())
         ud.removeObject(forKey: perAgentPrefsKey)
         ud.set(true, forKey: prefsMigrationKey)
+    }
+
+    /// Patches Cursor-specific defaults without wiping the full prefs store.
+    /// Only touches Cursor prefs and only if the user hasn't manually set a
+    /// per-event override for afterAgentResponse.
+    static func migrateCursorAgentResponseIfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: prefsMigrationKeyV8) else { return }
+        var map = loadPerAgentPrefs()
+        var cursorPrefs = map["cursor"] ?? NotificationPrefs()
+        // Only upgrade the phase-level bool; leave per-event overrides intact.
+        if cursorPrefs.enabledEvents["afterAgentResponse"] == nil {
+            cursorPrefs.agentResponse = true
+        }
+        map["cursor"] = cursorPrefs
+        savePerAgentPrefs(map)
+        ud.set(true, forKey: prefsMigrationKeyV8)
     }
 
     static func loadPrefs() -> NotificationPrefs {
@@ -173,13 +196,23 @@ struct ChannelStore {
     }
 
     /// Ensures every known agent has an explicit NotificationPrefs entry using
-    /// the global defaults. Called at launch so the per-agent UI always binds
-    /// to real stored prefs instead of falling back to the global.
+    /// curated per-agent defaults. Called at launch so the per-agent UI always
+    /// binds to real stored prefs instead of falling back to the global.
     static func initializeAllAgentPrefsIfNeeded() {
         var map = loadPerAgentPrefs()
         var changed = false
         for agent in TrackedAgent.allCases where map[agent.rawValue] == nil {
-            map[agent.rawValue] = NotificationPrefs()
+            switch agent {
+            case .cursor:
+                // afterAgentResponse is Cursor's primary turn-completion signal.
+                // Enable agentResponse so users get a notification when Cursor
+                // finishes responding — unlike Claude which has explicit hooks.
+                var prefs = NotificationPrefs()
+                prefs.agentResponse = true
+                map[agent.rawValue] = prefs
+            default:
+                map[agent.rawValue] = NotificationPrefs()
+            }
             changed = true
         }
         if changed { savePerAgentPrefs(map) }

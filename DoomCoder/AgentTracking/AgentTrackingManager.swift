@@ -254,13 +254,12 @@ final class AgentTrackingManager {
         sessions[sessionKey] = s
         eventSequence &+= 1
 
-        // Suppress sessionEnd when the agent PID is already dead (user quit
-        // before the final Stop hook arrived). Timeline entry is still recorded.
-        let isQuitInitiatedEnd = normalized.phase == .sessionEnd
-            && !PIDLiveness.isAlive(pid_t(envelope.pid))
+        // Terminal hooks (sessionEnd / stop) fire as part of the agent's
+        // shutdown sequence — the process exits immediately after sending the
+        // hook, so a PID-liveness check would always suppress them. Rely on
+        // the session-eviction logic for stale/phantom cleanup instead.
         let shouldNotify = NotificationPolicy.isNotifiable(agent: normalized.agent, rawEvent: normalized.rawEvent, phase: normalized.phase)
-            && !isQuitInitiatedEnd
-        logger.info("apply agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
+        logger.info("apply agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify)")
         if shouldNotify {
             NotificationDispatcher.shared.dispatch(.init(
                 sessionKey: sessionKey, agent: normalized.agent,
