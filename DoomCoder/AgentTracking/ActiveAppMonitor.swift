@@ -44,8 +44,10 @@ final class ActiveAppMonitor {
     private let logger = Logger(subsystem: "com.doomcoder", category: "activemonitor")
     private var activationObserver: (any NSObjectProtocol)?
 
-    // Bundle IDs we recognize as IDE processes
-    static let bundleToAgent: [String: TrackedAgent] = [
+    // Bundle IDs we recognize as IDE processes.
+    // nonisolated: [String: TrackedAgent] is Sendable, so a plain nonisolated let
+    // is sufficient to allow access from Sendable closures without actor isolation.
+    nonisolated static let bundleToAgent: [String: TrackedAgent] = [
         "com.todesktop.230313mzl4w4u92":  .cursor,
         "com.microsoft.VSCode":            .vscode,
         "com.microsoft.VSCodeInsiders":    .vscode,
