@@ -196,11 +196,21 @@ final class NotificationDispatcher {
     private func titleFor(_ ev: Event) -> String {
         let name = ev.agent.displayName
         switch ev.phase {
-        case .sessionStart:                 return "\(name) · started"
-        case .sessionEnd:                   return "\(name) · done"
-        case .error, .toolError:            return "\(name) · failed"
-        case .permissionNeeded:             return "\(name) · needs you"
-        default:                            return name
+        case .sessionStart:    return "\(name) · started"
+        case .sessionEnd:      return "\(name) · done"
+        case .agentResponse:   return "\(name) · replied"
+        case .error:           return "\(name) · error"
+        case .toolError:       return "\(name) · tool failed"
+        case .permissionNeeded:return "\(name) · needs you"
+        case .subagentStart:   return "\(name) · sub-agent started"
+        case .subagentEnd:     return "\(name) · sub-agent done"
+        case .toolStart:       return "\(name) · running"
+        case .toolEnd:         return "\(name) · tool done"
+        case .fileChanged:     return "\(name) · edited a file"
+        case .userPrompt:      return "\(name) · prompt received"
+        case .other:
+            // Use raw event name to produce a readable label when possible.
+            return "\(name) · \(readableEventLabel(ev.event))"
         }
     }
 
@@ -215,8 +225,6 @@ final class NotificationDispatcher {
             return cwdLabel.map { "Started in \($0)" } ?? "Started"
 
         case .sessionEnd:
-            // Prefer "finished editing <file>" when a recent file edit is known,
-            // else "finished using <tool>", else just duration.
             if let tool = lastTool, !tool.isEmpty {
                 return duration.map { "Finished using \(tool) · \($0)" } ?? "Finished using \(tool)"
             }
@@ -225,20 +233,108 @@ final class NotificationDispatcher {
             }
             return duration.map { "Finished · \($0)" } ?? "Finished"
 
-        case .error, .toolError:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Failed in \(tool) · \($0)" } ?? "Failed in \(tool)"
+        case .agentResponse:
+            if let cwd = cwdLabel {
+                return duration.map { "Replied in \(cwd) · \($0)" } ?? "Replied in \(cwd)"
             }
-            return duration.map { "Failed · \($0)" } ?? "Failed"
+            return duration.map { "Replied · \($0)" } ?? "Replied"
+
+        case .error:
+            if let tool = lastTool, !tool.isEmpty {
+                return duration.map { "Error in \(tool) · \($0)" } ?? "Error in \(tool)"
+            }
+            return duration.map { "Error · \($0)" } ?? "An error occurred"
+
+        case .toolError:
+            if let tool = lastTool, !tool.isEmpty {
+                return duration.map { "Failed: \(tool) · \($0)" } ?? "Failed: \(tool)"
+            }
+            return duration.map { "Tool failed · \($0)" } ?? "A tool call failed"
 
         case .permissionNeeded:
             if let tool = lastTool, !tool.isEmpty {
-                return "Waiting for your approval · \(tool)"
+                return "Waiting for approval · \(tool)"
             }
             return "Waiting for your approval"
 
-        default:
+        case .subagentStart:
+            return cwdLabel.map { "Started in \($0)" } ?? "Sub-agent launched"
+
+        case .subagentEnd:
+            return duration.map { "Finished · \($0)" } ?? "Sub-agent completed"
+
+        case .toolStart:
+            if let tool = lastTool, !tool.isEmpty { return "Running \(tool)" }
+            return "Invoking tool"
+
+        case .toolEnd:
+            if let tool = lastTool, !tool.isEmpty {
+                return duration.map { "Completed \(tool) · \($0)" } ?? "Completed \(tool)"
+            }
+            return "Tool call completed"
+
+        case .fileChanged:
+            return cwdLabel.map { "In \($0)" } ?? "File was modified"
+
+        case .userPrompt:
+            return cwdLabel.map { "In \($0)" } ?? "Prompt submitted"
+
+        case .other:
+            if let cwd = cwdLabel { return cwd }
             return ev.agent.displayName
+        }
+    }
+
+    /// Converts a raw hook event name to a short readable label for use in titles.
+    /// e.g. "afterAgentThought" → "thinking", "preCompact" → "compacting context"
+    private func readableEventLabel(_ rawEvent: String) -> String {
+        switch rawEvent {
+        // Cursor
+        case "afterAgentThought":     return "thinking"
+        case "preCompact",
+             "PreCompact":            return "compacting context"
+        case "beforeSubmitPrompt":    return "submitting prompt"
+        case "beforeTabFileRead":     return "reading file"
+        case "afterTabFileEdit":      return "edited file"
+        // Claude
+        case "Notification":          return "notification"
+        case "Elicitation":          return "waiting for input"
+        case "ElicitationResult":    return "input received"
+        case "TaskCreated":          return "task created"
+        case "TaskCompleted":        return "task completed"
+        case "PostCompact":          return "context compacted"
+        case "ConfigChange":         return "config changed"
+        case "InstructionsLoaded":   return "instructions loaded"
+        case "FileChanged":          return "file changed"
+        case "CwdChanged":           return "directory changed"
+        case "WorktreeCreate":       return "worktree created"
+        case "WorktreeRemove":       return "worktree removed"
+        case "Setup":                return "setting up"
+        case "UserPromptExpansion":  return "expanding prompt"
+        case "PostToolBatch":        return "tool batch done"
+        case "TeammateIdle":         return "teammate idle"
+        // Windsurf
+        case "pre_user_prompt":                      return "prompt incoming"
+        case "post_setup_worktree":                  return "worktree ready"
+        case "pre_read_code":                        return "reading code"
+        case "post_read_code":                       return "code read"
+        case "pre_write_code":                       return "writing code"
+        case "post_write_code":                      return "code written"
+        case "pre_run_command":                      return "running command"
+        case "post_run_command":                     return "command done"
+        case "post_mcp_tool_use":                    return "MCP tool done"
+        // CopilotCLI
+        case "userPromptSubmitted":                  return "prompt received"
+        case "errorOccurred":                        return "error"
+        // Generic fallback: camelCase/snake_case → spaced words
+        default:
+            let spaced = rawEvent
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "([A-Z])", with: " $1",
+                                      options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+            return spaced.isEmpty ? rawEvent : spaced
         }
     }
 
