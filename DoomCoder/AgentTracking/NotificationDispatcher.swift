@@ -216,72 +216,19 @@ final class NotificationDispatcher {
 
     private func bodyFor(_ ev: Event) -> String {
         let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
-        let cwdLabel = session.flatMap { shortCwd($0.cwd) }
-        let lastTool = session?.lastTool
-        let duration = sessionDuration(for: ev.sessionKey)
+        let tool   = session?.lastTool.flatMap { $0.isEmpty ? nil : $0 }
+        let folder = session.flatMap { shortCwd($0.cwd) }
 
+        // Body = tool name when available, else project folder, else empty.
+        // Keep it to one short token so the banner is scannable at a glance.
         switch ev.phase {
-        case .sessionStart:
-            return cwdLabel.map { "Started in \($0)" } ?? "Started"
-
-        case .sessionEnd:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Finished using \(tool) · \($0)" } ?? "Finished using \(tool)"
-            }
-            if let cwd = cwdLabel {
-                return duration.map { "Finished in \(cwd) · \($0)" } ?? "Finished in \(cwd)"
-            }
-            return duration.map { "Finished · \($0)" } ?? "Finished"
-
-        case .agentResponse:
-            if let cwd = cwdLabel {
-                return duration.map { "Replied in \(cwd) · \($0)" } ?? "Replied in \(cwd)"
-            }
-            return duration.map { "Replied · \($0)" } ?? "Replied"
-
-        case .error:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Error in \(tool) · \($0)" } ?? "Error in \(tool)"
-            }
-            return duration.map { "Error · \($0)" } ?? "An error occurred"
-
-        case .toolError:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Failed: \(tool) · \($0)" } ?? "Failed: \(tool)"
-            }
-            return duration.map { "Tool failed · \($0)" } ?? "A tool call failed"
-
-        case .permissionNeeded:
-            if let tool = lastTool, !tool.isEmpty {
-                return "Waiting for approval · \(tool)"
-            }
-            return "Waiting for your approval"
-
-        case .subagentStart:
-            return cwdLabel.map { "Started in \($0)" } ?? "Sub-agent launched"
-
-        case .subagentEnd:
-            return duration.map { "Finished · \($0)" } ?? "Sub-agent completed"
-
-        case .toolStart:
-            if let tool = lastTool, !tool.isEmpty { return "Running \(tool)" }
-            return "Invoking tool"
-
-        case .toolEnd:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Completed \(tool) · \($0)" } ?? "Completed \(tool)"
-            }
-            return "Tool call completed"
-
-        case .fileChanged:
-            return cwdLabel.map { "In \($0)" } ?? "File was modified"
-
-        case .userPrompt:
-            return cwdLabel.map { "In \($0)" } ?? "Prompt submitted"
-
-        case .other:
-            if let cwd = cwdLabel { return cwd }
-            return ev.agent.displayName
+        case .toolStart, .toolEnd, .toolError, .error, .permissionNeeded:
+            return tool ?? folder ?? ""
+        case .sessionStart, .sessionEnd:
+            return folder ?? ""
+        case .agentResponse, .userPrompt, .subagentStart, .subagentEnd,
+             .fileChanged, .other:
+            return tool ?? folder ?? ""
         }
     }
 
@@ -344,19 +291,6 @@ final class NotificationDispatcher {
         guard !trimmed.isEmpty else { return nil }
         let last = (trimmed as NSString).lastPathComponent
         return last.isEmpty ? nil : last
-    }
-
-    /// Looks up the session in AgentTrackingManager and formats elapsed time since start.
-    private func sessionDuration(for sessionKey: String) -> String? {
-        guard let session = AgentTrackingManager.shared.sessions[sessionKey] else { return nil }
-        let elapsed = Date().timeIntervalSince(session.startedAt)
-        guard elapsed > 1 else { return nil }
-        let minutes = Int(elapsed) / 60
-        let seconds = Int(elapsed) % 60
-        if minutes > 0 {
-            return "\(minutes)m \(seconds)s"
-        }
-        return "\(seconds)s"
     }
 
     // MARK: - macOS local
