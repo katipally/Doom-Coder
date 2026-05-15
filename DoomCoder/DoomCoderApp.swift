@@ -54,6 +54,8 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         ChannelStore.migratePrefsIfNeeded()
         // v8: patch Cursor's agentResponse=true without wiping other prefs.
         ChannelStore.migrateCursorAgentResponseIfNeeded()
+        // v9: seed per-agent enabledEvents with raw-hook defaults (non-destructive).
+        ChannelStore.migrateToRawEventPrefsIfNeeded()
         // Seed per-agent prefs for any agent that doesn't yet have explicit
         // stored prefs, so the per-agent UI always shows real toggles.
         ChannelStore.initializeAllAgentPrefsIfNeeded()

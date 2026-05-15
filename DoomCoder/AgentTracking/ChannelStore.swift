@@ -41,10 +41,12 @@ struct ChannelStore {
             }
         }
 
-        /// Checks a per-raw-event override first; falls back to phase-level bool.
+        /// Notification decision: raw event name is the sole key.
+        /// Returns enabledEvents[rawEvent] if set; false otherwise.
+        /// Phase-level bools are no longer consulted so users get clean,
+        /// per-hook control with no implicit grouping.
         func shouldNotify(rawEvent: String, phase: String) -> Bool {
-            if let override = enabledEvents[rawEvent] { return override }
-            return shouldNotify(phase: phase)
+            return enabledEvents[rawEvent] ?? false
         }
     }
 
@@ -114,6 +116,11 @@ struct ChannelStore {
     /// afterAgentResponse to signal turn completion.
     private static let prefsMigrationKeyV8 = "doomcoder.notification.prefs.migrated.v8"
 
+    /// v9: migrates all per-agent prefs to raw-event-level enabledEvents dicts.
+    /// For any agent whose enabledEvents is empty, seeds it with per-agent defaults.
+    /// Non-destructive — agents with existing enabledEvents entries are unchanged.
+    private static let prefsMigrationKeyV9 = "doomcoder.notification.prefs.migrated.v9"
+
     private static let perAgentPrefsKey = "doomcoder.notification.prefs.perAgent.v1"
 
     /// Run once at launch. If this build's migration flag hasn't been set,
@@ -143,6 +150,70 @@ struct ChannelStore {
         map["cursor"] = cursorPrefs
         savePerAgentPrefs(map)
         ud.set(true, forKey: prefsMigrationKeyV8)
+    }
+
+    /// Sensible per-agent defaults for the raw-event enabledEvents dict.
+    /// Only events that provide meaningful signal without excessive noise are enabled.
+    static func defaultEnabledEvents(for agent: TrackedAgent) -> [String: Bool] {
+        switch agent {
+        case .cursor:
+            return [
+                "stop": true,
+                "afterAgentResponse": true,
+                "postToolUseFailure": true,
+                "sessionEnd": true,
+            ]
+        case .claude:
+            return [
+                "SessionEnd": true,
+                "Stop": true,
+                "TaskCompleted": true,
+                "StopFailure": true,
+                "PostToolUseFailure": true,
+                "PermissionRequest": true,
+                "Notification": true,
+                "Elicitation": true,
+            ]
+        case .windsurf:
+            return [
+                "post_cascade_response": true,
+                "post_cascade_response_with_transcript": true,
+                "pre_mcp_tool_use": true,
+            ]
+        case .vscode:
+            return [
+                "Stop": true,
+                "PostToolUseFailure": true,
+                "PermissionRequest": true,
+            ]
+        case .copilotCLI:
+            return [
+                "sessionEnd": true,
+                "errorOccurred": true,
+            ]
+        case .codexCLI:
+            return [
+                "Stop": true,
+                "PermissionRequest": true,
+            ]
+        }
+    }
+
+    /// Seeds enabledEvents for any agent that has no raw-event overrides yet.
+    /// Non-destructive — agents with existing enabledEvents entries are unchanged.
+    static func migrateToRawEventPrefsIfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: prefsMigrationKeyV9) else { return }
+        var map = loadPerAgentPrefs()
+        for agent in TrackedAgent.allCases {
+            var prefs = map[agent.rawValue] ?? NotificationPrefs()
+            if prefs.enabledEvents.isEmpty {
+                prefs.enabledEvents = defaultEnabledEvents(for: agent)
+                map[agent.rawValue] = prefs
+            }
+        }
+        savePerAgentPrefs(map)
+        ud.set(true, forKey: prefsMigrationKeyV9)
     }
 
     static func loadPrefs() -> NotificationPrefs {
@@ -202,17 +273,9 @@ struct ChannelStore {
         var map = loadPerAgentPrefs()
         var changed = false
         for agent in TrackedAgent.allCases where map[agent.rawValue] == nil {
-            switch agent {
-            case .cursor:
-                // afterAgentResponse is Cursor's primary turn-completion signal.
-                // Enable agentResponse so users get a notification when Cursor
-                // finishes responding — unlike Claude which has explicit hooks.
-                var prefs = NotificationPrefs()
-                prefs.agentResponse = true
-                map[agent.rawValue] = prefs
-            default:
-                map[agent.rawValue] = NotificationPrefs()
-            }
+            var prefs = NotificationPrefs()
+            prefs.enabledEvents = defaultEnabledEvents(for: agent)
+            map[agent.rawValue] = prefs
             changed = true
         }
         if changed { savePerAgentPrefs(map) }

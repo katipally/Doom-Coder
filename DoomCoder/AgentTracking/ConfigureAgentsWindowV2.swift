@@ -402,9 +402,8 @@ struct ConfigureAgentsViewV2: View {
                                         Toggle(isOn: Binding(
                                             get: {
                                                 let p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()
-                                                // Per-event override first; fall back to phase-level bool.
-                                                return p.enabledEvents[entry.rawEvent]
-                                                    ?? p[keyPath: section.keyPath]
+                                                // Raw event name is the sole key — no phase-level fallback.
+                                                return p.enabledEvents[entry.rawEvent] ?? false
                                             },
                                             set: { v in
                                                 var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()

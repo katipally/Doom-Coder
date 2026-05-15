@@ -557,7 +557,8 @@ struct AgentInstallerV2 {
 
     static let vscodeEvents = [
         "SessionStart", "UserPromptSubmit",
-        "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PostToolUseFailure",
+        "PermissionRequest",
         "PreCompact",
         "Stop", "SubagentStart", "SubagentStop"
     ]
