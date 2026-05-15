@@ -386,9 +386,17 @@ struct AgentInstallerV2 {
         stripDcHookEntries(&root, agentToken: "vscode")
         pruneEmptyContainers(&root)
 
+        // VS Code supports the same matcher-group format as Claude.
+        // Using it here gives us future matcher-based filtering and keeps
+        // the hook structure identical across both agents.
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
         for event in vscodeEvents {
-            let entry: [String: Any] = ["type": "command", "command": cmdFor("vscode", event)]
+            let entry: [String: Any] = [
+                "matcher": "*",
+                "hooks": [
+                    ["type": "command", "command": cmdFor("vscode", event)] as [String: Any]
+                ]
+            ]
             var arr = (hooks[event] as? [[String: Any]]) ?? []
             arr.append(entry)
             hooks[event] = arr
@@ -613,12 +621,21 @@ struct AgentInstallerV2 {
         "beforeTabFileRead", "afterTabFileEdit"
     ]
 
+    // VS Code Copilot uses the same hook format and event namespace as Claude Code.
+    // We register all Claude events so VS Code captures them now (8 currently fire)
+    // and automatically gains new ones as VS Code expands its hook support.
     static let vscodeEvents = [
-        "SessionStart", "UserPromptSubmit",
-        "PreToolUse", "PostToolUse", "PostToolUseFailure",
-        "PermissionRequest",
-        "PreCompact",
-        "Stop", "SubagentStart", "SubagentStop"
+        "SessionStart", "Setup", "SessionEnd", "UserPromptSubmit", "UserPromptExpansion",
+        "PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch",
+        "PermissionRequest", "PermissionDenied",
+        "Notification", "Stop", "StopFailure",
+        "SubagentStart", "SubagentStop",
+        "TaskCreated", "TaskCompleted",
+        "TeammateIdle",
+        "PreCompact", "PostCompact",
+        "FileChanged", "CwdChanged", "ConfigChange",
+        "InstructionsLoaded", "Elicitation", "ElicitationResult",
+        "WorktreeCreate", "WorktreeRemove"
     ]
 
     static let copilotCLIEvents = [

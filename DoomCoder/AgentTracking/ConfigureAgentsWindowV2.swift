@@ -957,9 +957,9 @@ struct ConfigureAgentsViewV2: View {
             list.append(Prereq(label: "~/.cursor/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Cursor first"))
             list.append(Prereq(label: "Cursor 0.45+ with Hooks enabled", met: detections[.cursor]?.installed == true, fix: "Enable Hooks in Settings → Beta"))
         case .vscode:
-            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
-            list.append(Prereq(label: "~/.claude/ exists (shared config)", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `claude` once or create ~/.claude/ manually"))
-            list.append(Prereq(label: "VS Code + Copilot Chat extension", met: true, fix: nil))
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".copilot/hooks")
+            list.append(Prereq(label: "~/.copilot/hooks/ directory", met: FileManager.default.fileExists(atPath: dir.path), fix: "Click Install — DoomCoder creates it automatically"))
+            list.append(Prereq(label: "VS Code + GitHub Copilot Chat extension", met: true, fix: nil))
         case .copilotCLI:
             list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm, brew, or gh extension"))
             list.append(Prereq(label: "At least 1 project folder configured", met: !cliFolders.isEmpty, fix: "Click 'Add folder' below"))
@@ -1078,13 +1078,15 @@ struct ConfigureAgentsViewV2: View {
         case .vscode:
             return [
                 "VS Code with the GitHub Copilot Chat extension installed.",
-                "Hooks live in ~/.copilot/hooks/hooks.json (shared with Copilot CLI).",
-                "Reload the VS Code window after install for hooks to register."
+                "Hooks written to ~/.copilot/hooks/hooks.json in matcher-group format — identical to Claude Code.",
+                "All \(AgentInstallerV2.vscodeEvents.count) Claude Code events registered: VS Code currently fires 8 natively, more as support expands (hooks are in Preview).",
+                "Reload VS Code window after install for hooks to activate."
             ]
         case .copilotCLI:
             return [
                 "GitHub Copilot CLI installed (npm-global, gh-extension, brew, or volta/n).",
-                "User-level hooks installed to ~/.copilot/hooks/hooks.json automatically.",
+                "\(AgentInstallerV2.copilotCLIEvents.count) events tracked: sessionStart/End, userPromptSubmitted, preToolUse, postToolUse, errorOccurred.",
+                "User-level hooks auto-installed to ~/.copilot/hooks/hooks.json (coexist with VS Code via camelCase keys).",
                 "For per-project hooks, click 'Add folder' and pick its repo root — creates .github/hooks/doomcoder.json."
             ]
         case .windsurf:
@@ -1106,7 +1108,7 @@ struct ConfigureAgentsViewV2: View {
         switch agent {
         case .claude:     return "Hooks in ~/.claude/settings.json (nested matcher format)"
         case .cursor:     return "Hooks in ~/.cursor/hooks.json (version: 1, command only)"
-        case .vscode:     return "Hooks in ~/.copilot/hooks/hooks.json (PascalCase events)"
+        case .vscode:     return "Hooks in ~/.copilot/hooks/hooks.json (matcher-group, \(AgentInstallerV2.vscodeEvents.count) events — all Claude Code events)"
         case .copilotCLI: return "User-level ~/.copilot/hooks/hooks.json + per-project .github/hooks/doomcoder.json"
         case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
         case .codexCLI:   return "Hooks in ~/.codex/hooks.json + codex_hooks feature flag"

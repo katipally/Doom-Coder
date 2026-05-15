@@ -1,12 +1,13 @@
 import Foundation
 
 // VS Code Copilot tracker. Owns the full VS Code hook surface:
-//   - 8 native events (PascalCase, matcher-group style)
-//   - VS Code shares ~/.claude/settings.json with Claude — dc-hook's
-//     `vscode` agent token disambiguates at envelope time, so this
-//     tracker only ever receives true VS Code events.
+//   - All 29 Claude Code events (PascalCase, matcher-group style)
+//   - VS Code currently fires 8 events natively; additional events are
+//     registered so DoomCoder automatically captures them as VS Code
+//     expands its hook support (it's still in Preview).
+//   - Hooks live at ~/.copilot/hooks/hooks.json — same file as Copilot CLI
+//     user-level hooks, which coexist via case-sensitive camelCase keys.
 //   - Session identity: sessionId → session_id → pid-N
-//   - VS Code-specific interaction tools cover Quick Pick / Input Box.
 //
 // Ref: Ref/VScode-agent-hooks.md
 
@@ -21,17 +22,44 @@ struct VSCodeTracker: AgentTracker {
     ]
 
     private static let phaseMap: [String: NormalizedEventPhase] = [
-        "SessionStart":       .sessionStart,
-        "SessionEnd":         .sessionEnd,
-        "UserPromptSubmit":   .userPrompt,
-        "PreToolUse":         .toolStart,
-        "PostToolUse":        .toolEnd,
-        "PostToolUseFailure": .toolError,
-        "PermissionRequest":  .permissionNeeded,
-        "Stop":               .sessionEnd,
-        "SubagentStart":      .subagentStart,
-        "SubagentStop":       .subagentEnd,
-        "PreCompact":         .other,
+        // Session lifecycle
+        "SessionStart":        .sessionStart,
+        "Setup":               .sessionStart,
+        "SessionEnd":          .sessionEnd,
+        "Stop":                .sessionEnd,
+        "StopFailure":         .error,
+        // Prompts
+        "UserPromptSubmit":    .userPrompt,
+        "UserPromptExpansion": .userPrompt,
+        // Tools
+        "PreToolUse":          .toolStart,
+        "PostToolUse":         .toolEnd,
+        "PostToolUseFailure":  .toolError,
+        "PostToolBatch":       .toolEnd,
+        // Permissions & elicitation
+        "PermissionRequest":   .permissionNeeded,
+        "PermissionDenied":    .permissionNeeded,
+        "Elicitation":         .permissionNeeded,
+        "ElicitationResult":   .other,
+        // Notifications
+        "Notification":        .agentResponse,
+        // Sub-agents
+        "SubagentStart":       .subagentStart,
+        "SubagentStop":        .subagentEnd,
+        "TeammateIdle":        .other,
+        // Tasks
+        "TaskCreated":         .other,
+        "TaskCompleted":       .other,
+        // Context & config
+        "PreCompact":          .other,
+        "PostCompact":         .other,
+        "FileChanged":         .fileChanged,
+        "CwdChanged":          .other,
+        "ConfigChange":        .other,
+        "InstructionsLoaded":  .other,
+        // Setup
+        "WorktreeCreate":      .other,
+        "WorktreeRemove":      .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent {

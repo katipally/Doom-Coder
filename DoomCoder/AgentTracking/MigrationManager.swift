@@ -7,6 +7,7 @@ enum MigrationManager {
     private static let logger = Logger(subsystem: "com.doomcoder", category: "migration")
     private static let migratedKey = "doomcoder.migration.v1_to_v2.done"
     private static let migratedHookShKey = "doomcoder.migration.hooksh.done"
+    private static let migratedVSCodeFullEventsKey = "doomcoder.migration.vscode_full_events.done"
 
     /// Check if migration is needed. Returns list of affected agents.
     static func checkNeeded() -> [TrackedAgent] {
@@ -86,8 +87,12 @@ enum MigrationManager {
                 _ = AgentInstallerV2.install(.copilotCLI)
             }
         }
-        UserDefaults.standard.set(true, forKey: migratedHookShKey)
-        logger.info("hook.sh migration complete")
+        // UserDefaults.set() posts NSUserDefaultsDidChangeNotification which is
+        // observed by @MainActor components — must be delivered on the main thread.
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(true, forKey: migratedHookShKey)
+            logger.info("hook.sh migration complete")
+        }
     }
 
     /// Run migration: backup old configs, strip legacy entries, install v2 hooks.
@@ -129,8 +134,34 @@ enum MigrationManager {
             }
         }
 
-        UserDefaults.standard.set(true, forKey: migratedKey)
-        logger.info("Migration complete")
+        // UserDefaults.set() must be called on the main thread (posts NSNotification).
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(true, forKey: migratedKey)
+            logger.info("Migration complete")
+        }
+    }
+
+    /// Returns true if the VS Code hook file has fewer events than the current full set,
+    /// meaning it was installed before we expanded to all 29 Claude Code events.
+    static func needsVSCodeFullEventsMigration() -> Bool {
+        guard !UserDefaults.standard.bool(forKey: migratedVSCodeFullEventsKey) else { return false }
+        let path = AgentInstallerV2.copilotUserHooksPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let text = String(data: data, encoding: .utf8)
+        else { return false }
+        // If any new event is missing, we need to re-install.
+        return AgentInstallerV2.vscodeEvents.contains { !text.contains($0) }
+    }
+
+    /// Re-install VS Code hooks with the full 29-event set, then mark done.
+    static func migrateVSCodeFullEvents() {
+        if AgentInstallerV2.isInstalled(.vscode) {
+            _ = AgentInstallerV2.install(.vscode)
+        }
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(true, forKey: migratedVSCodeFullEventsKey)
+            logger.info("VS Code full-events migration complete")
+        }
     }
 
     static func markDone() {

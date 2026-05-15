@@ -184,33 +184,59 @@ enum AgentEventCatalog {
     ]
 
     // MARK: VS Code Copilot Chat
-    // Events match AgentInstallerV2.vscodeEvents (SessionStart, UserPromptSubmit,
-    // PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest,
-    // PreCompact, Stop, SubagentStart, SubagentStop).
-    // Note: VS Code does not fire a separate SessionEnd event; Stop covers session end.
+    // All 29 events mirror AgentInstallerV2.vscodeEvents (identical to Claude Code).
+    // VS Code currently fires 8 events natively (SessionStart, UserPromptSubmit,
+    // PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, Stop).
+    // The remaining events are registered so DoomCoder automatically captures them
+    // as VS Code expands its hook support (the feature is still in Preview).
     private static let vscodeSections: [AgentPhaseSection] = [
         .init(id: "session", label: "Session", entries: [
-            .init(id: "vs-ss",   rawEvent: "SessionStart", note: "New Copilot Chat agent session began"),
-            .init(id: "vs-stop", rawEvent: "Stop",         note: "Agent session ended"),
+            .init(id: "vs-ss",    rawEvent: "SessionStart",  note: "New VS Code Copilot session began"),
+            .init(id: "vs-setup", rawEvent: "Setup",         note: "Agent environment initialized"),
+            .init(id: "vs-se",    rawEvent: "SessionEnd",    note: "Session finished normally"),
+            .init(id: "vs-stop",  rawEvent: "Stop",          note: "Agent stopped — session ended"),
+            .init(id: "vs-sf",    rawEvent: "StopFailure",   note: "Fatal crash — session could not recover"),
+        ]),
+        .init(id: "tasks", label: "Tasks", entries: [
+            .init(id: "vs-tcr", rawEvent: "TaskCreated",   note: "Background sub-task created"),
+            .init(id: "vs-tc",  rawEvent: "TaskCompleted", note: "Background sub-task finished"),
+        ]),
+        .init(id: "notification", label: "Notifications", entries: [
+            .init(id: "vs-notif", rawEvent: "Notification",
+                  note: "Copilot sent a message, status update, or alert"),
+        ]),
+        .init(id: "prompt", label: "User prompts", entries: [
+            .init(id: "vs-ups", rawEvent: "UserPromptSubmit",    note: "You submitted a message"),
+            .init(id: "vs-upe", rawEvent: "UserPromptExpansion", note: "Prompt was expanded with context"),
         ]),
         .init(id: "tools", label: "Tool use", entries: [
-            .init(id: "vs-ptu",   rawEvent: "PreToolUse",         note: "About to use a tool"),
+            .init(id: "vs-ptu",   rawEvent: "PreToolUse",         note: "About to invoke a tool (Bash, Edit, Read…)"),
             .init(id: "vs-postu", rawEvent: "PostToolUse",        note: "Tool call completed"),
-            .init(id: "vs-ptuf",  rawEvent: "PostToolUseFailure", note: "A tool call failed"),
+            .init(id: "vs-ptuf",  rawEvent: "PostToolUseFailure", note: "Tool execution returned an error"),
+            .init(id: "vs-ptb",   rawEvent: "PostToolBatch",      note: "Batch of tool calls completed"),
         ]),
         .init(id: "perm", label: "Permissions", entries: [
-            .init(id: "vs-pr", rawEvent: "PermissionRequest",
-                  note: "Copilot requesting access to a resource"),
-        ]),
-        .init(id: "prompt", label: "Prompts", entries: [
-            .init(id: "vs-ups", rawEvent: "UserPromptSubmit", note: "You submitted a message"),
+            .init(id: "vs-pr",  rawEvent: "PermissionRequest", note: "Copilot requesting access to a resource"),
+            .init(id: "vs-pd",  rawEvent: "PermissionDenied",  note: "Permission denied — may need intervention"),
+            .init(id: "vs-el",  rawEvent: "Elicitation",       note: "Copilot paused, waiting for clarification"),
+            .init(id: "vs-elr", rawEvent: "ElicitationResult", note: "Clarification was submitted"),
         ]),
         .init(id: "subagent", label: "Sub-agents", entries: [
             .init(id: "vs-sas", rawEvent: "SubagentStart", note: "Sub-agent task started"),
             .init(id: "vs-sep", rawEvent: "SubagentStop",  note: "Sub-agent task finished"),
+            .init(id: "vs-ti",  rawEvent: "TeammateIdle",  note: "Teammate agent is idle"),
         ]),
-        .init(id: "other", label: "Other", entries: [
-            .init(id: "vs-pc", rawEvent: "PreCompact", note: "Before context is compacted"),
+        .init(id: "context", label: "Context & config", entries: [
+            .init(id: "vs-pc",   rawEvent: "PreCompact",         note: "Before context is compacted"),
+            .init(id: "vs-poc",  rawEvent: "PostCompact",        note: "Context was compacted"),
+            .init(id: "vs-il",   rawEvent: "InstructionsLoaded", note: "Agent instructions loaded"),
+            .init(id: "vs-cc",   rawEvent: "ConfigChange",       note: "Configuration changed"),
+            .init(id: "vs-fc",   rawEvent: "FileChanged",        note: "A file changed on disk"),
+            .init(id: "vs-cwdc", rawEvent: "CwdChanged",         note: "Working directory changed"),
+        ]),
+        .init(id: "setup", label: "Setup", entries: [
+            .init(id: "vs-wc", rawEvent: "WorktreeCreate", note: "Git worktree created"),
+            .init(id: "vs-wr", rawEvent: "WorktreeRemove", note: "Git worktree removed"),
         ]),
     ]
 

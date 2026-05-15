@@ -136,8 +136,13 @@ struct ChannelStore {
         case .vscode:
             return [
                 "Stop": true,
+                "SessionEnd": true,
+                "StopFailure": true,
                 "PostToolUseFailure": true,
                 "PermissionRequest": true,
+                "TaskCompleted": true,
+                "Notification": true,
+                "Elicitation": true,
             ]
         case .copilotCLI:
             return [

@@ -105,6 +105,14 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             }
         }
 
+        // Expand VS Code hooks to the full 29-event set (all Claude Code events).
+        // Runs off main thread; re-installs only if events are missing.
+        if MigrationManager.needsVSCodeFullEventsMigration() {
+            Task.detached(priority: .utility) {
+                MigrationManager.migrateVSCodeFullEvents()
+            }
+        }
+
         // Install the status bar item + wire the global hotkey.
         Task { @MainActor in
             // Belt-and-braces: even with .defaultLaunchBehavior(.suppressed),
