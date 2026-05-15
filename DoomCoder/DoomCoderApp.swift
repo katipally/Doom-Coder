@@ -52,8 +52,6 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
         ChannelStore.migratePrefsIfNeeded()
-        // v8: patch Cursor's agentResponse=true without wiping other prefs.
-        ChannelStore.migrateCursorAgentResponseIfNeeded()
         // v9: seed per-agent enabledEvents with raw-hook defaults (non-destructive).
         ChannelStore.migrateToRawEventPrefsIfNeeded()
         // Seed per-agent prefs for any agent that doesn't yet have explicit

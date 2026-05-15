@@ -11,40 +11,17 @@ struct ChannelStore {
         var ntfy: Bool = false
     }
 
-    /// Which event phases should trigger a push notification.
+    /// Per-event notification preferences for a single agent.
+    /// Uses a raw-event dict for fine-grained per-hook control (e.g. "SessionEnd", "stop").
+    /// Events absent from enabledEvents are suppressed.
     struct NotificationPrefs: Codable, Sendable, Equatable {
-        var sessionStart: Bool = false
-        var sessionEnd: Bool = true
-        var error: Bool = true
-        var permissionNeeded: Bool = true
-        var agentResponse: Bool = false
-        var subagentStart: Bool = false
-        var subagentEnd: Bool = false
-        var toolUse: Bool = false
-
-        /// Per raw-event overrides keyed by rawEvent (e.g. "SessionEnd", "post_cascade_response").
-        /// Empty = fall back to phase-level bools. Populated when the user explicitly
-        /// toggles an individual event in the Notification Events UI.
+        /// Per raw-event toggles keyed by rawEvent name.
+        /// Populated from per-agent defaults at launch and modified by the user in
+        /// the Notification Events UI.
         var enabledEvents: [String: Bool] = [:]
-
-        func shouldNotify(phase: String) -> Bool {
-            switch phase {
-            case "sessionStart":      return sessionStart
-            case "sessionEnd":        return sessionEnd
-            case "error", "toolError": return error
-            case "permissionNeeded":  return permissionNeeded
-            case "agentResponse":     return agentResponse
-            case "subagentStart":     return subagentStart
-            case "subagentEnd":       return subagentEnd
-            case "toolStart", "toolEnd": return toolUse
-            default:                  return false
-            }
-        }
 
         /// Notification decision: raw event name is the sole key.
         /// Returns enabledEvents[rawEvent] if set; false otherwise.
-        /// Phase-level bools are no longer consulted so users get clean,
-        /// per-hook control with no implicit grouping.
         func shouldNotify(rawEvent: String, phase: String) -> Bool {
             return enabledEvents[rawEvent] ?? false
         }
@@ -105,16 +82,9 @@ struct ChannelStore {
     // default for new installs). Per-agent overrides let users silence one
     // agent without disarming notifications globally.
 
-    /// Bumped when the default allowlist changes. Current defaults: 4-phase
-    /// — sessionStart, sessionEnd, error, permissionNeeded. agentResponse is
-    /// intentionally OFF to prevent spam from Claude's Notification hooks.
+    /// Migration key for v7 baseline. Wipes stale phase-level prefs and reseeds
+    /// with curated per-agent raw-event defaults via v9.
     private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v7"
-
-    /// v8: patches Cursor's agentResponse=true without wiping other prefs.
-    /// afterAgentResponse is Cursor's primary "I finished responding" signal —
-    /// unlike Claude which has explicit Notification hooks, Cursor relies on
-    /// afterAgentResponse to signal turn completion.
-    private static let prefsMigrationKeyV8 = "doomcoder.notification.prefs.migrated.v8"
 
     /// v9: migrates all per-agent prefs to raw-event-level enabledEvents dicts.
     /// For any agent whose enabledEvents is empty, seeds it with per-agent defaults.
@@ -133,23 +103,6 @@ struct ChannelStore {
         savePrefs(NotificationPrefs())
         ud.removeObject(forKey: perAgentPrefsKey)
         ud.set(true, forKey: prefsMigrationKey)
-    }
-
-    /// Patches Cursor-specific defaults without wiping the full prefs store.
-    /// Only touches Cursor prefs and only if the user hasn't manually set a
-    /// per-event override for afterAgentResponse.
-    static func migrateCursorAgentResponseIfNeeded() {
-        let ud = UserDefaults.standard
-        guard !ud.bool(forKey: prefsMigrationKeyV8) else { return }
-        var map = loadPerAgentPrefs()
-        var cursorPrefs = map["cursor"] ?? NotificationPrefs()
-        // Only upgrade the phase-level bool; leave per-event overrides intact.
-        if cursorPrefs.enabledEvents["afterAgentResponse"] == nil {
-            cursorPrefs.agentResponse = true
-        }
-        map["cursor"] = cursorPrefs
-        savePerAgentPrefs(map)
-        ud.set(true, forKey: prefsMigrationKeyV8)
     }
 
     /// Sensible per-agent defaults for the raw-event enabledEvents dict.

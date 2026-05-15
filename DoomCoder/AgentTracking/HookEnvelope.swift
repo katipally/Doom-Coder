@@ -77,25 +77,6 @@ enum NotificationPolicy {
         return prefs.shouldNotify(rawEvent: rawEvent, phase: phase.rawValue)
     }
 
-    /// Phase-only check (no rawEvent) — kept for call sites that don't have a raw event.
-    static func isNotifiable(agent: TrackedAgent, phase: NormalizedEventPhase) -> Bool {
-        let prefs = ChannelStore.loadPrefs(for: agent)
-        return prefs.shouldNotify(phase: phase.rawValue)
-    }
-
-    /// Legacy: check by raw agent + event name (for backward compat).
-    static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
-        let envelope = HookEnvelope(
-            v: "2", agent: agent.rawValue, event: event,
-            cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
-            synthetic: false, payloadRaw: nil
-        )
-        if let normalized = AgentTrackerRegistry.normalize(envelope: envelope) {
-            return isNotifiable(agent: agent, phase: normalized.phase)
-        }
-        return false
-    }
-
     /// Whether the event signals that a session has ended.
     static func isTerminal(event: String) -> Bool {
         let e = event.lowercased()
