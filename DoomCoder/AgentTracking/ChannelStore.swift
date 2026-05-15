@@ -22,6 +22,11 @@ struct ChannelStore {
         var subagentEnd: Bool = false
         var toolUse: Bool = false
 
+        /// Per raw-event overrides keyed by rawEvent (e.g. "SessionEnd", "post_cascade_response").
+        /// Empty = fall back to phase-level bools. Populated when the user explicitly
+        /// toggles an individual event in the Notification Events UI.
+        var enabledEvents: [String: Bool] = [:]
+
         func shouldNotify(phase: String) -> Bool {
             switch phase {
             case "sessionStart":      return sessionStart
@@ -34,6 +39,12 @@ struct ChannelStore {
             case "toolStart", "toolEnd": return toolUse
             default:                  return false
             }
+        }
+
+        /// Checks a per-raw-event override first; falls back to phase-level bool.
+        func shouldNotify(rawEvent: String, phase: String) -> Bool {
+            if let override = enabledEvents[rawEvent] { return override }
+            return shouldNotify(phase: phase)
         }
     }
 
@@ -95,7 +106,7 @@ struct ChannelStore {
     /// Bumped when the default allowlist changes. Current defaults: 4-phase
     /// — sessionStart, sessionEnd, error, permissionNeeded. agentResponse is
     /// intentionally OFF to prevent spam from Claude's Notification hooks.
-    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v6"
+    private static let prefsMigrationKey = "doomcoder.notification.prefs.migrated.v7"
 
     private static let perAgentPrefsKey = "doomcoder.notification.prefs.perAgent.v1"
 

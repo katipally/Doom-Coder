@@ -144,6 +144,10 @@ final class NotificationDispatcher {
         let masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
         guard masterEnabled, TrackingStore.isEnabled(agent) else { return }
 
+        // Honor per-event prefs for FM-judge notifications (phase = "other" fallback).
+        let prefs = ChannelStore.loadPrefs(for: agent)
+        guard prefs.shouldNotify(rawEvent: event, phase: "other") else { return }
+
         let key = "\(sessionKey)::fm::\(title)::\(body)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow { return }
         lastDispatchAt[key] = Date()

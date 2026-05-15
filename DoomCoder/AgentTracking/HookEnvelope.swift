@@ -70,9 +70,14 @@ struct TimelineEvent: Identifiable, Sendable {
 /// agent can have its own per-agent override; otherwise the global prefs
 /// apply.
 enum NotificationPolicy {
-    /// Per-agent decision: looks up agent-specific NotificationPrefs first,
-    /// then falls back to the global default. This is the only call path —
-    /// the legacy global-only overload was removed in v2.3.0.
+    /// Per-agent decision using both raw event name and phase. Checks per-event
+    /// override first, falls back to phase-level bool.
+    static func isNotifiable(agent: TrackedAgent, rawEvent: String, phase: NormalizedEventPhase) -> Bool {
+        let prefs = ChannelStore.loadPrefs(for: agent)
+        return prefs.shouldNotify(rawEvent: rawEvent, phase: phase.rawValue)
+    }
+
+    /// Phase-only check (no rawEvent) — kept for call sites that don't have a raw event.
     static func isNotifiable(agent: TrackedAgent, phase: NormalizedEventPhase) -> Bool {
         let prefs = ChannelStore.loadPrefs(for: agent)
         return prefs.shouldNotify(phase: phase.rawValue)
