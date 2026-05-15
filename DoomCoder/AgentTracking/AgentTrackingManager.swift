@@ -124,6 +124,20 @@ final class AgentTrackingManager {
     private(set) var eventSequence: Int = 0
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
+    // MARK: - Listener management
+
+    /// Restarts the Unix-socket listener, resubscribing the ingest callback.
+    /// Call when the Doctor determines the listener is not running.
+    func restartListener() {
+        HookSocketListener.shared.stop()
+        // Small delay so the raw fd has time to close before rebinding.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            HookSocketListener.shared.start { env in
+                Task { @MainActor in AgentTrackingManager.shared.ingest(env) }
+            }
+        }
+    }
+
     // MARK: - Active-window observation
 
     /// Start observing ActiveAppMonitor so session.isActiveWindow stays current.
@@ -244,7 +258,7 @@ final class AgentTrackingManager {
         // before the final Stop hook arrived). Timeline entry is still recorded.
         let isQuitInitiatedEnd = normalized.phase == .sessionEnd
             && !PIDLiveness.isAlive(pid_t(envelope.pid))
-        let shouldNotify = NotificationPolicy.isNotifiable(agent: normalized.agent, phase: normalized.phase)
+        let shouldNotify = NotificationPolicy.isNotifiable(agent: normalized.agent, rawEvent: normalized.rawEvent, phase: normalized.phase)
             && !isQuitInitiatedEnd
         logger.info("apply agent=\(normalized.agent.rawValue, privacy: .public) event=\(normalized.rawEvent, privacy: .public) phase=\(normalized.phase.rawValue, privacy: .public) notify=\(shouldNotify) quitInitiated=\(isQuitInitiatedEnd)")
         if shouldNotify {

@@ -385,7 +385,7 @@ struct ConfigureAgentsViewV2: View {
                 // Live Events
                 liveEventsSection(agent)
 
-                // Per-agent notification event preferences — always visible, no gate toggle.
+                // Per-agent notification event preferences — each raw event gets its own toggle.
                 GroupBox {
                     VStack(alignment: .leading, spacing: 5) {
                         let sections = AgentEventCatalog.sections(for: agent)
@@ -394,40 +394,38 @@ struct ConfigureAgentsViewV2: View {
                                 .font(.caption).foregroundStyle(.tertiary)
                         } else {
                             ForEach(sections) { section in
-                                let kp = section.keyPath
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Toggle(section.label, isOn: Binding(
-                                        get: {
-                                            (agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs())[keyPath: kp]
-                                        },
-                                        set: { v in
-                                            var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()
-                                            p[keyPath: kp] = v
-                                            ChannelStore.setPrefs(p, for: agent)
-                                            agentNotifPrefs[agent.rawValue] = p
-                                        }
-                                    ))
-                                    .toggleStyle(.checkbox)
-                                    .font(.callout)
+                                    Text(section.label)
+                                        .font(.callout.weight(.medium))
+                                        .padding(.bottom, 1)
                                     ForEach(section.entries) { entry in
-                                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                            Text("·")
-                                                .font(.caption)
-                                                .foregroundStyle(.tertiary)
-                                                .frame(width: 8, alignment: .center)
-                                            VStack(alignment: .leading, spacing: 0) {
+                                        Toggle(isOn: Binding(
+                                            get: {
+                                                let p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()
+                                                // Per-event override first; fall back to phase-level bool.
+                                                return p.enabledEvents[entry.rawEvent]
+                                                    ?? p[keyPath: section.keyPath]
+                                            },
+                                            set: { v in
+                                                var p = agentNotifPrefs[agent.rawValue] ?? ChannelStore.NotificationPrefs()
+                                                p.enabledEvents[entry.rawEvent] = v
+                                                ChannelStore.setPrefs(p, for: agent)
+                                                agentNotifPrefs[agent.rawValue] = p
+                                            }
+                                        )) {
+                                            VStack(alignment: .leading, spacing: 1) {
                                                 Text(entry.rawEvent)
                                                     .font(.caption)
                                                     .fontDesign(.monospaced)
-                                                    .foregroundStyle(.secondary)
                                                 Text(entry.note)
                                                     .font(.caption2)
                                                     .foregroundStyle(.tertiary)
                                             }
                                         }
-                                        .padding(.leading, 18)
+                                        .toggleStyle(.checkbox)
                                     }
                                 }
+                                .padding(.bottom, 4)
                             }
                         }
                     }
@@ -1356,16 +1354,13 @@ struct ConnectionDoctorSection: View {
         summary = nil
         steps = Self.initialSteps()
         var failures = 0
-        var firstFailedIndex: Int? = nil
 
         for idx in steps.indices {
-            if firstFailedIndex != nil { break }
             setStatus(idx, .running)
             let outcome = await runStep(idx)
             setStatus(idx, outcome.status, detail: outcome.detail)
             if outcome.status == .fail || outcome.status == .warn {
                 failures += 1
-                if firstFailedIndex == nil { firstFailedIndex = idx }
             }
         }
 
@@ -1457,9 +1452,8 @@ struct ConnectionDoctorSection: View {
         let pidStr = String(ProcessInfo.processInfo.processIdentifier)
         let box = EnvelopeBox()
         listener.setTestObserver { env in
-            if env.event.lowercased() == "unknown" || env.event.lowercased().contains("ping") {
-                box.signal(env)
-            }
+            // Accept any envelope that arrives — the ping sends exactly one.
+            box.signal(env)
         }
         defer { listener.setTestObserver(nil) }
 
@@ -1522,14 +1516,11 @@ struct ConnectionDoctorSection: View {
         case 0:
             _ = AgentInstallerV2.ensureStableHelper()
         case 1:
-            // Restart listener in-place. The primary callback is owned by
-            // the AppDelegate, so stop+start without a new callback is
-            // deliberately skipped — we ping again instead.
-            HookSocketListener.shared.stop()
-            // Give the raw fd time to close + rebind via AppDelegate
-            // lifecycle. We don't re-subscribe the primary callback from
-            // here. The user can relaunch if the listener is wedged.
-            try? await Task.sleep(nanoseconds: 400_000_000)
+            // Restart the listener by calling AgentTrackingManager which
+            // owns the ingest callback and re-subscribes it on restart.
+            await MainActor.run { AgentTrackingManager.shared.restartListener() }
+            // Wait for the listener to rebind before re-running Doctor.
+            try? await Task.sleep(nanoseconds: 700_000_000)
         case 2:
             if agent == .copilotCLI {
                 for folder in CopilotCLIFolderManager.folders {

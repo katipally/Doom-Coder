@@ -83,6 +83,13 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         center.delegate = self
         NotificationDispatcher.shared.requestPermission()
 
+        // Refresh notification permission status whenever the app returns to
+        // foreground (e.g., after the user granted/denied in System Settings).
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { _ in Task { @MainActor in NotificationDispatcher.shared.refreshPermissionStatus() } }
+
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()
 
