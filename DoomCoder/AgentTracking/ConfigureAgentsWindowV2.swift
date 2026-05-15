@@ -60,12 +60,17 @@ struct ConfigureAgentsViewV2: View {
             checkMigration()
             refreshPermStatus()
             validateAllHooks()
+            // Ensure UI reflects any migrations that ran at launch after the
+            // view's @State was first initialized.
+            agentNotifPrefs = ChannelStore.loadPerAgentPrefs()
         }
         .onReceive(healthTimer) { _ in
             validateAllHooks()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermStatus()
+            // Re-sync prefs in case they changed while the app was backgrounded.
+            agentNotifPrefs = ChannelStore.loadPerAgentPrefs()
         }
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
             detectAll()
