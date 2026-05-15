@@ -379,6 +379,9 @@ struct AgentInstallerV2 {
         var root = readJSON(at: path) ?? [:]
         backup(path)
 
+        // Strip old hook.sh references first (pre-dc-hook era).
+        stripHookShEntries(&root)
+
         // Strip only VSCode dc-hook entries before re-adding.
         stripDcHookEntries(&root, agentToken: "vscode")
         pruneEmptyContainers(&root)
@@ -409,6 +412,9 @@ struct AgentInstallerV2 {
         var root = readJSON(at: path) ?? [:]
         backup(path)
 
+        // Strip old hook.sh references first (pre-dc-hook era).
+        stripHookShEntries(&root)
+
         // Strip only Copilot CLI dc-hook entries before re-adding.
         stripDcHookEntries(&root, agentToken: "copilot_cli")
         pruneEmptyContainers(&root)
@@ -429,13 +435,18 @@ struct AgentInstallerV2 {
         try writeJSON(root, to: path, needsVersion: false)
     }
 
-    /// Strip entries referencing old hook.sh scripts (pre-JSON hook format).
+    /// Strip entries referencing old hook.sh scripts (pre-JSON hook format)
+    /// or flagged with the legacy "doomcoder-managed" sentinel key.
     static func stripHookShEntries(_ root: inout [String: Any]) {
         for (key, value) in root {
             if var arr = value as? [[String: Any]] {
                 arr.removeAll { obj in
+                    // Legacy hook.sh command reference
                     let cmd = (obj["command"] as? String) ?? (obj["bash"] as? String) ?? ""
-                    return cmd.hasSuffix("hook.sh") || cmd.contains("/hook.sh ")
+                    if cmd.hasSuffix("hook.sh") || cmd.contains("/hook.sh ") { return true }
+                    // Legacy doomcoder-managed sentinel (old v1 installer)
+                    if obj["doomcoder-managed"] != nil { return true }
+                    return false
                 }
                 if arr.isEmpty { root.removeValue(forKey: key) }
                 else { root[key] = arr }

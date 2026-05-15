@@ -112,8 +112,8 @@ struct TrackAccordion: View {
 
     private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?, agentState: AgentState) -> String {
         switch agentState {
-        case .notInstalled: return "not installed"
-        case .installed:    return agent == .copilotCLI ? "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" : "idle"
+        case .notInstalled: return "binary not found"
+        case .installed:    return agent == .copilotCLI ? "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" : "not running"
         case .idle:         return live?.status ?? "idle"
         case .working:      return live?.status ?? "working…"
         case .closed:       return "closed"
@@ -122,11 +122,11 @@ struct TrackAccordion: View {
 
     private func agentStateColor(_ s: AgentState) -> Color {
         switch s {
-        case .notInstalled: return .secondary.opacity(0.3)
-        case .installed:    return .secondary.opacity(0.5)
+        case .notInstalled: return .secondary.opacity(0.25)
+        case .installed:    return .secondary.opacity(0.55)
         case .idle:         return .green
         case .working:      return .yellow
-        case .closed:       return .gray
+        case .closed:       return .secondary.opacity(0.4)
         }
     }
 

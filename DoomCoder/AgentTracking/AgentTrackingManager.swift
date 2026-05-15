@@ -191,7 +191,7 @@ final class AgentTrackingManager {
 
     /// Published 5-state per-agent status, driven by AgentStateEngine.
     private(set) var agentStates: [TrackedAgent: AgentState] = {
-        Dictionary(uniqueKeysWithValues: TrackedAgent.allCases.map { ($0, .installed) })
+        Dictionary(uniqueKeysWithValues: TrackedAgent.allCases.map { ($0, .notInstalled) })
     }()
 
     /// Per-agent state machines.

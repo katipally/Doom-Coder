@@ -10,7 +10,7 @@ actor AgentStateEngine {
     private static let logger = Logger(subsystem: "DoomCoder", category: "AgentStateEngine")
 
     let agent: TrackedAgent
-    private(set) var state: AgentState = .installed
+    private(set) var state: AgentState = .notInstalled
     private let onStateChange: @Sendable (TrackedAgent, AgentState) -> Void
 
     private var watchedPID: pid_t = 0

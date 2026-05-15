@@ -97,6 +97,14 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()
 
+        // Auto-migrate old hook.sh references in ~/.copilot/hooks/hooks.json
+        // to the dc-hook binary format. Runs off main thread (file I/O).
+        if MigrationManager.needsHookShMigration() {
+            Task.detached(priority: .utility) {
+                MigrationManager.migrateHookSh()
+            }
+        }
+
         // Install the status bar item + wire the global hotkey.
         Task { @MainActor in
             // Belt-and-braces: even with .defaultLaunchBehavior(.suppressed),

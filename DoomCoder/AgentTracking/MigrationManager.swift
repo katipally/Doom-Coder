@@ -34,22 +34,56 @@ enum MigrationManager {
         return affected
     }
 
-    /// Returns true if any Copilot CLI folder has an old hook.sh script.
+    /// Returns true if any Copilot CLI folder has an old hook.sh script,
+    /// or if the user-level ~/.copilot/hooks/hooks.json still contains
+    /// top-level camelCase hook.sh references from the pre-dc-hook era.
     static func needsHookShMigration() -> Bool {
         guard !UserDefaults.standard.bool(forKey: migratedHookShKey) else { return false }
-        return CopilotCLIFolderManager.folders.contains { folder in
+        let hasPerFolder = CopilotCLIFolderManager.folders.contains { folder in
             let hookSh = folder.appendingPathComponent(".github/hooks/hook.sh").path
             return FileManager.default.fileExists(atPath: hookSh)
         }
+        if hasPerFolder { return true }
+        // Also detect old top-level hook.sh entries in the user-level file.
+        return userLevelFileHasHookShEntries()
     }
 
-    /// Remove legacy hook.sh scripts from registered Copilot CLI folders.
+    private static func userLevelFileHasHookShEntries() -> Bool {
+        let path = AgentInstallerV2.copilotUserHooksPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return false }
+        // Check top-level camelCase keys for hook.sh references.
+        for (_, value) in root {
+            if let arr = value as? [[String: Any]] {
+                for obj in arr {
+                    let cmd = (obj["bash"] as? String) ?? (obj["command"] as? String) ?? ""
+                    if cmd.contains("hook.sh") { return true }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Remove legacy hook.sh scripts from registered Copilot CLI folders
+    /// and strip old hook.sh references from the user-level hooks file.
     static func migrateHookSh() {
         for folder in CopilotCLIFolderManager.folders {
             let hookSh = folder.appendingPathComponent(".github/hooks/hook.sh").path
             if FileManager.default.fileExists(atPath: hookSh) {
                 AgentInstallerV2.backup(hookSh)
                 try? FileManager.default.removeItem(atPath: hookSh)
+            }
+        }
+        // Strip hook.sh references from the user-level file by reinstalling
+        // both VS Code and Copilot CLI hooks (install calls stripHookShEntries).
+        let userPath = AgentInstallerV2.copilotUserHooksPath()
+        if FileManager.default.fileExists(atPath: userPath) {
+            if AgentInstallerV2.isInstalled(.vscode) {
+                _ = AgentInstallerV2.install(.vscode)
+            }
+            if AgentInstallerV2.isInstalledCopilotCLIUserLevel() {
+                _ = AgentInstallerV2.install(.copilotCLI)
             }
         }
         UserDefaults.standard.set(true, forKey: migratedHookShKey)

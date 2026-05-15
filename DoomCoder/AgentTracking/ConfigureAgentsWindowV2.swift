@@ -1078,14 +1078,14 @@ struct ConfigureAgentsViewV2: View {
         case .vscode:
             return [
                 "VS Code with the GitHub Copilot Chat extension installed.",
-                "Hooks live in ~/.claude/settings.json (shared with Claude Code).",
+                "Hooks live in ~/.copilot/hooks/hooks.json (shared with Copilot CLI).",
                 "Reload the VS Code window after install for hooks to register."
             ]
         case .copilotCLI:
             return [
                 "GitHub Copilot CLI installed (npm-global, gh-extension, brew, or volta/n).",
-                "For each project you want tracked, click ‘Add folder’ and pick its repo root.",
-                "Hooks file is created at <repo>/.github/hooks/doomcoder.json."
+                "User-level hooks installed to ~/.copilot/hooks/hooks.json automatically.",
+                "For per-project hooks, click 'Add folder' and pick its repo root — creates .github/hooks/doomcoder.json."
             ]
         case .windsurf:
             return [
@@ -1106,8 +1106,8 @@ struct ConfigureAgentsViewV2: View {
         switch agent {
         case .claude:     return "Hooks in ~/.claude/settings.json (nested matcher format)"
         case .cursor:     return "Hooks in ~/.cursor/hooks.json (version: 1, command only)"
-        case .vscode:     return "VS Code reads ~/.claude/settings.json natively"
-        case .copilotCLI: return "Per-project .github/hooks/doomcoder.json (bash/cwd/timeoutSec)"
+        case .vscode:     return "Hooks in ~/.copilot/hooks/hooks.json (PascalCase events)"
+        case .copilotCLI: return "User-level ~/.copilot/hooks/hooks.json + per-project .github/hooks/doomcoder.json"
         case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
         case .codexCLI:   return "Hooks in ~/.codex/hooks.json + codex_hooks feature flag"
         }
@@ -1117,8 +1117,8 @@ struct ConfigureAgentsViewV2: View {
         switch agent {
         case .claude:     return "~/.claude/settings.json"
         case .cursor:     return "~/.cursor/hooks.json"
-        case .vscode:     return "~/.claude/settings.json"
-        case .copilotCLI: return ".github/hooks/doomcoder.json"
+        case .vscode:     return "~/.copilot/hooks/hooks.json"
+        case .copilotCLI: return "~/.copilot/hooks/hooks.json (user) + .github/hooks/doomcoder.json (per-project)"
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         case .codexCLI:   return "~/.codex/hooks.json"
         }
