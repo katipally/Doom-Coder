@@ -57,6 +57,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Seed per-agent prefs for any agent that doesn't yet have explicit
         // stored prefs, so the per-agent UI always shows real toggles.
         ChannelStore.initializeAllAgentPrefsIfNeeded()
+        // Non-destructively add any new default events that weren't in the
+        // user's stored prefs (e.g., VS Code expansion from 3 → 8 events).
+        ChannelStore.mergeNewDefaultEventsIfNeeded()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()

@@ -238,4 +238,33 @@ struct ChannelStore {
         }
         if changed { savePerAgentPrefs(map) }
     }
+
+    /// Non-destructively merges new default events into existing per-agent prefs.
+    ///
+    /// Run at every launch after `initializeAllAgentPrefsIfNeeded`. For each
+    /// agent, any event present in `defaultEnabledEvents(for:)` but **absent**
+    /// from the stored prefs is added with its default value. Events the user
+    /// has already configured (true or false) are left untouched.
+    ///
+    /// This ensures users upgrading from an older version automatically get the
+    /// correct default toggles for newly-registered events (e.g., when VS Code
+    /// expanded from 3 → 8 notification events) without losing existing choices.
+    private static let prefs_mergeEventsKey = "doomcoder.notification.prefs.merged.events.v1"
+    static func mergeNewDefaultEventsIfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: prefs_mergeEventsKey) else { return }
+        var map = loadPerAgentPrefs()
+        var changed = false
+        for agent in TrackedAgent.allCases {
+            let defaults = defaultEnabledEvents(for: agent)
+            var prefs = map[agent.rawValue] ?? NotificationPrefs()
+            for (event, enabled) in defaults where prefs.enabledEvents[event] == nil {
+                prefs.enabledEvents[event] = enabled
+                changed = true
+            }
+            map[agent.rawValue] = prefs
+        }
+        if changed { savePerAgentPrefs(map) }
+        ud.set(true, forKey: prefs_mergeEventsKey)
+    }
 }

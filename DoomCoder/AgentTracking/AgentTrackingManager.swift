@@ -117,6 +117,16 @@ final class AgentTrackingManager {
             if awaitingPermission && (event.phase == .toolStart || event.phase == .userPrompt) {
                 awaitingPermission = false
             }
+
+            // Multi-turn session support: agents like Windsurf reuse the same session ID
+            // (trajectory_id) across conversation turns. When a new user prompt arrives
+            // for an already-ended session, treat it as a live new turn rather than
+            // appending to a dead session. This prevents the UI from staying stuck on
+            // "completed" while the agent is actively processing turn 2+.
+            if hasEnded && event.phase == .userPrompt {
+                hasEnded = false
+                activeToolCount = 0   // fresh tool counter for the new turn
+            }
         }
     }
 

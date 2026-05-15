@@ -89,7 +89,7 @@ struct VSCodeTracker: AgentTracker {
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
             summary: summary,
-            isFatal: false,
+            isFatal: envelope.event == "StopFailure",
             payloadRaw: envelope.payloadRaw
         )
     }
