@@ -54,6 +54,9 @@
 		DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000050 /* AccessibilityPermission.swift */; };
 		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
+		DC0000000000002000000160 /* ProcessWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000160 /* ProcessWatcher.swift */; };
+		DC0000000000002000000161 /* CLICPUProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000161 /* CLICPUProbe.swift */; };
+		DC0000000000002000000162 /* AgentStateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000162 /* AgentStateEngine.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
 		DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* PrivacyInfo.xcprivacy */; };
@@ -109,6 +112,9 @@
 		DC0000000000001000000050 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
+		DC0000000000001000000160 /* ProcessWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessWatcher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000161 /* CLICPUProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICPUProbe.swift; sourceTree = "<group>"; };
+		DC0000000000001000000162 /* AgentStateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStateEngine.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
 		DC0000000000001000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -194,6 +200,9 @@
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
 				DC0000000000001000000046 /* UIAnimations.swift */,
 				DC0000000000001000000100 /* PIDLiveness.swift */,
+				DC0000000000001000000160 /* ProcessWatcher.swift */,
+				DC0000000000001000000161 /* CLICPUProbe.swift */,
+				DC0000000000001000000162 /* AgentStateEngine.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
 				DC0000000000001000000102 /* IconDownloader.swift */,
 			);
@@ -354,6 +363,9 @@
 				DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */,
 				DC0000000000002000000051 /* PanelRootView.swift in Sources */,
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
+				DC0000000000002000000160 /* ProcessWatcher.swift in Sources */,
+				DC0000000000002000000161 /* CLICPUProbe.swift in Sources */,
+				DC0000000000002000000162 /* AgentStateEngine.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 			);

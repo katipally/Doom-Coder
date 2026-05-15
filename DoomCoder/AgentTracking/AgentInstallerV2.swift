@@ -148,7 +148,12 @@ struct AgentInstallerV2 {
             case .claude:     try installClaude()
             case .cursor:     try installCursor()
             case .vscode:     try installVSCode()
-            case .copilotCLI: try installCopilotCLI(folder: folder)
+            case .copilotCLI:
+                if folder != nil {
+                    try installCopilotCLI(folder: folder)
+                } else {
+                    try installCopilotCLIUserLevel()
+                }
             case .windsurf:   try installWindsurf()
             case .codexCLI:   try installCodexCLI()
             }
@@ -236,11 +241,11 @@ struct AgentInstallerV2 {
     static func isInstalled(_ agent: TrackedAgent) -> Bool {
         switch agent {
         case .copilotCLI:
-            return !CopilotCLIFolderManager.installedFolders().isEmpty
+            return !CopilotCLIFolderManager.installedFolders().isEmpty || isInstalledCopilotCLIUserLevel()
         case .vscode:
-            // VSCode shares ~/.claude/settings.json with Claude. Detect by
-            // presence of vscode-specific dc-hook command lines.
-            return fileContainsDcHookFor(agent: "vscode", at: claudeSettingsPath())
+            // Check new path first, fall back to old shared path for migration detection.
+            return fileContainsDcHookFor(agent: "vscode", at: copilotUserHooksPath())
+                || fileContainsDcHookFor(agent: "vscode", at: claudeSettingsPath())
         case .claude:
             return fileContainsDcHookFor(agent: "claude", at: claudeSettingsPath())
         case .cursor:
@@ -250,6 +255,10 @@ struct AgentInstallerV2 {
         case .codexCLI:
             return fileContainsDcHookFor(agent: "codex_cli", at: codexHooksPath())
         }
+    }
+
+    static func isInstalledCopilotCLIUserLevel() -> Bool {
+        fileContainsDcHookFor(agent: "copilot_cli", at: copilotUserHooksPath())
     }
 
     static func isInstalledCLI(folder: URL) -> Bool {
@@ -263,12 +272,14 @@ struct AgentInstallerV2 {
         switch agent {
         case .claude:     return claudeSettingsPath()
         case .cursor:     return cursorHooksPath()
-        case .vscode:     return claudeSettingsPath() // VSCode reads ~/.claude/settings.json natively
+        case .vscode:     return copilotUserHooksPath()
         case .windsurf:   return windsurfHooksPath()
         case .codexCLI:   return codexHooksPath()
         case .copilotCLI:
-            let base = folder ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            return base.appendingPathComponent(".github/hooks/doomcoder.json").path
+            if let base = folder {
+                return base.appendingPathComponent(".github/hooks/doomcoder.json").path
+            }
+            return copilotUserHooksPath()
         }
     }
 
@@ -277,6 +288,8 @@ struct AgentInstallerV2 {
     static func windsurfHooksPath() -> String { NSHomeDirectory() + "/.codeium/windsurf/hooks.json" }
     static func codexHooksPath()    -> String { NSHomeDirectory() + "/.codex/hooks.json" }
     static func codexConfigPath()   -> String { NSHomeDirectory() + "/.codex/config.toml" }
+    /// Shared path for both VS Code Copilot and user-level Copilot CLI hooks.
+    static func copilotUserHooksPath() -> String { NSHomeDirectory() + "/.copilot/hooks/hooks.json" }
 
     // MARK: - Public verification
 
@@ -359,44 +372,78 @@ struct AgentInstallerV2 {
     }
 
     private static func installVSCode() throws {
-        // VSCode Copilot reads ~/.claude/settings.json natively via chat.hookFilesLocations
-        // We share the same file as Claude but add VSCode-specific events
-        let path = claudeSettingsPath()
+        // VS Code Copilot reads ~/.copilot/hooks/hooks.json.
+        // We write simple command entries (not matcher-group format).
+        let path = copilotUserHooksPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
         backup(path)
 
-        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        // Strip only VSCode dc-hook entries before re-adding.
+        stripDcHookEntries(&root, agentToken: "vscode")
+        pruneEmptyContainers(&root)
 
-        // Add ALL VS Code events (PascalCase, matcher-group format).
-        // Claude entries may already exist for the same event names —
-        // we just add a separate dc-hook vscode entry alongside.
-        let vscodeEvts = vscodeEvents
-        for event in vscodeEvts {
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        for event in vscodeEvents {
+            let entry: [String: Any] = ["type": "command", "command": cmdFor("vscode", event)]
             var arr = (hooks[event] as? [[String: Any]]) ?? []
-            // Check if dc-hook vscode entry already present
-            let alreadyHas = arr.contains { group in
-                if let innerHooks = group["hooks"] as? [[String: Any]] {
-                    return innerHooks.contains { ($0["command"] as? String)?.contains("dc-hook") == true && ($0["command"] as? String)?.contains("vscode") == true }
-                }
-                return false
-            }
-            if !alreadyHas {
-                let entry: [String: Any] = [
-                    "matcher": "*",
-                    "hooks": [
-                        [
-                            "type": "command",
-                            "command": cmdFor("vscode", event)
-                        ] as [String: Any]
-                    ]
-                ]
-                arr.append(entry)
-                hooks[event] = arr
-            }
+            arr.append(entry)
+            hooks[event] = arr
         }
         root["hooks"] = hooks
         try writeJSON(root, to: path, needsVersion: false)
+
+        // Legacy cleanup: strip vscode entries from old shared Claude settings.
+        let oldPath = claudeSettingsPath()
+        if FileManager.default.fileExists(atPath: oldPath),
+           var oldRoot = readJSON(at: oldPath) {
+            stripDcHookEntries(&oldRoot, agentToken: "vscode")
+            pruneEmptyContainers(&oldRoot)
+            try? writeJSON(oldRoot, to: oldPath, needsVersion: false)
+        }
+    }
+
+    private static func installCopilotCLIUserLevel() throws {
+        let path = copilotUserHooksPath()
+        try ensureParentDir(path)
+        var root = readJSON(at: path) ?? [:]
+        backup(path)
+
+        // Strip only Copilot CLI dc-hook entries before re-adding.
+        stripDcHookEntries(&root, agentToken: "copilot_cli")
+        pruneEmptyContainers(&root)
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        for event in copilotCLIEvents {
+            let entry: [String: Any] = [
+                "type": "command",
+                "bash": cmdFor("copilot_cli", event),
+                "cwd": ".",
+                "timeoutSec": 10
+            ]
+            var arr = (hooks[event] as? [[String: Any]]) ?? []
+            arr.append(entry)
+            hooks[event] = arr
+        }
+        root["hooks"] = hooks
+        try writeJSON(root, to: path, needsVersion: false)
+    }
+
+    /// Strip entries referencing old hook.sh scripts (pre-JSON hook format).
+    static func stripHookShEntries(_ root: inout [String: Any]) {
+        for (key, value) in root {
+            if var arr = value as? [[String: Any]] {
+                arr.removeAll { obj in
+                    let cmd = (obj["command"] as? String) ?? (obj["bash"] as? String) ?? ""
+                    return cmd.hasSuffix("hook.sh") || cmd.contains("/hook.sh ")
+                }
+                if arr.isEmpty { root.removeValue(forKey: key) }
+                else { root[key] = arr }
+            } else if var dict = value as? [String: Any] {
+                stripHookShEntries(&dict)
+                root[key] = dict
+            }
+        }
     }
 
     private static func installWindsurf() throws {
@@ -676,7 +723,7 @@ struct AgentInstallerV2 {
     /// string that also mentions the given agent token (e.g. "cursor",
     /// "claude", "vscode", "copilot_cli"). Used to distinguish Claude vs
     /// VSCode entries when both share ~/.claude/settings.json.
-    private static func fileContainsDcHookFor(agent token: String, at path: String) -> Bool {
+    static func fileContainsDcHookFor(agent token: String, at path: String) -> Bool {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return false }
         var found = false
         if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {

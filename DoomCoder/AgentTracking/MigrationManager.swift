@@ -6,6 +6,7 @@ import OSLog
 enum MigrationManager {
     private static let logger = Logger(subsystem: "com.doomcoder", category: "migration")
     private static let migratedKey = "doomcoder.migration.v1_to_v2.done"
+    private static let migratedHookShKey = "doomcoder.migration.hooksh.done"
 
     /// Check if migration is needed. Returns list of affected agents.
     static func checkNeeded() -> [TrackedAgent] {
@@ -16,7 +17,13 @@ enum MigrationManager {
         // Check Claude settings for old x-doomcoder tags
         if hasLegacyEntries(at: AgentInstallerV2.claudeSettingsPath()) {
             affected.append(.claude)
-            affected.append(.vscode) // shares same file
+        }
+
+        // If vscode entries are still in the old shared Claude settings file,
+        // migration is needed to move them to the new ~/.copilot/hooks/hooks.json.
+        if AgentInstallerV2.fileContainsDcHookFor(agent: "vscode", at: AgentInstallerV2.claudeSettingsPath())
+            && !affected.contains(.vscode) {
+            affected.append(.vscode)
         }
 
         // Check Cursor for old x-doomcoder tags or missing version
@@ -24,13 +31,29 @@ enum MigrationManager {
             affected.append(.cursor)
         }
 
-        // Check old VSCode path (v1.8.5 wrote to wrong location)
-        let oldVSCodePath = NSHomeDirectory() + "/.copilot/hooks/hooks.json"
-        if hasLegacyEntries(at: oldVSCodePath) && !affected.contains(.vscode) {
-            affected.append(.vscode)
-        }
-
         return affected
+    }
+
+    /// Returns true if any Copilot CLI folder has an old hook.sh script.
+    static func needsHookShMigration() -> Bool {
+        guard !UserDefaults.standard.bool(forKey: migratedHookShKey) else { return false }
+        return CopilotCLIFolderManager.folders.contains { folder in
+            let hookSh = folder.appendingPathComponent(".github/hooks/hook.sh").path
+            return FileManager.default.fileExists(atPath: hookSh)
+        }
+    }
+
+    /// Remove legacy hook.sh scripts from registered Copilot CLI folders.
+    static func migrateHookSh() {
+        for folder in CopilotCLIFolderManager.folders {
+            let hookSh = folder.appendingPathComponent(".github/hooks/hook.sh").path
+            if FileManager.default.fileExists(atPath: hookSh) {
+                AgentInstallerV2.backup(hookSh)
+                try? FileManager.default.removeItem(atPath: hookSh)
+            }
+        }
+        UserDefaults.standard.set(true, forKey: migratedHookShKey)
+        logger.info("hook.sh migration complete")
     }
 
     /// Run migration: backup old configs, strip legacy entries, install v2 hooks.
@@ -39,11 +62,14 @@ enum MigrationManager {
 
         for agent in agents {
             switch agent {
-            case .claude, .vscode:
-                // Both share ~/.claude/settings.json — handle once
+            case .claude:
                 let path = AgentInstallerV2.claudeSettingsPath()
                 AgentInstallerV2.backup(path)
                 stripLegacy(at: path)
+            case .vscode:
+                // Re-install at the new path; installVSCode() also strips the old shared path.
+                _ = AgentInstallerV2.install(.vscode)
+                continue
             case .cursor:
                 let path = AgentInstallerV2.cursorHooksPath()
                 AgentInstallerV2.backup(path)
@@ -51,15 +77,11 @@ enum MigrationManager {
             case .copilotCLI:
                 // Per-folder: strip from each registered folder
                 for folder in CopilotCLIFolderManager.folders {
-                    let hooksFile = folder.appendingPathComponent("hooks.json").path
+                    let hooksFile = folder.appendingPathComponent(".github/hooks/doomcoder.json").path
                     AgentInstallerV2.backup(hooksFile)
                     stripLegacy(at: hooksFile)
                 }
-            case .windsurf:
-                // New agent — no v1 legacy format exists, nothing to strip
-                break
-            case .codexCLI:
-                // New agent — no v1 legacy format exists, nothing to strip
+            case .windsurf, .codexCLI:
                 break
             }
 
@@ -68,16 +90,9 @@ enum MigrationManager {
                 for folder in CopilotCLIFolderManager.folders {
                     _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
                 }
-            } else {
+            } else if agent != .vscode {
                 _ = AgentInstallerV2.install(agent)
             }
-        }
-
-        // Also clean up old VSCode hooks at wrong path
-        let oldVSCodePath = NSHomeDirectory() + "/.copilot/hooks/hooks.json"
-        if FileManager.default.fileExists(atPath: oldVSCodePath) {
-            AgentInstallerV2.backup(oldVSCodePath)
-            stripLegacy(at: oldVSCodePath)
         }
 
         UserDefaults.standard.set(true, forKey: migratedKey)

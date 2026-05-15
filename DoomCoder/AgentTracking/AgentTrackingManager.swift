@@ -187,6 +187,86 @@ final class AgentTrackingManager {
         return Date().timeIntervalSince(last) < 60
     }
 
+    // MARK: - 5-state agent tracking
+
+    /// Published 5-state per-agent status, driven by AgentStateEngine.
+    private(set) var agentStates: [TrackedAgent: AgentState] = {
+        Dictionary(uniqueKeysWithValues: TrackedAgent.allCases.map { ($0, .installed) })
+    }()
+
+    /// Per-agent state machines.
+    private var engines: [TrackedAgent: AgentStateEngine] = [:]
+
+    private init() {
+        for a in TrackedAgent.allCases {
+            engines[a] = AgentStateEngine(agent: a) { [weak self] agent, state in
+                Task { @MainActor [weak self] in self?.agentStates[agent] = state }
+            }
+        }
+    }
+
+    /// Current 5-state for an agent.
+    func agentState(for agent: TrackedAgent) -> AgentState {
+        agentStates[agent] ?? .installed
+    }
+
+    // MARK: - NSWorkspace monitoring (app-level lifecycle)
+
+    private var workspaceLaunchObserver:    (any NSObjectProtocol)?
+    private var workspaceTerminateObserver: (any NSObjectProtocol)?
+
+    func startNSWorkspaceMonitoring() {
+        let nc = NSWorkspace.shared.notificationCenter
+
+        workspaceLaunchObserver = nc.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  let agent = ActiveAppMonitor.bundleToAgent[app.bundleIdentifier ?? ""] else { return }
+            let pid = app.processIdentifier
+            Task { [weak self] in await self?.engines[agent]?.applyProcessAlive(pid: pid) }
+        }
+
+        workspaceTerminateObserver = nc.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  let agent = ActiveAppMonitor.bundleToAgent[app.bundleIdentifier ?? ""] else { return }
+            Task { [weak self] in await self?.engines[agent]?.applyProcessNotFound() }
+        }
+    }
+
+    // MARK: - Periodic process polling (for CLI agents)
+
+    private var processPollTask: Task<Void, Never>?
+
+    func startProcessPolling() {
+        guard processPollTask == nil else { return }
+        processPollTask = Task.detached(priority: .utility) { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { break }
+                await self?.pollProcessStates()
+            }
+        }
+        // Run an initial poll immediately.
+        Task.detached(priority: .utility) { [weak self] in await self?.pollProcessStates() }
+    }
+
+    private func pollProcessStates() async {
+        let detections = await Task.detached(priority: .utility) { AgentDetector.detectAll() }.value
+        await MainActor.run { [weak self] in
+            guard let self else { return }
+            for detection in detections {
+                let agent = detection.agent
+                let runState = detection.runState
+                Task { await self.engines[agent]?.applyDetectionResult(runState) }
+            }
+        }
+    }
+
     // MARK: - Entry point (called from socket listener)
 
     func ingest(_ env: HookEnvelope) {
@@ -253,6 +333,10 @@ final class AgentTrackingManager {
         // via .animation(value:) to avoid NSHostingView constraint loops.
         sessions[sessionKey] = s
         eventSequence &+= 1
+
+        // Signal the 5-state engine with the now-normalized phase.
+        let envPID = pid_t(envelope.pid)
+        Task { [weak self] in await self?.engines[normalized.agent]?.applyHookSignal(phase: normalized.phase, pid: envPID) }
 
         // Terminal hooks (sessionEnd / stop) fire as part of the agent's
         // shutdown sequence — the process exits immediately after sending the

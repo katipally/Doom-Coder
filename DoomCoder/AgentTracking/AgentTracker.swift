@@ -111,6 +111,30 @@ enum AgentRunState: String, Sendable, Equatable {
     case active
 }
 
+// MARK: - Agent state (5-state model)
+// Replaces AgentRunState for the main tracking UI. AgentRunState is kept
+// for AgentDetection/AgentDetector backward compatibility.
+
+enum AgentState: String, Sendable, Equatable, CaseIterable {
+    case notInstalled  // binary/app not found on this system
+    case installed     // found but process not running
+    case idle          // process running, at a prompt / waiting for user
+    case working       // process running, actively executing tools or thinking
+    case closed        // process was running but has now exited (clean or crash)
+
+    var humanReadable: String {
+        switch self {
+        case .notInstalled: return "not installed"
+        case .installed:    return "installed"
+        case .idle:         return "idle"
+        case .working:      return "working"
+        case .closed:       return "closed"
+        }
+    }
+
+    var isRunning: Bool { self == .idle || self == .working }
+}
+
 // MARK: - Shared helpers
 //
 // These are intentionally non-public to the rest of the app but shared

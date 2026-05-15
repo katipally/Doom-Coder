@@ -2,6 +2,17 @@ import AppKit
 import ApplicationServices
 import OSLog
 
+// MARK: - AX state hint
+
+/// Coarse state hint derived from reading AX attributes on the active IDE window.
+/// Supplements hook events with a visual-layer signal for cases where hooks are
+/// delayed (e.g. long tool calls) or not yet installed.
+enum AXStateHint: Sendable {
+    case working   // progress bar visible / spinner / running indicator
+    case idle      // normal editing state, no obvious activity indicator
+    case unknown   // AX permission denied or element not found
+}
+
 // Watches which IDE window is frontmost and extracts its working directory.
 //
 // Uses NSWorkspace activation notifications + AXUIElement window-title parsing.
@@ -23,6 +34,12 @@ final class ActiveAppMonitor {
     }
 
     private(set) var frontmost: FrontmostEntry? = nil
+
+    /// Latest AX hint per agent (updated off-main-thread, published on main).
+    private(set) var axHints: [TrackedAgent: AXStateHint] = [:]
+
+    /// Callback fired whenever an AX hint changes. Set by `AgentTrackingManager`.
+    var onAXHint: ((TrackedAgent, AXStateHint) -> Void)?
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "activemonitor")
     private var activationObserver: (any NSObjectProtocol)?
@@ -158,6 +175,38 @@ final class ActiveAppMonitor {
                         return dir.isEmpty ? path : dir
                     }
                     return path
+                }
+            }
+        }
+        return nil
+    }
+
+    // MARK: - AX state hints
+
+    /// Read a coarse working/idle hint from an IDE window by probing for a
+    /// VS Code / Cursor / Windsurf "Copilot" or "thinking" status-bar item.
+    /// Must be called from a background thread (AX calls can block).
+    nonisolated static func readStatusBarHint(pid: pid_t) -> AXStateHint {
+        let axApp = AXUIElementCreateApplication(pid)
+        if let hint = searchForCopilotHint(in: axApp) { return hint }
+        return .unknown
+    }
+
+    nonisolated private static func searchForCopilotHint(in axApp: AXUIElement) -> AXStateHint? {
+        var ref: CFTypeRef?
+        // Try menu-bar-extra or status-bar items for the spinner icon
+        guard AXUIElementCopyAttributeValue(axApp, kAXMenuBarAttribute as CFString, &ref) == .success,
+              let bar = ref else { return nil }
+        var childRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(bar as! AXUIElement, kAXChildrenAttribute as CFString, &childRef) == .success,
+              let children = childRef as? [AXUIElement] else { return nil }
+        for child in children {
+            var descRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(child, kAXDescriptionAttribute as CFString, &descRef) == .success,
+               let desc = descRef as? String {
+                let lower = desc.lowercased()
+                if lower.contains("copilot") || lower.contains("generating") || lower.contains("thinking") {
+                    return lower.contains("generating") || lower.contains("thinking") ? .working : .idle
                 }
             }
         }

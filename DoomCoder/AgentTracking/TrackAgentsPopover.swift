@@ -60,6 +60,7 @@ struct TrackAccordion: View {
     private func compactRow(_ agent: TrackedAgent) -> some View {
         let live = manager.liveSessions.first { $0.agent == agent }
         let isFrontmost = live?.isActiveWindow == true
+        let agentSt = manager.agentState(for: agent)
         HStack(alignment: .center, spacing: 10) {
             // Agent icon with active-window badge overlay
             ZStack(alignment: .topTrailing) {
@@ -78,9 +79,9 @@ struct TrackAccordion: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.displayName).font(.caption.weight(.medium))
                 HStack(spacing: 4) {
-                    Circle().fill(stateColor(live?.displayState)).frame(width: 6, height: 6)
-                        .symbolEffect(.pulse, isActive: live?.displayState == .running)
-                    Text(subtitle(agent: agent, live: live))
+                    Circle().fill(agentStateColor(agentSt)).frame(width: 6, height: 6)
+                        .symbolEffect(.pulse, options: .repeating, isActive: agentSt == .working)
+                    Text(subtitle(agent: agent, live: live, agentState: agentSt))
                         .font(.caption2).foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
                 }
@@ -109,20 +110,23 @@ struct TrackAccordion: View {
         .transition(.opacity.combined(with: .offset(y: -8)))
     }
 
-    private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live { return live.status }
-        if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
-        return "idle"
+    private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?, agentState: AgentState) -> String {
+        switch agentState {
+        case .notInstalled: return "not installed"
+        case .installed:    return agent == .copilotCLI ? "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" : "idle"
+        case .idle:         return live?.status ?? "idle"
+        case .working:      return live?.status ?? "working…"
+        case .closed:       return "closed"
+        }
     }
 
-    private func stateColor(_ s: AgentSessionState?) -> Color {
-        guard let s else { return .secondary.opacity(0.5) }
+    private func agentStateColor(_ s: AgentState) -> Color {
         switch s {
-        case .running:          return .green
-        case .waitingInput:     return .yellow
-        case .waitingApproval:  return .orange
-        case .completed:        return .gray
-        case .failed:           return .red
+        case .notInstalled: return .secondary.opacity(0.3)
+        case .installed:    return .secondary.opacity(0.5)
+        case .idle:         return .green
+        case .working:      return .yellow
+        case .closed:       return .gray
         }
     }
 
@@ -131,11 +135,7 @@ struct TrackAccordion: View {
         var iMap: [TrackedAgent: Bool] = [:]
         for a in TrackedAgent.allCases {
             eMap[a] = TrackingStore.isEnabled(a)
-            if a == .copilotCLI {
-                iMap[a] = !CopilotCLIFolderManager.installedFolders().isEmpty
-            } else {
-                iMap[a] = AgentInstallerV2.isInstalled(a)
-            }
+            iMap[a] = AgentInstallerV2.isInstalled(a)
         }
         withAnimation(DCAnim.smooth) {
             enabled = eMap
@@ -146,11 +146,6 @@ struct TrackAccordion: View {
 
     // Count of installed agents (for header subtitle in parent view).
     static func configuredCount() -> Int {
-        TrackedAgent.allCases.filter { agent in
-            if agent == .copilotCLI {
-                return !CopilotCLIFolderManager.installedFolders().isEmpty
-            }
-            return AgentInstallerV2.isInstalled(agent)
-        }.count
+        TrackedAgent.allCases.filter { AgentInstallerV2.isInstalled($0) }.count
     }
 }

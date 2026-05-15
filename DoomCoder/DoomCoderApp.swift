@@ -69,6 +69,8 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Start active-window tracking (AX-based CWD detection).
         ActiveAppMonitor.shared.start()
         AgentTrackingManager.shared.startActiveWindowObservation()
+        AgentTrackingManager.shared.startProcessPolling()
+        AgentTrackingManager.shared.startNSWorkspaceMonitoring()
 
         // Path-heal any installed hooks off the main thread (JSON I/O).
         Task.detached(priority: .utility) {
