@@ -262,7 +262,27 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
         "userPromptSubmitted":  .userPrompt,
         "preToolUse":           .toolStart,
         "postToolUse":          .toolEnd,
+        "postToolUseFailure":   .toolError,
+        "agentStop":            .sessionEnd,
+        "subagentStart":        .subagentStart,
+        "subagentStop":         .subagentEnd,
         "errorOccurred":        .error,
+        "preCompact":           .other,
+        "permissionRequest":    .permissionNeeded,
+        // `notification` is dispatched by notification_type in normalize().
+        "notification":         .other,
+    ]
+
+    /// Sub-mapping for Copilot CLI's `notification` event — the per-turn
+    /// idle/done signal, equivalent to Claude's `Notification` hook. The
+    /// CLI sends a `notification_type` discriminator in the payload.
+    private static let notificationTypeMap: [String: NormalizedEventPhase] = [
+        "shell_completed":          .toolEnd,
+        "shell_detached_completed": .toolEnd,
+        "agent_completed":          .subagentEnd,
+        "agent_idle":               .sessionEnd,
+        "permission_prompt":        .permissionNeeded,
+        "elicitation_dialog":       .permissionNeeded,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -291,6 +311,15 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
                 phase = .error
                 isFatal = true
             }
+        }
+
+        // `notification` is the per-turn idle/done signal — equivalent to
+        // Claude's `Notification` hook. Dispatch on notification_type so we
+        // map agent_idle → sessionEnd (fires "done" toast) and
+        // permission_prompt → permissionNeeded.
+        if envelope.event == "notification" {
+            let kind = payload["notification_type"] as? String ?? ""
+            phase = Self.notificationTypeMap[kind] ?? .other
         }
 
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"

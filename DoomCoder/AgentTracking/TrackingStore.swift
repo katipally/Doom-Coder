@@ -31,9 +31,6 @@ enum TrackingStore {
         return TrackedAgent.allCases.filter { agent in
             let enabled = map[agent.rawValue] ?? true
             guard enabled else { return false }
-            if agent == .copilotCLI {
-                return !CopilotCLIFolderManager.installedFolders().isEmpty
-            }
             return AgentInstallerV2.isInstalled(agent)
         }.count
     }
@@ -41,10 +38,7 @@ enum TrackingStore {
     /// Number of agents with hooks installed (regardless of tracking toggle).
     static func installedCount() -> Int {
         TrackedAgent.allCases.filter { agent in
-            if agent == .copilotCLI {
-                return !CopilotCLIFolderManager.installedFolders().isEmpty
-            }
-            return AgentInstallerV2.isInstalled(agent)
+            AgentInstallerV2.isInstalled(agent)
         }.count
     }
 

@@ -15,19 +15,15 @@ struct ConfigureAgentsViewV2: View {
     @State private var isInstalling: Bool = false
     @State private var showMigrationAlert = false
     @State private var migrationAgents: [TrackedAgent] = []
-    // Copilot CLI folders
-    @State private var cliFolders: [URL] = CopilotCLIFolderManager.folders
-    @State private var showRemoveAllFoldersConfirm = false
     @State private var installedCache: [TrackedAgent: Bool] = [:]
+    // VS Code variants — which settings.json files the user wants patched.
+    @State private var vscodeEnabledVariants: [String] = AgentInstallerV2.vscodeEnabledVariantPaths()
     // Channel store
     @State private var channelConfig = ChannelStore.load()
     // Channel test results
     @State private var testResult: (Bool, String)? = nil
     // Hook validation warnings (human-readable drift diff per agent)
     @State private var hookWarnings: [TrackedAgent: String] = [:]
-    // Copilot CLI folders whose last verification failed — used to target
-    // Repair to the specific failing folders instead of a blanket reinstall.
-    @State private var cliFailingFolders: [URL] = []
     // Permission status
     @State private var permStatus: String = "…"
     // Notification event preferences
@@ -304,23 +300,22 @@ struct ConfigureAgentsViewV2: View {
                     Label("Prerequisites", systemImage: "list.bullet.clipboard")
                 }
 
-                // Copilot CLI: folder management
-                if agent == .copilotCLI {
-                    copilotCLIFoldersSection
-                }
-
                 // Install / Uninstall
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Config: \(configPathHint(agent))")
                             .font(.callout).foregroundStyle(.secondary)
 
+                        // VS Code variants checkbox group — lets users opt
+                        // in/out of patching settings.json per host (Stable,
+                        // Insiders, VSCodium, Cursor, Windsurf).
+                        if agent == .vscode {
+                            vscodeVariantsPicker
+                        }
+
                         HStack(spacing: 12) {
-                            if agent == .copilotCLI {
-                                // handled per-folder above
-                            } else {
-                                let isInst = installedCache[agent] ?? false
-                                Button(isInst ? "Reinstall" : "Install") {
+                            let isInst = installedCache[agent] ?? false
+                            Button(isInst ? "Reinstall" : "Install") {
                                     withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
                                     let r = AgentInstallerV2.install(agent)
                                     let msg = resultMessage(r, verb: "Install")
@@ -355,7 +350,6 @@ struct ConfigureAgentsViewV2: View {
                                         .controlSize(.small)
                                         .transition(.opacity)
                                 }
-                            }
 
                             Spacer()
 
@@ -454,212 +448,44 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
-    // MARK: - Copilot CLI folders
+    // MARK: - VS Code variants picker
 
-    private var copilotCLIFoldersSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                if cliFolders.isEmpty {
-                    VStack(spacing: 6) {
-                        Image(systemName: "folder.badge.questionmark")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("No project folders registered")
-                            .font(.callout).foregroundStyle(.secondary)
-                        Text("Copilot CLI hooks are installed per-project. Add your project folders below to track agent activity.")
-                            .font(.caption).foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
+    /// Checkbox group that lets users opt in/out of each detected VS Code
+    /// variant's settings.json patch. Order: Stable, Insiders, VSCodium,
+    /// Cursor, Windsurf.
+    private var vscodeVariantsPicker: some View {
+        let labels: [(path: String, name: String)] = [
+            (NSHomeDirectory() + "/Library/Application Support/Code/User/settings.json", "VS Code"),
+            (NSHomeDirectory() + "/Library/Application Support/Code - Insiders/User/settings.json", "VS Code Insiders"),
+            (NSHomeDirectory() + "/Library/Application Support/VSCodium/User/settings.json", "VSCodium"),
+            (NSHomeDirectory() + "/Library/Application Support/Cursor/User/settings.json", "Cursor"),
+            (NSHomeDirectory() + "/Library/Application Support/Windsurf/User/settings.json", "Windsurf"),
+        ]
+        let detected = labels.filter { FileManager.default.fileExists(atPath: $0.path) }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Patch settings.json in:").font(.caption).foregroundStyle(.secondary)
+            if detected.isEmpty {
+                Text("No VS Code-family installs detected.")
+                    .font(.caption).foregroundStyle(.tertiary)
+            } else {
+                ForEach(detected, id: \.path) { variant in
+                    Toggle(isOn: Binding(
+                        get: { vscodeEnabledVariants.contains(variant.path) },
+                        set: { on in
+                            var arr = vscodeEnabledVariants
+                            if on, !arr.contains(variant.path) { arr.append(variant.path) }
+                            if !on { arr.removeAll { $0 == variant.path } }
+                            vscodeEnabledVariants = arr
+                            AgentInstallerV2.setVSCodeEnabledVariants(arr)
+                        }
+                    )) {
+                        Text(variant.name).font(.caption)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                }
-
-                ForEach(cliFolders, id: \.path) { folder in
-                    let folderExists = FileManager.default.fileExists(atPath: folder.path)
-                    let isInst = folderExists && AgentInstallerV2.isInstalledCLI(folder: folder)
-                    HStack(spacing: 6) {
-                        // Status icon: green = hooks installed, orange = missing, red = folder gone
-                        Image(systemName: folderExists
-                              ? (isInst ? "folder.fill.badge.checkmark" : "folder.fill")
-                              : "folder.fill.badge.minus")
-                            .foregroundStyle(folderExists ? (isInst ? .green : .secondary) : .orange)
-                            .help(folderExists
-                                  ? (isInst ? "Hooks installed" : "No hooks installed")
-                                  : "Folder not found on disk — only Remove is available")
-
-                        Text(folder.lastPathComponent)
-                            .font(.callout.bold())
-                            .foregroundStyle(folderExists ? .primary : .secondary)
-                        Text(folder.path)
-                            .lineLimit(1).truncationMode(.middle)
-                            .font(.caption).foregroundStyle(.tertiary)
-
-                        Spacer()
-
-                        // ── Hook actions ────────────────────────────
-                        Button(isInst ? "Reinstall" : "Install") {
-                            _ = CopilotCLIFolderManager.installHooks(in: folder)
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        }
-                        .controlSize(.small)
-                        .disabled(!folderExists)
-                        .help(isInst
-                              ? "Overwrite and refresh hooks in this folder"
-                              : (folderExists ? "Install DoomCoder hooks in this folder"
-                                             : "Folder not found — cannot install"))
-
-                        Button("Uninstall") {
-                            _ = CopilotCLIFolderManager.uninstallHooksFromFolder(folder)
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        }
-                        .controlSize(.small)
-                        .disabled(!isInst)
-                        .help(isInst
-                              ? "Remove hooks from disk — folder stays in list so you can reinstall later"
-                              : "No hooks to uninstall")
-
-                        // ── Separator between hook ↔ list actions ─────
-                        Divider().frame(maxHeight: 16)
-
-                        // ── List action ──────────────────────────────
-                        Button("Remove", role: .destructive) {
-                            CopilotCLIFolderManager.removeFolder(folder)
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        }
-                        .controlSize(.small)
-                        .help(isInst
-                              ? "Remove this folder from DoomCoder's list — hooks on disk are NOT deleted"
-                              : "Remove this folder from DoomCoder's tracking list")
-                    }
-                    .padding(.vertical, 2)
-                }
-
-                // ── Bulk actions ─────────────────────────────────────────────────────
-                // Only shown when at least one folder is registered.
-                // Counts recompute every render so they reflect manual on-disk edits.
-                if !cliFolders.isEmpty {
-                    let notInstalled = cliFolders.filter { !AgentInstallerV2.isInstalledCLI(folder: $0) }
-                    let installed = cliFolders.filter { AgentInstallerV2.isInstalledCLI(folder: $0) }
-
-                    Divider()
-
-                    // Section: Hook Actions
-                    HStack(spacing: 6) {
-                        Text("HOOK ACTIONS")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                        Rectangle()
-                            .frame(height: 0.5)
-                            .foregroundStyle(.separator)
-                    }
-
-                    HStack(spacing: 6) {
-                        // Install missing hooks only
-                        Button {
-                            CopilotCLIFolderManager.installMissing()
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        } label: {
-                            Label("Install All (\(notInstalled.count))", systemImage: "arrow.down.circle")
-                        }
-                        .controlSize(.small)
-                        .disabled(notInstalled.isEmpty)
-                        .help(notInstalled.isEmpty
-                              ? "All registered folders already have hooks installed"
-                              : "Install hooks in \(notInstalled.count) folder\(notInstalled.count == 1 ? "" : "s") that are missing them")
-
-                        // Force overwrite in every folder
-                        Button {
-                            CopilotCLIFolderManager.reinstallAll()
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        } label: {
-                            Label("Reinstall All (\(cliFolders.count))", systemImage: "arrow.counterclockwise.circle")
-                        }
-                        .controlSize(.small)
-                        .help("Overwrite and refresh hooks in all \(cliFolders.count) registered folder\(cliFolders.count == 1 ? "" : "s")")
-
-                        // Remove hooks from installed folders — list untouched
-                        Button(role: .destructive) {
-                            CopilotCLIFolderManager.uninstallHooksOnly()
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        } label: {
-                            Label("Uninstall All (\(installed.count))", systemImage: "minus.circle")
-                        }
-                        .controlSize(.small)
-                        .disabled(installed.isEmpty)
-                        .help(installed.isEmpty
-                              ? "No folders have hooks installed"
-                              : "Remove hooks from \(installed.count) folder\(installed.count == 1 ? "" : "s") — folders stay in list so you can reinstall later")
-                    }
-
-                    // Section: Folder List Actions
-                    HStack(spacing: 6) {
-                        Text("FOLDER LIST")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                        Rectangle()
-                            .frame(height: 0.5)
-                            .foregroundStyle(.separator)
-                    }
-
-                    Button(role: .destructive) {
-                        showRemoveAllFoldersConfirm = true
-                    } label: {
-                        Label("Remove All (\(cliFolders.count)) from List", systemImage: "trash.circle")
-                    }
-                    .controlSize(.small)
-                    .help("Remove all \(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") from DoomCoder's tracking list — hooks on disk are NOT deleted")
-                    .confirmationDialog(
-                        "Remove \(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") from DoomCoder?",
-                        isPresented: $showRemoveAllFoldersConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Remove All from List", role: .destructive) {
-                            CopilotCLIFolderManager.removeAllFolders()
-                            withAnimation(DCAnim.smooth) { cliFolders = CopilotCLIFolderManager.folders }
-                        }
-                        Button("Cancel", role: .cancel) { }
-                    } message: {
-                        Text("Hooks installed in these folders will NOT be deleted. You can re-add folders and reinstall at any time.")
-                    }
-                }
-
-                Divider()
-
-                HStack(spacing: 8) {
-                    Button("Add Folder…") {
-                        let p = NSOpenPanel()
-                        p.canChooseFiles = false
-                        p.canChooseDirectories = true
-                        p.allowsMultipleSelection = true
-                        p.prompt = "Add Project"
-                        if p.runModal() == .OK {
-                            for url in p.urls {
-                                CopilotCLIFolderManager.addFolder(url)
-                            }
-                            cliFolders = CopilotCLIFolderManager.folders
-                        }
-                    }
-
-                    Button("Discover Projects") {
-                        let discovered = CopilotCLIFolderManager.discoverRecentFolders()
-                            .filter { d in !cliFolders.contains(where: { $0.path == d.path }) }
-                        for url in discovered.prefix(5) {
-                            CopilotCLIFolderManager.addFolder(url)
-                        }
-                        withAnimation(DCAnim.smooth) {
-                            cliFolders = CopilotCLIFolderManager.folders
-                        }
-                    }
-                    .help("Scans ~/Developer, ~/Projects, ~/Code, ~/src for project folders")
-
-                    Spacer()
-                    Text("\(cliFolders.count) folder\(cliFolders.count == 1 ? "" : "s") registered")
-                        .font(.caption).foregroundStyle(.tertiary)
+                    .toggleStyle(.checkbox)
                 }
             }
-        } label: {
-            Label("Project Folders", systemImage: "folder.badge.gearshape")
         }
+        .padding(.vertical, 2)
     }
 
     // MARK: - Channels tab
@@ -906,11 +732,7 @@ struct ConfigureAgentsViewV2: View {
             let dets = AgentDetector.detectAll()
             var inst: [TrackedAgent: Bool] = [:]
             for a in TrackedAgent.allCases {
-                if a == .copilotCLI {
-                    inst[a] = !CopilotCLIFolderManager.installedFolders().isEmpty
-                } else {
-                    inst[a] = AgentInstallerV2.isInstalled(a)
-                }
+                inst[a] = AgentInstallerV2.isInstalled(a)
             }
             return (dets, inst)
         }.value
@@ -919,7 +741,6 @@ struct ConfigureAgentsViewV2: View {
         withAnimation(DCAnim.smooth) {
             detections = d
             installedCache = results.1
-            cliFolders = CopilotCLIFolderManager.folders
         }
     }
 
@@ -967,8 +788,8 @@ struct ConfigureAgentsViewV2: View {
             list.append(Prereq(label: "~/.claude/ exists (shared config)", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `claude` once or create ~/.claude/ manually"))
             list.append(Prereq(label: "VS Code + Copilot Chat extension", met: true, fix: nil))
         case .copilotCLI:
-            list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm, brew, or gh extension"))
-            list.append(Prereq(label: "At least 1 project folder configured", met: !cliFolders.isEmpty, fix: "Click 'Add folder' below"))
+            list.append(Prereq(label: "GitHub Copilot CLI installed", met: detections[.copilotCLI]?.installed == true, fix: "Install via npm: `npm i -g @github/copilot`"))
+            list.append(Prereq(label: "~/.copilot/ exists", met: FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.copilot"), fix: "Run `copilot` once to initialize"))
         case .windsurf:
             let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codeium/windsurf")
             list.append(Prereq(label: "~/.codeium/windsurf/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Install Windsurf and open it once"))
@@ -995,58 +816,22 @@ struct ConfigureAgentsViewV2: View {
 
     private func validateAllHooks() {
         var warnings: [TrackedAgent: String] = [:]
-        var failingFolders: [URL] = []
         for agent in TrackedAgent.allCases {
             guard installedCache[agent] == true else { continue }
-            if agent == .copilotCLI {
-                // Per-folder verification: treat the agent as healthy as
-                // long as *any* registered folder is OK. Surface the diff
-                // for any folder that actually fails so the user can act
-                // on it.
-                let results = AgentInstallerV2.verifyAllCLIFolders()
-                if results.isEmpty { continue }
-                var failureMessages: [String] = []
-                for (folder, result) in results {
-                    if case .failure(let err) = result {
-                        failingFolders.append(folder)
-                        failureMessages.append(err.localizedDescription)
-                    }
-                }
-                if !failureMessages.isEmpty {
-                    warnings[agent] = failureMessages.joined(separator: "\n")
-                }
-            } else {
-                if case .failure(let err) = AgentInstallerV2.verifyInstalled(agent) {
-                    warnings[agent] = err.localizedDescription
-                }
+            if case .failure(let err) = AgentInstallerV2.verifyInstalled(agent) {
+                warnings[agent] = err.localizedDescription
             }
         }
         withAnimation(DCAnim.smooth) {
             hookWarnings = warnings
-            cliFailingFolders = failingFolders
         }
     }
 
-    /// Repairs hook configs when drift was detected. For Copilot CLI this
-    /// reinstalls *only* the folders that failed verification instead of
-    /// blanket-reinstalling every registered folder.
+    /// Reinstalls hooks for an agent when drift was detected.
     private func repairDriftedHooks(agent: TrackedAgent) {
-        if agent == .copilotCLI && !cliFailingFolders.isEmpty {
-            var failures: [String] = []
-            for folder in cliFailingFolders {
-                if case .failure(let err) = AgentInstallerV2.install(.copilotCLI, folder: folder) {
-                    failures.append("\(folder.lastPathComponent): \(err.localizedDescription)")
-                }
-            }
-            statusMessage = failures.isEmpty
-                ? "Repair successful — reinstalled \(cliFailingFolders.count) folder\(cliFailingFolders.count == 1 ? "" : "s")."
-                : "Repair failed for:\n\(failures.joined(separator: "\n"))"
-            statusIsError = !failures.isEmpty
-        } else {
-            let r = AgentInstallerV2.install(agent)
-            statusMessage = resultMessage(r, verb: "Repair")
-            if case .failure = r { statusIsError = true } else { statusIsError = false }
-        }
+        let r = AgentInstallerV2.install(agent)
+        statusMessage = resultMessage(r, verb: "Repair")
+        if case .failure = r { statusIsError = true } else { statusIsError = false }
         Task { await detectAllAsync(); validateAllHooks() }
     }
 
@@ -1084,14 +869,14 @@ struct ConfigureAgentsViewV2: View {
         case .vscode:
             return [
                 "VS Code with the GitHub Copilot Chat extension installed.",
-                "Hooks live in ~/.claude/settings.json (shared with Claude Code).",
+                "Hooks live in ~/.copilot/vscode-hooks/doomcoder.json. We patch each variant's settings.json to point chat.hookFilesLocations at this directory.",
                 "Reload the VS Code window after install for hooks to register."
             ]
         case .copilotCLI:
             return [
-                "GitHub Copilot CLI installed (npm-global, gh-extension, brew, or volta/n).",
-                "For each project you want tracked, click ‘Add folder’ and pick its repo root.",
-                "Hooks file is created at <repo>/.github/hooks/doomcoder.json."
+                "GitHub Copilot CLI installed (`npm i -g @github/copilot` or `brew install copilot-cli`).",
+                "Hooks file is created at ~/.copilot/hooks/doomcoder.json — global, applies to every directory you run `copilot` in.",
+                "Run `copilot` once so ~/.copilot/ is created."
             ]
         case .windsurf:
             return [
@@ -1112,8 +897,8 @@ struct ConfigureAgentsViewV2: View {
         switch agent {
         case .claude:     return "Hooks in ~/.claude/settings.json (nested matcher format)"
         case .cursor:     return "Hooks in ~/.cursor/hooks.json (version: 1, command only)"
-        case .vscode:     return "VS Code reads ~/.claude/settings.json natively"
-        case .copilotCLI: return "Per-project .github/hooks/doomcoder.json (bash/cwd/timeoutSec)"
+        case .vscode:     return "Hooks in ~/.copilot/vscode-hooks/doomcoder.json (chat.hookFilesLocations)"
+        case .copilotCLI: return "Hooks in ~/.copilot/hooks/doomcoder.json (global, all 13 events)"
         case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
         case .codexCLI:   return "Hooks in ~/.codex/hooks.json + codex_hooks feature flag"
         }
@@ -1123,8 +908,8 @@ struct ConfigureAgentsViewV2: View {
         switch agent {
         case .claude:     return "~/.claude/settings.json"
         case .cursor:     return "~/.cursor/hooks.json"
-        case .vscode:     return "~/.claude/settings.json"
-        case .copilotCLI: return ".github/hooks/doomcoder.json"
+        case .vscode:     return "~/.copilot/vscode-hooks/doomcoder.json"
+        case .copilotCLI: return "~/.copilot/hooks/doomcoder.json"
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         case .codexCLI:   return "~/.codex/hooks.json"
         }
@@ -1439,28 +1224,11 @@ struct ConnectionDoctorSection: View {
     }
 
     private func checkConfigMapping() -> StepOutcome {
-        if agent == .copilotCLI {
-            let results = AgentInstallerV2.verifyAllCLIFolders()
-            if results.isEmpty {
-                return StepOutcome(status: .warn, detail: "No project folders registered — add one to enable CLI tracking.")
-            }
-            var failingFolders: [String] = []
-            for (folder, result) in results {
-                if case .failure(let err) = result {
-                    failingFolders.append("\(folder.lastPathComponent): \(err.localizedDescription)")
-                }
-            }
-            if failingFolders.isEmpty {
-                return StepOutcome(status: .ok, detail: "All \(results.count) folder(s) verified.")
-            }
-            return StepOutcome(status: .fail, detail: failingFolders.joined(separator: "\n"))
-        } else {
-            switch AgentInstallerV2.verifyInstalled(agent) {
-            case .success:
-                return StepOutcome(status: .ok, detail: "All expected hook events mapped.")
-            case .failure(let err):
-                return StepOutcome(status: .fail, detail: err.localizedDescription)
-            }
+        switch AgentInstallerV2.verifyInstalled(agent) {
+        case .success:
+            return StepOutcome(status: .ok, detail: "All expected hook events mapped.")
+        case .failure(let err):
+            return StepOutcome(status: .fail, detail: err.localizedDescription)
         }
     }
 
@@ -1545,13 +1313,7 @@ struct ConnectionDoctorSection: View {
             // here. The user can relaunch if the listener is wedged.
             try? await Task.sleep(nanoseconds: 400_000_000)
         case 2:
-            if agent == .copilotCLI {
-                for folder in CopilotCLIFolderManager.folders {
-                    _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
-                }
-            } else {
-                _ = AgentInstallerV2.install(agent)
-            }
+            _ = AgentInstallerV2.install(agent)
         case 3:
             // Nothing we can do programmatically — point user at perms.
             NSWorkspace.shared.selectFile(AgentInstallerV2.helperBinaryPath(),

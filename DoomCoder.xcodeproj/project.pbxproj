@@ -29,7 +29,6 @@
 		DC0000000000002000000034 /* AgentIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000034 /* AgentIconProvider.swift */; };
 		DC0000000000002000000035 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000035 /* DeepLink.swift */; };
 		DC0000000000002000000036 /* ChannelTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000036 /* ChannelTester.swift */; };
-		DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000037 /* CopilotCLIFolderManager.swift */; };
 		DC0000000000002000000038 /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000038 /* MigrationManager.swift */; };
 		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
@@ -77,7 +76,6 @@
 		DC0000000000001000000034 /* AgentIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconProvider.swift; sourceTree = "<group>"; };
 		DC0000000000001000000035 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
 		DC0000000000001000000036 /* ChannelTester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTester.swift; sourceTree = "<group>"; };
-		DC0000000000001000000037 /* CopilotCLIFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCLIFolderManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000038 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
@@ -161,7 +159,6 @@
 				DC0000000000001000000034 /* AgentIconProvider.swift */,
 				DC0000000000001000000035 /* DeepLink.swift */,
 				DC0000000000001000000036 /* ChannelTester.swift */,
-				DC0000000000001000000037 /* CopilotCLIFolderManager.swift */,
 				DC0000000000001000000038 /* MigrationManager.swift */,
 				DC0000000000001000000041 /* TrackingStore.swift */,
 				DC0000000000001000000042 /* LogsView.swift */,
@@ -309,7 +306,6 @@
 				DC0000000000002000000034 /* AgentIconProvider.swift in Sources */,
 				DC0000000000002000000035 /* DeepLink.swift in Sources */,
 				DC0000000000002000000036 /* ChannelTester.swift in Sources */,
-				DC0000000000002000000037 /* CopilotCLIFolderManager.swift in Sources */,
 				DC0000000000002000000038 /* MigrationManager.swift in Sources */,
 				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
 				DC0000000000002000000042 /* LogsView.swift in Sources */,

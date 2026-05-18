@@ -143,3 +143,56 @@ struct WhatsNewSheet: View {
     }
 }
 
+// MARK: - v2.3.0 — Copilot CLI global hooks, all 13 events, VS Code split
+
+struct WhatsNewSheet230: View {
+    static let defaultsKey = "doomcoder.whatsnew.v2_3_0.seen"
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles").font(.title2).foregroundStyle(Color.accentColor)
+                Text("Copilot CLI, now first-class.").font(.title2.bold())
+            }
+
+            featureRow(
+                icon: "globe",
+                title: "Global Copilot CLI hooks",
+                body: "Install once and DoomCoder tracks every `copilot` session in every directory. No more per-project folder list — hooks live at ~/.copilot/hooks/doomcoder.json."
+            )
+            featureRow(
+                icon: "bell.badge",
+                title: "All 13 events, including the per-turn notification",
+                body: "We now wire every documented Copilot CLI hook event, including `notification` (agent_idle, agent_completed, shell_completed). You'll get the same 'agent done' alerts you get from Claude Code."
+            )
+            featureRow(
+                icon: "rectangle.split.2x1",
+                title: "VS Code Copilot moved to its own file",
+                body: "VS Code Copilot Chat hooks now live at ~/.copilot/vscode-hooks/doomcoder.json. We patch chat.hookFilesLocations in every detected VS Code variant (Stable, Insiders, VSCodium, Cursor, Windsurf) automatically."
+            )
+            featureRow(
+                icon: "bolt.heart",
+                title: "Real running / idle indicator",
+                body: "The main agents view now lights up green when `copilot` is running and dims when it's not — matching Claude Code and Codex CLI behavior."
+            )
+
+            Text("Migration is silent and one-shot. Per-project .github/hooks/doomcoder.json files are removed automatically. If you had committed one to git, you'll see it as a deletion in your next git status.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Button("Got it") {
+                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
+                    onDismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 460, alignment: .topLeading)
+    }
+}
