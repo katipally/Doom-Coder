@@ -160,7 +160,9 @@ struct AgentInstallerV2 {
     }
 
     /// Re-resolve the helper binary path in every installed agent config on launch.
+    /// Also removes any stale sibling backup files from previous DoomCoder versions.
     static func healAllPaths() {
+        cleanAllSiblingBackups()
         var healed = 0
         var files = 0
         let nonFolderAgents = TrackedAgent.allCases.filter { $0 != .copilotCLI }
@@ -177,6 +179,33 @@ struct AgentInstallerV2 {
             }
         }
         logger.notice("heal op=paths healed=\(healed) files=\(files)")
+    }
+
+    /// Remove all `.doomcoder-backup-*` and `.doomcoder-backup` sibling files from known config directories.
+    /// These were created by an older fallback code path and are no longer needed.
+    static func cleanAllSiblingBackups() {
+        let configFiles = [
+            claudeSettingsPath(),
+            cursorHooksPath(),
+            windsurfHooksPath(),
+            codexHooksPath(),
+            codexConfigPath(),
+        ]
+        let fm = FileManager.default
+        var removed = 0
+        for configFile in configFiles {
+            let dir = (configFile as NSString).deletingLastPathComponent
+            let base = (configFile as NSString).lastPathComponent
+            guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            for entry in entries where entry.hasPrefix(base + ".doomcoder-backup") {
+                let full = (dir as NSString).appendingPathComponent(entry)
+                try? fm.removeItem(atPath: full)
+                removed += 1
+            }
+        }
+        if removed > 0 {
+            logger.notice("heal op=sibling_backup_cleanup removed=\(removed)")
+        }
     }
 
     // MARK: - Detection
@@ -312,7 +341,10 @@ struct AgentInstallerV2 {
         let path = claudeSettingsPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
-        backup(path)
+
+        // Strip only VSCode dc-hook entries (preserves Claude entries in shared file)
+        stripDcHookEntries(&root, agentToken: "vscode")
+        pruneEmptyContainers(&root)
 
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
 
@@ -322,26 +354,17 @@ struct AgentInstallerV2 {
         let vscodeEvts = vscodeEvents
         for event in vscodeEvts {
             var arr = (hooks[event] as? [[String: Any]]) ?? []
-            // Check if dc-hook vscode entry already present
-            let alreadyHas = arr.contains { group in
-                if let innerHooks = group["hooks"] as? [[String: Any]] {
-                    return innerHooks.contains { ($0["command"] as? String)?.contains("dc-hook") == true && ($0["command"] as? String)?.contains("vscode") == true }
-                }
-                return false
-            }
-            if !alreadyHas {
-                let entry: [String: Any] = [
-                    "matcher": "*",
-                    "hooks": [
-                        [
-                            "type": "command",
-                            "command": cmdFor("vscode", event)
-                        ] as [String: Any]
-                    ]
+            let entry: [String: Any] = [
+                "matcher": "*",
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": cmdFor("vscode", event)
+                    ] as [String: Any]
                 ]
-                arr.append(entry)
-                hooks[event] = arr
-            }
+            ]
+            arr.append(entry)
+            hooks[event] = arr
         }
         root["hooks"] = hooks
         try writeJSON(root, to: path, needsVersion: false)
@@ -353,7 +376,6 @@ struct AgentInstallerV2 {
         let path = windsurfHooksPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
-        backup(path)
 
         // Strip only Windsurf dc-hook entries (preserves any other hooks user may have)
         stripDcHookEntries(&root, agentToken: "windsurf")
@@ -379,7 +401,6 @@ struct AgentInstallerV2 {
         let path = codexHooksPath()
         try ensureParentDir(path)
         var root = readJSON(at: path) ?? [:]
-        backup(path)
 
         stripDcHookEntries(&root, agentToken: "codex_cli")
         pruneEmptyContainers(&root)
@@ -457,7 +478,6 @@ struct AgentInstallerV2 {
         let hooksDir = folder.appendingPathComponent(".github/hooks")
         let path = hooksDir.appendingPathComponent("doomcoder.json").path
         try ensureParentDir(path)
-        backup(path)
 
         // Copilot CLI requires version: 1 and bash/cwd/timeoutSec keys — ALL events
         let events = copilotCLIEvents
@@ -478,12 +498,13 @@ struct AgentInstallerV2 {
 
     /// Complete event lists per agent — single source of truth.
     static let claudeEvents = [
-        "SessionStart", "SessionEnd", "UserPromptSubmit",
-        "PreToolUse", "PostToolUse", "PostToolUseFailure",
+        "SessionStart", "SessionEnd", "UserPromptSubmit", "UserPromptExpansion",
+        "PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch",
         "PermissionRequest", "PermissionDenied",
         "Notification", "Stop", "StopFailure",
         "SubagentStart", "SubagentStop",
         "TaskCreated", "TaskCompleted",
+        "TeammateIdle",
         "PreCompact", "PostCompact",
         "FileChanged", "CwdChanged", "ConfigChange",
         "InstructionsLoaded", "Elicitation", "ElicitationResult",
@@ -891,35 +912,23 @@ struct AgentInstallerV2 {
     @discardableResult
     static func backup(_ path: String) -> String? {
         guard FileManager.default.fileExists(atPath: path) else { return nil }
-        let ts = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let backupDir = AgentSupportDir.url.appendingPathComponent("backups", isDirectory: true)
         try? FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
         let name = (path as NSString).lastPathComponent
-        let dst = backupDir.appendingPathComponent("\(name).\(ts)").path
+        let dst = backupDir.appendingPathComponent(name).path
         do {
+            // Overwrite any existing backup — keep only one per config file.
+            if FileManager.default.fileExists(atPath: dst) {
+                try FileManager.default.removeItem(atPath: dst)
+            }
             try FileManager.default.copyItem(atPath: path, toPath: dst)
-            // Keep only the 3 most recent backups for this filename.
-            pruneBackups(in: backupDir.path, baseName: name, keep: 3)
             return dst
         } catch {
-            // Secondary fallback — sibling backup next to the file so we at
-            // least have something to revert from if the support-dir copy
-            // fails (e.g. sandboxed contexts).
-            let sibling = "\(path).doomcoder-backup-\(ts)"
+            // Secondary fallback — single sibling backup next to the file (no timestamp).
+            let sibling = "\(path).doomcoder-backup"
+            try? FileManager.default.removeItem(atPath: sibling)
             try? FileManager.default.copyItem(atPath: path, toPath: sibling)
             return FileManager.default.fileExists(atPath: sibling) ? sibling : nil
-        }
-    }
-
-    private static func pruneBackups(in dir: String, baseName: String, keep: Int) {
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
-        let matches = entries
-            .filter { $0.hasPrefix(baseName + ".") }
-            .sorted(by: >)   // ISO-8601 sort is chronological alphabetically
-        let toDelete = matches.dropFirst(keep)
-        for file in toDelete {
-            try? fm.removeItem(atPath: (dir as NSString).appendingPathComponent(file))
         }
     }
 

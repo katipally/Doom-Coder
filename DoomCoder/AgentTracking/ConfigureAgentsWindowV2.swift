@@ -1200,14 +1200,8 @@ private struct LiveEventRow: View {
             .buttonStyle(.plain)
 
             if expanded, let json = event.payloadJSON {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(json)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 4)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                PayloadRendererView(json: json)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             Divider().opacity(0.4)

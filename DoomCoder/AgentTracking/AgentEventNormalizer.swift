@@ -16,7 +16,6 @@ enum NormalizedEventPhase: String, Codable, Sendable {
     case subagentStart
     case subagentEnd
     case error
-    case fileChanged
     case other
 }
 
@@ -31,7 +30,6 @@ struct NormalizedHookEvent: Sendable {
     let filePath: String?
     let cwd: String
     let timestamp: Date
-    let summary: String
     let isFatal: Bool
     let payloadRaw: Data?
 }
@@ -78,32 +76,34 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
     let agent = TrackedAgent.claude
 
     private static let phaseMap: [String: NormalizedEventPhase] = [
-        "SessionStart":       .sessionStart,
-        "SessionEnd":         .sessionEnd,
-        "UserPromptSubmit":   .userPrompt,
-        "PreToolUse":         .toolStart,
-        "PostToolUse":        .toolEnd,
-        "PostToolUseFailure": .toolError,
-        "PermissionRequest":  .permissionNeeded,
-        "PermissionDenied":   .permissionNeeded,
-        "Notification":       .agentResponse,
-        "Stop":               .sessionEnd,
-        "StopFailure":        .error,
-        "SubagentStart":      .subagentStart,
-        "SubagentStop":       .subagentEnd,
-        "TaskCreated":        .other,
-        "TaskCompleted":      .sessionEnd,
-        "TeammateIdle":       .other,
-        "PreCompact":         .other,
-        "PostCompact":        .other,
-        "FileChanged":        .fileChanged,
-        "CwdChanged":         .other,
-        "ConfigChange":       .other,
-        "InstructionsLoaded": .other,
-        "Elicitation":        .permissionNeeded,  // MCP server requesting user input
-        "ElicitationResult":  .other,
-        "WorktreeCreate":     .other,
-        "WorktreeRemove":     .other,
+        "SessionStart":          .sessionStart,
+        "SessionEnd":            .sessionEnd,
+        "UserPromptSubmit":      .userPrompt,
+        "UserPromptExpansion":   .userPrompt,
+        "PreToolUse":            .toolStart,
+        "PostToolUse":           .toolEnd,
+        "PostToolUseFailure":    .toolError,
+        "PostToolBatch":         .toolEnd,
+        "PermissionRequest":     .permissionNeeded,
+        "PermissionDenied":      .permissionNeeded,
+        "Notification":          .agentResponse,
+        "Stop":                  .sessionEnd,
+        "StopFailure":           .error,
+        "SubagentStart":         .subagentStart,
+        "SubagentStop":          .subagentEnd,
+        "TaskCreated":           .other,
+        "TaskCompleted":         .sessionEnd,
+        "TeammateIdle":          .other,
+        "PreCompact":            .other,
+        "PostCompact":           .other,
+        "FileChanged":           .other,
+        "CwdChanged":            .other,
+        "ConfigChange":          .other,
+        "InstructionsLoaded":    .other,
+        "Elicitation":           .permissionNeeded,
+        "ElicitationResult":     .other,
+        "WorktreeCreate":        .other,
+        "WorktreeRemove":        .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -125,7 +125,6 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         return NormalizedHookEvent(
             agent: agent,
@@ -136,7 +135,6 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: envelope.event == "StopFailure",
             payloadRaw: envelope.payloadRaw
         )
@@ -160,7 +158,7 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         "afterShellExecution":    .toolEnd,
         "beforeMCPExecution":     .toolStart,
         "afterMCPExecution":      .toolEnd,
-        "afterFileEdit":          .fileChanged,
+        "afterFileEdit":          .other,
         "beforeReadFile":         .other,
         "beforeSubmitPrompt":     .userPrompt,
         "preCompact":             .other,
@@ -168,7 +166,7 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         "afterAgentResponse":     .agentResponse,
         "afterAgentThought":      .other,
         "beforeTabFileRead":      .other,
-        "afterTabFileEdit":       .fileChanged,
+        "afterTabFileEdit":       .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -188,7 +186,6 @@ struct CursorEventNormalizer: AgentEventNormalizer {
             ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         return NormalizedHookEvent(
             agent: agent,
@@ -199,7 +196,6 @@ struct CursorEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: false,
             payloadRaw: envelope.payloadRaw
         )
@@ -239,7 +235,6 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
             ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         return NormalizedHookEvent(
             agent: agent,
@@ -250,7 +245,6 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: false,
             payloadRaw: envelope.payloadRaw
         )
@@ -302,7 +296,6 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
         let sessionId = (payload["session_id"] as? String) ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         return NormalizedHookEvent(
             agent: agent,
@@ -313,7 +306,6 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: isFatal,
             payloadRaw: envelope.payloadRaw
         )
@@ -351,7 +343,6 @@ struct WindsurfEventNormalizer: AgentEventNormalizer {
         let toolInfo = payload["tool_info"] as? [String: Any] ?? [:]
         let filePath = toolInfo["file_path"] as? String
         let tool = windsurfToolName(event: envelope.event, toolInfo: toolInfo)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         // post_cascade_response marks end-of-turn → sessionEnd ("done" notification).
         // post_cascade_response_with_transcript fires immediately after as a superset;
@@ -368,7 +359,6 @@ struct WindsurfEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: toolInfo["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: false,
             payloadRaw: envelope.payloadRaw
         )
@@ -410,21 +400,13 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
-        var phase = Self.phaseMap[envelope.event] ?? .other
-
-        if envelope.event == "PreToolUse",
-           let toolName = payload["tool_name"] as? String,
-           codexInteractionTools.contains(toolName) {
-            phase = .permissionNeeded
-        }
-        if envelope.event.lowercased().contains("error") { phase = .error }
+        let phase = Self.phaseMap[envelope.event] ?? .other
 
         let sessionId = (payload["session_id"] as? String)
             ?? (payload["conversation_id"] as? String)
             ?? "pid-\(envelope.pid)"
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
-        let summary = buildSummary(event: envelope.event, tool: tool, payload: payload)
 
         return NormalizedHookEvent(
             agent: agent,
@@ -435,7 +417,6 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            summary: summary,
             isFatal: phase == .error,
             payloadRaw: envelope.payloadRaw
         )
@@ -465,14 +446,4 @@ enum EventNormalizerRegistry {
 private func extractFilePath(from payload: [String: Any]) -> String? {
     (payload["file_path"] as? String)
     ?? (payload["input"] as? [String: Any])?["file_path"] as? String
-}
-
-private func buildSummary(event: String, tool: String?, payload: [String: Any]) -> String {
-    if let tool {
-        if let filePath = extractFilePath(from: payload) {
-            return "\(tool): \(URL(fileURLWithPath: filePath).lastPathComponent)"
-        }
-        return tool
-    }
-    return event
 }

@@ -190,16 +190,21 @@ final class EventStore {
 
     func count(agent: String? = nil) -> Int {
         guard let db else { return 0 }
-        let sql: String
         if let agent {
-            sql = "SELECT COUNT(*) FROM events WHERE agent='\(agent)';"
+            let sql = "SELECT COUNT(*) FROM events WHERE agent=?;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+            defer { sqlite3_finalize(stmt) }
+            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, agent, -1, T)
+            return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
         } else {
-            sql = "SELECT COUNT(*) FROM events;"
+            let sql = "SELECT COUNT(*) FROM events;"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+            defer { sqlite3_finalize(stmt) }
+            return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
         }
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
-        defer { sqlite3_finalize(stmt) }
-        return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
     }
 
     func lastEvent(agent: String) -> Row? {
@@ -292,8 +297,15 @@ final class EventStore {
     }
 
     func clearAgent(_ agent: String) {
-        exec("DELETE FROM events WHERE agent='\(agent)';")
-        exec("DELETE FROM notifications WHERE agent='\(agent)';")
+        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for sql in ["DELETE FROM events WHERE agent=?;", "DELETE FROM notifications WHERE agent=?;"] {
+            guard let db else { continue }
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
+            sqlite3_bind_text(stmt, 1, agent, -1, T)
+            _ = sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
     }
 
     // MARK: - Export
@@ -348,7 +360,7 @@ final class EventStore {
         guard let db else { return }
         var err: UnsafeMutablePointer<CChar>?
         if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
-            if let err { sqlite3_free(err) }
+            if let e = err { print("EventStore SQL error: \(String(cString: e))"); sqlite3_free(e) }
         }
     }
 
