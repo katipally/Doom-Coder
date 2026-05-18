@@ -61,7 +61,7 @@ final class NotificationDispatcher {
     /// is `.denied` and the user wants to re-enable.
     func openSystemSettings() {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.katipally.DoomCoder"
-        let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)")!
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)") else { return }
         NSWorkspace.shared.open(url)
     }
 

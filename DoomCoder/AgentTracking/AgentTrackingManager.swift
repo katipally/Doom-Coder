@@ -15,10 +15,13 @@ final class AgentTrackingManager {
     private let logger = Logger(subsystem: "com.doomcoder", category: "agents")
 
     /// Stale threshold: sessions with no events for this long are considered stale.
-    var staleThreshold: TimeInterval = 900  // 15 minutes
+    var staleThreshold: TimeInterval = 300  // 5 minutes
 
     /// Auto-eviction delay after a session reaches terminal state.
     var evictionDelay: TimeInterval = 1800  // 30 minutes
+
+    /// Process monitor for IDE open/close and CLI running detection.
+    let processMonitor = AgentProcessMonitor.shared
 
     // MARK: - Session aggregate model
 
@@ -28,7 +31,6 @@ final class AgentTrackingManager {
         let id: String              // agent::sessionId
         let agent: TrackedAgent
         let sessionId: String
-        var events: [TimelineEvent] = []
         var lastEvent: String
         var lastPhase: NormalizedEventPhase = .sessionStart
         var toolCounts: [String: Int] = [:]
@@ -47,6 +49,7 @@ final class AgentTrackingManager {
         var awaitingPermission: Bool = false
         var hasEnded: Bool = false
         var hasFailed: Bool = false
+        var isMarkedStale: Bool = false
 
         /// Whether the session is still active (not terminal).
         var isLive: Bool { !hasEnded && !hasFailed }
@@ -58,6 +61,7 @@ final class AgentTrackingManager {
         var displayState: AgentSessionState {
             if hasFailed { return .failed }
             if hasEnded { return .completed }
+            if isMarkedStale { return .stale }
             if awaitingPermission { return .waitingApproval }
             if lastPhase == .agentResponse { return .waitingInput }
             return .running
@@ -101,7 +105,7 @@ final class AgentTrackingManager {
             case .subagentEnd:
                 subagentCount = max(0, subagentCount - 1)
             case .sessionStart, .agentResponse, .userPrompt,
-                 .fileChanged, .other:
+                 .other:
                 break
             }
 
@@ -114,6 +118,49 @@ final class AgentTrackingManager {
 
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
+
+    private init() {
+        // Sweep for stale sessions every 60 seconds.
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.sweepStaleSessions() }
+        }
+    }
+
+    // MARK: - Stale session management
+
+    func markStale(sessionKey: String) {
+        guard var s = sessions[sessionKey], s.isLive, !s.isMarkedStale else { return }
+        s.isMarkedStale = true
+        sessions[sessionKey] = s
+        NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
+        scheduleStaleEviction(sessionKey: sessionKey)
+    }
+
+    private func sweepStaleSessions() {
+        var changed = false
+        for key in sessions.keys {
+            guard var s = sessions[key], s.isLive, !s.isMarkedStale else { continue }
+            if s.isStale(threshold: staleThreshold) {
+                s.isMarkedStale = true
+                sessions[key] = s
+                changed = true
+                scheduleStaleEviction(sessionKey: key)
+            }
+        }
+        if changed { NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil) }
+    }
+
+    private func scheduleStaleEviction(sessionKey: String) {
+        let delay = staleThreshold * 2  // evict stale sessions after 10 minutes
+        Task { [sessionKey] in
+            try? await Task.sleep(for: .seconds(delay))
+            await MainActor.run {
+                if let cur = self.sessions[sessionKey], cur.isMarkedStale {
+                    self.sessions.removeValue(forKey: sessionKey)
+                }
+            }
+        }
+    }
 
     // MARK: - Entry point (called from socket listener)
 
@@ -136,15 +183,6 @@ final class AgentTrackingManager {
 
         let sessionKey = "\(normalized.agent.rawValue)::\(normalized.sessionId)"
 
-        // Build timeline entry (raw event log)
-        let timelineEvent = TimelineEvent(
-            event: normalized.rawEvent,
-            tool: normalized.toolName,
-            path: normalized.filePath ?? normalized.cwd,
-            timestamp: normalized.timestamp,
-            summary: normalized.summary
-        )
-
         var s = sessions[sessionKey] ?? Session(
             id: sessionKey,
             agent: normalized.agent,
@@ -154,7 +192,6 @@ final class AgentTrackingManager {
             startedAt: normalized.timestamp,
             updatedAt: normalized.timestamp
         )
-        s.events.append(timelineEvent)
         s.apply(normalized)
 
         // Assign without wrapping in withAnimation. Animation is applied at
@@ -178,6 +215,7 @@ final class AgentTrackingManager {
             state: normalized.phase.rawValue, ts: env.ts,
             payload: payloadString
         )
+        NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
 
         // Notification dispatch — uses user-configurable phase preferences
         // Suppress sessionEnd notifications when the agent PID is dead — this
@@ -195,8 +233,15 @@ final class AgentTrackingManager {
             ))
         }
 
+        // Register PID watcher for instant crash/exit detection (live sessions only).
+        if s.isLive && env.pid > 0 {
+            PIDWatcher.shared.watch(pid: pid_t(env.pid), sessionKey: sessionKey)
+        }
+
         // Evict terminal sessions after configured delay
         if !s.isLive {
+            // Cancel PID watcher — session ended cleanly, no need to watch for crash.
+            if env.pid > 0 { PIDWatcher.shared.cancel(pid: pid_t(env.pid)) }
             let delay = evictionDelay
             Task { [sessionKey] in
                 try? await Task.sleep(for: .seconds(delay))
@@ -213,17 +258,23 @@ final class AgentTrackingManager {
 
 // UI state enum — derived from SessionAggregate counters/flags.
 enum AgentSessionState: String, Sendable {
+    case notRunning    = "not_running"    // agent app / CLI process not detected
+    case open                             // IDE open, no active session
     case running
     case waitingInput     = "waiting_input"
     case waitingApproval  = "waiting_approval"
+    case stale                            // no events for staleThreshold / PID exited
     case completed
     case failed
 
     var humanReadable: String {
         switch self {
+        case .notRunning:       return "not running"
+        case .open:             return "idle"
         case .running:          return "running"
         case .waitingInput:     return "waiting for input"
         case .waitingApproval:  return "waiting for approval"
+        case .stale:            return "disconnected"
         case .completed:        return "completed"
         case .failed:           return "failed"
         }

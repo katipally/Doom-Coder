@@ -21,8 +21,12 @@ struct LogsView: View {
     @State private var expandedID: Int64? = nil
     @State private var totalCount: Int = 0
     @State private var retentionDays: Int = EventStore.retentionDays
-    @State private var tick = 0
-    private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    private static let dateFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +41,7 @@ struct LogsView: View {
             footerBar
         }
         .onAppear { reload() }
-        .onReceive(refreshTimer) { _ in tick &+= 1; reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .doomcoderNewEvent)) { _ in reload() }
     }
 
     // MARK: - Filter Bar
@@ -136,36 +140,10 @@ struct LogsView: View {
             .buttonStyle(.plain)
 
             if isExpanded, let payload = row.payload {
-                payloadDetail(payload)
+                PayloadRendererView(json: payload)
             }
         }
         .background(isExpanded ? Color.accentColor.opacity(0.04) : Color.clear)
-    }
-
-    private func payloadDetail(_ json: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ScrollView(.horizontal, showsIndicators: true) {
-                Text(prettyJSON(json))
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-            .frame(maxHeight: 200)
-            HStack {
-                Spacer()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(prettyJSON(json), forType: .string)
-                } label: {
-                    Label("Copy JSON", systemImage: "doc.on.doc")
-                        .font(.caption2)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
     }
 
     // MARK: - Notifications List
@@ -313,18 +291,7 @@ struct LogsView: View {
     }
 
     private func formattedDate(_ ts: TimeInterval) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm:ss"
-        return fmt.string(from: Date(timeIntervalSince1970: ts))
-    }
-
-    private func prettyJSON(_ raw: String) -> String {
-        guard let data = raw.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data),
-              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-              let str = String(data: pretty, encoding: .utf8)
-        else { return raw }
-        return str
+        Self.dateFmt.string(from: Date(timeIntervalSince1970: ts))
     }
 
     private func agentKey(for f: Filter) -> String? {

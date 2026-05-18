@@ -49,6 +49,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         PauseFlag.clearOnLaunch()
         EventStore.shared.open()
 
+        // Start process monitor: NSWorkspace IDE notifications + CLI proc_listpids scan.
+        _ = AgentProcessMonitor.shared
+
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
         ChannelStore.migratePrefsIfNeeded()

@@ -35,22 +35,20 @@ struct HookEnvelope: Sendable {
 }
 
 // MARK: - Timeline event (raw event in a session's ordered log)
-
+// Kept as a lightweight in-memory model for Connection Doctor / test replay.
 struct TimelineEvent: Identifiable, Sendable {
     let id: UUID
     let event: String
     let tool: String?
     let path: String?
     let timestamp: Date
-    let summary: String
 
-    init(event: String, tool: String? = nil, path: String? = nil, timestamp: Date = .now, summary: String = "") {
+    init(event: String, tool: String? = nil, path: String? = nil, timestamp: Date = .now) {
         self.id = UUID()
         self.event = event
         self.tool = tool
         self.path = path
         self.timestamp = timestamp
-        self.summary = summary
     }
 }
 
@@ -65,29 +63,16 @@ enum NotificationPolicy {
         let prefs = ChannelStore.loadPrefs()
         return prefs.shouldNotify(phase: phase.rawValue)
     }
-
-    /// Legacy: check by raw agent + event name (for backward compat).
-    static func isNotifiable(agent: TrackedAgent, event: String) -> Bool {
-        // Create a minimal envelope just for phase lookup
-        let envelope = HookEnvelope(
-            v: "1", agent: agent.rawValue, event: event,
-            cwd: "", pid: 0, ts: Date().timeIntervalSince1970,
-            synthetic: false, payloadRaw: nil
-        )
-        if let normalized = EventNormalizerRegistry.normalize(envelope: envelope) {
-            return isNotifiable(phase: normalized.phase)
-        }
-        return false
-    }
-
-    /// Whether the event signals that a session has ended.
-    static func isTerminal(event: String) -> Bool {
-        let e = event.lowercased()
-        return e.contains("sessionend") || e.contains("stop") || e == "taskcompleted"
-    }
 }
 
-// MARK: - Agent identity
+// MARK: - Notification names
+
+extension Notification.Name {
+    /// Posted by AgentTrackingManager.ingest() after each event is written to SQLite.
+    static let doomcoderNewEvent = Notification.Name("com.doomcoder.newEvent")
+    /// Posted by AgentProcessMonitor when any agent's running state changes.
+    static let doomcoderProcessStateChanged = Notification.Name("com.doomcoder.processStateChanged")
+}
 
 enum TrackedAgent: String, CaseIterable, Sendable {
     case claude
@@ -105,6 +90,14 @@ enum TrackedAgent: String, CaseIterable, Sendable {
         case .copilotCLI: return "Copilot CLI"
         case .windsurf:   return "Windsurf"
         case .codexCLI:   return "Codex CLI"
+        }
+    }
+
+    /// True for IDE-based agents (open = idle); false for CLI agents (transient processes).
+    var isIDEAgent: Bool {
+        switch self {
+        case .cursor, .vscode, .windsurf: return true
+        case .claude, .copilotCLI, .codexCLI: return false
         }
     }
 }
