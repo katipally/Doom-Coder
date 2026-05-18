@@ -29,7 +29,7 @@ final class AgentProcessMonitor {
     private static let cliProcessNames: [TrackedAgent: String] = [
         .claude:     "claude",
         .codexCLI:   "codex",
-        .copilotCLI: "gh",
+        .copilotCLI: "copilot",
     ]
 
     private var cliScanTimer: Timer?

@@ -13,7 +13,6 @@ struct TrackAgentsView: View {
     @State private var pausedFlag: Bool = PauseFlag.isPaused
     @State private var enabled: [TrackedAgent: Bool] = [:]
     @State private var installed: [TrackedAgent: Bool] = [:]
-    @State private var cliFolderCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -155,7 +154,6 @@ struct TrackAgentsView: View {
         if monitor.isAppRunning[agent] == true {
             return agent.isIDEAgent ? "idle" : "running"
         }
-        if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
         return "not running"
     }
 
@@ -177,16 +175,11 @@ struct TrackAgentsView: View {
         var iMap: [TrackedAgent: Bool] = [:]
         for a in TrackedAgent.allCases {
             eMap[a] = TrackingStore.isEnabled(a)
-            if a == .copilotCLI {
-                iMap[a] = !CopilotCLIFolderManager.installedFolders().isEmpty
-            } else {
-                iMap[a] = AgentInstallerV2.isInstalled(a)
-            }
+            iMap[a] = AgentInstallerV2.isInstalled(a)
         }
         withAnimation(DCAnim.smooth) {
             enabled = eMap
             installed = iMap
-            cliFolderCount = CopilotCLIFolderManager.folderCount()
         }
         pausedFlag = PauseFlag.isPaused
     }
@@ -201,7 +194,6 @@ struct TrackAccordion: View {
     @State private var manager = AgentTrackingManager.shared
     @State private var enabled: [TrackedAgent: Bool] = [:]
     @State private var installed: [TrackedAgent: Bool] = [:]
-    @State private var cliFolderCount: Int = 0
 
     var openConfigure: () -> Void = {}
 
@@ -292,7 +284,6 @@ struct TrackAccordion: View {
         if monitor.isAppRunning[agent] == true {
             return agent.isIDEAgent ? "idle" : "running"
         }
-        if agent == .copilotCLI { return "\(cliFolderCount) folder\(cliFolderCount == 1 ? "" : "s")" }
         return "not running"
     }
 
@@ -314,30 +305,19 @@ struct TrackAccordion: View {
         var iMap: [TrackedAgent: Bool] = [:]
         for a in TrackedAgent.allCases {
             eMap[a] = TrackingStore.isEnabled(a)
-            if a == .copilotCLI {
-                iMap[a] = !CopilotCLIFolderManager.installedFolders().isEmpty
-            } else {
-                iMap[a] = AgentInstallerV2.isInstalled(a)
-            }
+            iMap[a] = AgentInstallerV2.isInstalled(a)
         }
         withAnimation(DCAnim.smooth) {
             enabled = eMap
             installed = iMap
-            cliFolderCount = CopilotCLIFolderManager.folderCount()
         }
     }
 
     // Count of installed+enabled agents (for header subtitle in parent view).
     static func configuredCount() -> Int {
         var n = 0
-        for a in TrackedAgent.allCases {
-            let ok: Bool
-            if a == .copilotCLI {
-                ok = !CopilotCLIFolderManager.installedFolders().isEmpty
-            } else {
-                ok = AgentInstallerV2.isInstalled(a)
-            }
-            if ok { n += 1 }
+        for a in TrackedAgent.allCases where AgentInstallerV2.isInstalled(a) {
+            n += 1
         }
         return n
     }

@@ -6,6 +6,7 @@ import OSLog
 enum MigrationManager {
     private static let logger = Logger(subsystem: "com.doomcoder", category: "migration")
     private static let migratedKey = "doomcoder.migration.v1_to_v2.done"
+    private static let migratedKeyV3 = "doomcoder.migration.v2_to_v3.done"
 
     /// Check if migration is needed. Returns list of affected agents.
     static func checkNeeded() -> [TrackedAgent] {
@@ -49,28 +50,17 @@ enum MigrationManager {
                 AgentInstallerV2.backup(path)
                 stripLegacy(at: path)
             case .copilotCLI:
-                // Per-folder: strip from each registered folder
-                for folder in CopilotCLIFolderManager.folders {
-                    let hooksFile = folder.appendingPathComponent("hooks.json").path
+                // Per-folder legacy installs — strip any registered folder.
+                for folder in legacyCopilotCLIFolders() {
+                    let hooksFile = folder.appendingPathComponent(".github/hooks/doomcoder.json").path
                     AgentInstallerV2.backup(hooksFile)
-                    stripLegacy(at: hooksFile)
+                    try? FileManager.default.removeItem(atPath: hooksFile)
                 }
-            case .windsurf:
-                // New agent — no v1 legacy format exists, nothing to strip
-                break
-            case .codexCLI:
-                // New agent — no v1 legacy format exists, nothing to strip
+            case .windsurf, .codexCLI:
                 break
             }
 
-            // Re-install with correct v2 schema
-            if agent == .copilotCLI {
-                for folder in CopilotCLIFolderManager.folders {
-                    _ = AgentInstallerV2.install(.copilotCLI, folder: folder)
-                }
-            } else {
-                _ = AgentInstallerV2.install(agent)
-            }
+            _ = AgentInstallerV2.install(agent)
         }
 
         // Also clean up old VSCode hooks at wrong path
@@ -86,6 +76,77 @@ enum MigrationManager {
 
     static func markDone() {
         UserDefaults.standard.set(true, forKey: migratedKey)
+    }
+
+    // MARK: - v2 → v3 (Copilot CLI per-folder → global; VS Code → dedicated file)
+
+    /// Idempotent silent migration. Runs once on launch; flag persisted in
+    /// `doomcoder.migration.v2_to_v3.done`. Cleans up legacy per-folder
+    /// Copilot CLI hooks files and installs the new global file.
+    static func migrateV2toV3() {
+        if UserDefaults.standard.bool(forKey: migratedKeyV3) { return }
+        defer { UserDefaults.standard.set(true, forKey: migratedKeyV3) }
+
+        let legacyFolders = legacyCopilotCLIFolders()
+        var anyLegacy = false
+        for folder in legacyFolders {
+            let hooksFile = folder.appendingPathComponent(".github/hooks/doomcoder.json").path
+            if FileManager.default.fileExists(atPath: hooksFile) {
+                AgentInstallerV2.backup(hooksFile)
+                try? FileManager.default.removeItem(atPath: hooksFile)
+                anyLegacy = true
+            }
+        }
+
+        // If there is a v2 ~/.claude/settings.json VS Code dc-hook block,
+        // strip those entries so the new dedicated file is the sole source.
+        let claudePath = AgentInstallerV2.claudeSettingsPath()
+        if FileManager.default.fileExists(atPath: claudePath),
+           let data = try? Data(contentsOf: URL(fileURLWithPath: claudePath)),
+           var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            let before = (try? JSONSerialization.data(withJSONObject: root))?.count ?? 0
+            AgentInstallerV2.stripDcHookEntries(&root, agentToken: "vscode")
+            AgentInstallerV2.pruneEmptyContainers(&root)
+            let after = (try? JSONSerialization.data(withJSONObject: root))?.count ?? 0
+            if before != after {
+                AgentInstallerV2.backup(claudePath)
+                if let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) {
+                    try? out.write(to: URL(fileURLWithPath: claudePath), options: .atomic)
+                }
+            }
+        }
+
+        // Install global Copilot CLI hooks if user had any per-folder installs
+        // OR if a v3 global file is missing while their UserDefault folder list
+        // is non-empty. Either way, the install is idempotent.
+        if anyLegacy || !legacyFolders.isEmpty || !AgentInstallerV2.isInstalled(.copilotCLI) {
+            _ = AgentInstallerV2.install(.copilotCLI)
+        }
+
+        // Wipe the legacy folder list so a downgrade-then-upgrade can't
+        // resurrect it.
+        UserDefaults.standard.removeObject(forKey: "doomcoder.copilotcli.folders")
+        UserDefaults.standard.removeObject(forKey: "doomcoder.copilotcli.folder_bookmarks")
+        logger.notice("v2_to_v3 migration complete legacy_folders=\(legacyFolders.count) any=\(anyLegacy)")
+    }
+
+    /// Read the legacy `doomcoder.copilotcli.folders` UserDefault that the
+    /// removed `CopilotCLIFolderManager` used to maintain. We tolerate both
+    /// the bookmark-array shape and the plain-path-array shape.
+    private static func legacyCopilotCLIFolders() -> [URL] {
+        var out: [URL] = []
+        if let arr = UserDefaults.standard.array(forKey: "doomcoder.copilotcli.folders") as? [String] {
+            out.append(contentsOf: arr.map { URL(fileURLWithPath: $0) })
+        }
+        if let arr = UserDefaults.standard.array(forKey: "doomcoder.copilotcli.folder_bookmarks") as? [Data] {
+            for data in arr {
+                var stale = false
+                if let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) {
+                    out.append(url)
+                }
+            }
+        }
+        return out
     }
 
     // MARK: - Private

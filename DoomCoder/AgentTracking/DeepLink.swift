@@ -52,14 +52,11 @@ enum DeepLink {
                 task.arguments = ["--command", "workbench.action.openSettings", "@id:chat.hookFilesLocations"]
                 try? task.run()
             } else {
-                openFileInDefaultEditor(AgentInstallerV2.claudeSettingsPath())
+                openFileInDefaultEditor(AgentInstallerV2.vscodeCopilotHooksPath())
             }
 
         case .copilotCLI:
-            if let folder = folder {
-                let hooksFile = AgentInstallerV2.configPath(for: .copilotCLI, folder: folder)
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: hooksFile)])
-            }
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: AgentInstallerV2.copilotCLIHooksPath())])
 
         case .windsurf:
             let bid = "com.codeium.windsurf"

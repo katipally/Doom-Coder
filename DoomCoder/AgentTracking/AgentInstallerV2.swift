@@ -96,7 +96,7 @@ struct AgentInstallerV2 {
             case .claude:     try installClaude()
             case .cursor:     try installCursor()
             case .vscode:     try installVSCode()
-            case .copilotCLI: try installCopilotCLI(folder: folder)
+            case .copilotCLI: try installCopilotCLI()
             case .windsurf:   try installWindsurf()
             case .codexCLI:   try installCodexCLI()
             }
@@ -125,6 +125,22 @@ struct AgentInstallerV2 {
     @discardableResult
     static func uninstall(_ agent: TrackedAgent, folder: URL? = nil) -> Result<Void, Error> {
         let path = configPath(for: agent, folder: folder)
+        // VS Code stores its hooks in a dedicated file we own outright + a
+        // settings.json patch in every detected variant. Delete the file
+        // and revert the chat.hookFilesLocations entry in one shot.
+        if agent == .vscode {
+            try? FileManager.default.removeItem(atPath: path)
+            unpatchVSCodeSettings()
+            logger.notice("installer op=uninstall agent=vscode outcome=ok")
+            return .success(())
+        }
+        // Copilot CLI now owns ~/.copilot/hooks/doomcoder.json outright; just
+        // delete the whole file rather than trying to strip dc-hook keys.
+        if agent == .copilotCLI {
+            try? FileManager.default.removeItem(atPath: path)
+            logger.notice("installer op=uninstall agent=copilot_cli outcome=ok")
+            return .success(())
+        }
         guard FileManager.default.fileExists(atPath: path) else {
             logger.notice("installer op=uninstall agent=\(agent.rawValue, privacy: .public) outcome=noop reason=no_file")
             return .success(())
@@ -165,17 +181,10 @@ struct AgentInstallerV2 {
         cleanAllSiblingBackups()
         var healed = 0
         var files = 0
-        let nonFolderAgents = TrackedAgent.allCases.filter { $0 != .copilotCLI }
-        for agent in nonFolderAgents {
+        for agent in TrackedAgent.allCases {
             if isInstalled(agent) {
                 files += 1
                 if case .success = install(agent) { healed += 1 }
-            }
-        }
-        for folder in CopilotCLIFolderManager.folders {
-            if isInstalledCLI(folder: folder) {
-                files += 1
-                if case .success = install(.copilotCLI, folder: folder) { healed += 1 }
             }
         }
         logger.notice("heal op=paths healed=\(healed) files=\(files)")
@@ -190,6 +199,8 @@ struct AgentInstallerV2 {
             windsurfHooksPath(),
             codexHooksPath(),
             codexConfigPath(),
+            copilotCLIHooksPath(),
+            vscodeCopilotHooksPath(),
         ]
         let fm = FileManager.default
         var removed = 0
@@ -213,11 +224,11 @@ struct AgentInstallerV2 {
     static func isInstalled(_ agent: TrackedAgent) -> Bool {
         switch agent {
         case .copilotCLI:
-            return !CopilotCLIFolderManager.installedFolders().isEmpty
+            return fileContainsDcHookFor(agent: "copilot_cli", at: copilotCLIHooksPath())
         case .vscode:
-            // VSCode shares ~/.claude/settings.json with Claude. Detect by
-            // presence of vscode-specific dc-hook command lines.
-            return fileContainsDcHookFor(agent: "vscode", at: claudeSettingsPath())
+            // VS Code now reads its own dedicated file under ~/.copilot/vscode-hooks/.
+            // Detect by presence of the file with our vscode token.
+            return fileContainsDcHookFor(agent: "vscode", at: vscodeCopilotHooksPath())
         case .claude:
             return fileContainsDcHookFor(agent: "claude", at: claudeSettingsPath())
         case .cursor:
@@ -229,23 +240,16 @@ struct AgentInstallerV2 {
         }
     }
 
-    static func isInstalledCLI(folder: URL) -> Bool {
-        let path = folder.appendingPathComponent(".github/hooks/doomcoder.json").path
-        return fileContainsDcHookFor(agent: "copilot_cli", at: path)
-    }
-
     // MARK: - Config paths
 
     static func configPath(for agent: TrackedAgent, folder: URL? = nil) -> String {
         switch agent {
         case .claude:     return claudeSettingsPath()
         case .cursor:     return cursorHooksPath()
-        case .vscode:     return claudeSettingsPath() // VSCode reads ~/.claude/settings.json natively
+        case .vscode:     return vscodeCopilotHooksPath()
         case .windsurf:   return windsurfHooksPath()
         case .codexCLI:   return codexHooksPath()
-        case .copilotCLI:
-            let base = folder ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            return base.appendingPathComponent(".github/hooks/doomcoder.json").path
+        case .copilotCLI: return copilotCLIHooksPath()
         }
     }
 
@@ -254,6 +258,16 @@ struct AgentInstallerV2 {
     static func windsurfHooksPath() -> String { NSHomeDirectory() + "/.codeium/windsurf/hooks.json" }
     static func codexHooksPath()    -> String { NSHomeDirectory() + "/.codex/hooks.json" }
     static func codexConfigPath()   -> String { NSHomeDirectory() + "/.codex/config.toml" }
+    /// Global hooks file picked up by Copilot CLI (`copilot` binary) across
+    /// every directory the user runs it from.
+    static func copilotCLIHooksPath() -> String { NSHomeDirectory() + "/.copilot/hooks/doomcoder.json" }
+    /// Dedicated VS Code Copilot Chat hooks file. We point `chat.hookFilesLocations`
+    /// at this directory in every detected VS Code variant so CLI and VS Code
+    /// never fire duplicate events from the same JSON file.
+    static func vscodeCopilotHooksPath() -> String { NSHomeDirectory() + "/.copilot/vscode-hooks/doomcoder.json" }
+    /// Directory portion of `vscodeCopilotHooksPath()`, used in the
+    /// `chat.hookFilesLocations` settings.json entry.
+    static func vscodeCopilotHooksDir() -> String { NSHomeDirectory() + "/.copilot/vscode-hooks" }
 
     // MARK: - Public verification
 
@@ -268,14 +282,12 @@ struct AgentInstallerV2 {
         return verifyDetailed(agent: agent, at: path, folder: folder)
     }
 
-    /// Walks every registered Copilot CLI folder and verifies its config
-    /// individually. Used by the Configure window to surface a precise
-    /// per-folder integrity summary instead of a misleading blanket
-    /// warning for CLI projects.
-    static func verifyAllCLIFolders() -> [URL: Result<Void, Error>] {
-        var out: [URL: Result<Void, Error>] = [:]
-        for folder in CopilotCLIFolderManager.folders {
-            out[folder] = verifyInstalled(.copilotCLI, folder: folder)
+    /// Verify hook installation for every agent. Returns a per-agent
+    /// success/failure result, used by the Configure window's health badge.
+    static func verifyAll() -> [TrackedAgent: Result<Void, Error>] {
+        var out: [TrackedAgent: Result<Void, Error>] = [:]
+        for agent in TrackedAgent.allCases where isInstalled(agent) {
+            out[agent] = verifyInstalled(agent)
         }
         return out
     }
@@ -336,24 +348,16 @@ struct AgentInstallerV2 {
     }
 
     private static func installVSCode() throws {
-        // VSCode Copilot reads ~/.claude/settings.json natively via chat.hookFilesLocations
-        // We share the same file as Claude but add VSCode-specific events
-        let path = claudeSettingsPath()
+        // VS Code Copilot Chat hooks live in their own file so they never
+        // collide with CLI events. Discover paths via the `chat.hookFilesLocations`
+        // settings.json setting, which we patch for every detected variant
+        // (Stable, Insiders, VSCodium, Cursor, Windsurf).
+        let path = vscodeCopilotHooksPath()
         try ensureParentDir(path)
-        var root = readJSON(at: path) ?? [:]
 
-        // Strip only VSCode dc-hook entries (preserves Claude entries in shared file)
-        stripDcHookEntries(&root, agentToken: "vscode")
-        pruneEmptyContainers(&root)
-
-        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
-
-        // Add ALL VS Code events (PascalCase, matcher-group format).
-        // Claude entries may already exist for the same event names —
-        // we just add a separate dc-hook vscode entry alongside.
-        let vscodeEvts = vscodeEvents
-        for event in vscodeEvts {
-            var arr = (hooks[event] as? [[String: Any]]) ?? []
+        var root: [String: Any] = [:]
+        var hooks: [String: Any] = [:]
+        for event in vscodeEvents {
             let entry: [String: Any] = [
                 "matcher": "*",
                 "hooks": [
@@ -363,11 +367,15 @@ struct AgentInstallerV2 {
                     ] as [String: Any]
                 ]
             ]
-            arr.append(entry)
-            hooks[event] = arr
+            hooks[event] = [entry]
         }
         root["hooks"] = hooks
         try writeJSON(root, to: path, needsVersion: false)
+
+        // Patch every enabled VS Code variant's settings.json to include the
+        // hooks directory. Failures are non-fatal — the file write above is
+        // the real installation; settings.json is just discovery wiring.
+        patchVSCodeSettings()
     }
 
     private static func installWindsurf() throws {
@@ -471,22 +479,18 @@ struct AgentInstallerV2 {
         }
     }
 
-    private static func installCopilotCLI(folder: URL?) throws {
-        guard let folder = folder else {
-            throw InstallerError.missingFolder
-        }
-        let hooksDir = folder.appendingPathComponent(".github/hooks")
-        let path = hooksDir.appendingPathComponent("doomcoder.json").path
+    private static func installCopilotCLI() throws {
+        // Global Copilot CLI hooks file — picked up automatically by every
+        // `copilot` invocation regardless of working directory.
+        let path = copilotCLIHooksPath()
         try ensureParentDir(path)
 
-        // Copilot CLI requires version: 1 and bash/cwd/timeoutSec keys — ALL events
         let events = copilotCLIEvents
         var hooks: [String: Any] = [:]
         for event in events {
             hooks[event] = [[
                 "type": "command",
                 "bash": cmdFor("copilot_cli", event),
-                "cwd": ".",
                 "timeoutSec": 10
             ] as [String: Any]]
         }
@@ -533,8 +537,13 @@ struct AgentInstallerV2 {
     static let copilotCLIEvents = [
         "sessionStart", "sessionEnd",
         "userPromptSubmitted",
-        "preToolUse", "postToolUse",
-        "errorOccurred"
+        "preToolUse", "postToolUse", "postToolUseFailure",
+        "agentStop",
+        "subagentStart", "subagentStop",
+        "errorOccurred",
+        "preCompact",
+        "notification",
+        "permissionRequest"
     ]
 
     // All 12 Windsurf Cascade hook events — snake_case, no version field required.
@@ -932,15 +941,163 @@ struct AgentInstallerV2 {
         }
     }
 
+    // MARK: - VS Code variants (settings.json patch)
+
+    /// Default settings.json paths for every host that ships VS Code Copilot
+    /// Chat. Order matters only for log readability.
+    static func vscodeVariantSettingsPaths() -> [String] {
+        let base = NSHomeDirectory() + "/Library/Application Support/"
+        return [
+            base + "Code/User/settings.json",
+            base + "Code - Insiders/User/settings.json",
+            base + "VSCodium/User/settings.json",
+            base + "Cursor/User/settings.json",
+            base + "Windsurf/User/settings.json",
+        ]
+    }
+
+    /// Variants the user actually wants us to touch. Defaults to every
+    /// detected variant; persisted under `doomcoder.vscode.variants.enabled`.
+    static func vscodeEnabledVariantPaths() -> [String] {
+        let key = "doomcoder.vscode.variants.enabled"
+        let all = vscodeVariantSettingsPaths()
+        if let saved = UserDefaults.standard.array(forKey: key) as? [String] {
+            return saved.filter { all.contains($0) }
+        }
+        return all.filter { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    static func setVSCodeEnabledVariants(_ paths: [String]) {
+        UserDefaults.standard.set(paths, forKey: "doomcoder.vscode.variants.enabled")
+    }
+
+    /// Merge `~/.copilot/vscode-hooks` into every enabled variant's
+    /// `chat.hookFilesLocations`. Idempotent and tolerant of JSONC (line
+    /// comments, block comments, trailing commas).
+    static func patchVSCodeSettings() {
+        let entry = vscodeCopilotHooksDir()
+        for path in vscodeEnabledVariantPaths() where FileManager.default.fileExists(atPath: path) {
+            do {
+                guard var root = readJSONC(at: path) else { continue }
+                _ = backup(path)
+                var locs = (root["chat.hookFilesLocations"] as? [String: Any]) ?? [:]
+                locs[entry] = true
+                root["chat.hookFilesLocations"] = locs
+                try writeJSON(root, to: path, needsVersion: false)
+                logger.notice("vscode settings patched at=\(path, privacy: .public)")
+            } catch {
+                logger.error("vscode settings patch failed at=\(path, privacy: .public) err=\(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    static func unpatchVSCodeSettings() {
+        let entry = vscodeCopilotHooksDir()
+        for path in vscodeVariantSettingsPaths() where FileManager.default.fileExists(atPath: path) {
+            do {
+                guard var root = readJSONC(at: path) else { continue }
+                guard var locs = root["chat.hookFilesLocations"] as? [String: Any] else { continue }
+                guard locs[entry] != nil else { continue }
+                _ = backup(path)
+                locs.removeValue(forKey: entry)
+                if locs.isEmpty {
+                    root.removeValue(forKey: "chat.hookFilesLocations")
+                } else {
+                    root["chat.hookFilesLocations"] = locs
+                }
+                try writeJSON(root, to: path, needsVersion: false)
+                logger.notice("vscode settings unpatched at=\(path, privacy: .public)")
+            } catch {
+                logger.error("vscode settings unpatch failed at=\(path, privacy: .public) err=\(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// JSONC-tolerant read. Strips `//` line comments, `/* */` block
+    /// comments, and trailing commas before handing to JSONSerialization.
+    /// Preserves string literals so a `//` inside a string is not stripped.
+    private static func readJSONC(at path: String) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let raw = String(data: data, encoding: .utf8) else { return [:] }
+        let stripped = stripJSONC(raw)
+        guard let cleanData = stripped.data(using: .utf8),
+              let any = try? JSONSerialization.jsonObject(with: cleanData) else { return nil }
+        return (any as? [String: Any]) ?? [:]
+    }
+
+    static func stripJSONC(_ src: String) -> String {
+        var out = ""
+        out.reserveCapacity(src.count)
+        var inString = false
+        var stringQuote: Character = "\""
+        var prevWasBackslash = false
+        var i = src.startIndex
+        while i < src.endIndex {
+            let c = src[i]
+            if inString {
+                out.append(c)
+                if c == "\\" && !prevWasBackslash {
+                    prevWasBackslash = true
+                } else {
+                    if c == stringQuote && !prevWasBackslash {
+                        inString = false
+                    }
+                    prevWasBackslash = false
+                }
+                i = src.index(after: i)
+                continue
+            }
+            if c == "\"" {
+                inString = true
+                stringQuote = c
+                out.append(c)
+                i = src.index(after: i)
+                continue
+            }
+            // Line comment
+            if c == "/", src.index(after: i) < src.endIndex, src[src.index(after: i)] == "/" {
+                while i < src.endIndex && src[i] != "\n" { i = src.index(after: i) }
+                continue
+            }
+            // Block comment
+            if c == "/", src.index(after: i) < src.endIndex, src[src.index(after: i)] == "*" {
+                i = src.index(i, offsetBy: 2)
+                while i < src.endIndex {
+                    if src[i] == "*", src.index(after: i) < src.endIndex, src[src.index(after: i)] == "/" {
+                        i = src.index(i, offsetBy: 2)
+                        break
+                    }
+                    i = src.index(after: i)
+                }
+                continue
+            }
+            out.append(c)
+            i = src.index(after: i)
+        }
+        // Strip trailing commas: `,` followed by optional whitespace then `}` or `]`.
+        var result = ""
+        result.reserveCapacity(out.count)
+        var j = out.startIndex
+        while j < out.endIndex {
+            let c = out[j]
+            if c == "," {
+                var k = out.index(after: j)
+                while k < out.endIndex, out[k].isWhitespace { k = out.index(after: k) }
+                if k < out.endIndex, out[k] == "}" || out[k] == "]" {
+                    j = k
+                    continue
+                }
+            }
+            result.append(c)
+            j = out.index(after: j)
+        }
+        return result
+    }
+
     // MARK: - Errors
 
     enum InstallerError: LocalizedError {
-        case missingFolder
-
-        var errorDescription: String? {
-            switch self {
-            case .missingFolder: return "No project folder selected for Copilot CLI hooks."
-            }
-        }
+        case unknown
+        var errorDescription: String? { return "Unknown installer error." }
     }
 }
