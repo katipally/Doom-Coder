@@ -467,6 +467,8 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
         "PostToolUse":        .toolEnd,
         "PermissionRequest":  .permissionNeeded,
         "Stop":               .sessionEnd,
+        "PreCompact":         .other,
+        "PostCompact":        .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {

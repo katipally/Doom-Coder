@@ -244,7 +244,16 @@ final class AgentTrackingManager {
         // Suppress sessionEnd notifications when the agent PID is dead — this
         // means the user already quit (Cmd+Q) before the final Stop/sessionEnd
         // hook arrived. Timeline entry is still recorded above.
+        //
+        // IDE agents (Cursor, VS Code Copilot, Windsurf) are exempt from this
+        // check because they invoke dc-hook via a short-lived shell subprocess.
+        // dc-hook reports getppid() (the shell), which exits immediately after
+        // dc-hook starts — so PIDLiveness always returns false for IDE-spawned
+        // hooks, which would incorrectly suppress every session-end notification.
+        // CLI agents (Claude, Copilot CLI, Codex) spawn dc-hook directly, so
+        // getppid() is the CLI process itself, which is alive until Cmd+Q.
         let isQuitInitiatedEnd = normalized.phase == .sessionEnd
+            && !normalized.agent.isIDEAgent
             && !PIDLiveness.isAlive(pid_t(env.pid))
         let shouldNotify = NotificationPolicy.isNotifiable(phase: normalized.phase)
             && !isQuitInitiatedEnd

@@ -29,8 +29,8 @@ struct ChannelStore {
             case "error", "toolError": return error
             case "permissionNeeded":  return permissionNeeded
             case "agentResponse":     return agentResponse
-            case "subagentStart":     return subagentStart
-            case "subagentEnd":       return subagentEnd
+            // "Sub-agent activity" toggle controls both start and end phases.
+            case "subagentStart", "subagentEnd": return subagentStart
             case "toolStart", "toolEnd": return toolUse
             default:                  return false
             }
