@@ -5,23 +5,16 @@ import UserNotifications
 @main
 struct DoomCoderApp: App {
     @NSApplicationDelegateAdaptor(DoomCoderAppDelegate.self) private var appDelegate
-    @State private var sleepManager = SleepManager.shared
-    @State private var updaterViewModel = CheckForUpdatesViewModel.shared
 
     var body: some Scene {
         // No MenuBarExtra — replaced by NSStatusItem + NSPanel wired
         // by DoomCoderAppDelegate. We still register Window scenes so
-        // openWindow(id:) keeps working for Configure / Settings / About.
+        // openWindow(id:) keeps working for Configure / About.
         //
-        // `.defaultLaunchBehavior(.suppressed)` prevents SwiftUI from
-        // auto-instantiating + showing the first Window scene on launch
-        // (LSUIElement apps otherwise get a stray Settings window).
-        Window("Settings", id: "settings") {
-            SettingsView(sleepManager: sleepManager)
-                .background(WindowOpenerBridge())
-        }
-        .windowResizability(.contentSize)
-        .defaultLaunchBehavior(.suppressed)
+        // Settings is no longer a standalone Window — it lives as the
+        // 4th tab inside Configure (see ConfigureSettingsPane). The
+        // WindowOpenerBridge re-routes any legacy `settings` open
+        // request to Configure with the Settings tab pre-selected.
 
         Window("About Doom Coder", id: "about") {
             AboutView()

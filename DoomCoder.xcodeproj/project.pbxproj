@@ -13,7 +13,7 @@
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
-		DC0000000000002000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* SettingsView.swift */; };
+		DC0000000000002000000014 /* ConfigureSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000014 /* ConfigureSettingsPane.swift */; };
 		DC0000000000002000000020 /* HookEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000020 /* HookEnvelope.swift */; };
 		DC0000000000002000000021 /* PauseFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* PauseFlag.swift */; };
 		DC0000000000002000000022 /* AgentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* AgentDetector.swift */; };
@@ -60,7 +60,7 @@
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
 		DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckForUpdatesViewModel.swift; sourceTree = "<group>"; };
-		DC0000000000001000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000014 /* ConfigureSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureSettingsPane.swift; sourceTree = "<group>"; };
 		DC0000000000001000000020 /* HookEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEnvelope.swift; sourceTree = "<group>"; };
 		DC0000000000001000000021 /* PauseFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseFlag.swift; sourceTree = "<group>"; };
 		DC0000000000001000000022 /* AgentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetector.swift; sourceTree = "<group>"; };
@@ -125,7 +125,7 @@
 				DC0000000000001000000003 /* SleepManager.swift */,
 				DC0000000000001000000005 /* AboutView.swift */,
 				DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */,
-				DC0000000000001000000014 /* SettingsView.swift */,
+				DC0000000000001000000014 /* ConfigureSettingsPane.swift */,
 				DC0000000000001000000047 /* FloatingPanelController.swift */,
 				DC0000000000001000000048 /* StatusItemController.swift */,
 				DC0000000000001000000049 /* GlobalHotkey.swift */,
@@ -289,7 +289,7 @@
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
-				DC0000000000002000000014 /* SettingsView.swift in Sources */,
+				DC0000000000002000000014 /* ConfigureSettingsPane.swift in Sources */,
 				DC0000000000002000000020 /* HookEnvelope.swift in Sources */,
 				DC0000000000002000000021 /* PauseFlag.swift in Sources */,
 				DC0000000000002000000022 /* AgentDetector.swift in Sources */,
