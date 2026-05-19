@@ -14,11 +14,24 @@ final class AgentTrackingManager {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "agents")
 
-    /// Stale threshold: sessions with no events for this long are considered stale.
-    var staleThreshold: TimeInterval = 300  // 5 minutes
-
-    /// Auto-eviction delay after a session reaches terminal state.
+    /// Auto-eviction delay: sessions with no events for this long are
+    /// dropped from the in-memory map. Periodically swept every 60 s.
     var evictionDelay: TimeInterval = 1800  // 30 minutes
+
+    /// Default delay (seconds) before completed/failed sessions auto-revert
+    /// to idle. Overridable via UserDefaults "doomcoder.session.autoRevertSeconds".
+    private let defaultAutoRevertSeconds: TimeInterval = 30
+
+    /// User-configurable auto-revert delay; clamped to [10, 120].
+    var autoRevertSeconds: TimeInterval {
+        let raw = UserDefaults.standard.object(forKey: "doomcoder.session.autoRevertSeconds") as? Int
+        let value = TimeInterval(raw ?? Int(defaultAutoRevertSeconds))
+        return min(max(value, 10), 120)
+    }
+
+    /// Per-session monotonic token used to invalidate prior auto-revert timers
+    /// when a new terminal event re-schedules.
+    private var revertTokens: [String: Int] = [:]
 
     /// Process monitor for IDE open/close and CLI running detection.
     let processMonitor = AgentProcessMonitor.shared
@@ -49,7 +62,6 @@ final class AgentTrackingManager {
         var awaitingPermission: Bool = false
         var hasEnded: Bool = false
         var hasFailed: Bool = false
-        var isMarkedStale: Bool = false
 
         /// Whether the session is still active (not terminal).
         var isLive: Bool { !hasEnded && !hasFailed }
@@ -61,15 +73,12 @@ final class AgentTrackingManager {
         var displayState: AgentSessionState {
             if hasFailed { return .failed }
             if hasEnded { return .completed }
-            if isMarkedStale { return .stale }
             if awaitingPermission { return .waitingApproval }
             if lastPhase == .agentResponse { return .waitingInput }
-            return .running
-        }
-
-        /// Check if session is stale (no events for too long).
-        func isStale(threshold: TimeInterval) -> Bool {
-            !hasEnded && !hasFailed && Date().timeIntervalSince(updatedAt) > threshold
+            switch lastPhase {
+            case .sessionStart, .sessionEnd: return .open
+            default: return .running
+            }
         }
 
         // MARK: - Apply normalized event
@@ -120,44 +129,58 @@ final class AgentTrackingManager {
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
     private init() {
-        // Sweep for stale sessions every 60 seconds.
+        // Periodic eviction sweep: drop sessions whose updatedAt is older than evictionDelay.
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.sweepStaleSessions() }
+            Task { @MainActor [weak self] in self?.sweepEvictedSessions() }
         }
     }
 
-    // MARK: - Stale session management
+    // MARK: - Session lifecycle helpers
 
-    func markStale(sessionKey: String) {
-        guard var s = sessions[sessionKey], s.isLive, !s.isMarkedStale else { return }
-        s.isMarkedStale = true
+    /// Called by PIDWatcher when a watched agent process exits without a
+    /// terminal hook event. Treats process death as session completion so
+    /// the badge transitions through completed -> idle via auto-revert.
+    func finalizeOnPIDExit(sessionKey: String) {
+        guard var s = sessions[sessionKey], s.isLive else { return }
+        s.hasEnded = true
+        s.updatedAt = Date()
         sessions[sessionKey] = s
         NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
-        scheduleStaleEviction(sessionKey: sessionKey)
+        scheduleTerminalRevert(sessionKey: sessionKey)
     }
 
-    private func sweepStaleSessions() {
+    private func sweepEvictedSessions() {
         var changed = false
+        let now = Date()
         for key in sessions.keys {
-            guard var s = sessions[key], s.isLive, !s.isMarkedStale else { continue }
-            if s.isStale(threshold: staleThreshold) {
-                s.isMarkedStale = true
-                sessions[key] = s
+            guard let s = sessions[key] else { continue }
+            if now.timeIntervalSince(s.updatedAt) > evictionDelay {
+                sessions.removeValue(forKey: key)
+                revertTokens.removeValue(forKey: key)
                 changed = true
-                scheduleStaleEviction(sessionKey: key)
             }
         }
         if changed { NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil) }
     }
 
-    private func scheduleStaleEviction(sessionKey: String) {
-        let delay = staleThreshold * 2  // evict stale sessions after 10 minutes
-        Task { [sessionKey] in
+    /// Schedules a one-shot demotion of a completed/failed session back to
+    /// idle (.open). If a newer event re-schedules, the older timer is
+    /// invalidated via per-session monotonic token.
+    func scheduleTerminalRevert(sessionKey: String) {
+        let nextToken = (revertTokens[sessionKey] ?? 0) + 1
+        revertTokens[sessionKey] = nextToken
+        let delay = autoRevertSeconds
+        Task { [sessionKey, nextToken] in
             try? await Task.sleep(for: .seconds(delay))
             await MainActor.run {
-                if let cur = self.sessions[sessionKey], cur.isMarkedStale {
-                    self.sessions.removeValue(forKey: sessionKey)
-                }
+                guard self.revertTokens[sessionKey] == nextToken else { return }
+                guard var s = self.sessions[sessionKey] else { return }
+                guard s.hasEnded || s.hasFailed else { return }
+                s.hasEnded = false
+                s.hasFailed = false
+                s.lastPhase = .sessionStart
+                self.sessions[sessionKey] = s
+                NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
             }
         }
     }
@@ -242,12 +265,17 @@ final class AgentTrackingManager {
         if !s.isLive {
             // Cancel PID watcher — session ended cleanly, no need to watch for crash.
             if env.pid > 0 { PIDWatcher.shared.cancel(pid: pid_t(env.pid)) }
+            // Schedule the soft demotion back to .open after autoRevertSeconds.
+            scheduleTerminalRevert(sessionKey: sessionKey)
+            // Schedule hard eviction after evictionDelay (long-term cleanup).
             let delay = evictionDelay
             Task { [sessionKey] in
                 try? await Task.sleep(for: .seconds(delay))
                 await MainActor.run {
-                    if let cur = self.sessions[sessionKey], !cur.isLive {
+                    if let cur = self.sessions[sessionKey],
+                       Date().timeIntervalSince(cur.updatedAt) > delay {
                         self.sessions.removeValue(forKey: sessionKey)
+                        self.revertTokens.removeValue(forKey: sessionKey)
                     }
                 }
             }
@@ -263,18 +291,16 @@ enum AgentSessionState: String, Sendable {
     case running
     case waitingInput     = "waiting_input"
     case waitingApproval  = "waiting_approval"
-    case stale                            // no events for staleThreshold / PID exited
     case completed
     case failed
 
     var humanReadable: String {
         switch self {
-        case .notRunning:       return "not running"
+        case .notRunning:       return "closed"
         case .open:             return "idle"
         case .running:          return "running"
         case .waitingInput:     return "waiting for input"
         case .waitingApproval:  return "waiting for approval"
-        case .stale:            return "disconnected"
         case .completed:        return "completed"
         case .failed:           return "failed"
         }

@@ -54,10 +54,23 @@ private let claudeInteractionTools: Set<String> = [
     "Elicitation",
 ]
 
-private let cursorInteractionTools: Set<String> = [
-    "AskUserQuestion",
-    "ExitPlanMode",
+private let cursorPermissionTools: Set<String> = [
+    "Shell", "Write", "Edit", "Delete"
 ]
+
+/// Returns true when the tool name matches a Cursor-native action whose
+/// invocation would normally prompt the user, or any MCP tool (prefix
+/// "MCP:"). Reserved for future use — Plan A+ relies on the dedicated
+/// beforeShellExecution / beforeMCPExecution events for the permission
+/// signal; this predicate is kept so a future preToolUse-only build of
+/// Cursor (or a payload without dedicated events) can still classify
+/// tools without resurrecting the old Claude-style heuristic.
+@inline(__always)
+private func isCursorPermissionTool(_ name: String) -> Bool {
+    if cursorPermissionTools.contains(name) { return true }
+    if name.hasPrefix("MCP:") { return true }
+    return false
+}
 
 private let vscodeInteractionTools: Set<String> = [
     "vscode_askQuestions",
@@ -154,9 +167,9 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         "postToolUseFailure":     .toolError,
         "subagentStart":          .subagentStart,
         "subagentStop":           .subagentEnd,
-        "beforeShellExecution":   .toolStart,
+        "beforeShellExecution":   .permissionNeeded,
         "afterShellExecution":    .toolEnd,
-        "beforeMCPExecution":     .toolStart,
+        "beforeMCPExecution":     .permissionNeeded,
         "afterMCPExecution":      .toolEnd,
         "afterFileEdit":          .other,
         "beforeReadFile":         .other,
@@ -167,16 +180,39 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         "afterAgentThought":      .other,
         "beforeTabFileRead":      .other,
         "afterTabFileEdit":       .other,
+        "workspaceOpen":          .other,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
         let payload = envelope.payloadDict ?? [:]
         var phase = Self.phaseMap[envelope.event] ?? .other
+        var isFatal = false
 
-        if envelope.event == "preToolUse",
-           let toolName = payload["tool_name"] as? String,
-           cursorInteractionTools.contains(toolName) {
-            phase = .permissionNeeded
+        // Payload-status dispatch (Plan A+): use Cursor's native differentiation
+        // fields rather than heuristics. status="error" => fatal failure,
+        // "aborted"/"completed" => clean session end.
+        switch envelope.event {
+        case "stop", "sessionEnd":
+            let status = (payload["status"] as? String) ?? (payload["reason"] as? String)
+            if status == "error" {
+                phase = .error
+                isFatal = true
+            } else {
+                phase = .sessionEnd
+            }
+        case "subagentStop":
+            if (payload["status"] as? String) == "error" {
+                phase = .toolError
+            } else {
+                phase = .subagentEnd
+            }
+        case "postToolUseFailure":
+            phase = .toolError
+        default:
+            // For Shell/Write/Edit/Delete/MCP:* preToolUse calls, prefer the
+            // dedicated beforeShellExecution / beforeMCPExecution events for
+            // the permission signal. preToolUse stays at .toolStart.
+            break
         }
 
         // Cursor uses conversation_id, then session_id, then generation_id
@@ -187,6 +223,12 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         let tool = payload["tool_name"] as? String ?? payload["tool"] as? String
         let filePath = extractFilePath(from: payload)
 
+        // Suppress noisy permission-needed flag on tools we know Cursor won't
+        // actually prompt for. The predicate `isCursorPermissionTool` is
+        // available for future heuristics; today only the dedicated
+        // beforeShellExecution/beforeMCPExecution events emit .permissionNeeded.
+        _ = isCursorPermissionTool
+
         return NormalizedHookEvent(
             agent: agent,
             phase: phase,
@@ -196,7 +238,7 @@ struct CursorEventNormalizer: AgentEventNormalizer {
             filePath: filePath,
             cwd: payload["cwd"] as? String ?? envelope.cwd,
             timestamp: Date(timeIntervalSince1970: envelope.ts),
-            isFatal: false,
+            isFatal: isFatal,
             payloadRaw: envelope.payloadRaw
         )
     }

@@ -261,13 +261,20 @@ struct AgentInstallerV2 {
     /// Global hooks file picked up by Copilot CLI (`copilot` binary) across
     /// every directory the user runs it from.
     static func copilotCLIHooksPath() -> String { NSHomeDirectory() + "/.copilot/hooks/doomcoder.json" }
-    /// Dedicated VS Code Copilot Chat hooks file. We point `chat.hookFilesLocations`
-    /// at this directory in every detected VS Code variant so CLI and VS Code
-    /// never fire duplicate events from the same JSON file.
+    /// Dedicated VS Code Copilot Chat hooks file (absolute, used for disk I/O).
     static func vscodeCopilotHooksPath() -> String { NSHomeDirectory() + "/.copilot/vscode-hooks/doomcoder.json" }
-    /// Directory portion of `vscodeCopilotHooksPath()`, used in the
-    /// `chat.hookFilesLocations` settings.json entry.
-    static func vscodeCopilotHooksDir() -> String { NSHomeDirectory() + "/.copilot/vscode-hooks" }
+    /// Directory portion of `vscodeCopilotHooksPath()` as a **literal tilde
+    /// string** — VS Code's `chat.hookFilesLocations` silently rejects
+    /// absolute paths; only relative and `~`-prefixed paths are honored.
+    /// Use this exclusively when writing/reading the settings.json entry.
+    static func vscodeCopilotHooksDir() -> String { "~/.copilot/vscode-hooks" }
+    /// Absolute filesystem path for FileManager / ensureParentDir calls.
+    static func vscodeCopilotHooksDirAbsolute() -> String { NSHomeDirectory() + "/.copilot/vscode-hooks" }
+    /// Literal tilde path for the Copilot CLI hooks dir. We write this with
+    /// `false` into VS Code's `chat.hookFilesLocations` to suppress the
+    /// default-discovery double-fire (VS Code reads `~/.copilot/hooks` by
+    /// default; if we let it, every CLI hook would fire twice).
+    static func copilotCLIHooksDirLiteral() -> String { "~/.copilot/hooks" }
 
     // MARK: - Public verification
 
@@ -524,7 +531,8 @@ struct AgentInstallerV2 {
         "afterFileEdit", "beforeReadFile",
         "beforeSubmitPrompt", "preCompact", "stop",
         "afterAgentResponse", "afterAgentThought",
-        "beforeTabFileRead", "afterTabFileEdit"
+        "beforeTabFileRead", "afterTabFileEdit",
+        "workspaceOpen"
     ]
 
     static let vscodeEvents = [
@@ -972,16 +980,26 @@ struct AgentInstallerV2 {
     }
 
     /// Merge `~/.copilot/vscode-hooks` into every enabled variant's
-    /// `chat.hookFilesLocations`. Idempotent and tolerant of JSONC (line
-    /// comments, block comments, trailing commas).
+    /// `chat.hookFilesLocations` and simultaneously suppress the default
+    /// discovery of `~/.copilot/hooks` (the Copilot CLI dir) so VS Code
+    /// doesn't fire every CLI hook twice. Idempotent and tolerant of
+    /// JSONC (line comments, block comments, trailing commas).
     static func patchVSCodeSettings() {
         let entry = vscodeCopilotHooksDir()
+        let cliDir = copilotCLIHooksDirLiteral()
         for path in vscodeEnabledVariantPaths() where FileManager.default.fileExists(atPath: path) {
             do {
                 guard var root = readJSONC(at: path) else { continue }
                 _ = backup(path)
                 var locs = (root["chat.hookFilesLocations"] as? [String: Any]) ?? [:]
                 locs[entry] = true
+                // Only set the CLI-dir suppressor if the user hasn't explicitly
+                // opted to enable it. Preserve a user-set `true` exactly as-is.
+                if let existing = locs[cliDir] as? Bool, existing == true {
+                    // User wants the CLI dir — leave alone.
+                } else {
+                    locs[cliDir] = false
+                }
                 root["chat.hookFilesLocations"] = locs
                 try writeJSON(root, to: path, needsVersion: false)
                 logger.notice("vscode settings patched at=\(path, privacy: .public)")
@@ -993,13 +1011,21 @@ struct AgentInstallerV2 {
 
     static func unpatchVSCodeSettings() {
         let entry = vscodeCopilotHooksDir()
+        let cliDir = copilotCLIHooksDirLiteral()
         for path in vscodeVariantSettingsPaths() where FileManager.default.fileExists(atPath: path) {
             do {
                 guard var root = readJSONC(at: path) else { continue }
                 guard var locs = root["chat.hookFilesLocations"] as? [String: Any] else { continue }
-                guard locs[entry] != nil else { continue }
+                let hasEntry = locs[entry] != nil
+                // Only reverse the CLI-dir suppressor if WE set it (value is exactly false).
+                let hasOurSuppressor: Bool = {
+                    if let v = locs[cliDir] as? Bool, v == false { return true }
+                    return false
+                }()
+                guard hasEntry || hasOurSuppressor else { continue }
                 _ = backup(path)
-                locs.removeValue(forKey: entry)
+                if hasEntry { locs.removeValue(forKey: entry) }
+                if hasOurSuppressor { locs.removeValue(forKey: cliDir) }
                 if locs.isEmpty {
                     root.removeValue(forKey: "chat.hookFilesLocations")
                 } else {
