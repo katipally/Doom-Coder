@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -19,10 +19,6 @@
 		DC0000000000002000000022 /* AgentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* AgentDetector.swift */; };
 		DC0000000000002000000023 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000023 /* EventStore.swift */; };
 		DC0000000000002000000025 /* HookSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* HookSocketListener.swift */; };
-		DC0000000000002000000200 /* CloudKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000200 /* CloudKitSyncEngine.swift */; };
-		DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* ControlCommandRouter.swift */; };
-		DC0000000000002000000202 /* WoLProfileExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* WoLProfileExporter.swift */; };
-		DC0000000000002000000203 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000003 /* DoomCoderCore */; };
 		DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* NotificationDispatcher.swift */; };
 		DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* AgentTrackingManager.swift */; };
 		DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000030 /* TrackAgentsPopover.swift */; };
@@ -40,7 +36,6 @@
 		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
 		DC0000000000002000000046 /* UIAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000046 /* UIAnimations.swift */; };
-		DC0000000000002000000104 /* PayloadRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* PayloadRendererView.swift */; };
 		DC0000000000002000000047 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000047 /* FloatingPanelController.swift */; };
 		DC0000000000002000000048 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000048 /* StatusItemController.swift */; };
 		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
@@ -50,8 +45,13 @@
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
 		DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000103 /* PrivacyInfo.xcprivacy */; };
+		DC0000000000002000000104 /* PayloadRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* PayloadRendererView.swift */; };
 		DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000110 /* AgentProcessMonitor.swift */; };
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
+		DC0000000000002000000200 /* CloudKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000200 /* CloudKitSyncEngine.swift */; };
+		DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* ControlCommandRouter.swift */; };
+		DC0000000000002000000202 /* WoLProfileExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* WoLProfileExporter.swift */; };
+		DC0000000000002000000203 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000003 /* DoomCoderCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,9 +69,6 @@
 		DC0000000000001000000022 /* AgentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000023 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* HookSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketListener.swift; sourceTree = "<group>"; };
-		DC0000000000001000000200 /* CloudKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncEngine.swift; sourceTree = "<group>"; };
-		DC0000000000001000000201 /* ControlCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCommandRouter.swift; sourceTree = "<group>"; };
-		DC0000000000001000000202 /* WoLProfileExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoLProfileExporter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000028 /* AgentTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000030 /* TrackAgentsPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAgentsPopover.swift; sourceTree = "<group>"; };
@@ -89,7 +86,6 @@
 		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000046 /* UIAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAnimations.swift; sourceTree = "<group>"; };
-		DC0000000000001000000104 /* PayloadRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadRendererView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000047 /* FloatingPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelController.swift; sourceTree = "<group>"; };
 		DC0000000000001000000048 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
@@ -99,8 +95,12 @@
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
 		DC0000000000001000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		DC0000000000001000000104 /* PayloadRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadRendererView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000110 /* AgentProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProcessMonitor.swift; sourceTree = "<group>"; };
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000200 /* CloudKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncEngine.swift; sourceTree = "<group>"; };
+		DC0000000000001000000201 /* ControlCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCommandRouter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000202 /* WoLProfileExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoLProfileExporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -146,6 +146,14 @@
 			path = DoomCoder;
 			sourceTree = "<group>";
 		};
+		DC0000000000003000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000000001 /* DoomCoder.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		DC0000000000003000000004 /* AgentTracking */ = {
 			isa = PBXGroup;
 			children = (
@@ -184,14 +192,6 @@
 			path = AgentTracking;
 			sourceTree = "<group>";
 		};
-		DC0000000000003000000003 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				DC0000000000001000000001 /* DoomCoder.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -218,30 +218,6 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		DC0000000000004000000010 /* Build dc-hook helper */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/dc-hook/main.swift",
-			);
-			name = "Build dc-hook helper";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/dc-hook",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nRES_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources\"\nmkdir -p \"$RES_DIR\"\nOUT=\"$RES_DIR/dc-hook\"\nxcrun swiftc -O -target \"$(uname -m)-apple-macos$MACOSX_DEPLOYMENT_TARGET\" \"$SRCROOT/dc-hook/main.swift\" -o \"$OUT\"\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options=runtime \"$OUT\" || true\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXProject section */
 		DC0000000000008000000001 /* Project object */ = {
@@ -289,6 +265,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DC0000000000004000000010 /* Build dc-hook helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/dc-hook/main.swift",
+			);
+			name = "Build dc-hook helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/dc-hook",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nRES_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources\"\nmkdir -p \"$RES_DIR\"\nOUT=\"$RES_DIR/dc-hook\"\nxcrun swiftc -O -target \"$(uname -m)-apple-macos$MACOSX_DEPLOYMENT_TARGET\" \"$SRCROOT/dc-hook/main.swift\" -o \"$OUT\"\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options=runtime \"$OUT\" || true\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		DC0000000000004000000001 /* Sources */ = {
@@ -479,6 +479,7 @@
 				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -503,6 +504,7 @@
 				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -531,6 +533,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		DC0000000000009000000004 /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DoomCoderCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		DC0000000000009000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -541,13 +550,6 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		DC0000000000009000000004 /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/DoomCoderCore;
-		};
-/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		DC0000000000009000000002 /* Sparkle */ = {
@@ -560,7 +562,6 @@
 			productName = DoomCoderCore;
 		};
 /* End XCSwiftPackageProductDependency section */
-
 	};
 	rootObject = DC0000000000008000000001 /* Project object */;
 }

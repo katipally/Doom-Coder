@@ -40,15 +40,16 @@ final class CloudKitSyncEngine {
 
     // MARK: Internals
 
-    private let logger = Logger(subsystem: "com.doomcoder", category: "cloudkit")
+    private nonisolated let logger = Logger(subsystem: "com.doomcoder", category: "cloudkit")
     private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
     private var database: CKDatabase { container.privateCloudDatabase }
     private let zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
                                          ownerName: CKCurrentUserDefaultName)
 
-    private nonisolated(unsafe) var pendingSaves: [CKRecord] = []
-    private nonisolated(unsafe) var pendingDeletes: [CKRecord.ID] = []
+    private var pendingSaves: [CKRecord] = []
+    private var pendingDeletes: [CKRecord.ID] = []
     private var flushScheduled = false
+    private var reauthScheduled = false
 
     /// Cumulative settings record; CloudKit upserts are merge-aware.
     private var currentSettings: SettingsRecord?
@@ -74,6 +75,7 @@ final class CloudKitSyncEngine {
     private init() {}
 
     func start() {
+        logger.info("CloudKitSyncEngine.start() invoked, macId=\(self.macId, privacy: .public)")
         Task { [weak self] in
             guard let self else { return }
             await self.refreshAccountStatus()
@@ -85,9 +87,16 @@ final class CloudKitSyncEngine {
         }
     }
 
+    /// Public re-trigger of the iCloud account-status probe so Settings UI
+    /// can offer a "Re-check iCloud" button.
+    func refreshAccountStatusNow() async {
+        await refreshAccountStatus()
+    }
+
     private func refreshAccountStatus() async {
         do {
             let status = try await container.accountStatus()
+            logger.info("accountStatus -> \(String(describing: status), privacy: .public)")
             switch status {
             case .available:
                 isAvailable = true
@@ -118,16 +127,36 @@ final class CloudKitSyncEngine {
     }
 
     private func bootstrap() async {
+        // Step 1: zone (idempotent on the server).
         do {
             try await ensureZone()
-            try await ensureSubscriptions()
-            try await registerForRemoteNotifications()
-            // Initial MacStatus heartbeat.
-            publishMacStatus()
+            logger.info("ensureZone OK")
         } catch {
             lastError = error.localizedDescription
-            logger.error("bootstrap failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("ensureZone failed: \(error.localizedDescription, privacy: .public)")
+            // Without a zone, no further work is possible.
+            return
         }
+
+        // Step 2: publish initial MacStatus FIRST. This guarantees the
+        // schema for at least one record type exists before we attempt
+        // any query subscriptions. Without this, a first-ever launch
+        // can fail at the subscription step and never auto-create the
+        // schema — leaving the CloudKit dashboard empty.
+        publishMacStatus()
+        logger.info("initial MacStatus enqueued")
+
+        // Step 3: subscriptions are best-effort. Push delivery is a
+        // nice-to-have for prompt remote-control; the Mac still works
+        // (just polls on its own clock) if these never get created.
+        await ensureSubscriptionsBestEffort()
+
+        // Step 4: register for APNs so silent pushes can wake the Mac.
+        // Also best-effort.
+        await MainActor.run {
+            NSApplication.shared.registerForRemoteNotifications()
+        }
+        logger.info("registerForRemoteNotifications requested")
     }
 
     private func ensureZone() async throws {
@@ -137,48 +166,13 @@ final class CloudKitSyncEngine {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             op.modifyRecordZonesResultBlock = { result in
                 switch result {
-                case .success: cont.resume()
-                case .failure(let err): cont.resume(throwing: err)
-                }
-            }
-            database.add(op)
-        }
-    }
-
-    private func ensureSubscriptions() async throws {
-        // Database-level subscription → silent push when anything changes.
-        let dbSub = CKDatabaseSubscription(subscriptionID: "doomcoder-db-sub")
-        let info = CKSubscription.NotificationInfo()
-        info.shouldSendContentAvailable = true
-        dbSub.notificationInfo = info
-
-        // Query subscription for incoming ControlCommand records that haven't
-        // been applied yet — silent push so we react promptly even when the
-        // user just woke the Mac.
-        let predicate = NSPredicate(format: "appliedAt == nil")
-        let cmdSub = CKQuerySubscription(
-            recordType: ControlCommandRecord.recordType,
-            predicate: predicate,
-            subscriptionID: "doomcoder-cmd-sub",
-            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
-        )
-        let cmdInfo = CKSubscription.NotificationInfo()
-        cmdInfo.shouldSendContentAvailable = true
-        cmdSub.notificationInfo = cmdInfo
-
-        let op = CKModifySubscriptionsOperation(
-            subscriptionsToSave: [dbSub, cmdSub],
-            subscriptionIDsToDelete: nil
-        )
-        op.qualityOfService = .utility
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            op.modifySubscriptionsResultBlock = { result in
-                switch result {
-                case .success: cont.resume()
+                case .success:
+                    cont.resume()
                 case .failure(let err):
-                    // Already-exists is fine.
-                    if let cke = err as? CKError,
-                       cke.code == .serverRejectedRequest || cke.code == .unknownItem {
+                    // A zone that already exists is fine — CK reports this
+                    // through .partialFailure with .serverRecordChanged
+                    // sub-errors, or directly via .serverRejectedRequest.
+                    if Self.isBenignAlreadyExistsError(err) {
                         cont.resume()
                     } else {
                         cont.resume(throwing: err)
@@ -189,10 +183,70 @@ final class CloudKitSyncEngine {
         }
     }
 
-    private func registerForRemoteNotifications() async throws {
-        await MainActor.run {
-            NSApplication.shared.registerForRemoteNotifications()
+    /// Creates the database-level silent subscription so the Mac is
+    /// woken on any private-DB change (this is how the Mac learns of
+    /// new `ControlCommand` records pushed by iOS).
+    ///
+    /// We intentionally do NOT create a `CKQuerySubscription` on
+    /// `ControlCommand` here:
+    ///   • On the very first launch the record type doesn't exist yet,
+    ///     so the predicate `appliedAt == nil` would 400 with
+    ///     `.invalidArguments` and block schema bootstrap.
+    ///   • The database silent subscription is sufficient — Mac runs
+    ///     `ControlCommandRouter.drainPending()` from the
+    ///     `didReceiveRemoteNotification` handler.
+    ///
+    /// The iOS app owns its own query subscription on `NotificationLog`
+    /// (with `shouldSendMutableContent = true`) for user-visible pushes.
+    private func ensureSubscriptionsBestEffort() async {
+        let dbSub = CKDatabaseSubscription(subscriptionID: "doomcoder-db-sub")
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        dbSub.notificationInfo = info
+
+        let op = CKModifySubscriptionsOperation(
+            subscriptionsToSave: [dbSub],
+            subscriptionIDsToDelete: nil
+        )
+        op.qualityOfService = .utility
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            op.modifySubscriptionsResultBlock = { [logger] result in
+                switch result {
+                case .success:
+                    logger.info("ensureSubscriptions: db-sub OK")
+                case .failure(let err):
+                    if Self.isBenignAlreadyExistsError(err) {
+                        logger.info("ensureSubscriptions: db-sub already exists")
+                    } else {
+                        logger.error("ensureSubscriptions failed (non-fatal): \(err.localizedDescription, privacy: .public)")
+                    }
+                }
+                cont.resume()
+            }
+            database.add(op)
         }
+    }
+
+    /// CloudKit returns a wide variety of error codes when an op tries
+    /// to recreate something that already exists or query a schema that
+    /// isn't materialized yet. None of these are fatal for our purposes.
+    private static func isBenignAlreadyExistsError(_ error: Error) -> Bool {
+        guard let cke = error as? CKError else { return false }
+        let benign: Set<CKError.Code> = [
+            .serverRejectedRequest,
+            .unknownItem,
+            .invalidArguments,
+            .serverRecordChanged
+        ]
+        if benign.contains(cke.code) { return true }
+        if cke.code == .partialFailure,
+           let perItem = cke.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+            return perItem.values.allSatisfy { sub in
+                guard let s = sub as? CKError else { return false }
+                return benign.contains(s.code)
+            }
+        }
+        return false
     }
 
     // MARK: Publish API (called from app code)
@@ -290,6 +344,29 @@ final class CloudKitSyncEngine {
         enqueue(save: rec.toCKRecord())
     }
 
+    /// Manual end-to-end verification entry-point exposed from the
+    /// Configure → Settings → "Send Test Ping" button. Publishes one
+    /// MacStatus record and one NotificationLog record, which together
+    /// exercise the entire write path (zone → record → schema auto-
+    /// create → CK Dashboard visible row).
+    func sendTestPing() {
+        logger.info("sendTestPing tapped (isAvailable=\(self.isAvailable))")
+        publishMacStatus()
+        publishNotification(
+            sessionKey: "test-\(UUID().uuidString.prefix(8))",
+            agent: "claude",
+            phase: "system",
+            event: "test-ping",
+            title: "DoomCoder Test Ping",
+            body: "Manual ping from Configure → Settings.",
+            channel: "iOSCompanion",
+            success: true,
+            ts: Date(),
+            lastTool: nil,
+            cwdBase: "~/"
+        )
+    }
+
     // MARK: Coalescing queue
 
     private func enqueue(save record: CKRecord) {
@@ -322,8 +399,14 @@ final class CloudKitSyncEngine {
         for r in saves { byID[r.recordID] = r }
         let unique = Array(byID.values)
 
+        let recordTypes = Set(unique.map(\.recordType)).sorted().joined(separator: ",")
+        logger.info("flush: \(unique.count) saves [\(recordTypes, privacy: .public)] + \(deletes.count) deletes")
+
         let op = CKModifyRecordsOperation(recordsToSave: unique, recordIDsToDelete: deletes)
-        op.savePolicy = .changedKeys
+        // .allKeys ensures the very first write of a new record type carries
+        // every field, so the auto-created schema is complete. .changedKeys
+        // is incompatible with first-launch schema bootstrap.
+        op.savePolicy = .allKeys
         op.qualityOfService = .utility
         op.modifyRecordsResultBlock = { [weak self] result in
             Task { @MainActor [weak self] in
@@ -332,13 +415,31 @@ final class CloudKitSyncEngine {
                 case .success:
                     self.lastSyncAt = Date()
                     self.lastError = nil
+                    self.logger.info("flush OK at \(self.lastSyncAt!)")
                 case .failure(let err):
                     self.lastError = err.localizedDescription
                     self.logger.error("modifyRecords failed: \(err.localizedDescription, privacy: .public)")
+                    if let cke = err as? CKError, cke.code == .notAuthenticated {
+                        self.scheduleReauth()
+                    }
                 }
             }
         }
         database.add(op)
+    }
+
+    /// One-shot recovery: if a publish fails because iCloud auth dropped,
+    /// re-run accountStatus 5 s later. Guarded so a burst of failures
+    /// doesn't queue dozens of probes.
+    private func scheduleReauth() {
+        guard !reauthScheduled else { return }
+        reauthScheduled = true
+        isAvailable = false
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            await MainActor.run { self?.reauthScheduled = false }
+            await self?.refreshAccountStatus()
+        }
     }
 
     // MARK: Helpers

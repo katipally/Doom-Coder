@@ -97,11 +97,51 @@ struct ConfigureSettingsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    HStack {
+                        Text("Pending writes")
+                            .font(.caption)
+                        Spacer()
+                        Text("\(syncEngine.pendingWrites)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Mac ID")
+                            .font(.caption)
+                        Spacer()
+                        Text(syncEngine.macId)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(syncEngine.macId, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy Mac ID")
+                    }
                     if let err = syncEngine.lastError {
                         Text(err)
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
+                    HStack {
+                        Button("Re-check iCloud") {
+                            Task { await syncEngine.refreshAccountStatusNow() }
+                        }
+                        Button("Send Test Ping") {
+                            syncEngine.sendTestPing()
+                        }
+                        .disabled(!syncEngine.isAvailable)
+                    }
+                    .buttonStyle(.bordered)
+                    Text("Test Ping publishes one MacStatus + one NotificationLog so you can verify CloudKit Dashboard (Development → Private → DoomCoderZone).")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 section("Diagnostics") {
