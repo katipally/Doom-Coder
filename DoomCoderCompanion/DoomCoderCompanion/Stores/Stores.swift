@@ -123,7 +123,7 @@ final class SettingsStore {
         mutate(&current)
         current.touch(field, by: deviceId)
         Task {
-            await CompanionSyncEngine.shared.enqueueSave(current.toCKRecord())
+            CompanionSyncEngine.shared.enqueueSave(current.toCKRecord())
         }
     }
 }

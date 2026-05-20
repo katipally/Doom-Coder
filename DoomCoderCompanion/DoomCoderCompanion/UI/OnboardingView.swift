@@ -48,7 +48,7 @@ struct OnboardingView: View {
                     openSettings()
                 }
                 StatusRow(label: "Notifications enabled", state: notifState, actionLabel: "Enable") {
-                    requestNotifications()
+                    Task { await requestNotifications() }
                 }
                 StatusRow(label: "Mac visible", state: macState, actionLabel: nil, action: nil)
             }
@@ -110,12 +110,10 @@ struct OnboardingView: View {
         }
     }
 
-    private func requestNotifications() {
-        Task {
-            let granted = (try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-            notifState = granted ? .ok : .actionNeeded
-        }
+    private func requestNotifications() async {
+        let granted = (try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        notifState = granted ? .ok : .actionNeeded
     }
 
     private func openSettings() {

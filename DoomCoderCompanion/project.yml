@@ -60,6 +60,13 @@ targets:
           - armv7
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         BGTaskSchedulerPermittedIdentifiers:
           - com.doomcoder.app.companion.refresh
         NSLocalNetworkUsageDescription: "DoomCoder Companion sends a Wake-on-LAN packet on your local Wi-Fi to wake your Mac. Network access is used only when you tap Wake."

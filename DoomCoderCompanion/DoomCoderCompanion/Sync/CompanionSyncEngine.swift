@@ -119,7 +119,7 @@ final class CompanionSyncEngine: NSObject {
     private func setupNotificationLogSubscription() async {
         // Delete old subscription (saved without alertBody — silent push only)
         // so we can recreate it with the required aps.alert fields.
-        try? await db.deleteSubscription(withID: "companion-notiflog-sub")
+        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub")
 
         let yesterday = Date(timeIntervalSinceNow: -86_400)
         let pred = NSPredicate(format: "ts > %@", yesterday as NSDate)
