@@ -167,7 +167,11 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Record fan-out
 
     nonisolated private func handleFetched(_ record: CKRecord) {
-        Task { @MainActor in
+        // Use Task.detached to stay outside the CKSyncEngine delegate task tree.
+        // An inherited Task here would still be a child of the delegate callback,
+        // which can cause reentrancy crashes if any store mutation triggers
+        // additional CKSyncEngine operations.
+        Task.detached { @MainActor in
             switch record.recordType {
             case CloudKitConstants.RecordType.macStatus:
                 if let r = MacStatusRecord(record) { MacStatusStore.shared.upsert(r) }
@@ -258,8 +262,12 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 for fail in e.failedRecordSaves {
                     print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(fail.error.localizedDescription)")
                 }
-                // Trigger a fresh fetch to pull down the authoritative server copy.
-                Task { await self.fetchChanges() }
+                // MUST use Task.detached — calling engine.fetchChanges() from
+                // inside a delegate callback causes a CKSyncEngine reentrancy
+                // crash (Task 840: "BUG IN CLIENT OF CLOUDKIT"). Detached task
+                // runs outside the delegate's task tree, satisfying CKSyncEngine's
+                // serial-delegate guarantee.
+                Task.detached { [weak self] in await self?.fetchChanges() }
             }
 
         default:
