@@ -120,16 +120,17 @@ final class CompanionSyncEngine: NSObject {
     }
 
     private func setupNotificationLogSubscription() async {
-        // Delete old subscriptions (v1 was silent-only, v2 had wrong field name).
+        // Delete old subscriptions — v1 silent-only, v2 wrong field, v3 too many desiredKeys (>5).
         _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub")
         _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub-v2")
+        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub-v3")
 
         let yesterday = Date(timeIntervalSinceNow: -86_400)
         let pred = NSPredicate(format: "ts > %@", yesterday as NSDate)
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v3",   // v3: correct field names
+            subscriptionID: "companion-notiflog-sub-v4",   // v4: ≤5 desiredKeys
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
@@ -141,12 +142,14 @@ final class CompanionSyncEngine: NSObject {
         info.alertBody = "Agent update"
         info.shouldSendMutableContent = true   // NSE will enrich
         info.soundName = "default"
-        // Field names MUST match the CK record field keys in NotificationLogRecord,
-        // NOT the Swift property names. "lastTool" not "tool".
-        info.desiredKeys = [
-            "agent", "phase", "lastTool", "cwdBase", "sessionKey",
-            "macName", "ts", "title", "body", "macId",
-        ]
+        // CloudKit hard limit: max 5 desiredKeys per CKQuerySubscription.
+        // Pick the 5 fields the NSE uses most critically:
+        //   agent + phase → title/body enrichment + interruption level + icon
+        //   lastTool      → NotificationCopy.EventContext
+        //   sessionKey    → UNNotification threadIdentifier (groups alerts)
+        //   macName       → subtitle "On <macName>"
+        // Fallback title/body come from info.title / info.alertBody above.
+        info.desiredKeys = ["agent", "phase", "lastTool", "sessionKey", "macName"]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {

@@ -40,7 +40,7 @@ class NotificationService: UNNotificationServiceExtension {
 
         let agentRaw   = field("agent")
         let phaseRaw   = field("phase")
-        let tool       = field("tool")
+        let tool       = field("lastTool")   // CK field key is "lastTool", not "tool"
         let cwdBase    = field("cwdBase")
         let sessionKey = field("sessionKey")
         let macName    = field("macName")
