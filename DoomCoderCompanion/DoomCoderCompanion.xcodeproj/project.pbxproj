@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0886526DBDC2303DF16C3D5C /* NSEDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE088471B3BCCBCE53DAE3D /* NSEDebugView.swift */; };
 		13080AA8AC50EB8EC7B7CE3F /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4038EC43DC5D6E9E65F27D /* DoomCoderCore */; };
 		3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A67B01FA77C05717991E37 /* RootTabView.swift */; };
 		3A4B25C5A59BB9FD1A9801E8 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DA4FB5F5754B7516043CF0 /* HomeView.swift */; };
@@ -21,6 +22,7 @@
 		AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */; };
 		AF7FB6DD1454B0DE8AB4E39D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */; };
 		B87084239BB62CDDF5387361 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED52275E7367F2AB4E383199 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BF92E0FA81291D820E0FCD34 /* LocalNotificationPoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A0776F05A0DA4111FFB797 /* LocalNotificationPoster.swift */; };
 		C454F8A9D858B87680B15C02 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = C8C6B66E763641B3CB2A309A /* DoomCoderCore */; };
 		D636B6479C595F7C776E1639 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A001013B397C1A86AA65F66F /* Assets.xcassets */; };
 		DE3BC7A18DE362080C7EFCCA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1FD10F71AB58F8526779A2D /* AppDelegate.swift */; };
@@ -60,6 +62,7 @@
 		16A67B01FA77C05717991E37 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
 		577E6F8848446B47EA914860 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
+		59A0776F05A0DA4111FFB797 /* LocalNotificationPoster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationPoster.swift; sourceTree = "<group>"; };
 		84F0362D4080511605EBD81F /* AgentIconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconFetcher.swift; sourceTree = "<group>"; };
 		852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPublisher.swift; sourceTree = "<group>"; };
 		87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeOnLAN.swift; sourceTree = "<group>"; };
@@ -74,6 +77,7 @@
 		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4DA4FB5F5754B7516043CF0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		F97B277B605875975558BFB9 /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
+		FBE088471B3BCCBCE53DAE3D /* NSEDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSEDebugView.swift; sourceTree = "<group>"; };
 		FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -121,6 +125,7 @@
 				DA7841884D6F604D75A0B585 /* BackgroundRefresh.swift */,
 				852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */,
 				12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */,
+				59A0776F05A0DA4111FFB797 /* LocalNotificationPoster.swift */,
 				87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */,
 			);
 			path = Sync;
@@ -139,6 +144,7 @@
 			children = (
 				F4DA4FB5F5754B7516043CF0 /* HomeView.swift */,
 				B9D9D643A8FD265E614D1CD0 /* LogsView.swift */,
+				FBE088471B3BCCBCE53DAE3D /* NSEDebugView.swift */,
 				FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
 				F97B277B605875975558BFB9 /* SessionsView.swift */,
@@ -332,7 +338,9 @@
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
 				3A4B25C5A59BB9FD1A9801E8 /* HomeView.swift in Sources */,
+				BF92E0FA81291D820E0FCD34 /* LocalNotificationPoster.swift in Sources */,
 				8A3A3870B8803279FB2D8830 /* LogsView.swift in Sources */,
+				0886526DBDC2303DF16C3D5C /* NSEDebugView.swift in Sources */,
 				AF7FB6DD1454B0DE8AB4E39D /* OnboardingView.swift in Sources */,
 				3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */,
 				438A5661C9584975973C0077 /* SessionsView.swift in Sources */,

@@ -122,7 +122,8 @@ final class CompanionSyncEngine: NSObject {
     private func setupNotificationLogSubscription() async {
         // Delete all previous subscription versions.
         for id in ["companion-notiflog-sub", "companion-notiflog-sub-v2",
-                   "companion-notiflog-sub-v3", "companion-notiflog-sub-v4"] {
+                   "companion-notiflog-sub-v3", "companion-notiflog-sub-v4",
+                   "companion-notiflog-sub-v5"] {
             _ = try? await db.deleteSubscription(withID: id)
         }
 
@@ -131,28 +132,33 @@ final class CompanionSyncEngine: NSObject {
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v5",
+            subscriptionID: "companion-notiflog-sub-v6",
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
         // CRITICAL: alertBody + title must be non-nil so CloudKit includes
         // aps.alert in the APNs payload. Without aps.alert the push is treated
         // as silent and the NSE is NEVER invoked — no banner.
+        // The NSE overwrites these with the values from desiredKeys below.
         info.title = "DoomCoder"
         info.alertBody = "Agent update"
-        info.shouldSendMutableContent = true   // NSE will enrich
+        info.shouldSendMutableContent = true   // invokes NSE on each push
         info.soundName = "default"
-        // CloudKit hard limit: max 5 desiredKeys per CKQuerySubscription.
-        // macName is NOT included — NSE reads it from App Group UserDefaults
-        // (written by MacStatusStore.upsert on every sync). This frees a slot
-        // for cwdBase which gives richer body copy ("Started in <project>").
-        info.desiredKeys = ["agent", "phase", "lastTool", "sessionKey", "cwdBase"]
+        // v6 desiredKeys: include the Mac-precomputed rich title + body.
+        // CloudKit hard limit: 5 desiredKeys max.
+        //   title      → mutable.title  (Mac-computed rich copy)
+        //   body       → mutable.body   (Mac-computed rich copy)
+        //   agent      → icon slug + interruption level in NSE
+        //   phase      → interruption level in NSE
+        //   sessionKey → UNNotification threadIdentifier
+        info.desiredKeys = ["title", "body", "agent", "phase", "sessionKey"]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {
             try await db.save(sub)
+            print("[CompanionSyncEngine] notiflog sub v6 registered")
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
-            // Already exists with this ID — fine.
+            print("[CompanionSyncEngine] notiflog sub v6 already exists")
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
         }

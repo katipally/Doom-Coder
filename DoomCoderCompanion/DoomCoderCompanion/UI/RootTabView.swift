@@ -19,6 +19,9 @@ struct RootTabView: View {
             Tab("Settings", systemImage: "gearshape.fill") {
                 SettingsView()
             }
+            Tab("Debug", systemImage: "ant.fill") {
+                NSEDebugView()
+            }
         }
     }
 }

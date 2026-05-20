@@ -93,6 +93,10 @@ final class NotificationLogStore {
         }
         // Persist the trimmed list for the NSE.
         AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
+        // Post a rich local notification as the primary backup channel.
+        // The CKQuerySubscription push arrives first and the NSE enriches it.
+        // This local post ensures rich content even if the NSE is bypassed.
+        LocalNotificationPoster.post(r)
     }
 }
 
