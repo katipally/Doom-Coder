@@ -12,7 +12,7 @@ enum AppGroupCache {
 
     // Force-unwrapped: the app group is declared in entitlements; if this fails
     // the build configuration is broken and we want a loud crash.
-    static let defaults: UserDefaults = UserDefaults(suiteName: suiteName)!
+    nonisolated(unsafe) static let defaults: UserDefaults = UserDefaults(suiteName: suiteName)!
 
     /// Shared container URL (nil only if the App Group entitlement is missing).
     static var containerURL: URL? {

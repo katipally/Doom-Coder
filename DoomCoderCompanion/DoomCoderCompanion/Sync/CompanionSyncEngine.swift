@@ -176,29 +176,28 @@ final class CompanionSyncEngine: NSObject {
 
 extension CompanionSyncEngine: CKSyncEngineDelegate {
 
-    nonisolated func syncEngine(
-        _ syncEngine: CKSyncEngine,
-        handleEvent event: CKSyncEngine.Event
-    ) {
+    nonisolated func handleEvent(
+        _ event: CKSyncEngine.Event,
+        syncEngine: CKSyncEngine
+    ) async {
         switch event {
         case .stateUpdate(let e):
             // Persist the engine state so we can restore across launches.
             if let data = try? JSONEncoder().encode(e.stateSerialization) {
-                AppGroupCache.defaults.set(data, forKey: Self.engineStateKey)
-            }
-            Task { @MainActor in
-                self.lastSyncAt = Date()
+                await MainActor.run {
+                    AppGroupCache.defaults.set(data, forKey: Self.engineStateKey)
+                    self.lastSyncAt = Date()
+                }
             }
 
         case .accountChange(let e):
-            Task { @MainActor in
+            await MainActor.run {
                 switch e.changeType {
                 case .signIn:
                     self.accountAvailable = true
                 case .signOut:
                     self.accountAvailable = false
                 case .switchAccounts:
-                    // Clear local caches on account switch.
                     MacStatusStore.shared.clear()
                     SessionStore.shared.clear()
                     NotificationLogStore.shared.entries.removeAll()
@@ -210,23 +209,23 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
 
         case .fetchedRecordZoneChanges(let e):
             for change in e.modifications {
-                handleFetched(change.record)
+                await MainActor.run {
+                    self.handleFetched(change.record)
+                }
             }
-            Task { @MainActor in
+            await MainActor.run {
                 self.zoneReady = true
                 self.lastSyncAt = Date()
             }
 
         case .willSendChanges:
-            // Nothing extra to prepare; pendingSaves is already populated.
             break
 
         case .sentRecordZoneChanges(let e):
-            // Resolve any command completions when ControlCommand comes back with appliedAt.
             for save in e.savedRecords {
                 if save.recordType == CloudKitConstants.RecordType.controlCommand,
                    let cmd = ControlCommandRecord(save) {
-                    Task { @MainActor in
+                    await MainActor.run {
                         CommandPublisher.shared.handleEcho(cmd)
                     }
                 }
@@ -237,20 +236,19 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         }
     }
 
-    nonisolated func syncEngine(
-        _ syncEngine: CKSyncEngine,
-        nextRecordZoneChangeBatch context: CKSyncEngine.SendChangesContext
+    nonisolated func nextRecordZoneChangeBatch(
+        _ context: CKSyncEngine.SendChangesContext,
+        syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        // Drain pendingSaves.
         let saves: [CKRecord] = await MainActor.run {
             let batch = self.pendingSaves
             self.pendingSaves.removeAll()
             return batch
         }
         guard !saves.isEmpty else { return nil }
-        return CKSyncEngine.RecordZoneChangeBatch(
-            recordsToSave: saves,
-            recordIDsToDelete: []
+        return await CKSyncEngine.RecordZoneChangeBatch(
+            pendingChanges: saves.map { .saveRecord($0.recordID) },
+            recordProvider: { id in saves.first(where: { $0.recordID == id }) }
         )
     }
 }

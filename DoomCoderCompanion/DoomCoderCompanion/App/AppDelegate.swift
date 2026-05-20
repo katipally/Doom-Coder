@@ -7,7 +7,8 @@ import UIKit
 import UserNotifications
 import BackgroundTasks
 
-final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, @unchecked Sendable {
+@MainActor
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     func application(
         _ application: UIApplication,
@@ -57,7 +58,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // MARK: - UNUserNotificationCenterDelegate
 
     /// Show banner + sound + badge when a notification arrives while the app is foregrounded.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
@@ -65,7 +66,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .list])
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void

@@ -81,6 +81,8 @@ targets:
         excludes:
           - "Info.plist"
           - "NotificationService.entitlements"
+      - path: DoomCoderCompanion/SharedCache
+        group: SharedCache
     info:
       path: NotificationService/Info.plist
       properties:
@@ -96,3 +98,30 @@ targets:
         CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
     dependencies:
       - package: DoomCoderCore
+
+schemes:
+  DoomCoderCompanion:
+    build:
+      targets:
+        DoomCoderCompanion: all
+        NotificationService: all
+    run:
+      config: Debug
+      commandLineArguments: {}
+      environmentVariables: []
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  NotificationService:
+    build:
+      targets:
+        NotificationService: all
+    run:
+      config: Debug
+    archive:
+      config: Release

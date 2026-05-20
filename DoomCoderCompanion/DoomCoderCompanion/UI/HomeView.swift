@@ -139,7 +139,7 @@ private struct MacStatusCard: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(asleep ? Color.secondary.opacity(0.2) : Color.green.opacity(0.2))
-            .foregroundStyle(asleep ? .secondary : .green)
+            .foregroundStyle(asleep ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.green))
             .clipShape(Capsule())
     }
 }

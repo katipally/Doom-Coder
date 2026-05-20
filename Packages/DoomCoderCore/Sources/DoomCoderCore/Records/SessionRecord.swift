@@ -4,7 +4,7 @@ import CloudKit
 #endif
 
 /// Per-session aggregate mirroring AgentTrackingManager.Session. Writer: Mac.
-public struct SessionRecord: Sendable, Codable, Equatable {
+public struct SessionRecord: Sendable, Codable, Equatable, Hashable, Identifiable {
     public var sessionKey: String     // "<agentRaw>::<sessionId>"
     public var macId: String
     public var agent: String          // TrackedAgent.rawValue
@@ -23,6 +23,8 @@ public struct SessionRecord: Sendable, Codable, Equatable {
     public var hasFailed: Bool
     public var displayState: String
     public var schemaVersion: Int
+
+    public var id: String { sessionKey }
 
     public init(sessionKey: String, macId: String, agent: String, sessionId: String,
                 cwd: String, cwdBase: String? = nil,

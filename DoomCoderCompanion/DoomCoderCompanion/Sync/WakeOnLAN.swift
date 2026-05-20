@@ -6,6 +6,7 @@
 
 import Foundation
 import Network
+import os
 
 // MARK: - Error type
 
@@ -46,10 +47,14 @@ enum WakeOnLAN {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let monitor = NWPathMonitor()
             let q = DispatchQueue(label: "wol.pathmonitor")
-            var finished = false
+            let finished = OSAllocatedUnfairLock<Bool>(initialState: false)
             monitor.pathUpdateHandler = { path in
-                guard !finished else { return }
-                finished = true
+                let shouldFire = finished.withLock { f -> Bool in
+                    if f { return false }
+                    f = true
+                    return true
+                }
+                guard shouldFire else { return }
                 monitor.cancel()
                 if path.usesInterfaceType(.wifi) {
                     continuation.resume()

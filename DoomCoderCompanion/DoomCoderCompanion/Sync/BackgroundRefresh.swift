@@ -44,14 +44,16 @@ enum BackgroundRefresh {
             fetchTask.cancel()
         }
 
+        // Capture only Sendable values into the async Task to avoid sending
+        // the non-Sendable BGAppRefreshTask across actor boundaries.
+        nonisolated(unsafe) let unsafeTask = task
         Task {
-            // Give the engine up to 25 seconds.
             let deadline = ContinuousClock.now + .seconds(25)
             do {
                 try await withDeadline(deadline) { await fetchTask.value }
-                task.setTaskCompleted(success: true)
+                unsafeTask.setTaskCompleted(success: true)
             } catch {
-                task.setTaskCompleted(success: false)
+                unsafeTask.setTaskCompleted(success: false)
             }
         }
     }

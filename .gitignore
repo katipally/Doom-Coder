@@ -27,9 +27,6 @@ build/
 .build/
 .swiftpm/
 
-# XcodeGen-generated project (run `xcodegen generate` in DoomCoderCompanion/)
-DoomCoderCompanion/DoomCoderCompanion.xcodeproj/
-
 # Sparkle tools (downloaded in CI, not committed)
 sparkle-tools/
 sparkle.tar.xz
