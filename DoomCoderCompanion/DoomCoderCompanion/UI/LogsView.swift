@@ -98,7 +98,15 @@ struct LogsView: View {
     private var logList: some View {
         Group {
             if filtered.isEmpty {
-                ContentUnavailableView.search(text: searchText.isEmpty ? "logs" : searchText)
+                if searchText.isEmpty && agentFilter == nil && phaseFilter == nil {
+                    ContentUnavailableView(
+                        "No Logs Yet",
+                        systemImage: "text.below.photo",
+                        description: Text("Agent activity from your Mac will appear here.")
+                    )
+                } else {
+                    ContentUnavailableView.search(text: searchText.isEmpty ? "matching logs" : searchText)
+                }
             } else {
                 List(filtered, id: \.notifId) { entry in
                     LogEntryRow(entry: entry)

@@ -58,18 +58,16 @@ struct SettingsView: View {
 
     private var timersSection: some View {
         Section("Timers") {
-            // Retention days: discrete 1 / 7 / 30.
-            VStack(alignment: .leading) {
-                Text("Retention: \(store.current.retentionDays) day\(store.current.retentionDays == 1 ? "" : "s")")
-                Slider(
-                    value: Binding(
-                        get: { Double(store.current.retentionDays) },
-                        set: { v in store.update(field: "retentionDays") { $0.retentionDays = discreteRetention(v) } }
-                    ),
-                    in: 1...30,
-                    step: 1
-                )
+            // Retention days: discrete 1 / 7 / 30 days.
+            Picker("Retention", selection: Binding(
+                get: { store.current.retentionDays },
+                set: { v in store.update(field: "retentionDays") { $0.retentionDays = v } }
+            )) {
+                Text("1 day").tag(1)
+                Text("7 days").tag(7)
+                Text("30 days").tag(30)
             }
+            .pickerStyle(.segmented)
 
             VStack(alignment: .leading) {
                 Text("Auto-revert after: \(store.current.autoRevertSec) s")
@@ -148,11 +146,5 @@ struct SettingsView: View {
             get: { store.current[keyPath: keyPath] },
             set: { newVal in store.update(field: field) { $0[keyPath: keyPath] = newVal } }
         )
-    }
-
-    private func discreteRetention(_ raw: Double) -> Int {
-        // Map slider to nearest of 1, 7, 30.
-        let options = [1, 7, 30]
-        return options.min(by: { abs($0 - Int(raw)) < abs($1 - Int(raw)) }) ?? 7
     }
 }

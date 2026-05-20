@@ -111,9 +111,6 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Subscriptions
 
     private func setupDatabaseSubscription() async {
-        // Remove legacy subscription created with a different ID.
-        _ = try? await db.deleteSubscription(withID: "doomcoder-db-sub")
-
         let sub = CKDatabaseSubscription(subscriptionID: "companion-db-sub")
         let info = CKSubscription.NotificationInfo()
         info.shouldSendMutableContent = true

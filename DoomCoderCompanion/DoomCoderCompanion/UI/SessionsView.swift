@@ -34,10 +34,11 @@ struct SessionsView: View {
             }
         }
         .task {
-            // Fetch every 5 s while foregrounded on this tab.
+            // Fetch every 30 s while foregrounded on this tab as a backstop.
+            // Real-time updates arrive via CKDatabaseSubscription silent push.
             while !Task.isCancelled {
                 await CompanionSyncEngine.shared.fetchChanges()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(30))
             }
         }
     }
@@ -132,7 +133,7 @@ struct SessionDetailView: View {
         .task {
             while !Task.isCancelled {
                 await CompanionSyncEngine.shared.fetchChanges()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(30))
             }
         }
     }

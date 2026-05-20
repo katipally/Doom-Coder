@@ -29,11 +29,14 @@ struct OnboardingView: View {
 
             // App logo / wordmark
             VStack(spacing: 8) {
-                Image("AppIcon")      // from Assets.xcassets
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.accentColor.gradient)
+                        .frame(width: 96, height: 96)
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.white)
+                }
 
                 Text("DoomCoder")
                     .font(.largeTitle.bold())

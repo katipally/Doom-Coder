@@ -197,6 +197,12 @@ private struct PreventSleepCard: View {
             localMode  = settings.current.mode == "screenOn" ? 0 : 1
             localHours = settings.current.sessionTimerHrs
         }
+        .onChange(of: settings.current.mode) { _, new in
+            localMode = new == "screenOn" ? 0 : 1
+        }
+        .onChange(of: settings.current.sessionTimerHrs) { _, new in
+            localHours = new
+        }
     }
 
     private func sendToggleMaster() -> AsyncThrowingStream<CommandPublisher.Status, Error>? {

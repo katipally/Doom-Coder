@@ -12,6 +12,17 @@ enum LocalNotificationPoster {
     /// Post a rich local notification for a freshly-received NotificationLogRecord.
     /// Safe to call multiple times with the same record — deduplicated by notifId.
     static func post(_ r: NotificationLogRecord) {
+        // Guard 1: Only notify for RECENT events. When CKSyncEngine does a full
+        // zone fetch on first launch or state reset, it delivers ALL historical
+        // records. Without this check, every historical record fires a spurious
+        // notification banner as soon as the app opens. 5 minutes is generous
+        // enough to cover CloudKit propagation delays while excluding records
+        // from hours/days ago.
+        guard r.ts > Date(timeIntervalSinceNow: -300) else { return }
+
+        // Guard 2: Per-notifId dedup so we never post the same event twice,
+        // even if the record is delivered by both CKDatabaseSubscription and
+        // CKQuerySubscription paths.
         let dedupKey = "localPosted.\(r.notifId)"
         guard AppGroupCache.defaults.object(forKey: dedupKey) == nil else { return }
         AppGroupCache.defaults.set(true, forKey: dedupKey)
