@@ -430,10 +430,10 @@ struct ConfigureAgentsViewV2: View {
                                     if v { NotificationDispatcher.shared.requestPermission() }
                                 }
                             ))
-                            Toggle("ntfy", isOn: Binding(
-                                get: { override.ntfy },
+                            Toggle("iOS Companion", isOn: Binding(
+                                get: { override.iOSCompanion },
                                 set: { v in
-                                    var c = override; c.ntfy = v
+                                    var c = override; c.iOSCompanion = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
                                 }
@@ -580,80 +580,38 @@ struct ConfigureAgentsViewV2: View {
                     Label("macOS", systemImage: "bell.fill")
                 }
 
-                // ntfy
+                // iOS Companion (replaces ntfy in v3.0)
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Toggle("ntfy", isOn: Binding(
-                                get: { channelConfig.global.ntfy },
+                            Toggle("iOS Companion", isOn: Binding(
+                                get: { channelConfig.global.iOSCompanion },
                                 set: { v in
-                                    channelConfig.global.ntfy = v
+                                    channelConfig.global.iOSCompanion = v
                                     ChannelStore.setGlobal(channelConfig.global)
                                 }
                             ))
                             Spacer()
                             Button("Test") {
-                                ChannelTester.sendTest(channel: .ntfy) { ok, msg in
+                                ChannelTester.sendTest(channel: .iOSCompanion) { ok, msg in
                                     testResult = (ok, msg)
                                 }
                             }
                         }
-
                         HStack {
-                            Text("Topic:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.getOrCreate())
-                                .font(.system(.callout, design: .monospaced))
-                                .textSelection(.enabled)
-                            Spacer()
-                            Button("Copy Topic") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(NtfyTopic.getOrCreate(), forType: .string)
-                            }
-                            Button("Regenerate") { _ = NtfyTopic.regenerate() }
-                        }
-
-                        HStack {
-                            Text("Server:")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(NtfyTopic.server ?? "https://ntfy.sh")
+                            Image(systemName: "icloud")
+                                .foregroundStyle(.secondary)
+                            Text(CloudKitSyncEngine.shared.accountStatusText)
                                 .font(.callout)
+                                .foregroundStyle(.secondary)
                             Spacer()
                         }
-
-                        HStack {
-                            if let url = NtfyTopic.shareURL {
-                                Text("Subscribe URL:")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                Text(url.absoluteString)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                Spacer()
-                                Button("Copy Subscribe URL") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                                }
-                            }
-                        }
-
-                        // QR Code
-                        if let url = NtfyTopic.shareURL {
-                            HStack {
-                                Spacer()
-                                qrCodeImage(for: url.absoluteString)
-                                    .resizable()
-                                    .interpolation(.none)
-                                    .frame(width: 120, height: 120)
-                                Spacer()
-                            }
-                            Text("Scan to subscribe on your phone")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity)
-                        }
+                        Text("Install **DoomCoder Companion** on your iPhone (same Apple ID). No setup — it syncs through iCloud automatically.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
                 } label: {
-                    Label("ntfy", systemImage: "paperplane.fill")
+                    Label("iOS Companion", systemImage: "iphone")
                 }
 
                 // Notification event preferences

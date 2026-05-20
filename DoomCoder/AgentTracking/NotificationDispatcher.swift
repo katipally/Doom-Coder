@@ -4,9 +4,9 @@ import AppKit
 import OSLog
 
 // Fan-out for DoomCoder agent notifications. Honors the TrackingStore
-// per-agent opt-out and the global ChannelStore (macOS local + ntfy).
-// Minimal content only — no prompt text, no file paths over ntfy. 5-second
-// dedupe window per (session, event).
+// per-agent opt-out and the global ChannelStore (macOS local +
+// iOS companion via CloudKit). Minimal content only. 10-second dedupe
+// window per (session, event).
 @MainActor
 @Observable
 final class NotificationDispatcher {
@@ -121,6 +121,10 @@ final class NotificationDispatcher {
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
         let ts = Date().timeIntervalSince1970
 
+        let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
+        let cwdBase = session.flatMap { shortCwd($0.cwd) }
+        let lastTool = session?.lastTool
+
         if channels.macNotification {
             postLocal(title: title, body: body, threadID: ev.sessionKey, agent: ev.agent)
             EventStore.shared.insertNotification(
@@ -128,11 +132,19 @@ final class NotificationDispatcher {
                 title: title, body: body, channel: "macOS", success: true, ts: ts
             )
         }
-        if channels.ntfy {
-            postNtfy(title: title, body: body)
+        if channels.iOSCompanion {
+            CloudKitSyncEngine.shared.publishNotification(
+                sessionKey: ev.sessionKey,
+                agent: ev.agent.rawValue,
+                phase: ev.phase.rawValue,
+                event: ev.event,
+                title: title, body: body,
+                channel: "iOS", success: true, ts: Date(),
+                lastTool: lastTool, cwdBase: cwdBase
+            )
             EventStore.shared.insertNotification(
                 sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
-                title: title, body: body, channel: "ntfy", success: true, ts: ts
+                title: title, body: body, channel: "iOS", success: true, ts: ts
             )
         }
     }
@@ -149,13 +161,22 @@ final class NotificationDispatcher {
             guard ok else { return false }
             postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
             return true
-        case .ntfy:
-            postNtfy(title: "DoomCoder", body: "ntfy channel is working ✨")
+        case .iOS:
+            CloudKitSyncEngine.shared.publishNotification(
+                sessionKey: "test::\(UUID().uuidString)",
+                agent: TrackedAgent.claude.rawValue,
+                phase: NormalizedEventPhase.other.rawValue,
+                event: "test",
+                title: "DoomCoder · test",
+                body: "iOS notifications are working ✨",
+                channel: "iOS", success: true, ts: Date(),
+                lastTool: nil, cwdBase: nil
+            )
             return true
         }
     }
 
-    enum TestChannel { case macOS, ntfy }
+    enum TestChannel { case macOS, iOS }
 
     // MARK: - Copy
 
@@ -279,19 +300,4 @@ final class NotificationDispatcher {
         }
     }
 
-    // MARK: - ntfy
-
-    private func postNtfy(title: String, body: String) {
-        let topic = NtfyTopic.getOrCreate()
-        let server = NtfyTopic.server ?? "https://ntfy.sh"
-        guard let url = URL(string: "\(server)/\(topic)") else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue(title, forHTTPHeaderField: "Title")
-        req.setValue("default", forHTTPHeaderField: "Priority")
-        req.httpBody = Data(body.utf8)
-        URLSession.shared.dataTask(with: req) { [weak self] _, _, err in
-            if let err { self?.logger.error("ntfy failed: \(err.localizedDescription, privacy: .public)") }
-        }.resume()
-    }
 }

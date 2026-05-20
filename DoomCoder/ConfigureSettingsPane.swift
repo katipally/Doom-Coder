@@ -6,7 +6,7 @@ import AppKit
 /// real, persistent preference — no stubs.
 struct ConfigureSettingsPane: View {
     @Bindable var sleepManager: SleepManager
-    @State private var ntfyRegenerated = false
+    @Bindable var syncEngine: CloudKitSyncEngine = .shared
     @State private var autoRevertSeconds: Int = {
         UserDefaults.standard.object(forKey: "doomcoder.session.autoRevertSeconds") as? Int ?? 30
     }()
@@ -81,32 +81,27 @@ struct ConfigureSettingsPane: View {
                         }
                     Divider()
                     HStack {
-                        Text("ntfy topic")
+                        Label("iCloud sync", systemImage: "icloud")
                         Spacer()
-                        Text(NtfyTopic.getOrCreate())
-                            .font(.system(.body, design: .monospaced))
+                        Text(syncEngine.accountStatusText)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                     }
-                    HStack {
-                        Button {
-                            _ = NtfyTopic.regenerate()
-                            ntfyRegenerated = true
-                            Task {
-                                try? await Task.sleep(for: .seconds(2))
-                                ntfyRegenerated = false
-                            }
-                        } label: {
-                            if ntfyRegenerated {
-                                Label("Regenerated", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Text("Regenerate ntfy topic")
-                            }
+                    if let last = syncEngine.lastSyncAt {
+                        HStack {
+                            Text("Last sync")
+                                .font(.caption)
+                            Spacer()
+                            Text(last.formatted(.relative(presentation: .named)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        Spacer()
                     }
-                    .buttonStyle(.bordered)
+                    if let err = syncEngine.lastError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 section("Diagnostics") {

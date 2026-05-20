@@ -1,14 +1,40 @@
 import Foundation
 
 // Stores global + per-agent notification channel preferences in UserDefaults.
-// Channels: macOS notifications, ntfy. Each can be toggled globally and overridden per-agent.
+// Channels: macOS local notifications, iOS companion push. Each can be
+// toggled globally and overridden per-agent.
 struct ChannelStore {
-    static let defaultsKey = "doomcoder.channels.v2"
+    static let defaultsKey = "doomcoder.channels.v3"
+    static let legacyDefaultsKey = "doomcoder.channels.v2"
     static let prefsKey = "doomcoder.notification.prefs.v1"
 
     struct ChannelConfig: Codable, Sendable, Equatable {
         var macNotification: Bool = true
-        var ntfy: Bool = false
+        var iOSCompanion: Bool = true
+    }
+
+    /// One-shot migration: drop the ntfy field from any previously-persisted
+    /// v2 store, set iOSCompanion = true (the new default), persist under v3.
+    static func migrateRemoveNtfyIfNeeded() {
+        let ud = UserDefaults.standard
+        guard ud.data(forKey: defaultsKey) == nil,
+              let legacy = ud.data(forKey: legacyDefaultsKey) else { return }
+        struct LegacyConfig: Codable { var macNotification: Bool = true; var ntfy: Bool = false }
+        struct LegacyStore: Codable {
+            var global: LegacyConfig = LegacyConfig()
+            var perAgent: [String: LegacyConfig] = [:]
+        }
+        guard let decoded = try? JSONDecoder().decode(LegacyStore.self, from: legacy) else {
+            ud.removeObject(forKey: legacyDefaultsKey)
+            return
+        }
+        var fresh = Store()
+        fresh.global = ChannelConfig(macNotification: decoded.global.macNotification, iOSCompanion: true)
+        fresh.perAgent = decoded.perAgent.mapValues { ChannelConfig(macNotification: $0.macNotification, iOSCompanion: true) }
+        save(fresh)
+        ud.removeObject(forKey: legacyDefaultsKey)
+        // Wipe out the old ntfy topic/server keys too.
+        for k in ["doomcoder.ntfy.topic", "doomcoder.ntfy.server"] { ud.removeObject(forKey: k) }
     }
 
     /// Which event phases should trigger a push notification.

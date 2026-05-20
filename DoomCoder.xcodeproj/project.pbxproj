@@ -18,8 +18,11 @@
 		DC0000000000002000000021 /* PauseFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000021 /* PauseFlag.swift */; };
 		DC0000000000002000000022 /* AgentDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000022 /* AgentDetector.swift */; };
 		DC0000000000002000000023 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000023 /* EventStore.swift */; };
-		DC0000000000002000000024 /* NtfyTopic.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000024 /* NtfyTopic.swift */; };
 		DC0000000000002000000025 /* HookSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* HookSocketListener.swift */; };
+		DC0000000000002000000200 /* CloudKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000200 /* CloudKitSyncEngine.swift */; };
+		DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* ControlCommandRouter.swift */; };
+		DC0000000000002000000202 /* WoLProfileExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* WoLProfileExporter.swift */; };
+		DC0000000000002000000203 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000003 /* DoomCoderCore */; };
 		DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* NotificationDispatcher.swift */; };
 		DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* AgentTrackingManager.swift */; };
 		DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000030 /* TrackAgentsPopover.swift */; };
@@ -65,8 +68,10 @@
 		DC0000000000001000000021 /* PauseFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseFlag.swift; sourceTree = "<group>"; };
 		DC0000000000001000000022 /* AgentDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetector.swift; sourceTree = "<group>"; };
 		DC0000000000001000000023 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
-		DC0000000000001000000024 /* NtfyTopic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyTopic.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* HookSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketListener.swift; sourceTree = "<group>"; };
+		DC0000000000001000000200 /* CloudKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncEngine.swift; sourceTree = "<group>"; };
+		DC0000000000001000000201 /* ControlCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCommandRouter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000202 /* WoLProfileExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoLProfileExporter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000028 /* AgentTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000030 /* TrackAgentsPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAgentsPopover.swift; sourceTree = "<group>"; };
@@ -104,6 +109,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DC0000000000002000000010 /* Sparkle in Frameworks */,
+				DC0000000000002000000203 /* DoomCoderCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,8 +153,10 @@
 				DC0000000000001000000021 /* PauseFlag.swift */,
 				DC0000000000001000000022 /* AgentDetector.swift */,
 				DC0000000000001000000023 /* EventStore.swift */,
-				DC0000000000001000000024 /* NtfyTopic.swift */,
 				DC0000000000001000000025 /* HookSocketListener.swift */,
+				DC0000000000001000000200 /* CloudKitSyncEngine.swift */,
+				DC0000000000001000000201 /* ControlCommandRouter.swift */,
+				DC0000000000001000000202 /* WoLProfileExporter.swift */,
 				DC0000000000001000000032 /* AgentInstallerV2.swift */,
 				DC0000000000001000000027 /* NotificationDispatcher.swift */,
 				DC0000000000001000000028 /* AgentTrackingManager.swift */,
@@ -203,6 +211,7 @@
 			name = DoomCoder;
 			packageProductDependencies = (
 				DC0000000000009000000002 /* Sparkle */,
+				DC0000000000009000000003 /* DoomCoderCore */,
 			);
 			productName = DoomCoder;
 			productReference = DC0000000000001000000001 /* DoomCoder.app */;
@@ -258,6 +267,7 @@
 			mainGroup = DC0000000000003000000001;
 			packageReferences = (
 				DC0000000000009000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				DC0000000000009000000004 /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */,
 			);
 			productRefGroup = DC0000000000003000000003 /* Products */;
 			projectDirPath = "";
@@ -294,8 +304,10 @@
 				DC0000000000002000000021 /* PauseFlag.swift in Sources */,
 				DC0000000000002000000022 /* AgentDetector.swift in Sources */,
 				DC0000000000002000000023 /* EventStore.swift in Sources */,
-				DC0000000000002000000024 /* NtfyTopic.swift in Sources */,
 				DC0000000000002000000025 /* HookSocketListener.swift in Sources */,
+				DC0000000000002000000200 /* CloudKitSyncEngine.swift in Sources */,
+				DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */,
+				DC0000000000002000000202 /* WoLProfileExporter.swift in Sources */,
 				DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */,
 				DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */,
 				DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */,
@@ -455,7 +467,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
+				CURRENT_PROJECT_VERSION = 3000;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -464,7 +476,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -479,7 +491,7 @@
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2002;
+				CURRENT_PROJECT_VERSION = 3000;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -488,7 +500,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -530,11 +542,22 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		DC0000000000009000000004 /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DoomCoderCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		DC0000000000009000000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DC0000000000009000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		DC0000000000009000000003 /* DoomCoderCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DoomCoderCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 

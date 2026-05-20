@@ -48,6 +48,13 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
         ChannelStore.migratePrefsIfNeeded()
+        // v2.x → v3.0: drop ntfy field, default-enable iOS companion channel.
+        ChannelStore.migrateRemoveNtfyIfNeeded()
+
+        // Start CloudKit sync engine (no-op until iCloud account confirms).
+        CloudKitSyncEngine.shared.start()
+        // Publish WoL profile so iOS can wake this Mac on the same LAN.
+        WoLProfileExporter.publish()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
@@ -139,6 +146,22 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         await MainActor.run {
             FloatingPanelController.shared.show()
         }
+    }
+
+    /// Silent push from CloudKit subscriptions — drain pending control
+    /// commands and let CKSyncEngine fetch zone changes.
+    func application(_ application: NSApplication,
+                     didReceiveRemoteNotification userInfo: [String: Any]) {
+        Task { @MainActor in
+            await ControlCommandRouter.drainPending()
+            CloudKitSyncEngine.shared.publishMacStatus()
+        }
+    }
+
+    func application(_ application: NSApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // CloudKit subscriptions don't require us to forward this token,
+        // but registering enables push delivery. No-op body.
     }
 
     @MainActor

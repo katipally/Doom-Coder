@@ -165,6 +165,7 @@ final class SleepManager {
         startElapsedTimer()
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
+        CloudKitSyncEngine.shared.publishMacStatus()
     }
 
     func disable() {
@@ -185,6 +186,7 @@ final class SleepManager {
         sessionEndDate = nil
         stopElapsedTimer()
         stopSessionTimer()
+        CloudKitSyncEngine.shared.publishMacStatus()
     }
 
     func toggle() {

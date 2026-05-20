@@ -12,28 +12,28 @@ enum ChannelTester {
         switch channel {
         case .macNotification:
             sendMacTest(completion: completion)
-        case .ntfy:
-            sendNtfyTest(completion: completion)
+        case .iOSCompanion:
+            sendiOSTest(completion: completion)
         }
     }
 
     enum Channel: String, CaseIterable, Identifiable {
         case macNotification = "macOS"
-        case ntfy = "ntfy"
+        case iOSCompanion = "iOS"
 
         var id: String { rawValue }
 
         var displayName: String {
             switch self {
             case .macNotification: return "macOS Notification"
-            case .ntfy:            return "ntfy"
+            case .iOSCompanion:    return "iOS Companion"
             }
         }
 
         var icon: String {
             switch self {
             case .macNotification: return "bell.badge.fill"
-            case .ntfy:            return "paperplane.fill"
+            case .iOSCompanion:    return "iphone.gen3.badge.play"
             }
         }
     }
@@ -75,38 +75,17 @@ enum ChannelTester {
         }
     }
 
-    // MARK: - ntfy Test
+    // MARK: - iOS Companion Test
 
-    private static func sendNtfyTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
-        let topic = NtfyTopic.getOrCreate()
-
-        let server = NtfyTopic.server ?? "https://ntfy.sh"
-        guard let url = URL(string: "\(server)/\(topic)") else {
-            Task { @MainActor in
-                completion(false, "Invalid ntfy URL.")
-            }
+    @MainActor
+    private static func sendiOSTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
+        guard CloudKitSyncEngine.shared.isAvailable else {
+            completion(false, "iCloud is not available — sign in to iCloud on this Mac to use the iOS companion.")
             return
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("DoomCoder — Test", forHTTPHeaderField: "Title")
-        request.setValue("high", forHTTPHeaderField: "Priority")
-        request.setValue("white_check_mark", forHTTPHeaderField: "Tags")
-        request.httpBody = "ntfy channel is working! You'll see agent alerts here.".data(using: .utf8)
-        request.timeoutInterval = 10
-
-        URLSession.shared.dataTask(with: request) { _, response, error in
-            Task { @MainActor in
-                if let error {
-                    completion(false, "ntfy error: \(error.localizedDescription)")
-                } else if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    completion(true, "ntfy test sent (topic: \(topic))")
-                } else {
-                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    completion(false, "ntfy returned HTTP \(code)")
-                }
-            }
-        }.resume()
+        Task { @MainActor in
+            let ok = await NotificationDispatcher.shared.sendTest(channel: .iOS)
+            completion(ok, ok ? "Sent to iOS companion via iCloud." : "Failed to enqueue iCloud push.")
+        }
     }
 }
