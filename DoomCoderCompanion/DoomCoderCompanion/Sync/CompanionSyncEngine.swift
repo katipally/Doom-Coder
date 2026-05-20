@@ -117,16 +117,26 @@ final class CompanionSyncEngine: NSObject {
     }
 
     private func setupNotificationLogSubscription() async {
+        // Delete old subscription (saved without alertBody — silent push only)
+        // so we can recreate it with the required aps.alert fields.
+        try? await db.deleteSubscription(withID: "companion-notiflog-sub")
+
         let yesterday = Date(timeIntervalSinceNow: -86_400)
         let pred = NSPredicate(format: "ts > %@", yesterday as NSDate)
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub",
+            subscriptionID: "companion-notiflog-sub-v2",   // v2: includes alertBody
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
-        info.shouldSendMutableContent = true
+        // CRITICAL: alertBody + title must be non-nil so CloudKit includes
+        // aps.alert in the APNs payload. Without aps.alert, the push is
+        // treated as a silent push and the NSE is NEVER invoked — no banner.
+        // The NSE overwrites these placeholders with enriched copy.
+        info.title = "DoomCoder"
+        info.alertBody = "Agent update"
+        info.shouldSendMutableContent = true   // NSE will enrich
         info.soundName = "default"
         info.desiredKeys = [
             "agent", "phase", "tool", "cwdBase", "sessionKey",
@@ -137,7 +147,7 @@ final class CompanionSyncEngine: NSObject {
         do {
             try await db.save(sub)
         } catch let e as CKError where e.code == .serverRejectedRequest {
-            // Already exists.
+            // Already exists with this ID — fine.
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
         }

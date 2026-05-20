@@ -16,6 +16,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
 
+        // Request notification permission every launch. iOS only prompts
+        // the user once; subsequent calls are no-ops if already granted.
+        Task {
+            try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])
+        }
+
         // Start sync engine and register BGTask on the main actor.
         Task { @MainActor in
             CompanionSyncEngine.shared.start()
