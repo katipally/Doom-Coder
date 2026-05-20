@@ -32,7 +32,6 @@ struct HomeView: View {
         }
         .onAppear {
             startPathMonitor()
-            Task { await CompanionSyncEngine.shared.ensureSubscriptions() }
         }
         .onDisappear { pathMonitor.cancel() }
     }

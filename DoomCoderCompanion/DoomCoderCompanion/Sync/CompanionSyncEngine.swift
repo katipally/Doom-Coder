@@ -31,6 +31,9 @@ final class CompanionSyncEngine: NSObject {
 
     private var syncEngine: CKSyncEngine?
 
+    /// Prevents subscriptions from being registered more than once per launch.
+    private var subscriptionsReady = false
+
     /// Records queued for the next CKSyncEngine push batch.
     private var pendingSaves: [CKRecord] = []
     private var pendingDeletes: [CKRecord.ID] = []
@@ -73,6 +76,12 @@ final class CompanionSyncEngine: NSObject {
         )
 
         syncEngine = CKSyncEngine(config)
+
+        // Register subscriptions once per launch after the engine is up.
+        if !subscriptionsReady {
+            subscriptionsReady = true
+            await ensureSubscriptions()
+        }
     }
 
     // MARK: - Public API
@@ -86,7 +95,7 @@ final class CompanionSyncEngine: NSObject {
         await fetchChanges()
     }
 
-    func ensureSubscriptions() async {
+    private func ensureSubscriptions() async {
         await setupDatabaseSubscription()
         await setupNotificationLogSubscription()
     }
@@ -180,7 +189,7 @@ final class CompanionSyncEngine: NSObject {
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) { NotificationLogStore.shared.append(r) }
             case CloudKitConstants.RecordType.settings:
-                if let r = SettingsRecord(record) { SettingsStore.shared.applyRemote(r) }
+                if let r = SettingsRecord(record) { SettingsStore.shared.applyRemote(r, rawRecord: record) }
             case CloudKitConstants.RecordType.wolProfile:
                 if let r = WoLProfileRecord(record) { WoLStore.shared.upsert(r) }
             case CloudKitConstants.RecordType.agentIcon:
@@ -261,6 +270,11 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             if !e.failedRecordSaves.isEmpty {
                 for fail in e.failedRecordSaves {
                     print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(fail.error.localizedDescription)")
+                    // If Settings-singleton conflicts, clear our cached server record
+                    // so the next user edit doesn't re-use a stale changeTag.
+                    if fail.record.recordID.recordName == SettingsRecord.singletonRecordName {
+                        await MainActor.run { SettingsStore.shared.serverRecord = nil }
+                    }
                 }
                 // MUST use Task.detached — calling engine.fetchChanges() from
                 // inside a delegate callback causes a CKSyncEngine reentrancy

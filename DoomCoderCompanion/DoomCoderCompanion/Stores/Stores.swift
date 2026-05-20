@@ -5,6 +5,7 @@
 // creating import cycles.
 
 import Foundation
+import CloudKit
 import DoomCoderCore
 
 // MARK: - MacStatusStore
@@ -118,22 +119,30 @@ final class SettingsStore {
 
     private(set) var current: SettingsRecord = SettingsRecord()
 
+    /// The raw CKRecord last fetched from the server, including its changeTag.
+    /// MUST be reused when saving so CloudKit performs an UPDATE (not INSERT).
+    var serverRecord: CKRecord?
+
     private var deviceId: String {
         AppGroupCache.defaults.string(forKey: "device.id") ?? "iOS"
     }
 
     /// Applies a remotely fetched record using per-field LWW merge.
-    func applyRemote(_ remote: SettingsRecord) {
+    /// `rawRecord` carries the server's changeTag — store it so future saves
+    /// perform an UPDATE rather than a blind INSERT.
+    func applyRemote(_ remote: SettingsRecord, rawRecord: CKRecord? = nil) {
         current.merge(with: remote)
+        if let raw = rawRecord { serverRecord = raw }
     }
 
     /// Mutates a single field, stamps its LWW timestamp, and enqueues a CloudKit save.
     func update(field: String, mutate: (inout SettingsRecord) -> Void) {
         mutate(&current)
         current.touch(field, by: deviceId)
-        Task {
-            CompanionSyncEngine.shared.enqueueSave(current.toCKRecord())
-        }
+        // Patch the server record (preserves changeTag → UPDATE, not INSERT).
+        // Falls back to creating a new record only if the server record has
+        // never been fetched (unlikely in practice after first sync).
+        CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
     }
 }
 

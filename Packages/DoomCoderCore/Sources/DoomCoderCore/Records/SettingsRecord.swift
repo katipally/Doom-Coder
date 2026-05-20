@@ -148,8 +148,12 @@ extension SettingsRecord {
         return CKRecord.ID(recordName: singletonRecordName, zoneID: zone)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: Self.recordID)
+    /// Creates or patches a CKRecord with the current field values.
+    /// Pass `base:` when updating an existing server record so the server's
+    /// `changeTag` is preserved — without it CloudKit treats every save as an
+    /// INSERT and fails with "record to insert already exists" (code 14/2004).
+    public func toCKRecord(base: CKRecord? = nil) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: Self.recordID)
         r["masterEnabled"]        = (masterEnabled ? 1 : 0) as CKRecordValue
         r["mode"]                 = mode as CKRecordValue
         r["sessionTimerHrs"]      = sessionTimerHrs as CKRecordValue
