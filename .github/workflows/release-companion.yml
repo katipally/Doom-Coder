@@ -1,0 +1,130 @@
+name: Release Companion (iOS)
+
+# Builds the DoomCoder Companion iOS app + NotificationService extension
+# and uploads to TestFlight. Triggered by tags shaped `companion-vX.Y.Z`.
+#
+# Required secrets (separate from the macOS app workflow):
+#   APPLE_API_KEY_ID            - App Store Connect API Key ID (e.g. ABCDE12345)
+#   APPLE_API_ISSUER_ID         - App Store Connect API Key issuer UUID
+#   APPLE_API_PRIVATE_KEY       - Contents of the AuthKey_<KEYID>.p8 file
+#   IOS_DIST_CERTIFICATE        - Base64-encoded Apple Distribution .p12
+#   IOS_DIST_CERTIFICATE_PWD    - Password for the .p12
+#   IOS_PROVISIONING_PROFILE    - Base64-encoded .mobileprovision for the app
+#   IOS_NSE_PROVISIONING_PROFILE- Base64-encoded .mobileprovision for the NSE
+
+on:
+  push:
+    tags:
+      - 'companion-v[0-9]*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Upload to TestFlight
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#companion-v}"
+          IFS='.' read -r _MAJOR _MINOR _PATCH <<< "$VERSION"
+          BUILD=$(( _MAJOR * 1000 + _MINOR * 100 + _PATCH ))
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD=${BUILD}" >> $GITHUB_ENV
+
+      - name: Select Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "${XCODE_PATH}"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: DoomCoderCompanion
+        run: xcodegen generate
+
+      - name: Import Distribution certificate
+        env:
+          CERT_B64: ${{ secrets.IOS_DIST_CERTIFICATE }}
+          CERT_PWD: ${{ secrets.IOS_DIST_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          KEYCHAIN_PWD=$(openssl rand -base64 24)
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          echo -n "$CERT_B64" | base64 --decode -o $RUNNER_TEMP/dist.p12
+          security import $RUNNER_TEMP/dist.p12 -k "$KEYCHAIN_PATH" -P "$CERT_PWD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d \")
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH" >/dev/null
+
+      - name: Install provisioning profiles
+        env:
+          APP_PROF: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          NSE_PROF: ${{ secrets.IOS_NSE_PROVISIONING_PROFILE }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$APP_PROF" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          echo -n "$NSE_PROF" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/nse.mobileprovision
+
+      - name: Set marketing version
+        working-directory: DoomCoderCompanion
+        run: |
+          xcrun agvtool new-marketing-version "$VERSION" || true
+          xcrun agvtool new-version -all "$BUILD" || true
+
+      - name: Write App Store Connect API key
+        env:
+          KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP"
+          printf '%s' "$KEY" > "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Build & Archive
+        working-directory: DoomCoderCompanion
+        run: |
+          xcodebuild \
+            -project DoomCoderCompanion.xcodeproj \
+            -scheme DoomCoderCompanion \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/DoomCoderCompanion.xcarchive" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD" \
+            archive
+
+      - name: Export IPA
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>A9P2388PHM</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadBitcode</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/DoomCoderCompanion.xcarchive" \
+            -exportPath "$RUNNER_TEMP/Export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyID "${{ secrets.APPLE_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APPLE_API_ISSUER_ID }}" \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8"

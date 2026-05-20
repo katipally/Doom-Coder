@@ -3,6 +3,32 @@
 All notable changes to Doom Coder will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [3.0.0] - 2026-05
+
+### Added
+- **DoomCoder Companion (iOS 26)** — a free iPhone companion that mirrors the Mac app over your private iCloud. Sign in to iCloud with the same Apple ID and the iPhone sees your Mac's sleep state, agent sessions, logs, and full settings live. Toggle Prevent-Sleep, flip modes, pause agents, send test notifications, and Wake the Mac (on Wi-Fi) from your phone. Notifications mirror the Mac with the agent icon, Time-Sensitive level for `permissionNeeded` and `error` phases. No accounts, no servers — install and go.
+- **`DoomCoderCore` Swift package** at `Packages/DoomCoderCore/` — shared between Mac, iOS, and the iOS Notification Service Extension. Source of truth for record DTOs, notification copy, agent metadata, and per-field LWW for `Settings`.
+- **CloudKit sync** on Mac (`CloudKitSyncEngine`, `ControlCommandRouter`, `WoLProfileExporter`) — account-gated, late-bound. If iCloud is signed out the Mac continues to work as before. Private CloudKit container `iCloud.com.doomcoder.app`, zone `DoomCoderZone`.
+- **`DoomCoder.xcworkspace`** containing both Xcode projects + the SPM package.
+- **`.github/workflows/release-companion.yml`** — TestFlight upload for the iOS app via App Store Connect API key.
+
+### Removed
+- **ntfy push** entirely. `NtfyTopic.swift`, `postNtfy` in `NotificationDispatcher`, the `ntfy` channel in `ChannelStore`, the QR + share-URL UI, and the `ChannelTester` ntfy case are gone. A one-shot migration in `ChannelStore.migrateRemoveNtfyIfNeeded()` drops the legacy `doomcoder.channels.v2` key and any `doomcoder.ntfy.*` UserDefaults.
+
+### Changed
+- `Channel` enum is now `[.macOS, .iOSCompanion]`. The Configure window's Notifications tab gains an "iOS Companion" toggle (global + per-agent override) that publishes to CloudKit instead of ntfy.
+- Mac Info.plist entitlements now include `aps-environment`, `com.apple.developer.icloud-container-identifiers`, `com.apple.developer.icloud-services`, `com.apple.developer.ubiquity-container-identifiers`, and the new App Group `group.com.doomcoder.app.companion`.
+
+### Notes
+- The iOS app requires manual Apple Developer setup before it can run: see the v3.0 setup guide for App ID / CloudKit / App Group provisioning, schema deploy, and TestFlight onboarding.
+
+---
+
+
 
 ## [2.2.0] - 2025-05-13
 
@@ -23,8 +49,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `DoomCoderiOS/` — empty directory with only `.DS_Store`
 - `Ref/Windsurf/` — saved reference HTML and vendor assets
 - 49 `.doomcoder-backup-*` files from `.github/hooks/`
-
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
