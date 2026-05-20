@@ -102,6 +102,9 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Subscriptions
 
     private func setupDatabaseSubscription() async {
+        // Remove legacy subscription created with a different ID.
+        _ = try? await db.deleteSubscription(withID: "doomcoder-db-sub")
+
         let sub = CKDatabaseSubscription(subscriptionID: "companion-db-sub")
         let info = CKSubscription.NotificationInfo()
         info.shouldSendMutableContent = true
@@ -109,7 +112,7 @@ final class CompanionSyncEngine: NSObject {
         sub.notificationInfo = info
         do {
             try await db.save(sub)
-        } catch let e as CKError where e.code == .serverRejectedRequest {
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
             // Already exists — that is fine.
         } catch {
             print("[CompanionSyncEngine] DB subscription error: \(error)")
@@ -117,16 +120,16 @@ final class CompanionSyncEngine: NSObject {
     }
 
     private func setupNotificationLogSubscription() async {
-        // Delete old subscription (saved without alertBody — silent push only)
-        // so we can recreate it with the required aps.alert fields.
+        // Delete old subscriptions (v1 was silent-only, v2 had wrong field name).
         _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub")
+        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub-v2")
 
         let yesterday = Date(timeIntervalSinceNow: -86_400)
         let pred = NSPredicate(format: "ts > %@", yesterday as NSDate)
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v2",   // v2: includes alertBody
+            subscriptionID: "companion-notiflog-sub-v3",   // v3: correct field names
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
@@ -138,15 +141,17 @@ final class CompanionSyncEngine: NSObject {
         info.alertBody = "Agent update"
         info.shouldSendMutableContent = true   // NSE will enrich
         info.soundName = "default"
+        // Field names MUST match the CK record field keys in NotificationLogRecord,
+        // NOT the Swift property names. "lastTool" not "tool".
         info.desiredKeys = [
-            "agent", "phase", "tool", "cwdBase", "sessionKey",
+            "agent", "phase", "lastTool", "cwdBase", "sessionKey",
             "macName", "ts", "title", "body", "macId",
         ]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {
             try await db.save(sub)
-        } catch let e as CKError where e.code == .serverRejectedRequest {
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
             // Already exists with this ID — fine.
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
@@ -239,6 +244,16 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                         CommandPublisher.shared.handleEcho(cmd)
                     }
                 }
+            }
+            // When a record fails with .serverRecordChanged, the server already
+            // has a newer copy. Re-fetch so our local state catches up.
+            // Do NOT re-enqueue a save — iOS is a read-mostly client for Settings.
+            if !e.failedRecordSaves.isEmpty {
+                for fail in e.failedRecordSaves {
+                    print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(fail.error.localizedDescription)")
+                }
+                // Trigger a fresh fetch to pull down the authoritative server copy.
+                Task { await self.fetchChanges() }
             }
 
         default:
