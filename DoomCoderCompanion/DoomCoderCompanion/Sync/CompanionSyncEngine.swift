@@ -120,36 +120,33 @@ final class CompanionSyncEngine: NSObject {
     }
 
     private func setupNotificationLogSubscription() async {
-        // Delete old subscriptions — v1 silent-only, v2 wrong field, v3 too many desiredKeys (>5).
-        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub")
-        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub-v2")
-        _ = try? await db.deleteSubscription(withID: "companion-notiflog-sub-v3")
+        // Delete all previous subscription versions.
+        for id in ["companion-notiflog-sub", "companion-notiflog-sub-v2",
+                   "companion-notiflog-sub-v3", "companion-notiflog-sub-v4"] {
+            _ = try? await db.deleteSubscription(withID: id)
+        }
 
         let yesterday = Date(timeIntervalSinceNow: -86_400)
         let pred = NSPredicate(format: "ts > %@", yesterday as NSDate)
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v4",   // v4: ≤5 desiredKeys
+            subscriptionID: "companion-notiflog-sub-v5",
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
         // CRITICAL: alertBody + title must be non-nil so CloudKit includes
-        // aps.alert in the APNs payload. Without aps.alert, the push is
-        // treated as a silent push and the NSE is NEVER invoked — no banner.
-        // The NSE overwrites these placeholders with enriched copy.
+        // aps.alert in the APNs payload. Without aps.alert the push is treated
+        // as silent and the NSE is NEVER invoked — no banner.
         info.title = "DoomCoder"
         info.alertBody = "Agent update"
         info.shouldSendMutableContent = true   // NSE will enrich
         info.soundName = "default"
         // CloudKit hard limit: max 5 desiredKeys per CKQuerySubscription.
-        // Pick the 5 fields the NSE uses most critically:
-        //   agent + phase → title/body enrichment + interruption level + icon
-        //   lastTool      → NotificationCopy.EventContext
-        //   sessionKey    → UNNotification threadIdentifier (groups alerts)
-        //   macName       → subtitle "On <macName>"
-        // Fallback title/body come from info.title / info.alertBody above.
-        info.desiredKeys = ["agent", "phase", "lastTool", "sessionKey", "macName"]
+        // macName is NOT included — NSE reads it from App Group UserDefaults
+        // (written by MacStatusStore.upsert on every sync). This frees a slot
+        // for cwdBase which gives richer body copy ("Started in <project>").
+        info.desiredKeys = ["agent", "phase", "lastTool", "sessionKey", "cwdBase"]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {

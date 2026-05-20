@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             BackgroundRefresh.schedule()
         }
 
+        // Download agent icons into App Group so the NSE can attach them to banners.
+        AgentIconFetcher.prefetchIfNeeded()
+
         application.registerForRemoteNotifications()
         return true
     }

@@ -26,6 +26,11 @@ final class MacStatusStore {
 
     func upsert(_ r: MacStatusRecord) {
         byMacId[r.macId] = r
+        // Cache the most-recently-seen Mac's name in App Group so the NSE
+        // can read it without it being included in push desiredKeys.
+        if let primary = byMacId.values.max(by: { $0.lastSeen < $1.lastSeen }) {
+            AppGroupCache.defaults.set(primary.name, forKey: "cache.primaryMacName")
+        }
     }
 
     func clear() { byMacId.removeAll() }
