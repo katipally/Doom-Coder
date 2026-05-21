@@ -50,5 +50,18 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+    	<dict>
+        	<key>CFBundleTypeRole</key>
+        	<string>Viewer</string>
+        	<key>CFBundleURLName</key>
+        	<string>com.doomcoder.app.companion.session</string>
+        	<key>CFBundleURLSchemes</key>
+        	<array>
+            	<string>doomcoder</string>
+        	</array>
+    	</dict>
+	</array>
 </dict>
 </plist>

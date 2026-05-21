@@ -144,17 +144,6 @@ final class SleepManager {
         hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
     }
 
-    // MARK: - Global Hotkey
-    // Owned by GlobalHotkey (Carbon RegisterEventHotKey). No AX permission
-    // required. This class no longer installs a duplicate NSEvent monitor.
-
-    private func setupGlobalHotkey() {
-        if let existing = _hotkeyMonitor {
-            NSEvent.removeMonitor(existing)
-            _hotkeyMonitor = nil
-        }
-    }
-
     // MARK: - Enable / Disable / Toggle
 
     func enable() {

@@ -16,7 +16,6 @@ import ActivityKit
 public struct DoomCoderActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable, Sendable {
         public var displayState: String
-        public var lastPhase: String
         public var lastTool: String?
         public var toolCallCount: Int
         public var elapsedSeconds: Int
@@ -25,7 +24,6 @@ public struct DoomCoderActivityAttributes: ActivityAttributes {
         public var cwdBase: String?
 
         public init(displayState: String,
-                    lastPhase: String,
                     lastTool: String? = nil,
                     toolCallCount: Int,
                     elapsedSeconds: Int,
@@ -33,7 +31,6 @@ public struct DoomCoderActivityAttributes: ActivityAttributes {
                     agentDisplayName: String,
                     cwdBase: String? = nil) {
             self.displayState     = displayState
-            self.lastPhase        = lastPhase
             self.lastTool         = lastTool
             self.toolCallCount    = toolCallCount
             self.elapsedSeconds   = elapsedSeconds

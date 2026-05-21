@@ -28,7 +28,6 @@ final class LiveActivityManager {
         let elapsed = Int(Date().timeIntervalSince(session.startedAt))
         let state = DoomCoderActivityAttributes.ContentState(
             displayState:      session.displayState,
-            lastPhase:         session.lastPhase,
             lastTool:          session.lastTool,
             toolCallCount:     session.toolCallCount,
             elapsedSeconds:    elapsed,

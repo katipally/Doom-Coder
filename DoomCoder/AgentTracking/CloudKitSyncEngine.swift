@@ -66,8 +66,6 @@ final class CloudKitSyncEngine {
     // MARK: - CKSyncEngine
 
     private var syncEngine: CKSyncEngine?
-    // nonisolated(unsafe) so the nonisolated CKSyncEngineDelegate callbacks
-    // can read this constant without a MainActor hop.
     private nonisolated(unsafe) static let engineStateKey = "ck.mac.engineState"
 
     /// Records awaiting a `.allKeys` save: MacStatus, Session, Event,
@@ -741,8 +739,7 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                 }
             }
             for fail in e.failedRecordSaves {
-                // In SDK 26+, fail.error is already typed CKError.
-                let errCode = (fail.error as? CKError)?.code ?? (fail.error as CKError).code
+                let errCode = fail.error.code
                 if errCode == .serverRecordChanged,
                    fail.record.recordType == CloudKitConstants.RecordType.settings {
                     self.logger.notice("settings conflict — re-fetching")

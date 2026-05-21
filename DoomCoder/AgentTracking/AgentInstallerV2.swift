@@ -1048,7 +1048,7 @@ struct AgentInstallerV2 {
     /// Preserves string literals so a `//` inside a string is not stripped.
     private static func readJSONC(at path: String) -> [String: Any]? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let raw = String(data: data, encoding: .utf8) else { return [:] }
+              let raw = String(data: data, encoding: .utf8) else { return nil }
         let stripped = stripJSONC(raw)
         guard let cleanData = stripped.data(using: .utf8),
               let any = try? JSONSerialization.jsonObject(with: cleanData) else { return nil }

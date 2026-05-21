@@ -69,7 +69,10 @@ enum BackgroundRefresh {
                 try await Task.sleep(until: deadline, clock: .continuous)
                 throw CancellationError()
             }
-            let result = try await group.next()!
+            guard let result = try await group.next() else {
+                group.cancelAll()
+                throw CancellationError()
+            }
             group.cancelAll()
             return result
         }

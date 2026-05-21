@@ -241,17 +241,9 @@ final class AgentTrackingManager {
         NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
 
         // Mirror to CloudKit for the iOS companion.
+        // Note: publishEvent is omitted — iOS has no EventRecord consumer and
+        // the raw event stream is already persisted locally in SQLite.
         CloudKitSyncEngine.shared.publishSession(s)
-        CloudKitSyncEngine.shared.publishEvent(
-            sessionKey: sessionKey,
-            agent: normalized.agent.rawValue,
-            event: normalized.rawEvent,
-            phase: normalized.phase.rawValue,
-            tool: normalized.toolName,
-            path: normalized.cwd,
-            ts: Date(timeIntervalSince1970: env.ts),
-            payloadSnippet: payloadString.map { String($0.prefix(200)) }
-        )
 
         // Notification dispatch — uses user-configurable phase preferences
         // Suppress sessionEnd notifications when the agent PID is dead — this

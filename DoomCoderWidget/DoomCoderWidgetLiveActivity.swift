@@ -1,80 +1,216 @@
-//
-//  DoomCoderWidgetLiveActivity.swift
-//  DoomCoderWidget
-//
-//  Created by Yash on 5/21/26.
-//
+// DoomCoderWidgetLiveActivity.swift — DoomCoder Widget Extension
+// Live Activity and Dynamic Island views for active coding sessions.
+// Reads DoomCoderActivityAttributes (from DoomCoderCore) pushed by
+// LiveActivityManager in the iOS companion app.
 
 import ActivityKit
 import WidgetKit
 import SwiftUI
+import DoomCoderCore
 
-struct DoomCoderWidgetAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        // Dynamic stateful properties about your activity go here!
-        var emoji: String
-    }
+// MARK: - Live Activity Widget
 
-    // Fixed non-changing properties about your activity go here!
-    var name: String
-}
-
+@available(iOS 16.1, *)
 struct DoomCoderWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: DoomCoderWidgetAttributes.self) { context in
-            // Lock screen/banner UI goes here
-            VStack {
-                Text("Hello \(context.state.emoji)")
-            }
-            .activityBackgroundTint(Color.cyan)
-            .activitySystemActionForegroundColor(Color.black)
-
+        ActivityConfiguration(for: DoomCoderActivityAttributes.self) { context in
+            // Lock screen / notification banner UI
+            LockScreenView(context: context)
+                .activityBackgroundTint(Color(.systemBackground))
+                .activitySystemActionForegroundColor(.primary)
         } dynamicIsland: { context in
             DynamicIsland {
-                // Expanded UI goes here.  Compose the expanded UI through
-                // various regions, like leading/trailing/center/bottom
+                // Expanded (long-press)
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Leading")
+                    ExpandedLeading(context: context)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("Trailing")
+                    ExpandedTrailing(context: context)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("Bottom \(context.state.emoji)")
-                    // more content
+                    ExpandedBottom(context: context)
                 }
             } compactLeading: {
-                Text("L")
+                CompactLeadingView(agent: context.attributes.agent)
             } compactTrailing: {
-                Text("T \(context.state.emoji)")
+                CompactTrailingView(context: context)
             } minimal: {
-                Text(context.state.emoji)
+                MinimalView(agent: context.attributes.agent)
             }
-            .widgetURL(URL(string: "http://www.apple.com"))
-            .keylineTint(Color.red)
+            .widgetURL(URL(string: "doomcoder://session/\(context.attributes.sessionKey)"))
+            .keylineTint(context.state.awaitingPermission ? .orange : .green)
         }
     }
 }
 
-extension DoomCoderWidgetAttributes {
-    fileprivate static var preview: DoomCoderWidgetAttributes {
-        DoomCoderWidgetAttributes(name: "World")
+// MARK: - Lock screen view
+
+private struct LockScreenView: View {
+    let context: ActivityViewContext<DoomCoderActivityAttributes>
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AgentSymbol(agent: context.attributes.agent, size: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(context.state.agentDisplayName)
+                        .font(.headline)
+                    Spacer()
+                    Text(elapsedText(context.state.elapsedSeconds))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Text(context.state.displayState)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let tool = context.state.lastTool {
+                    Text(tool)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            if context.state.awaitingPermission {
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(.orange)
+                    .font(.title3)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
-extension DoomCoderWidgetAttributes.ContentState {
-    fileprivate static var smiley: DoomCoderWidgetAttributes.ContentState {
-        DoomCoderWidgetAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: DoomCoderWidgetAttributes.ContentState {
-         DoomCoderWidgetAttributes.ContentState(emoji: "🤩")
-     }
+// MARK: - Dynamic Island: expanded regions
+
+private struct ExpandedLeading: View {
+    let context: ActivityViewContext<DoomCoderActivityAttributes>
+    var body: some View {
+        HStack(spacing: 8) {
+            AgentSymbol(agent: context.attributes.agent, size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(context.state.agentDisplayName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                if let base = context.state.cwdBase {
+                    Text(base)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.leading, 4)
+    }
 }
 
-#Preview("Notification", as: .content, using: DoomCoderWidgetAttributes.preview) {
-   DoomCoderWidgetLiveActivity()
-} contentStates: {
-    DoomCoderWidgetAttributes.ContentState.smiley
-    DoomCoderWidgetAttributes.ContentState.starEyes
+private struct ExpandedTrailing: View {
+    let context: ActivityViewContext<DoomCoderActivityAttributes>
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(elapsedText(context.state.elapsedSeconds))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("\(context.state.toolCallCount) calls")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.trailing, 4)
+    }
+}
+
+private struct ExpandedBottom: View {
+    let context: ActivityViewContext<DoomCoderActivityAttributes>
+    var body: some View {
+        HStack {
+            if context.state.awaitingPermission {
+                Label("Needs your approval", systemImage: "hand.raised.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            } else if let tool = context.state.lastTool {
+                Label(tool, systemImage: "wrench.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(context.state.displayState)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 4)
+    }
+}
+
+// MARK: - Dynamic Island: compact + minimal
+
+private struct CompactLeadingView: View {
+    let agent: String
+    var body: some View {
+        AgentSymbol(agent: agent, size: 20)
+    }
+}
+
+private struct CompactTrailingView: View {
+    let context: ActivityViewContext<DoomCoderActivityAttributes>
+    var body: some View {
+        if context.state.awaitingPermission {
+            Label("Wait", systemImage: "hand.raised.fill")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.orange)
+                .font(.caption2.weight(.bold))
+        } else {
+            Text(elapsedText(context.state.elapsedSeconds))
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.green)
+        }
+    }
+}
+
+private struct MinimalView: View {
+    let agent: String
+    var body: some View {
+        AgentSymbol(agent: agent, size: 16)
+    }
+}
+
+// MARK: - Agent icon (SF Symbol fallback — bundle assets not available in widget)
+
+private struct AgentSymbol: View {
+    let agent: String
+    let size: CGFloat
+
+    private var symbolName: String {
+        switch agent {
+        case "claude":     return "c.circle.fill"
+        case "cursor":     return "cursorarrow.rays"
+        case "vscode":     return "chevron.left.forwardslash.chevron.right"
+        case "copilotCLI": return "terminal.fill"
+        case "windsurf":   return "wind"
+        case "codexCLI":   return "circle.hexagongrid.fill"
+        default:           return "cpu.fill"
+        }
+    }
+
+    var body: some View {
+        Image(systemName: symbolName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .foregroundStyle(.green)
+    }
+}
+
+// MARK: - Helpers
+
+private func elapsedText(_ seconds: Int) -> String {
+    if seconds < 3600 {
+        let m = seconds / 60, s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+    let h = seconds / 3600, m = (seconds % 3600) / 60
+    return String(format: "%dh%02dm", h, m)
 }
