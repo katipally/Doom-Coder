@@ -255,12 +255,26 @@ final class CloudKitSyncEngine {
     /// (with `shouldSendMutableContent = true`) for user-visible pushes.
     private func ensureSubscriptionsBestEffort() async {
         let dbSub = CKDatabaseSubscription(subscriptionID: "doomcoder-db-sub")
-        let info = CKSubscription.NotificationInfo()
-        info.shouldSendContentAvailable = true
-        dbSub.notificationInfo = info
+        let dbInfo = CKSubscription.NotificationInfo()
+        dbInfo.shouldSendContentAvailable = true
+        dbSub.notificationInfo = dbInfo
+
+        // Dedicated query subscription for the Settings singleton so iOS
+        // Settings writes reach the Mac via a faster, record-scoped push
+        // rather than the blunt database-level silent notification.
+        let settingsPredicate = NSPredicate(format: "recordName == %@", SettingsRecord.singletonRecordName)
+        let settingsSub = CKQuerySubscription(
+            recordType: CloudKitConstants.RecordType.settings,
+            predicate: settingsPredicate,
+            subscriptionID: "doomcoder-settings-sub",
+            options: [.firesOnRecordUpdate]
+        )
+        let settingsInfo = CKSubscription.NotificationInfo()
+        settingsInfo.shouldSendContentAvailable = true
+        settingsSub.notificationInfo = settingsInfo
 
         let op = CKModifySubscriptionsOperation(
-            subscriptionsToSave: [dbSub],
+            subscriptionsToSave: [dbSub, settingsSub],
             subscriptionIDsToDelete: nil
         )
         op.qualityOfService = .utility
@@ -268,10 +282,10 @@ final class CloudKitSyncEngine {
             op.modifySubscriptionsResultBlock = { [logger] result in
                 switch result {
                 case .success:
-                    logger.info("ensureSubscriptions: db-sub OK")
+                    logger.info("ensureSubscriptions: db-sub + settings-sub OK")
                 case .failure(let err):
                     if Self.isBenignAlreadyExistsError(err) {
-                        logger.info("ensureSubscriptions: db-sub already exists")
+                        logger.info("ensureSubscriptions: subs already exist")
                     } else {
                         logger.error("ensureSubscriptions failed (non-fatal): \(err.localizedDescription, privacy: .public)")
                     }
@@ -505,6 +519,10 @@ final class CloudKitSyncEngine {
 
         let ud = UserDefaults.standard
         ud.set(s.masterEnabled, forKey: "doomcoder.masterEnabled")
+        if SleepManager.shared.isActive != s.masterEnabled {
+            if s.masterEnabled { SleepManager.shared.enable() }
+            else { SleepManager.shared.disable() }
+        }
         if let mode = DoomCoderMode(rawValue: s.mode), SleepManager.shared.mode != mode {
             SleepManager.shared.mode = mode
         }

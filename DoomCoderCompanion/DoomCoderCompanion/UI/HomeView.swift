@@ -156,13 +156,13 @@ private struct MacStatusCard: View {
     }
 
     private var statusPill: some View {
-        let asleep = mac.sleepActive
-        return Text(asleep ? "Asleep" : "Awake")
+        let isActive = mac.sleepActive
+        return Text(isActive ? "Active" : "Idle")
             .font(.caption.bold())
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(asleep ? Color.secondary.opacity(0.2) : Color.green.opacity(0.2))
-            .foregroundStyle(asleep ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.green))
+            .background(isActive ? Color.green.opacity(0.2) : Color.secondary.opacity(0.2))
+            .foregroundStyle(isActive ? AnyShapeStyle(Color.green) : AnyShapeStyle(.secondary))
             .clipShape(Capsule())
     }
 }

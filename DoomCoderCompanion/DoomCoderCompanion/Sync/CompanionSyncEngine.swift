@@ -211,6 +211,11 @@ final class CompanionSyncEngine: NSObject {
                     let slug = TrackedAgent(rawValue: r.agent)?.iconSlug ?? r.agent
                     AppGroupCache.writeIcon(slug: slug, data: data)
                 }
+            case CloudKitConstants.RecordType.controlCommand:
+                // Mac stamps appliedAt + result after processing the command.
+                // Route the updated record to CommandPublisher so the stream
+                // completes with the real Mac acknowledgement.
+                if let r = ControlCommandRecord(record) { CommandPublisher.shared.handleEcho(r) }
             default:
                 break
             }

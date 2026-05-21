@@ -94,6 +94,9 @@ final class CommandPublisher {
     /// Called by CompanionSyncEngine when a ControlCommand echo arrives from
     /// CloudKit with appliedAt set (meaning the Mac applied it).
     func handleEcho(_ cmd: ControlCommandRecord) {
+        // Ignore the premature echo fired by sentRecordZoneChanges (when iOS
+        // first saves the record — appliedAt is still nil at that point).
+        guard cmd.appliedAt != nil else { return }
         guard let waiter = waiters.removeValue(forKey: cmd.commandId) else { return }
         if let err = cmd.error {
             waiter.continuation.yield(.failed(err))

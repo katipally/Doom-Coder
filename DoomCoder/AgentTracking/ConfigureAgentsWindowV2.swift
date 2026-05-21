@@ -70,6 +70,7 @@ struct ConfigureAgentsViewV2: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: CloudKitSyncEngine.settingsChangedNotification)) { _ in
             channelConfig = ChannelStore.load()
+            notifPrefs = ChannelStore.loadPrefs()
         }
         .onReceive(NotificationCenter.default.publisher(for: .dcSelectConfigureTab)) { note in
             guard let id = note.object as? String else { return }

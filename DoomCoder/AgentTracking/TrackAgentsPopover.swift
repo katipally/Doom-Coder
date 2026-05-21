@@ -35,6 +35,7 @@ struct TrackAgentsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .doomcoderNewEvent)) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .doomcoderProcessStateChanged)) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: CloudKitSyncEngine.settingsChangedNotification)) { _ in reload() }
     }
 
     // MARK: - Pieces
@@ -224,6 +225,7 @@ struct TrackAccordion: View {
         .onReceive(NotificationCenter.default.publisher(for: .doomcoderNewEvent)) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .doomcoderProcessStateChanged)) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: CloudKitSyncEngine.settingsChangedNotification)) { _ in reload() }
     }
 
     @ViewBuilder

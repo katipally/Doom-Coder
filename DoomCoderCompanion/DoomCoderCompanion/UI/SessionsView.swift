@@ -435,10 +435,7 @@ struct SessionDetailView: View {
         .navigationTitle(session.cwdBase ?? session.agent)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            while !Task.isCancelled {
-                await CompanionSyncEngine.shared.fetchChanges()
-                try? await Task.sleep(for: .seconds(30))
-            }
+            await CompanionSyncEngine.shared.fetchChanges()
         }
     }
 }

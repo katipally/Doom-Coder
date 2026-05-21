@@ -85,7 +85,10 @@ enum ControlCommandRouter {
             return "mode=\(mode.rawValue)"
 
         case .setSessionTimer:
-            guard let h = args["hours"] as? Int else { throw RouterError.badArgs("hours") }
+            let h: Int
+            if let i = args["hours"] as? Int { h = i }
+            else if let s = args["hours"] as? String, let i = Int(s) { h = i }
+            else { throw RouterError.badArgs("hours") }
             SleepManager.shared.sessionTimerHours = h
             return "timer=\(h)h"
 
