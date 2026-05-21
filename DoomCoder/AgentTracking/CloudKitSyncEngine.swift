@@ -177,6 +177,11 @@ final class CloudKitSyncEngine {
         // the Mac was offline are merged into local state on launch.
         await fetchSettings()
 
+        // Step 5b: republish Settings so the `installed` per-agent bits are
+        // freshened (covers the case where the user installed an agent on a
+        // different machine then launches this Mac — local truth wins).
+        publishSettingsTouching(["perAgentOverridesJSON"])
+
         // Step 6: drain any ControlCommand records queued up while offline.
         await ControlCommandRouter.drainPending()
 
@@ -437,9 +442,10 @@ final class CloudKitSyncEngine {
             for agent in TrackedAgent.allCases {
                 let ch = perAgent[agent.rawValue]
                 mapped[agent.rawValue] = [
-                    "mac":      ch?.macNotification ?? true,
-                    "ios":      ch?.iOSCompanion    ?? true,
-                    "tracking": TrackingStore.isEnabled(agent)
+                    "mac":       ch?.macNotification ?? true,
+                    "ios":       ch?.iOSCompanion    ?? true,
+                    "tracking":  TrackingStore.isEnabled(agent),
+                    "installed": AgentInstallerV2.isInstalled(agent)
                 ]
             }
             guard let d = try? JSONEncoder().encode(mapped),

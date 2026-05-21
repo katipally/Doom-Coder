@@ -106,6 +106,21 @@ enum PerAgentOverrides {
         }
         return str
     }
+
+    /// Returns the list of agents the Mac has actually configured (hooks
+    /// installed). The iOS Agents tab only shows these — agents the user
+    /// hasn't set up on the Mac never appear in the companion list.
+    static func configuredAgents(in json: String) -> [TrackedAgent] {
+        guard
+            let data = json.data(using: .utf8),
+            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Bool]]
+        else { return [] }
+        return TrackedAgent.allCases.filter { agent in
+            // `installed` key written by Mac. If absent, treat as not configured
+            // (was never published) so we hide the row rather than show a stub.
+            dict[agent.rawValue]?["installed"] == true
+        }
+    }
 }
 
 // MARK: - Agent status (derived, no new CloudKit data)
@@ -155,6 +170,7 @@ struct AgentsView: View {
 
     var body: some View {
         NavigationStack {
+            let configured = PerAgentOverrides.configuredAgents(in: settings.current.perAgentOverridesJSON)
             List {
                 if !sessionStore.live.isEmpty {
                     Section("Live") {
@@ -165,12 +181,25 @@ struct AgentsView: View {
                         }
                     }
                 }
-                Section("Configured") {
-                    ForEach(TrackedAgent.allCases, id: \.rawValue) { agent in
-                        NavigationLink(value: agent) {
-                            AgentRow(agent: agent,
-                                     settings: settings,
-                                     sessionStore: sessionStore)
+                if configured.isEmpty {
+                    Section {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("No agents configured")
+                                .font(.callout.weight(.medium))
+                            Text("Open DoomCoder on your Mac and configure at least one agent. It will appear here automatically.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                } else {
+                    Section("Configured") {
+                        ForEach(configured, id: \.rawValue) { agent in
+                            NavigationLink(value: agent) {
+                                AgentRow(agent: agent,
+                                         settings: settings,
+                                         sessionStore: sessionStore)
+                            }
                         }
                     }
                 }

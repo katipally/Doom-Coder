@@ -43,7 +43,7 @@ class NotificationService: UNNotificationServiceExtension {
             return val
         }
 
-        // v7 desiredKeys: agent, title, body, sessionKey, phase
+        // v8 desiredKeys: agent, title, body, sessionKey, phase
         // title + body are pre-computed by the Mac via NotificationCopy.
         let richTitle  = field("title")
         let richBody   = field("body")
@@ -51,13 +51,25 @@ class NotificationService: UNNotificationServiceExtension {
         let phaseRaw   = field("phase")
         let sessionKey = field("sessionKey")
 
-        // ── Always render title / body ──────────────────────────────────────
-        // APNs already delivered `aps.alert = " "` (CompanionSyncEngine sets
-        // the placeholder so iOS will invoke the NSE at all). We MUST replace
-        // both fields with non-empty strings — returning empty content does
-        // NOT suppress the banner; the OS still shows the placeholder space.
-        // Fallback chain: push field → re-render via NotificationCopy from
-        // (agent, phase) → literal "DoomCoder · update".
+        // ── Title / body resolution ─────────────────────────────────────────
+        // With v8 subscriptions APNs delivers the Mac-rendered title and body
+        // directly in `aps.alert.title` / `aps.alert.body` (via
+        // titleLocalizationKey="%@" + args=["title"] in CompanionSyncEngine).
+        // The OS pre-populates request.content.title / body with those
+        // values, so the NSE just needs to keep them.
+        //
+        // Fallback chain (in order):
+        //   1. request.content.title/body — APNs-substituted CKRecord values
+        //   2. additional-fields ("af") map — same CKRecord values, manually
+        //      extracted; covers the case where the localization-arg
+        //      substitution fails on older iOS or quirky payloads.
+        //   3. NotificationCopy re-render from (agent, phase) — last-ditch
+        //      reconstruction if the Mac fields somehow weren't delivered.
+        // We deliberately do NOT fall through to literal "DoomCoder · Update"
+        // anymore. If steps 1–3 all fail we let the OS show whatever it
+        // already has, which is at minimum a non-blank space from APNs.
+        let preTitle = mutable.title
+        let preBody  = mutable.body
         let agent = agentRaw.flatMap { TrackedAgent(rawValue: $0) }
         let phase = phaseRaw.flatMap { NormalizedEventPhase(rawValue: $0) }
         let copyContext: NotificationCopy.EventContext? = {
@@ -65,19 +77,19 @@ class NotificationService: UNNotificationServiceExtension {
             return NotificationCopy.EventContext(agent: agent, phase: phase)
         }()
 
-        if let t = richTitle, !t.isEmpty {
-            mutable.title = t
-        } else if let ctx = copyContext {
-            mutable.title = NotificationCopy.title(ctx)
-        } else {
-            mutable.title = "DoomCoder"
+        if preTitle.isEmpty || preTitle == " " {
+            if let t = richTitle, !t.isEmpty {
+                mutable.title = t
+            } else if let ctx = copyContext {
+                mutable.title = NotificationCopy.title(ctx)
+            }
         }
-        if let b = richBody, !b.isEmpty {
-            mutable.body = b
-        } else if let ctx = copyContext {
-            mutable.body = NotificationCopy.body(ctx)
-        } else {
-            mutable.body = "Update"
+        if preBody.isEmpty || preBody == " " {
+            if let b = richBody, !b.isEmpty {
+                mutable.body = b
+            } else if let ctx = copyContext {
+                mutable.body = NotificationCopy.body(ctx)
+            }
         }
 
         // Subtitle is intentionally NOT set — users found "On <MacName>" noisy.

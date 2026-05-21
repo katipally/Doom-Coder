@@ -1,7 +1,7 @@
 // Stores.swift — DoomCoder Companion
 // Observable singleton stores that hold the decoded CloudKit state for the
-// main app. MacStatusStore, SessionStore, NotificationLogStore, SettingsStore,
-// and WoLStore are all defined here for easy cross-store access without
+// main app. MacStatusStore, SessionStore, NotificationLogStore, and
+// SettingsStore are all defined here for easy cross-store access without
 // creating import cycles.
 
 import Foundation
@@ -181,17 +181,4 @@ final class SettingsStore {
         current = SettingsRecord()
         serverRecord = nil
     }
-}
-
-// MARK: - WoLStore (deprecated, v3.0)
-
-/// DEPRECATED in v3.0. Wake-on-LAN was removed when the companion adopted
-/// CloudKit-only transport. The store is kept as an empty no-op shell so
-/// any straggler reference still compiles. No code currently writes to
-/// or reads from it.
-@MainActor
-@Observable
-final class WoLStore {
-    static let shared = WoLStore()
-    private init() {}
 }

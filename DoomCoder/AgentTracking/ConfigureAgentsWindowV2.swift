@@ -356,6 +356,7 @@ struct ConfigureAgentsViewV2: View {
                                         isInstalling = false
                                     }
                                     Task { await detectAllAsync() }
+                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                                 }
                                 .disabled(isInstalling)
                                 if isInst {
@@ -371,6 +372,7 @@ struct ConfigureAgentsViewV2: View {
                                             isInstalling = false
                                         }
                                         Task { await detectAllAsync() }
+                                        CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                                     }
                                     .disabled(isInstalling)
                                 }

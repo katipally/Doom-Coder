@@ -133,7 +133,8 @@ final class CompanionSyncEngine: NSObject {
         // Delete all previous subscription versions.
         for id in ["companion-notiflog-sub", "companion-notiflog-sub-v2",
                    "companion-notiflog-sub-v3", "companion-notiflog-sub-v4",
-                   "companion-notiflog-sub-v5", "companion-notiflog-sub-v6"] {
+                   "companion-notiflog-sub-v5", "companion-notiflog-sub-v6",
+                   "companion-notiflog-sub-v7"] {
             _ = try? await db.deleteSubscription(withID: id)
         }
 
@@ -142,34 +143,39 @@ final class CompanionSyncEngine: NSObject {
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v7",
+            subscriptionID: "companion-notiflog-sub-v8",
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
-        // CloudKit requires a non-nil aps.alert payload to invoke the NSE.
-        // We use a single space so APNs includes aps.alert (NSE fires) but the
-        // user never sees the literal placeholder text "Agent update" if the
-        // NSE happens to be skipped or fails. The NSE replaces title/body
-        // with the Mac-rendered NotificationCopy values; if it cannot, it
-        // emits empty content so the OS suppresses the banner entirely.
-        info.title = " "
-        info.alertBody = " "
+        // Use title/body localization-key substitution so APNs delivers the
+        // Mac-rendered title and body in `aps.alert.title` / `aps.alert.body`
+        // *directly*. The OS displays the right text even if the NSE never
+        // runs (low-power / killed extension / decode failure). NSE then only
+        // adds icon attachment, thread identifier, and interruption level.
+        //
+        // "%@" with a single CKRecord field name in the args array tells
+        // CloudKit to substitute that field's string value verbatim. This is
+        // the canonical way to wire query subscriptions to real push content.
+        info.titleLocalizationKey  = "%@"
+        info.titleLocalizationArgs = ["title"]
+        info.alertLocalizationKey  = "%@"
+        info.alertLocalizationArgs = ["body"]
         info.shouldSendMutableContent = true   // invokes NSE on each push
         info.soundName = "default"
-        // v7 desiredKeys (CloudKit hard limit: 5):
-        //   title      → mutable.title  (Mac NotificationCopy)
-        //   body       → mutable.body   (Mac NotificationCopy)
-        //   agent      → icon slug + interruption level + fallback re-render
-        //   phase      → interruption level + fallback re-render
+        // v8 desiredKeys (CloudKit hard limit: 5):
+        //   title      → aps.alert.title via titleLocalizationArgs (also NSE fallback)
+        //   body       → aps.alert.body  via alertLocalizationArgs (also NSE fallback)
+        //   agent      → icon slug + interruption level
+        //   phase      → interruption level
         //   sessionKey → UNNotification threadIdentifier
         info.desiredKeys = ["title", "body", "agent", "phase", "sessionKey"]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {
             try await db.save(sub)
-            print("[CompanionSyncEngine] notiflog sub v7 registered")
+            print("[CompanionSyncEngine] notiflog sub v8 registered")
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
-            print("[CompanionSyncEngine] notiflog sub v7 already exists")
+            print("[CompanionSyncEngine] notiflog sub v8 already exists")
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
         }
