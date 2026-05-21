@@ -16,20 +16,44 @@ import DoomCoderCore
 final class MacStatusStore {
 
     static let shared = MacStatusStore()
-    private init() {}
+    private init() {
+        primaryMacIdOverride = AppGroupCache.defaults.string(forKey: Self.primaryMacIdKey)
+    }
+
+    /// UserDefaults key (App Group) that pins a specific macId as the primary.
+    /// When unset, primary falls back to "most recently seen Mac".
+    static let primaryMacIdKey = "doomcoder.companion.primaryMacId"
 
     private(set) var byMacId: [String: MacStatusRecord] = [:]
+    private(set) var primaryMacIdOverride: String?
 
-    /// Most recently seen Mac (used as the "primary" Mac for single-Mac flows).
+    /// User-pinned primary Mac, if set and still visible. Otherwise the most
+    /// recently seen Mac (preserves the v2.x behaviour for single-Mac users).
     var primary: MacStatusRecord? {
-        byMacId.values.max(by: { $0.lastSeen < $1.lastSeen })
+        if let id = primaryMacIdOverride, let pinned = byMacId[id] {
+            return pinned
+        }
+        return byMacId.values.max(by: { $0.lastSeen < $1.lastSeen })
+    }
+
+    func setPrimary(_ macId: String?) {
+        primaryMacIdOverride = macId
+        if let id = macId {
+            AppGroupCache.defaults.set(id, forKey: Self.primaryMacIdKey)
+        } else {
+            AppGroupCache.defaults.removeObject(forKey: Self.primaryMacIdKey)
+        }
     }
 
     func upsert(_ r: MacStatusRecord) {
         byMacId[r.macId] = r
     }
 
-    func clear() { byMacId.removeAll() }
+    func clear() {
+        byMacId.removeAll()
+        primaryMacIdOverride = nil
+        AppGroupCache.defaults.removeObject(forKey: Self.primaryMacIdKey)
+    }
 }
 
 // MARK: - SessionStore

@@ -57,6 +57,14 @@ struct OnboardingView: View {
             }
             .padding(.horizontal)
 
+            if notifState == .actionNeeded {
+                Text("DoomCoder uses notifications to tell you when an agent on your Mac needs your attention — finished a task, hit a permission prompt, or errored out. No marketing pings, ever.")
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
+
             if macState == .actionNeeded {
                 Text("Open DoomCoder on your Mac first — the iPhone app will sync once it sees the Mac.")
                     .font(.caption)
@@ -107,7 +115,9 @@ struct OnboardingView: View {
         case .authorized, .provisional, .ephemeral:
             notifState = .ok
         case .notDetermined:
-            await requestNotifications()
+            // v3.0: do NOT auto-prompt. Show the "Enable" button and let the
+            // user tap it after they've read why DoomCoder needs notifications.
+            notifState = .actionNeeded
         default:
             notifState = .actionNeeded
         }

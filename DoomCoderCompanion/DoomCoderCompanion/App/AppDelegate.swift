@@ -19,12 +19,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // One-shot v3 cleanup of legacy App Group keys / files.
         AppGroupCache.runV3MigrationOnce()
 
-        // Request notification permission every launch. iOS only prompts
-        // the user once; subsequent calls are no-ops if already granted.
-        Task {
-            try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])
-        }
+        // v3.0: do NOT request notification permission here. The user grants
+        // it from the Onboarding screen, AFTER reading the context copy that
+        // explains what the notifications are for. Calling
+        // requestAuthorization here would trigger the system prompt before
+        // the user has any frame of reference and is the #1 cause of users
+        // permanently denying the permission.
 
         // Start sync engine and register BGTask on the main actor.
         Task { @MainActor in

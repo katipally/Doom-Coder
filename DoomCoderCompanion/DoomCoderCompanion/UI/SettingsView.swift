@@ -21,6 +21,7 @@ struct SettingsView: View {
                 phaseSection
                 timersSection
                 privacySection
+                primaryMacSection
                 historySection
                 testSection
                 aboutSection
@@ -91,6 +92,26 @@ struct SettingsView: View {
             Text("When enabled, truncated tool-output snippets are stored in iCloud and shown in notification bodies.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryMacSection: some View {
+        if macStore.byMacId.count > 1 {
+            Section("Primary Mac") {
+                Picker("Primary Mac", selection: Binding(
+                    get: { macStore.primaryMacIdOverride ?? macStore.primary?.macId ?? "" },
+                    set: { macStore.setPrimary($0.isEmpty ? nil : $0) }
+                )) {
+                    ForEach(Array(macStore.byMacId.values.sorted(by: { $0.name < $1.name })), id: \.macId) { mac in
+                        Text(mac.name).tag(mac.macId)
+                    }
+                }
+                .pickerStyle(.menu)
+                Text("Notifications, Settings, and remote commands target this Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
