@@ -104,6 +104,8 @@ final class CompanionSyncEngine: NSObject {
     private func ensureSubscriptions() async {
         await setupDatabaseSubscription()
         await setupNotificationLogSubscription()
+        await setupMacStatusSubscription()
+        await setupSessionSubscription()
     }
 
     /// Enqueue a CKRecord for the next outbound sync batch.
@@ -181,6 +183,46 @@ final class CompanionSyncEngine: NSObject {
             print("[CompanionSyncEngine] notiflog sub v8 already exists")
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
+        }
+    }
+
+    private func setupMacStatusSubscription() async {
+        let sub = CKQuerySubscription(
+            recordType: CloudKitConstants.RecordType.macStatus,
+            predicate: NSPredicate(value: true),
+            subscriptionID: "companion-macstatus-sub-v1",
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
+        )
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        sub.notificationInfo = info
+        sub.zoneID = zone.zoneID
+        do {
+            try await db.save(sub)
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            // Already exists.
+        } catch {
+            print("[CompanionSyncEngine] MacStatus subscription error: \(error)")
+        }
+    }
+
+    private func setupSessionSubscription() async {
+        let sub = CKQuerySubscription(
+            recordType: CloudKitConstants.RecordType.session,
+            predicate: NSPredicate(value: true),
+            subscriptionID: "companion-session-sub-v1",
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate, .firesOnRecordDeletion]
+        )
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        sub.notificationInfo = info
+        sub.zoneID = zone.zoneID
+        do {
+            try await db.save(sub)
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            // Already exists.
+        } catch {
+            print("[CompanionSyncEngine] Session subscription error: \(error)")
         }
     }
 
