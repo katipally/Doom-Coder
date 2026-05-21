@@ -20,7 +20,16 @@ struct OnboardingView: View {
     @State private var macStore = MacStatusStore.shared
 
     private var canContinue: Bool {
-        icloudState == .ok && notifState == .ok
+        // v3.2 — STRICT gate. All three signals must be green before the
+        // user lands on the main UI; otherwise the empty-state scenarios
+        // we polished out of HomeView reappear here and confuse first-run
+        // users into thinking the app is broken.
+        //
+        // ⚠ App-Review note: blocking the app behind an external-device
+        // signal (Mac visible) carries some risk. If reviewers reject the
+        // build, soften this to icloud + notif only and surface the Mac
+        // requirement as a non-blocking warning row.
+        icloudState == .ok && notifState == .ok && macState == .ok
     }
 
     var body: some View {
@@ -83,8 +92,21 @@ struct OnboardingView: View {
             .controlSize(.large)
             .disabled(!canContinue)
             .padding(.horizontal)
-            .padding(.bottom, 32)
+
+            #if DEBUG
+            // Debug-only escape hatch for QA / TestFlight builds. Hidden on
+            // Release. Lets us bypass the strict gate when a sim has no
+            // paired Mac available.
+            Button("Continue anyway (DEBUG)") {
+                AppGroupCache.defaults.set(Date(), forKey: "onboarding.completedAt")
+                onComplete()
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 4)
+            #endif
         }
+        .padding(.bottom, 32)
         .task { await runChecks() }
         .onChange(of: macStore.byMacId.count) { _, count in
             macState = count > 0 ? .ok : .actionNeeded

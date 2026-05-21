@@ -121,7 +121,7 @@ struct TrackAgentsView: View {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
-                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                    CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(agent: agent.rawValue, subs: ["tracking"])
                 }
             ))
             .toggleStyle(.switch)
@@ -145,7 +145,7 @@ struct TrackAgentsView: View {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
-            CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+            CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(agent: agent.rawValue, subs: ["tracking"])
         }
     }
 
@@ -260,7 +260,7 @@ struct TrackAccordion: View {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
-                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                    CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(agent: agent.rawValue, subs: ["tracking"])
                 }
             ))
             .toggleStyle(.switch)
@@ -277,7 +277,7 @@ struct TrackAccordion: View {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
-            CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+            CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(agent: agent.rawValue, subs: ["tracking"])
         }
         .transition(.opacity.combined(with: .offset(y: -8)))
     }

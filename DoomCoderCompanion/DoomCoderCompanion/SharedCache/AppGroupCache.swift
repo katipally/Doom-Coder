@@ -59,6 +59,29 @@ enum AppGroupCache {
 
     static let notificationLogKey = "cache.notificationLog"
 
+    // MARK: - Schema version guard
+    //
+    // Bumped whenever a cache key's encoded shape changes incompatibly. On
+    // mismatch we nuke the affected keys so a stale decode doesn't silently
+    // return nil for the rest of the app's lifetime.
+    private static let schemaVersionKey = "cache.schemaVersion"
+    private static let currentSchemaVersion = 2
+
+    /// Call once on app launch (after `runV3MigrationOnce`). Idempotent.
+    /// Wipes mac-status / notification-log / paired-mac caches if the
+    /// stored schema version is older than `currentSchemaVersion`.
+    static func enforceSchemaVersion() {
+        let stored = defaults.integer(forKey: schemaVersionKey)
+        guard stored < currentSchemaVersion else { return }
+        let staleKeys = [
+            "cache.macStatus.byMacId",
+            notificationLogKey,
+            "doomcoder.companion.pairedMacEverSeen"
+        ]
+        for k in staleKeys { defaults.removeObject(forKey: k) }
+        defaults.set(currentSchemaVersion, forKey: schemaVersionKey)
+    }
+
     // MARK: - v3 first-launch migration
     //
     // Idempotent cleanup for users upgrading from 1.x → 3.0.

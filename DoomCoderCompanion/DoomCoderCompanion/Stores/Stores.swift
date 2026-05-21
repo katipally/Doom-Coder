@@ -175,6 +175,19 @@ final class SettingsStore {
         CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
     }
 
+    /// v3.2 — toggling per-agent overrides bumps per-(agent, sub-key) LWW
+    /// timestamps so a Mac install/uninstall happening in the same window
+    /// merges cleanly instead of being clobbered by the bulk JSON stamp.
+    func updatePerAgent(agent: String,
+                        subs: [String],
+                        mutate: (inout SettingsRecord) -> Void) {
+        mutate(&current)
+        for sub in subs {
+            current.touchPerAgent(agent, sub: sub, by: deviceId)
+        }
+        CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
+    }
+
     /// Wipe local settings + server-record cache. Called on `.switchAccounts`
     /// so a new iCloud account doesn't see the prior account's preferences.
     func clear() {

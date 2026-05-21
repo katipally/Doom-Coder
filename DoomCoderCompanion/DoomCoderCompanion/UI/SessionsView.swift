@@ -107,6 +107,11 @@ enum PerAgentOverrides {
         return str
     }
 
+    /// v3.2 — sub-keys stamped together when iOS toggles an agent.
+    /// Used by SettingsStore to call SettingsRecord.touchPerAgent so the
+    /// per-agent LWW merge picks the right side per (agent, sub-key).
+    static let toggleSubKeys = ["mac", "ios", "tracking"]
+
     /// Returns the list of agents the Mac has actually configured (hooks
     /// installed). The iOS Agents tab only shows these — agents the user
     /// hasn't set up on the Mac never appear in the companion list.
@@ -206,6 +211,7 @@ struct AgentsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Agents")
+            .refreshable { await CompanionSyncEngine.shared.fetchChanges() }
             .navigationDestination(for: TrackedAgent.self) { agent in
                 AgentDetailView(agent: agent)
             }
@@ -214,13 +220,10 @@ struct AgentsView: View {
             }
         }
         .task {
-            // Foreground backstop — push delivery is the primary path but we
-            // re-fetch every 30 s while the user is on this tab in case a
-            // silent push was dropped.
-            while !Task.isCancelled {
-                await CompanionSyncEngine.shared.fetchChanges()
-                try? await Task.sleep(for: .seconds(30))
-            }
+            // One-shot warm fetch on appear. Push delivery + pull-to-refresh
+            // are the steady-state paths; the 30 s polling loop was removed
+            // in v3.2 (battery drain on a tab the user often leaves open).
+            await CompanionSyncEngine.shared.fetchChanges()
         }
     }
 }
@@ -273,7 +276,8 @@ private struct AgentRow: View {
                 let next = PerAgentOverrides.setting(agent,
                                                      enabled: newVal,
                                                      in: settings.current.perAgentOverridesJSON)
-                settings.update(field: "perAgentOverridesJSON") {
+                settings.updatePerAgent(agent: agent.rawValue,
+                                        subs: PerAgentOverrides.toggleSubKeys) {
                     $0.perAgentOverridesJSON = next
                 }
             }
@@ -339,7 +343,8 @@ struct AgentDetailView: View {
                 let next = PerAgentOverrides.setting(agent,
                                                      enabled: newVal,
                                                      in: settings.current.perAgentOverridesJSON)
-                settings.update(field: "perAgentOverridesJSON") {
+                settings.updatePerAgent(agent: agent.rawValue,
+                                        subs: PerAgentOverrides.toggleSubKeys) {
                     $0.perAgentOverridesJSON = next
                 }
             }

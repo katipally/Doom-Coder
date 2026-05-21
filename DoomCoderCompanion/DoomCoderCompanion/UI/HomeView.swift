@@ -23,17 +23,45 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("DoomCoder")
+            .refreshable { await sync.fetchChanges() }
         }
     }
 
-    /// Show "No Mac" only after iCloud has positively reported "no Mac
-    /// paired" — never on cold launch while the first fetch is still in
-    /// flight. Prevents the false-positive that v3.0 users hit on every
-    /// app open.
+    /// Persisted across launches — set the first time we ever see a Mac via
+    /// CloudKit. Once true, the empty-state screen is suppressed forever:
+    /// cached data wins, with a Reconnect pill if the sync goes stale.
+    /// (v3.2 — fixes the v3.0/3.1 false-positive empty-state on cold launch.)
+    private static let pairedMacFlagKey = "doomcoder.companion.pairedMacEverSeen"
+    private static var pairedMacEverSeen: Bool {
+        get { AppGroupCache.defaults.bool(forKey: pairedMacFlagKey) }
+        set { AppGroupCache.defaults.set(newValue, forKey: pairedMacFlagKey) }
+    }
+
+    /// Show the "No Mac" empty state ONLY on truly first run (we've never
+    /// seen a Mac on this install). After that, we always show cached data
+    /// with a Reconnect pill if the last successful fetch is stale.
     private var shouldShowEmptyState: Bool {
         if !sync.accountAvailable { return true }
-        if !macStatus.byMacId.isEmpty { return false }
+        if !macStatus.byMacId.isEmpty {
+            // First time seeing a Mac — record it so we never lie again.
+            if !Self.pairedMacEverSeen {
+                Self.pairedMacEverSeen = true
+            }
+            return false
+        }
+        // We have no live Mac in memory. If we've seen one before on this
+        // install, prefer cached state (which warmed from App Group) and
+        // never show the scary empty state.
+        if Self.pairedMacEverSeen { return false }
         return sync.firstFetchCompleted
+    }
+
+    /// True if more than `staleAfterSeconds` have passed since the last
+    /// successful CKSyncEngine fetch. Drives the manual Reconnect pill.
+    private static let staleAfterSeconds: TimeInterval = 60
+    private var syncIsStale: Bool {
+        guard let last = sync.lastSyncAt else { return sync.firstFetchCompleted }
+        return Date().timeIntervalSince(last) > Self.staleAfterSeconds
     }
 
     // MARK: - Empty state
@@ -62,6 +90,8 @@ struct HomeView: View {
                         Spacer()
                     }
                     .padding(.horizontal, 4)
+                } else if syncIsStale {
+                    reconnectPill
                 }
                 if let mac = macStatus.primary {
                     MacStatusCard(mac: mac)
@@ -70,6 +100,32 @@ struct HomeView: View {
             }
             .padding()
         }
+    }
+
+    private var reconnectPill: some View {
+        Button {
+            Task { await sync.fetchChanges() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                Text("Reconnect")
+                    .font(.caption.weight(.semibold))
+                if let last = sync.lastSyncAt {
+                    Text("· last sync \(last, style: .relative) ago")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.orange.opacity(0.15))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reconnect to iCloud")
     }
 }
 

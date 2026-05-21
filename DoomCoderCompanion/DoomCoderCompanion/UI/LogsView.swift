@@ -1,6 +1,8 @@
 // LogsView.swift — DoomCoder Companion
-// Searchable, filterable log browser for the notification history.
-// Supports agent filter chips, phase filter chips, and time-window selection.
+// Searchable, filterable browser for notification history (every alert
+// the Mac has ever pushed to this device). Agent / phase / time-window
+// filter chips. The legacy "Events" segment was dropped in v3.2 — it
+// never branched a real data source.
 
 import SwiftUI
 import DoomCoderCore
@@ -8,13 +10,11 @@ import DoomCoderCore
 struct LogsView: View {
 
     @State private var notifStore = NotificationLogStore.shared
-    @State private var segment: Segment = .notifications
     @State private var searchText  = ""
     @State private var agentFilter: TrackedAgent? = nil
     @State private var phaseFilter: NormalizedEventPhase? = nil
     @State private var windowFilter: TimeWindow = .all
 
-    enum Segment: String, CaseIterable { case notifications = "Notifications"; case events = "Events" }
     enum TimeWindow: String, CaseIterable { case hour = "1h"; case day = "24h"; case week = "7d"; case all = "All" }
 
     private var filtered: [NotificationLogRecord] {
@@ -44,26 +44,17 @@ struct LogsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                segmentedControl
                 filterChips
                 logList
             }
-            .navigationTitle("Logs")
-            .searchable(text: $searchText, prompt: "Search logs")
+            .navigationTitle("Notification History")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Search notifications")
+            .refreshable { await CompanionSyncEngine.shared.fetchChanges() }
         }
     }
 
     // MARK: - Subviews
-
-    private var segmentedControl: some View {
-        Picker("View", selection: $segment) {
-            ForEach(Segment.allCases, id: \.self) { s in
-                Text(s.rawValue).tag(s)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding([.horizontal, .top])
-    }
 
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -100,12 +91,12 @@ struct LogsView: View {
             if filtered.isEmpty {
                 if searchText.isEmpty && agentFilter == nil && phaseFilter == nil {
                     ContentUnavailableView(
-                        "No Logs Yet",
-                        systemImage: "text.below.photo",
-                        description: Text("Agent activity from your Mac will appear here.")
+                    "No Notifications Yet",
+                    systemImage: "bell.slash",
+                    description: Text("Agent activity from your Mac will appear here as it happens.")
                     )
                 } else {
-                    ContentUnavailableView.search(text: searchText.isEmpty ? "matching logs" : searchText)
+                ContentUnavailableView.search(text: searchText.isEmpty ? "matching notifications" : searchText)
                 }
             } else {
                 List(filtered, id: \.notifId) { entry in

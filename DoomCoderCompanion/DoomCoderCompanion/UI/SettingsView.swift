@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     @State private var store     = SettingsStore.shared
     @State private var macStore  = MacStatusStore.shared
+    @State private var sync      = CompanionSyncEngine.shared
     @State private var testSent  = false
 
     private var primaryMacId: String? { macStore.primary?.macId }
@@ -23,6 +24,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
+            .refreshable { await sync.fetchChanges() }
         }
     }
 
@@ -102,6 +104,18 @@ struct SettingsView: View {
             LabeledContent("Build") {
                 Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—")
             }
+            LabeledContent("Last sync") {
+                if let ts = sync.lastSyncAt {
+                    Text(ts, style: .relative).foregroundStyle(.secondary)
+                } else {
+                    Text("Never").foregroundStyle(.secondary)
+                }
+            }
+            Button {
+                Task { await sync.fetchChanges() }
+            } label: {
+                Label("Sync now", systemImage: "arrow.clockwise")
+            }
 
             if macStore.byMacId.isEmpty {
                 Text("No paired Macs detected")
@@ -116,7 +130,7 @@ struct SettingsView: View {
         } header: {
             Text("About")
         } footer: {
-            Text("Phase, retention, payload, and macOS-channel preferences live on your Mac. Open DoomCoder there for advanced settings.")
+            Text("Pull down on any tab to fetch the latest from iCloud. Phase, retention, and payload preferences live on your Mac.")
         }
     }
 

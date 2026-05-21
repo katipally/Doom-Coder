@@ -177,10 +177,14 @@ final class CloudKitSyncEngine {
         // the Mac was offline are merged into local state on launch.
         await fetchSettings()
 
-        // Step 5b: republish Settings so the `installed` per-agent bits are
-        // freshened (covers the case where the user installed an agent on a
-        // different machine then launches this Mac — local truth wins).
-        publishSettingsTouching(["perAgentOverridesJSON"])
+        // v3.2 — DELIBERATELY DO NOT republish Settings on bootstrap.
+        // The previous step 5b unconditionally touched perAgentOverridesJSON
+        // with a fresh `now` timestamp, which clobbered any iOS edit made
+        // inside the LWW merge window (because the Mac's "now" was always
+        // later than the iOS write that just synced down). The `installed`
+        // bit is now refreshed lazily — only when AgentInstallerV2 actually
+        // installs or uninstalls — via the explicit publishSettingsTouching
+        // calls in ConfigureAgentsWindowV2 install/uninstall handlers.
 
         // Step 6: drain any ControlCommand records queued up while offline.
         await ControlCommandRouter.drainPending()
@@ -396,6 +400,22 @@ final class CloudKitSyncEngine {
         s.updatedAt = currentSettings?.updatedAt ?? s.updatedAt
         let now = Date()
         for f in touchedFields { s.touch(f, at: now, by: macId) }
+        currentSettings = s
+        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+    }
+
+    /// v3.2 — per-agent stamping path. Use when toggling a single agent's
+    /// `installed` / `tracking` / `mac` / `ios` sub-key so the LWW merge
+    /// only competes for that exact (agent, sub-key) pair instead of the
+    /// whole bundle. Falls back to the legacy bundle stamp for clients
+    /// that don't yet read the per-agent timestamps.
+    func publishSettingsTouchingPerAgent(agent: String, subs: [String]) {
+        guard isAvailable else { return }
+        guard !applyingRemoteSettings else { return }
+        var s = localSettingsSnapshot()
+        s.updatedAt = currentSettings?.updatedAt ?? s.updatedAt
+        let now = Date()
+        for sub in subs { s.touchPerAgent(agent, sub: sub, at: now, by: macId) }
         currentSettings = s
         enqueue(save: s.toCKRecord(base: settingsServerRecord))
     }

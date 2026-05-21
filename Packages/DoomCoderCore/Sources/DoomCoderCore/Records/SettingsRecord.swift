@@ -118,15 +118,32 @@ public struct SettingsRecord: Sendable, Codable, Equatable {
         prefSubagentStart    = pick("prefSubagentStart", prefSubagentStart, other.prefSubagentStart)
         prefSubagentEnd      = pick("prefSubagentEnd", prefSubagentEnd, other.prefSubagentEnd)
         prefToolUse          = pick("prefToolUse", prefToolUse, other.prefToolUse)
-        perAgentOverridesJSON = pick("perAgentOverridesJSON", perAgentOverridesJSON, other.perAgentOverridesJSON)
+        // v3.2 — per-agent LWW sub-keys.
+        // perAgentOverridesJSON is a multiplexed dict of independent sub-keys
+        // (per agent × {tracking, mac, ios, installed}). Picking the whole
+        // JSON by a single timestamp clobbers cross-device edits within the
+        // merge window. Instead, merge agent-by-agent sub-key by sub-key
+        // using `perAgent.<agent>.<sub>` timestamps — falling back to the
+        // legacy single `perAgentOverridesJSON` timestamp when an old peer
+        // still publishes the bundle.
+        perAgentOverridesJSON = Self.mergePerAgentJSON(
+            local: perAgentOverridesJSON,
+            remote: other.perAgentOverridesJSON,
+            localStamps: updatedAt,
+            remoteStamps: other.updatedAt
+        )
         includePayloadSnippets = pick("includePayloadSnippets", includePayloadSnippets, other.includePayloadSnippets)
 
-        // Adopt the per-key max of both sides into our timestamp map.
+        // Adopt the per-key max of both sides into our timestamp map (top-
+        // level fields + every per-agent sub-key seen in either side).
         var merged = updatedAt
         for k in Self.allFieldKeys {
             let l = updatedAt[k] ?? 0
             let r = other.updatedAt[k] ?? 0
             merged[k] = max(l, r)
+        }
+        for (k, v) in other.updatedAt where k.hasPrefix("perAgent.") {
+            merged[k] = max(merged[k] ?? 0, v)
         }
         updatedAt = merged
     }
@@ -136,6 +153,71 @@ public struct SettingsRecord: Sendable, Codable, Equatable {
     public mutating func touch(_ field: String, at date: Date = Date(), by updater: String) {
         updatedAt[field] = date.timeIntervalSince1970
         updatedBy = updater
+    }
+
+    /// Stamps a per-agent sub-key (e.g. `tracking`, `mac`, `ios`, `installed`)
+    /// for the given agent in the LWW timestamp map. Use this whenever you
+    /// mutate `perAgentOverridesJSON` so cross-device edits don't clobber
+    /// each other inside the bundle.
+    public mutating func touchPerAgent(_ agent: String,
+                                       sub: String,
+                                       at date: Date = Date(),
+                                       by updater: String) {
+        let key = "perAgent.\(agent).\(sub)"
+        updatedAt[key] = date.timeIntervalSince1970
+        // Also bump the legacy bundle key so peers that don't yet read the
+        // per-agent sub-keys still pick up the most recent overall edit.
+        updatedAt["perAgentOverridesJSON"] = date.timeIntervalSince1970
+        updatedBy = updater
+    }
+
+    /// Per-agent, per-sub-key LWW merge of two `perAgentOverridesJSON`
+    /// strings. Sub-keys win independently — toggling iOS notifications
+    /// for `claude` on the phone never clobbers a Mac install/uninstall
+    /// for `cursor` happening at the same time.
+    public static func mergePerAgentJSON(local: String,
+                                         remote: String,
+                                         localStamps: [String: Double],
+                                         remoteStamps: [String: Double]) -> String {
+        let lDict  = decodePerAgent(local)
+        let rDict  = decodePerAgent(remote)
+        // Legacy fallback timestamps for clients that still bulk-stamp.
+        let lBundle = localStamps["perAgentOverridesJSON"]  ?? 0
+        let rBundle = remoteStamps["perAgentOverridesJSON"] ?? 0
+
+        var out: [String: [String: Bool]] = [:]
+        let agents = Set(lDict.keys).union(rDict.keys)
+        for agent in agents {
+            let lEntry = lDict[agent] ?? [:]
+            let rEntry = rDict[agent] ?? [:]
+            let subs   = Set(lEntry.keys).union(rEntry.keys)
+            var merged: [String: Bool] = [:]
+            for sub in subs {
+                let key   = "perAgent.\(agent).\(sub)"
+                let lTime = localStamps[key]  ?? lBundle
+                let rTime = remoteStamps[key] ?? rBundle
+                let lVal  = lEntry[sub]
+                let rVal  = rEntry[sub]
+                if let l = lVal, let r = rVal {
+                    merged[sub] = rTime > lTime ? r : l
+                } else {
+                    merged[sub] = lVal ?? rVal
+                }
+            }
+            out[agent] = merged
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: out),
+              let str  = String(data: data, encoding: .utf8) else {
+            return local
+        }
+        return str
+    }
+
+    private static func decodePerAgent(_ json: String) -> [String: [String: Bool]] {
+        guard let data = json.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Bool]]
+        else { return [:] }
+        return dict
     }
 }
 

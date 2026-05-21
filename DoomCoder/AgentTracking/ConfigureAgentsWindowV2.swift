@@ -354,9 +354,17 @@ struct ConfigureAgentsViewV2: View {
                                         statusMessage = msg
                                         statusIsError = isErr
                                         isInstalling = false
+                                        // Optimistic: reflect installer success in the
+                                        // sidebar immediately so the row updates the
+                                        // same frame, before the slower AgentDetector
+                                        // re-scan completes.
+                                        if !isErr { installedCache[agent] = true }
                                     }
                                     Task { await detectAllAsync() }
-                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                                    CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(
+                                        agent: agent.rawValue,
+                                        subs: ["installed"]
+                                    )
                                 }
                                 .disabled(isInstalling)
                                 if isInst {
@@ -370,9 +378,13 @@ struct ConfigureAgentsViewV2: View {
                                             statusMessage = msg
                                             statusIsError = isErr
                                             isInstalling = false
+                                            if !isErr { installedCache[agent] = false }
                                         }
                                         Task { await detectAllAsync() }
-                                        CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                                        CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(
+                                            agent: agent.rawValue,
+                                            subs: ["installed"]
+                                        )
                                     }
                                     .disabled(isInstalling)
                                 }
@@ -421,7 +433,10 @@ struct ConfigureAgentsViewV2: View {
                                     ChannelStore.clearOverride(for: agent)
                                 }
                                 channelConfig = ChannelStore.load()
-                                CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                                CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(
+                                    agent: agent.rawValue,
+                                    subs: ["mac", "ios"]
+                                )
                             }
                         ))
 
@@ -433,7 +448,10 @@ struct ConfigureAgentsViewV2: View {
                                     var c = override; c.macNotification = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
-                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                                    CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(
+                                        agent: agent.rawValue,
+                                        subs: ["mac"]
+                                    )
                                     if v { NotificationDispatcher.shared.requestPermission() }
                                 }
                             ))
@@ -443,7 +461,10 @@ struct ConfigureAgentsViewV2: View {
                                     var c = override; c.iOSCompanion = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
-                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
+                                    CloudKitSyncEngine.shared.publishSettingsTouchingPerAgent(
+                                        agent: agent.rawValue,
+                                        subs: ["ios"]
+                                    )
                                 }
                             ))
                         } else {

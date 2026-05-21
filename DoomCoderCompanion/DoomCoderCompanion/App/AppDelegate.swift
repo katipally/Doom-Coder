@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
         // One-shot v3 cleanup of legacy App Group keys / files.
         AppGroupCache.runV3MigrationOnce()
+        AppGroupCache.enforceSchemaVersion()
 
         // v3.0: do NOT request notification permission here. The user grants
         // it from the Onboarding screen, AFTER reading the context copy that
@@ -37,6 +38,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         AgentIconFetcher.prefetchIfNeeded()
 
         application.registerForRemoteNotifications()
+
+        // Clear the badge when the user comes back so it stays accurate.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                try? await UNUserNotificationCenter.current().setBadgeCount(0)
+            }
+        }
+
         return true
     }
 
