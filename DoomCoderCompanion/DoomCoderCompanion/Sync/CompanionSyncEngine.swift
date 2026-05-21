@@ -38,9 +38,11 @@ final class CompanionSyncEngine: NSObject {
     /// Prevents subscriptions from being registered more than once per launch.
     private var subscriptionsReady = false
 
-    /// Records queued for the next CKSyncEngine push batch.
-    private var pendingSaves: [CKRecord] = []
-    private var pendingDeletes: [CKRecord.ID] = []
+    /// Records queued for the next CKSyncEngine push batch, keyed by recordID
+    /// so a rapid second edit to the same record overwrites the first instead
+    /// of producing two `.saveRecord(sameID)` entries (which CloudKit rejects
+    /// as "You can't save the same record twice").
+    private var recordsByID: [CKRecord.ID: CKRecord] = [:]
 
     // MARK: - Defaults key for engine state
 
@@ -105,8 +107,9 @@ final class CompanionSyncEngine: NSObject {
     }
 
     /// Enqueue a CKRecord for the next outbound sync batch.
+    /// Latest write per recordID wins (overwrites in-flight queued copy).
     func enqueueSave(_ record: CKRecord) {
-        pendingSaves.append(record)
+        recordsByID[record.recordID] = record
         syncEngine?.state.add(pendingRecordZoneChanges: [
             CKSyncEngine.PendingRecordZoneChange.saveRecord(record.recordID)
         ])
@@ -240,11 +243,13 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                     self.accountAvailable = true
                 case .signOut:
                     self.accountAvailable = false
+                    self.recordsByID.removeAll()
                 case .switchAccounts:
                     MacStatusStore.shared.clear()
                     SessionStore.shared.clear()
                     SettingsStore.shared.clear()
                     NotificationLogStore.shared.entries.removeAll()
+                    self.recordsByID.removeAll()
                     self.accountAvailable = true
                 @unknown default:
                     break
@@ -267,6 +272,13 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             break
 
         case .sentRecordZoneChanges(let e):
+            // Drop successfully-saved records from our local queue map.
+            if !e.savedRecords.isEmpty {
+                let savedIDs = e.savedRecords.map(\.recordID)
+                await MainActor.run {
+                    for id in savedIDs { self.recordsByID.removeValue(forKey: id) }
+                }
+            }
             for save in e.savedRecords {
                 if save.recordType == CloudKitConstants.RecordType.controlCommand,
                    let cmd = ControlCommandRecord(save) {
@@ -281,10 +293,21 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             if !e.failedRecordSaves.isEmpty {
                 for fail in e.failedRecordSaves {
                     print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(fail.error.localizedDescription)")
+                    let recordID = fail.record.recordID
                     // If Settings-singleton conflicts, clear our cached server record
                     // so the next user edit doesn't re-use a stale changeTag.
-                    if fail.record.recordID.recordName == SettingsRecord.singletonRecordName {
+                    if recordID.recordName == SettingsRecord.singletonRecordName {
                         await MainActor.run { SettingsStore.shared.serverRecord = nil }
+                    }
+                    // Drop the failed record from our queue. CKSyncEngine
+                    // already removed the pending change from its state for
+                    // non-retryable errors; for retryable ones it keeps the
+                    // pending change and will call us again — at which point
+                    // recordProvider will return nil for this ID and the
+                    // engine will skip it. Either way, holding onto the stale
+                    // record only invites the duplicate-save bug.
+                    await MainActor.run {
+                        self.recordsByID.removeValue(forKey: recordID)
                     }
                 }
                 // MUST use Task.detached — calling engine.fetchChanges() from
@@ -304,15 +327,17 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        let saves: [CKRecord] = await MainActor.run {
-            let batch = self.pendingSaves
-            self.pendingSaves.removeAll()
-            return batch
-        }
-        guard !saves.isEmpty else { return nil }
+        // Canonical pattern: use the engine's deduped pending-change list
+        // (filtered by send scope) and serve records from our local map.
+        // The engine guarantees each recordID appears at most once here, so
+        // the resulting batch can never contain duplicate save entries.
+        let scope = context.options.scope
+        let changes = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !changes.isEmpty else { return nil }
+        let snapshot: [CKRecord.ID: CKRecord] = await MainActor.run { self.recordsByID }
         return await CKSyncEngine.RecordZoneChangeBatch(
-            pendingChanges: saves.map { .saveRecord($0.recordID) },
-            recordProvider: { id in saves.first(where: { $0.recordID == id }) }
+            pendingChanges: changes,
+            recordProvider: { id in snapshot[id] }
         )
     }
 }
