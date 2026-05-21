@@ -21,5 +21,5 @@ public enum CloudKitConstants {
 
     /// Current schema version published to CloudKit. Bump together with field
     /// additions; old clients ignore unknown fields.
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
 }
