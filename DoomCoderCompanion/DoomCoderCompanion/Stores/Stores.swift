@@ -148,25 +148,15 @@ final class SettingsStore {
     }
 }
 
-// MARK: - WoLStore
+// MARK: - WoLStore (deprecated, v3.0)
 
-/// Caches WoLProfileRecords keyed by macId for Wake-on-LAN support.
+/// DEPRECATED in v3.0. Wake-on-LAN was removed when the companion adopted
+/// CloudKit-only transport. The store is kept as an empty no-op shell so
+/// any straggler reference still compiles. No code currently writes to
+/// or reads from it.
 @MainActor
 @Observable
 final class WoLStore {
-
     static let shared = WoLStore()
     private init() {}
-
-    private(set) var byMacId: [String: WoLProfileRecord] = [:]
-
-    func upsert(_ r: WoLProfileRecord) {
-        byMacId[r.macId] = r
-    }
-
-    /// Profile for the primary Mac (mirrors MacStatusStore.primary selection).
-    var primary: WoLProfileRecord? {
-        guard let id = MacStatusStore.shared.primary?.macId else { return nil }
-        return byMacId[id]
-    }
 }

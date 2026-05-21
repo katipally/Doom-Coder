@@ -21,6 +21,7 @@ struct SettingsView: View {
                 phaseSection
                 timersSection
                 privacySection
+                historySection
                 testSection
                 aboutSection
             }
@@ -90,6 +91,16 @@ struct SettingsView: View {
             Text("When enabled, truncated tool-output snippets are stored in iCloud and shown in notification bodies.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var historySection: some View {
+        Section("Activity") {
+            NavigationLink {
+                LogsView()
+            } label: {
+                Label("Notification history", systemImage: "bell.badge")
+            }
         }
     }
 

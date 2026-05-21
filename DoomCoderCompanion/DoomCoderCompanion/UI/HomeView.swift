@@ -1,23 +1,16 @@
 // HomeView.swift — DoomCoder Companion
 // Primary dashboard: shows the primary Mac's live status, a PreventSleep
-// control card, an agent-activity grid, and a Wake-on-LAN button.
+// control card, and an agent-activity grid. Wake-on-LAN was removed in
+// v3.0 — CloudKit silent push wakes a sleeping Mac on its own.
 
 import SwiftUI
-import Network
 import DoomCoderCore
 
 struct HomeView: View {
 
     @State private var macStatus  = MacStatusStore.shared
     @State private var sessionStore = SessionStore.shared
-    @State private var wolStore   = WoLStore.shared
     @State private var settings   = SettingsStore.shared
-    @State private var wifiAvailable = false
-    @State private var wakePending   = false
-    @State private var wakeError: String?
-
-    // Path monitor runs for the lifetime of this view.
-    private let pathMonitor = NWPathMonitor()
 
     var body: some View {
         NavigationStack {
@@ -30,10 +23,6 @@ struct HomeView: View {
             }
             .navigationTitle("DoomCoder")
         }
-        .onAppear {
-            startPathMonitor()
-        }
-        .onDisappear { pathMonitor.cancel() }
     }
 
     // MARK: - Empty state
@@ -56,51 +45,8 @@ struct HomeView: View {
                 }
                 PreventSleepCard(settings: settings)
                 AgentsCard(sessionStore: sessionStore)
-                WakeCard(
-                    profile: wolStore.primary,
-                    wifiAvailable: wifiAvailable,
-                    isPending: wakePending,
-                    errorMessage: wakeError,
-                    onWake: sendWoL
-                )
             }
             .padding()
-        }
-    }
-
-    // MARK: - Wi-Fi path monitor
-
-    private func startPathMonitor() {
-        pathMonitor.pathUpdateHandler = { path in
-            DispatchQueue.main.async {
-                self.wifiAvailable = path.usesInterfaceType(.wifi)
-            }
-        }
-        pathMonitor.start(queue: DispatchQueue(label: "home.pathmonitor"))
-    }
-
-    // MARK: - Wake-on-LAN action
-
-    private func sendWoL() {
-        guard let profile = wolStore.primary else {
-            wakeError = "No WoL profile for this Mac."
-            return
-        }
-        wakePending = true
-        wakeError = nil
-
-        // Log the attempt as a ControlCommand for timeline visibility.
-        if let macId = macStatus.primary?.macId {
-            _ = CommandPublisher.shared.send(verb: .wakeMac, targetMacId: macId)
-        }
-
-        Task {
-            do {
-                try await WakeOnLAN.wake(macAddresses: profile.macAddresses)
-            } catch {
-                wakeError = error.localizedDescription
-            }
-            wakePending = false
         }
     }
 }
@@ -265,44 +211,4 @@ private struct AgentTile: View {
     }
 }
 
-// MARK: - WakeCard
-
-private struct WakeCard: View {
-    let profile: WoLProfileRecord?
-    let wifiAvailable: Bool
-    let isPending: Bool
-    let errorMessage: String?
-    let onWake: () -> Void
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                if let err = errorMessage {
-                    Label(err, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                }
-
-                Button(action: onWake) {
-                    Label(isPending ? "Sending…" : "Wake Mac", systemImage: "power")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!wifiAvailable || profile == nil || isPending)
-
-                if !wifiAvailable {
-                    Text("Connect to Wi-Fi to use Wake-on-LAN")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if profile == nil {
-                    Text("No WoL profile synced from Mac yet")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } label: {
-            Label("Wake on LAN", systemImage: "network")
-        }
-    }
-}
+// MARK: - WakeCard removed in v3.0 (Wake-on-LAN deprecated).

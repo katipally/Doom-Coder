@@ -498,12 +498,6 @@ final class CloudKitSyncEngine {
         enqueue(save: record.toCKRecord())
     }
 
-    /// Upserts the local WoL profile so iOS can wake this Mac from LAN.
-    func publishWoLProfile(_ rec: WoLProfileRecord) {
-        guard isAvailable else { return }
-        enqueue(save: rec.toCKRecord())
-    }
-
     /// Manual end-to-end verification entry-point exposed from the
     /// Configure → Settings → "Send Test Ping" button. Publishes one
     /// MacStatus record and one NotificationLog record, which together

@@ -53,8 +53,6 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
         // Start CloudKit sync engine (no-op until iCloud account confirms).
         CloudKitSyncEngine.shared.start()
-        // Publish WoL profile so iOS can wake this Mac on the same LAN.
-        WoLProfileExporter.publish()
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
@@ -113,15 +111,9 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             }
         }
 
-        // Show the most recent What's New sheet (checked newest-first).
-        if !UserDefaults.standard.bool(forKey: WhatsNewSheet230.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew230() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet220.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew220() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
-            Task { @MainActor in self.showWhatsNewV2() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew() }
+        // Show the most recent What's New sheet on first launch after upgrade.
+        if !UserDefaults.standard.bool(forKey: WhatsNewSheet300.defaultsKey) {
+            Task { @MainActor in self.showWhatsNew300() }
         }
     }
 
@@ -167,93 +159,8 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     }
 
     @MainActor
-    func showWhatsNew230() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet230(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 460)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Mark every older sheet as seen so users don't see them next launch.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet220.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNew220() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet220(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 420)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Mark older sheets as seen so users don't see them on the next launch.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNewV2() {
-        let hosting = NSHostingController(rootView: WhatsNewSheetV2(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 460)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Also mark v1.9 as seen — users upgrading past v2 shouldn't see the
-        // older sheet on their next launch after dismissing this one.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNew() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet(onDismiss: { [weak self] in
+    func showWhatsNew300() {
+        let hosting = NSHostingController(rootView: WhatsNewSheet300(onDismiss: { [weak self] in
             self?.whatsNewWindow?.close()
             self?.whatsNewWindow = nil
         }))
@@ -261,7 +168,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // (no preferredContentSize getter, no min/max extrema). This breaks
         // the infinite updateConstraints → sizeThatFits → setNeedsUpdate loop.
         hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 440)
+        let contentSize = NSSize(width: 520, height: 480)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable],

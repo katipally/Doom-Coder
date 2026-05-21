@@ -189,7 +189,8 @@ final class CompanionSyncEngine: NSObject {
             case CloudKitConstants.RecordType.settings:
                 if let r = SettingsRecord(record) { SettingsStore.shared.applyRemote(r, rawRecord: record) }
             case CloudKitConstants.RecordType.wolProfile:
-                if let r = WoLProfileRecord(record) { WoLStore.shared.upsert(r) }
+                // v3.0 retired Wake-on-LAN; ignore stragglers from older Macs.
+                break
             case CloudKitConstants.RecordType.agentIcon:
                 if let r = AgentIconRecord(record), let asset = r.pngAsset,
                    let fileURL = asset.fileURL,

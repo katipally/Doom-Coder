@@ -142,11 +142,6 @@ enum ControlCommandRouter {
                 NSApp.terminate(nil)
             }
             return "quitting"
-
-        case .wakeMac:
-            // Mac itself can't wake itself — this verb is processed by iOS
-            // (Wake-on-LAN). Recording the breadcrumb is enough.
-            return "noop"
         }
     }
 

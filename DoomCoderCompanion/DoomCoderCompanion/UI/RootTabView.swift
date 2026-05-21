@@ -13,14 +13,8 @@ struct RootTabView: View {
             Tab("Sessions", systemImage: "waveform.path") {
                 SessionsView()
             }
-            Tab("Logs", systemImage: "text.below.photo") {
-                LogsView()
-            }
             Tab("Settings", systemImage: "gearshape.fill") {
                 SettingsView()
-            }
-            Tab("Debug", systemImage: "ant.fill") {
-                NSEDebugView()
             }
         }
     }

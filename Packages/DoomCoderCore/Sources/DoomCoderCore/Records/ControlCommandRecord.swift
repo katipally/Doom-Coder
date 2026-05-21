@@ -29,9 +29,6 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
         // Tier 4 — admin / system
         case restartHookSocket
         case quitDoomCoder
-        case wakeMac                 // Mac does nothing for this (Wake-on-LAN
-                                     // is iOS-only). The record is created
-                                     // so the timeline shows the attempt.
     }
 
     public var commandId: String
