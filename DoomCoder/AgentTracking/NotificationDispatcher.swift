@@ -2,6 +2,7 @@ import Foundation
 import UserNotifications
 import AppKit
 import OSLog
+import DoomCoderCore
 
 // Fan-out for DoomCoder agent notifications. Honors the TrackingStore
 // per-agent opt-out and the global ChannelStore (macOS local +
@@ -105,8 +106,24 @@ final class NotificationDispatcher {
         // Claude Code fires both PreToolUse and Notification hooks for the same
         // permission prompt — different raw event names but identical title + body.
         // Keying on rendered content collapses them into a single dispatch.
-        let title = titleFor(ev)
-        let body  = bodyFor(ev)
+        let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
+        let cwdBase = session.flatMap { DoomCoderCore.NotificationCopy.shortCwd($0.cwd) }
+        let lastTool = session?.lastTool
+        let durationSeconds = sessionDurationSeconds(for: ev.sessionKey)
+        // The Mac target has its own TrackedAgent / NormalizedEventPhase enums
+        // (HookEnvelope.swift, AgentEventNormalizer.swift) that share rawValues
+        // with DoomCoderCore's public types. Bridge via rawValue.
+        let coreAgent = DoomCoderCore.TrackedAgent(rawValue: ev.agent.rawValue) ?? .claude
+        let corePhase = DoomCoderCore.NormalizedEventPhase(rawValue: ev.phase.rawValue) ?? .other
+        let copyContext = DoomCoderCore.NotificationCopy.EventContext(
+            agent: coreAgent,
+            phase: corePhase,
+            lastTool: lastTool,
+            cwdBase: cwdBase,
+            durationSeconds: durationSeconds
+        )
+        let title = DoomCoderCore.NotificationCopy.title(copyContext)
+        let body  = DoomCoderCore.NotificationCopy.body(copyContext)
         let key = "\(ev.sessionKey)::\(ev.phase.rawValue)::\(title)::\(body)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow {
             return
@@ -120,10 +137,6 @@ final class NotificationDispatcher {
         }
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
         let ts = Date().timeIntervalSince1970
-
-        let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
-        let cwdBase = session.flatMap { shortCwd($0.cwd) }
-        let lastTool = session?.lastTool
 
         if channels.macNotification {
             postLocal(title: title, body: body, threadID: ev.sessionKey, agent: ev.agent)
@@ -179,75 +192,17 @@ final class NotificationDispatcher {
     enum TestChannel { case macOS, iOS }
 
     // MARK: - Copy
+    //
+    // All title/body rendering is delegated to the shared `NotificationCopy`
+    // helper in `DoomCoderCore` so the Mac (this file) and the iOS
+    // Notification Service Extension produce byte-identical strings.
 
-    private func titleFor(_ ev: Event) -> String {
-        let name = ev.agent.displayName
-        switch ev.phase {
-        case .sessionStart:                 return "\(name) · started"
-        case .sessionEnd:                   return "\(name) · done"
-        case .error, .toolError:            return "\(name) · failed"
-        case .permissionNeeded:             return "\(name) · needs you"
-        default:                            return name
-        }
-    }
-
-    private func bodyFor(_ ev: Event) -> String {
-        let session = AgentTrackingManager.shared.sessions[ev.sessionKey]
-        let cwdLabel = session.flatMap { shortCwd($0.cwd) }
-        let lastTool = session?.lastTool
-        let duration = sessionDuration(for: ev.sessionKey)
-
-        switch ev.phase {
-        case .sessionStart:
-            return cwdLabel.map { "Started in \($0)" } ?? "Started"
-
-        case .sessionEnd:
-            // Prefer "finished editing <file>" when a recent file edit is known,
-            // else "finished using <tool>", else just duration.
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Finished using \(tool) · \($0)" } ?? "Finished using \(tool)"
-            }
-            if let cwd = cwdLabel {
-                return duration.map { "Finished in \(cwd) · \($0)" } ?? "Finished in \(cwd)"
-            }
-            return duration.map { "Finished · \($0)" } ?? "Finished"
-
-        case .error, .toolError:
-            if let tool = lastTool, !tool.isEmpty {
-                return duration.map { "Failed in \(tool) · \($0)" } ?? "Failed in \(tool)"
-            }
-            return duration.map { "Failed · \($0)" } ?? "Failed"
-
-        case .permissionNeeded:
-            if let tool = lastTool, !tool.isEmpty {
-                return "Waiting for your approval · \(tool)"
-            }
-            return "Waiting for your approval"
-
-        default:
-            return ev.agent.displayName
-        }
-    }
-
-    /// Short, human-friendly cwd label: "~/foo/bar" → "bar" (last path component).
-    private func shortCwd(_ cwd: String) -> String? {
-        let trimmed = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let last = (trimmed as NSString).lastPathComponent
-        return last.isEmpty ? nil : last
-    }
-
-    /// Looks up the session in AgentTrackingManager and formats elapsed time since start.
-    private func sessionDuration(for sessionKey: String) -> String? {
+    /// Returns the elapsed wall-clock seconds for a session, or nil if the
+    /// session is unknown or just started (≤ 1 s).
+    private func sessionDurationSeconds(for sessionKey: String) -> Int? {
         guard let session = AgentTrackingManager.shared.sessions[sessionKey] else { return nil }
-        let elapsed = Date().timeIntervalSince(session.startedAt)
-        guard elapsed > 1 else { return nil }
-        let minutes = Int(elapsed) / 60
-        let seconds = Int(elapsed) % 60
-        if minutes > 0 {
-            return "\(minutes)m \(seconds)s"
-        }
-        return "\(seconds)s"
+        let elapsed = Int(Date().timeIntervalSince(session.startedAt))
+        return elapsed > 1 ? elapsed : nil
     }
 
     // MARK: - macOS local
@@ -293,10 +248,9 @@ final class NotificationDispatcher {
                     }
                 }
             }
-            // 20 ms stagger between posts so macOS preserves our enqueue
-            // order even under rapid bursts (session start → tool call →
-            // session end arriving within the same runloop tick).
-            Thread.sleep(forTimeInterval: 0.02)
+            // The 0.01s UNTimeIntervalNotificationTrigger above already
+            // preserves enqueue order for back-to-back posts on the serial
+            // queue, so no additional Thread.sleep is required here.
         }
     }
 

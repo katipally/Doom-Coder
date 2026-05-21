@@ -129,7 +129,7 @@ final class CompanionSyncEngine: NSObject {
         // Delete all previous subscription versions.
         for id in ["companion-notiflog-sub", "companion-notiflog-sub-v2",
                    "companion-notiflog-sub-v3", "companion-notiflog-sub-v4",
-                   "companion-notiflog-sub-v5"] {
+                   "companion-notiflog-sub-v5", "companion-notiflog-sub-v6"] {
             _ = try? await db.deleteSubscription(withID: id)
         }
 
@@ -138,33 +138,34 @@ final class CompanionSyncEngine: NSObject {
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: pred,
-            subscriptionID: "companion-notiflog-sub-v6",
+            subscriptionID: "companion-notiflog-sub-v7",
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
-        // CRITICAL: alertBody + title must be non-nil so CloudKit includes
-        // aps.alert in the APNs payload. Without aps.alert the push is treated
-        // as silent and the NSE is NEVER invoked — no banner.
-        // The NSE overwrites these with the values from desiredKeys below.
-        info.title = "DoomCoder"
-        info.alertBody = "Agent update"
+        // CloudKit requires a non-nil aps.alert payload to invoke the NSE.
+        // We use a single space so APNs includes aps.alert (NSE fires) but the
+        // user never sees the literal placeholder text "Agent update" if the
+        // NSE happens to be skipped or fails. The NSE replaces title/body
+        // with the Mac-rendered NotificationCopy values; if it cannot, it
+        // emits empty content so the OS suppresses the banner entirely.
+        info.title = " "
+        info.alertBody = " "
         info.shouldSendMutableContent = true   // invokes NSE on each push
         info.soundName = "default"
-        // v6 desiredKeys: include the Mac-precomputed rich title + body.
-        // CloudKit hard limit: 5 desiredKeys max.
-        //   title      → mutable.title  (Mac-computed rich copy)
-        //   body       → mutable.body   (Mac-computed rich copy)
-        //   agent      → icon slug + interruption level in NSE
-        //   phase      → interruption level in NSE
+        // v7 desiredKeys (CloudKit hard limit: 5):
+        //   title      → mutable.title  (Mac NotificationCopy)
+        //   body       → mutable.body   (Mac NotificationCopy)
+        //   agent      → icon slug + interruption level + fallback re-render
+        //   phase      → interruption level + fallback re-render
         //   sessionKey → UNNotification threadIdentifier
         info.desiredKeys = ["title", "body", "agent", "phase", "sessionKey"]
         sub.notificationInfo = info
         sub.zoneID = zone.zoneID
         do {
             try await db.save(sub)
-            print("[CompanionSyncEngine] notiflog sub v6 registered")
+            print("[CompanionSyncEngine] notiflog sub v7 registered")
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
-            print("[CompanionSyncEngine] notiflog sub v6 already exists")
+            print("[CompanionSyncEngine] notiflog sub v7 already exists")
         } catch {
             print("[CompanionSyncEngine] NotifLog subscription error: \(error)")
         }

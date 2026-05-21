@@ -22,10 +22,10 @@ class NotificationService: UNNotificationServiceExtension {
         }
         self.bestAttemptContent = mutable
 
-        // ── Debug dump ──────────────────────────────────────────────────────
-        // Write the raw push payload to App Group so the companion app can
-        // display it in a Debug tab. Remove once NSE is confirmed working.
+        // ── Debug dump (DEBUG-only) ─────────────────────────────────────────
+        #if DEBUG
         dumpPayload(request.content.userInfo)
+        #endif
 
         // ── Field extraction ────────────────────────────────────────────────
         // CloudKit push payload for CKQuerySubscription with desiredKeys:
@@ -43,22 +43,42 @@ class NotificationService: UNNotificationServiceExtension {
             return val
         }
 
-        // v6 desiredKeys: agent, title, body, sessionKey, phase
-        // title + body are pre-computed by the Mac (rich copy already done).
+        // v7 desiredKeys: agent, title, body, sessionKey, phase
+        // title + body are pre-computed by the Mac via NotificationCopy.
         let richTitle  = field("title")
         let richBody   = field("body")
         let agentRaw   = field("agent")
         let phaseRaw   = field("phase")
         let sessionKey = field("sessionKey")
-        // macName not in desiredKeys — read from App Group cache.
-        let macName    = AppGroupCache.defaults.string(forKey: "cache.primaryMacName")
+
+        // ── Drop empty pushes ───────────────────────────────────────────────
+        // If neither rich copy nor agent identity is present, the push is
+        // malformed (or arrived before its zone fetch). Suppress the OS-level
+        // placeholder ("Agent update") by emitting empty content; the system
+        // drops the banner. The in-app NotificationLog still records it.
+        if (richTitle?.isEmpty ?? true) && (richBody?.isEmpty ?? true) && (agentRaw?.isEmpty ?? true) {
+            contentHandler(UNMutableNotificationContent())
+            return
+        }
 
         // ── Enrich title / body ─────────────────────────────────────────────
-        if let t = richTitle, !t.isEmpty { mutable.title = t }
-        if let b = richBody,  !b.isEmpty { mutable.body  = b }
+        // Prefer the Mac-rendered copy. If only `agent` + `phase` are present
+        // (older Mac builds, or stripped desiredKeys), re-render via the
+        // shared NotificationCopy so output is byte-identical to the Mac.
+        if let t = richTitle, !t.isEmpty {
+            mutable.title = t
+        } else if let agent = agentRaw.flatMap({ TrackedAgent(rawValue: $0) }),
+                  let phase = phaseRaw.flatMap({ NormalizedEventPhase(rawValue: $0) }) {
+            mutable.title = NotificationCopy.title(.init(agent: agent, phase: phase))
+        }
+        if let b = richBody, !b.isEmpty {
+            mutable.body = b
+        } else if let agent = agentRaw.flatMap({ TrackedAgent(rawValue: $0) }),
+                  let phase = phaseRaw.flatMap({ NormalizedEventPhase(rawValue: $0) }) {
+            mutable.body = NotificationCopy.body(.init(agent: agent, phase: phase))
+        }
 
-        // ── Subtitle ────────────────────────────────────────────────────────
-        if let mn = macName, !mn.isEmpty { mutable.subtitle = "On \(mn)" }
+        // Subtitle is intentionally NOT set — users found "On <MacName>" noisy.
 
         // ── Thread identifier ────────────────────────────────────────────────
         if let sk = sessionKey { mutable.threadIdentifier = sk }
@@ -89,6 +109,7 @@ class NotificationService: UNNotificationServiceExtension {
 
     // MARK: - Debug helpers
 
+    #if DEBUG
     private func dumpPayload(_ userInfo: [AnyHashable: Any]) {
         guard let dir = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier:
@@ -100,4 +121,5 @@ class NotificationService: UNNotificationServiceExtension {
             to: dir.appendingPathComponent("nse_debug.json"),
             options: .atomic)
     }
+    #endif
 }

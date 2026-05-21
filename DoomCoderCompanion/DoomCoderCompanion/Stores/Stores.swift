@@ -27,11 +27,6 @@ final class MacStatusStore {
 
     func upsert(_ r: MacStatusRecord) {
         byMacId[r.macId] = r
-        // Cache the most-recently-seen Mac's name in App Group so the NSE
-        // can read it without it being included in push desiredKeys.
-        if let primary = byMacId.values.max(by: { $0.lastSeen < $1.lastSeen }) {
-            AppGroupCache.defaults.set(primary.name, forKey: "cache.primaryMacName")
-        }
     }
 
     func clear() { byMacId.removeAll() }
@@ -94,10 +89,10 @@ final class NotificationLogStore {
         }
         // Persist the trimmed list for the NSE.
         AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
-        // Post a rich local notification as the primary backup channel.
-        // The CKQuerySubscription push arrives first and the NSE enriches it.
-        // This local post ensures rich content even if the NSE is bypassed.
-        LocalNotificationPoster.post(r)
+        // Banner display is owned exclusively by the Notification Service
+        // Extension on the CloudKit push path. We do NOT post a duplicate
+        // local notification from here — that path produced a second banner
+        // for every event and re-introduced the "On <MacName>" subtitle.
     }
 }
 

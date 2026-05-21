@@ -15,6 +15,7 @@ enum AgentIconFetcher {
     private static let entries: [(filename: String, slug: String)] = [
         ("claudecode-color.png", "claude"),
         ("cursor.png",           "cursor"),
+        ("vscode-color.png",     "vscode"),
         ("githubcopilot.png",    "github-copilot"),
         ("windsurf.png",         "windsurf"),
         ("codex-color.png",      "openai"),

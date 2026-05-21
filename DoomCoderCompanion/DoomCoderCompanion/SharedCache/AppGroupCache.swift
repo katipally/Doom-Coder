@@ -58,4 +58,33 @@ enum AppGroupCache {
     // MARK: - NotificationLog mirror key
 
     static let notificationLogKey = "cache.notificationLog"
+
+    // MARK: - v3 first-launch migration
+    //
+    // Idempotent cleanup for users upgrading from 1.x → 3.0.
+    // Removes App Group state that is no longer used:
+    //   - cache.primaryMacName    (subtitle source — feature removed)
+    //   - localPosted.*           (LocalNotificationPoster dedup keys — path removed)
+    //   - nse_debug.json          (NSE payload dump — DEBUG-only now)
+    // The flag `migration.v3.done` makes this a one-shot.
+    private static let v3MigrationFlagKey = "migration.v3.done"
+
+    /// Runs once per install. Subsequent launches are no-ops.
+    static func runV3MigrationOnce() {
+        guard defaults.bool(forKey: v3MigrationFlagKey) == false else { return }
+
+        defaults.removeObject(forKey: "cache.primaryMacName")
+
+        for key in defaults.dictionaryRepresentation().keys
+            where key.hasPrefix("localPosted.") {
+            defaults.removeObject(forKey: key)
+        }
+
+        if let dir = containerURL {
+            let dumpURL = dir.appendingPathComponent("nse_debug.json")
+            try? FileManager.default.removeItem(at: dumpURL)
+        }
+
+        defaults.set(true, forKey: v3MigrationFlagKey)
+    }
 }

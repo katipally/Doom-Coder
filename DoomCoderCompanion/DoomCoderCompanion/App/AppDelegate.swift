@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
 
+        // One-shot v3 cleanup of legacy App Group keys / files.
+        AppGroupCache.runV3MigrationOnce()
+
         // Request notification permission every launch. iOS only prompts
         // the user once; subsequent calls are no-ops if already granted.
         Task {
