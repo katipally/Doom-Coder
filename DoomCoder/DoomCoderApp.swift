@@ -153,16 +153,23 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         }
     }
 
-    /// Silent push from CloudKit subscriptions — drain pending control
-    /// commands, fetch the latest singleton SettingsRecord, and let
-    /// CKSyncEngine fetch zone changes.
+    /// Silent push from CloudKit subscriptions.
+    /// CKSyncEngine.fetchChanges() performs a delta fetch that delivers any
+    /// new ControlCommand and Settings records, replacing the old separate
+    /// drainPending() + fetchSettings() calls.
     func application(_ application: NSApplication,
                      didReceiveRemoteNotification userInfo: [String: Any]) {
         Task { @MainActor in
-            await ControlCommandRouter.drainPending()
-            await CloudKitSyncEngine.shared.fetchSettings()
+            await CloudKitSyncEngine.shared.fetchChanges()
             CloudKitSyncEngine.shared.publishMacStatus()
         }
+    }
+
+    /// Publish an "offline" MacStatus synchronously before the process exits
+    /// so iOS sees the Mac go offline within seconds rather than waiting for
+    /// the next 90 s heartbeat.
+    func applicationWillTerminate(_ notification: Notification) {
+        CloudKitSyncEngine.shared.publishOfflineMacStatusSync()
     }
 
     func application(_ application: NSApplication,

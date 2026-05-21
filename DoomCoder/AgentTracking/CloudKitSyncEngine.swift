@@ -7,30 +7,26 @@ import DoomCoderCore
 
 /// Single sync surface between the Mac app and iCloud (private DB).
 ///
-/// Responsibilities:
-///   • Lazy-bind: only does work when the user is signed into iCloud.
-///   • Ensures `DoomCoderZone` exists (Mac is the canonical zone creator).
-///   • Subscribes to the zone (silent push) + to `ControlCommand` records
-///     for prompt remote-control delivery while the Mac is foregrounded.
-///   • Coalesces enqueued record writes through a single
-///     `CKModifyRecordsOperation` per debounce window so a burst of agent
-///     events doesn't issue one CK op per event.
-///   • Provides `publish(...)` convenience for each record type. Callers
-///     don't have to know about CloudKit at all.
+/// Migrated from manual CKModifyRecordsOperation + 400ms coalesce queue
+/// to CKSyncEngine (macOS 14+). Benefits:
+///   • Automatic retry and back-off on network errors.
+///   • Engine state serialised to UserDefaults — pending writes survive
+///     clean and unclean process exits.
+///   • Delta-based fetches (token tracked by CKSyncEngine) rather than
+///     re-fetching the whole Settings singleton on every push.
+///   • Per-batch save-policy: Settings uses .changedKeys for per-field LWW;
+///     heartbeat records (MacStatus, Session, etc.) use .allKeys so we
+///     never need to track change-tags for write-often records.
 ///
-/// All public mutating API is `@MainActor`; the CK operation queue is a
-/// separate serial queue so we never block the main thread on network I/O.
-///
-/// Failure mode is silent — sleep prevention and macOS local notifications
-/// must continue working when the engine is unavailable (no iCloud,
-/// container missing, schema mismatch, etc.). The Configure window
-/// surfaces `lastError` for diagnostics.
+/// All public mutating API is @MainActor; delegate callbacks are nonisolated
+/// and hop to MainActor via Task.detached { @MainActor in … }.
 @MainActor
 @Observable
 final class CloudKitSyncEngine {
+
     static let shared = CloudKitSyncEngine()
 
-    // MARK: Public state (UI bindable)
+    // MARK: - Public state (UI-bindable)
 
     private(set) var isAvailable: Bool = false
     private(set) var accountStatusText: String = "Checking iCloud…"
@@ -38,40 +34,15 @@ final class CloudKitSyncEngine {
     private(set) var lastError: String?
     private(set) var pendingWrites: Int = 0
 
-    // MARK: Internals
-
-    private nonisolated let logger = Logger(subsystem: "com.doomcoder", category: "cloudkit")
-    private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
-    private var database: CKDatabase { container.privateCloudDatabase }
-    private let zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
-                                         ownerName: CKCurrentUserDefaultName)
-
-    private var pendingSaves: [CKRecord] = []
-    private var pendingDeletes: [CKRecord.ID] = []
-    private var flushScheduled = false
-    private var reauthScheduled = false
-
-    /// Cumulative settings record; CloudKit upserts are merge-aware.
-    private var currentSettings: SettingsRecord?
-
-    /// Last server-side CKRecord for the singleton SettingsRecord. We must
-    /// reuse this on every modify so CloudKit preserves its `recordChangeTag`
-    /// — without it every save is treated as an INSERT and fails with code
-    /// 14/2004 ("record to insert already exists"). See §12.6.
-    private var settingsServerRecord: CKRecord?
-
-    /// Set while `applyRemoteSettings(_:)` is mutating local state. Mac
-    /// edit-paths check this flag to avoid re-publishing values that came
-    /// in from CloudKit (write loop).
-    private(set) var applyingRemoteSettings: Bool = false
-
-    /// Fired after `applyRemoteSettings` has updated UserDefaults so any
-    /// observer (PanelRootView, ChannelStore-driven UI) can refresh.
+    /// Posted after applyRemoteSettings(_:) updates local state.
     static let settingsChangedNotification = Notification.Name("DoomCoderSettingsChanged")
 
-    // MARK: Identity
+    /// True while applyRemoteSettings is mutating local state; edit paths
+    /// check this flag to skip re-publishing values that came from CloudKit.
+    private(set) var applyingRemoteSettings: Bool = false
 
-    /// Stable per-Mac identifier (hardware UUID).
+    // MARK: - Identity
+
     let macId: String = {
         let dict = IOServiceMatching("IOPlatformExpertDevice")
         let svc = IOServiceGetMatchingService(kIOMainPortDefault, dict)
@@ -79,18 +50,58 @@ final class CloudKitSyncEngine {
         guard svc != 0,
               let cf = IORegistryEntryCreateCFProperty(svc, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0)
         else { return UUID().uuidString }
-        let uuid = (cf.takeRetainedValue() as? String) ?? UUID().uuidString
-        return uuid
+        return (cf.takeRetainedValue() as? String) ?? UUID().uuidString
     }()
 
     var macName: String { Host.current().localizedName ?? "Mac" }
 
-    // MARK: Lifecycle
+    // MARK: - Private CloudKit plumbing
+
+    private nonisolated let logger = Logger(subsystem: "com.doomcoder", category: "cloudkit")
+    private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
+    var database: CKDatabase { container.privateCloudDatabase }
+    private let zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
+                                         ownerName: CKCurrentUserDefaultName)
+
+    // MARK: - CKSyncEngine
+
+    private var syncEngine: CKSyncEngine?
+    // nonisolated(unsafe) so the nonisolated CKSyncEngineDelegate callbacks
+    // can read this constant without a MainActor hop.
+    private nonisolated(unsafe) static let engineStateKey = "ck.mac.engineState"
+
+    /// Records awaiting a `.allKeys` save: MacStatus, Session, Event,
+    /// NotificationLog, ControlCommand echo. We do not track change-tags
+    /// for these write-often heartbeat records so .allKeys is correct.
+    private var regularRecordsByID: [CKRecord.ID: CKRecord] = [:]
+
+    /// Records awaiting a `.changedKeys` save: Settings only.
+    /// CKSyncEngine uses changedKeys here so that concurrent iOS edits to
+    /// different settings fields survive without being clobbered.
+    private var settingsRecordsByID: [CKRecord.ID: CKRecord] = [:]
+
+    // MARK: - Settings state
+
+    private var currentSettings: SettingsRecord?
+
+    /// Server-side CKRecord for the singleton SettingsRecord. Updated by
+    /// sentRecordZoneChanges so subsequent saves carry the latest changeTag.
+    private var settingsServerRecord: CKRecord?
+
+    // MARK: - Timers
+
+    private var heartbeatTimer: Timer?
+    private var pruneTimer: Timer?
+    private var reauthScheduled = false
+
+    // MARK: - Init
 
     private init() {}
 
+    // MARK: - Lifecycle
+
     func start() {
-        logger.info("CloudKitSyncEngine.start() invoked, macId=\(self.macId, privacy: .public)")
+        logger.info("CloudKitSyncEngine.start() macId=\(self.macId, privacy: .public)")
         Task { [weak self] in
             guard let self else { return }
             await self.refreshAccountStatus()
@@ -102,11 +113,7 @@ final class CloudKitSyncEngine {
         }
     }
 
-    /// Public re-trigger of the iCloud account-status probe so Settings UI
-    /// can offer a "Re-check iCloud" button.
-    func refreshAccountStatusNow() async {
-        await refreshAccountStatus()
-    }
+    func refreshAccountStatusNow() async { await refreshAccountStatus() }
 
     private func refreshAccountStatus() async {
         do {
@@ -114,8 +121,6 @@ final class CloudKitSyncEngine {
             logger.info("accountStatus -> \(String(describing: status), privacy: .public)")
             switch status {
             case .available:
-                isAvailable = true
-                accountStatusText = "iCloud synced"
                 await bootstrap()
             case .noAccount:
                 isAvailable = false
@@ -142,185 +147,64 @@ final class CloudKitSyncEngine {
     }
 
     private func bootstrap() async {
-        // Step 1: zone (idempotent on the server).
+        // Step 1: zone (idempotent on the server). CKSyncEngine does not
+        // create zones automatically — we must ensure it exists first.
         do {
             try await ensureZone()
             logger.info("ensureZone OK")
         } catch {
             lastError = error.localizedDescription
             logger.error("ensureZone failed: \(error.localizedDescription, privacy: .public)")
-            // Without a zone, no further work is possible.
             return
         }
 
-        // Step 2: publish initial MacStatus FIRST. This guarantees the
-        // schema for at least one record type exists before we attempt
-        // any query subscriptions. Without this, a first-ever launch
-        // can fail at the subscription step and never auto-create the
-        // schema — leaving the CloudKit dashboard empty.
+        // Step 2: init CKSyncEngine, restoring persisted state so in-flight
+        // writes from the previous session are re-queued automatically.
+        let serialization: CKSyncEngine.State.Serialization? = {
+            guard let data = UserDefaults.standard.data(forKey: Self.engineStateKey),
+                  let s = try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: data)
+            else { return nil }
+            return s
+        }()
+        let config = CKSyncEngine.Configuration(
+            database: database,
+            stateSerialization: serialization,
+            delegate: self
+        )
+        syncEngine = CKSyncEngine(config)
+
+        // Step 3: signal availability. All publish methods gate on isAvailable.
+        isAvailable = true
+        accountStatusText = "iCloud synced"
+
+        // Step 4: initial MacStatus heartbeat.
         publishMacStatus()
         logger.info("initial MacStatus enqueued")
 
-        // Step 3: subscriptions are best-effort. Push delivery is a
-        // nice-to-have for prompt remote-control; the Mac still works
-        // (just polls on its own clock) if these never get created.
+        // Step 5: subscriptions (best-effort; push is a nice-to-have).
         await ensureSubscriptionsBestEffort()
 
-        // Step 4: register for APNs so silent pushes can wake the Mac.
-        // Also best-effort.
-        await MainActor.run {
-            NSApplication.shared.registerForRemoteNotifications()
-        }
+        // Step 6: register for APNs so silent pushes can wake the Mac.
+        await MainActor.run { NSApplication.shared.registerForRemoteNotifications() }
         logger.info("registerForRemoteNotifications requested")
 
-        // Step 5: pull the singleton SettingsRecord so iOS edits made while
-        // the Mac was offline are merged into local state on launch.
-        await fetchSettings()
+        // Step 7: delta-fetch to apply any Settings or ControlCommand records
+        // written by iOS while the Mac was offline.
+        try? await syncEngine?.fetchChanges()
 
-        // v3.2 — DELIBERATELY DO NOT republish Settings on bootstrap.
-        // The previous step 5b unconditionally touched perAgentOverridesJSON
-        // with a fresh `now` timestamp, which clobbered any iOS edit made
-        // inside the LWW merge window (because the Mac's "now" was always
-        // later than the iOS write that just synced down). The `installed`
-        // bit is now refreshed lazily — only when AgentInstallerV2 actually
-        // installs or uninstalls — via the explicit publishSettingsTouching
-        // calls in ConfigureAgentsWindowV2 install/uninstall handlers.
-
-        // Step 6: drain any ControlCommand records queued up while offline.
+        // Step 8: safety-net drain for ControlCommands that CKSyncEngine
+        // state hasn't seen yet (first-launch, token reset, etc.).
         await ControlCommandRouter.drainPending()
 
-        // Step 7: heartbeat. Republish MacStatus every 5 minutes so iOS sees
-        // a fresh `lastSeen` while the Mac is awake, even with no agent
-        // activity. Paused when the screen is asleep AND the app is hidden
-        // to avoid burning battery on a closed lid (sleep wake events still
-        // fire `publishMacStatus()` directly via SleepManager).
-        startMacStatusHeartbeat()
+        // Step 9: 90 s heartbeat so iOS sees a fresh lastSeen regularly.
+        startHeartbeat()
+
+        // Step 10: daily CloudKit Event pruning.
+        startPruneTimer()
     }
 
-    private var macStatusHeartbeatTimer: Timer?
+    // MARK: - Publish API
 
-    private func startMacStatusHeartbeat() {
-        macStatusHeartbeatTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                let screenAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
-                let appHidden    = NSApp?.isHidden ?? false
-                if screenAsleep && appHidden { return }
-                self.publishMacStatus()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        macStatusHeartbeatTimer = timer
-    }
-
-    private func ensureZone() async throws {
-        let zone = CKRecordZone(zoneID: zoneID)
-        let op = CKModifyRecordZonesOperation(recordZonesToSave: [zone], recordZoneIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            op.modifyRecordZonesResultBlock = { result in
-                switch result {
-                case .success:
-                    cont.resume()
-                case .failure(let err):
-                    // A zone that already exists is fine — CK reports this
-                    // through .partialFailure with .serverRecordChanged
-                    // sub-errors, or directly via .serverRejectedRequest.
-                    if Self.isBenignAlreadyExistsError(err) {
-                        cont.resume()
-                    } else {
-                        cont.resume(throwing: err)
-                    }
-                }
-            }
-            database.add(op)
-        }
-    }
-
-    /// Creates the database-level silent subscription so the Mac is
-    /// woken on any private-DB change (this is how the Mac learns of
-    /// new `ControlCommand` records pushed by iOS).
-    ///
-    /// We intentionally do NOT create a `CKQuerySubscription` on
-    /// `ControlCommand` here:
-    ///   • On the very first launch the record type doesn't exist yet,
-    ///     so the predicate `appliedAt == nil` would 400 with
-    ///     `.invalidArguments` and block schema bootstrap.
-    ///   • The database silent subscription is sufficient — Mac runs
-    ///     `ControlCommandRouter.drainPending()` from the
-    ///     `didReceiveRemoteNotification` handler.
-    ///
-    /// The iOS app owns its own query subscription on `NotificationLog`
-    /// (with `shouldSendMutableContent = true`) for user-visible pushes.
-    private func ensureSubscriptionsBestEffort() async {
-        let dbSub = CKDatabaseSubscription(subscriptionID: "doomcoder-db-sub")
-        let dbInfo = CKSubscription.NotificationInfo()
-        dbInfo.shouldSendContentAvailable = true
-        dbSub.notificationInfo = dbInfo
-
-        // Dedicated query subscription for the Settings singleton so iOS
-        // Settings writes reach the Mac via a faster, record-scoped push
-        // rather than the blunt database-level silent notification.
-        let settingsPredicate = NSPredicate(format: "recordName == %@", SettingsRecord.singletonRecordName)
-        let settingsSub = CKQuerySubscription(
-            recordType: CloudKitConstants.RecordType.settings,
-            predicate: settingsPredicate,
-            subscriptionID: "doomcoder-settings-sub",
-            options: [.firesOnRecordUpdate]
-        )
-        let settingsInfo = CKSubscription.NotificationInfo()
-        settingsInfo.shouldSendContentAvailable = true
-        settingsSub.notificationInfo = settingsInfo
-
-        let op = CKModifySubscriptionsOperation(
-            subscriptionsToSave: [dbSub, settingsSub],
-            subscriptionIDsToDelete: nil
-        )
-        op.qualityOfService = .utility
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            op.modifySubscriptionsResultBlock = { [logger] result in
-                switch result {
-                case .success:
-                    logger.info("ensureSubscriptions: db-sub + settings-sub OK")
-                case .failure(let err):
-                    if Self.isBenignAlreadyExistsError(err) {
-                        logger.info("ensureSubscriptions: subs already exist")
-                    } else {
-                        logger.error("ensureSubscriptions failed (non-fatal): \(err.localizedDescription, privacy: .public)")
-                    }
-                }
-                cont.resume()
-            }
-            database.add(op)
-        }
-    }
-
-    /// CloudKit returns a wide variety of error codes when an op tries
-    /// to recreate something that already exists or query a schema that
-    /// isn't materialized yet. None of these are fatal for our purposes.
-    private static func isBenignAlreadyExistsError(_ error: Error) -> Bool {
-        guard let cke = error as? CKError else { return false }
-        let benign: Set<CKError.Code> = [
-            .serverRejectedRequest,
-            .unknownItem,
-            .invalidArguments,
-            .serverRecordChanged
-        ]
-        if benign.contains(cke.code) { return true }
-        if cke.code == .partialFailure,
-           let perItem = cke.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
-            return perItem.values.allSatisfy { sub in
-                guard let s = sub as? CKError else { return false }
-                return benign.contains(s.code)
-            }
-        }
-        return false
-    }
-
-    // MARK: Publish API (called from app code)
-
-    /// Heartbeat — publishes current sleep state, mode, timer, etc.
     func publishMacStatus() {
         guard isAvailable else { return }
         let sm = SleepManager.shared
@@ -336,7 +220,37 @@ final class CloudKitSyncEngine {
         enqueue(save: rec.toCKRecord())
     }
 
-    /// Publishes a session aggregate snapshot. Idempotent (recordID stable).
+    /// Synchronously publishes an "offline" MacStatus before the Mac process
+    /// exits. Bypasses the async enqueue path with a direct
+    /// CKModifyRecordsOperation + DispatchSemaphore so the record has a
+    /// chance to reach CloudKit within the ~3 s the OS gives us in
+    /// applicationWillTerminate.
+    func publishOfflineMacStatusSync() {
+        guard isAvailable else { return }
+        let sm = SleepManager.shared
+        let rec = MacStatusRecord(
+            macId: macId, name: macName,
+            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0",
+            sleepActive: false,
+            mode: sm.mode.rawValue,
+            sessionEndsAt: nil,
+            lastSeen: Date(),
+            thermalState: "offline"
+        )
+        let op = CKModifyRecordsOperation(recordsToSave: [rec.toCKRecord()], recordIDsToDelete: nil)
+        op.savePolicy = .allKeys
+        op.qualityOfService = .userInteractive
+        let sema = DispatchSemaphore(value: 0)
+        op.modifyRecordsResultBlock = { [logger] result in
+            if case .failure(let e) = result {
+                logger.error("offline MacStatus failed: \(e.localizedDescription, privacy: .public)")
+            }
+            sema.signal()
+        }
+        database.add(op)
+        _ = sema.wait(timeout: .now() + 3)
+    }
+
     func publishSession(_ s: AgentTrackingManager.Session) {
         guard isAvailable else { return }
         let rec = SessionRecord(
@@ -355,7 +269,6 @@ final class CloudKitSyncEngine {
         enqueue(save: rec.toCKRecord())
     }
 
-    /// Appends an Event row.
     func publishEvent(sessionKey: String, agent: String, event: String,
                       phase: String, tool: String?, path: String?,
                       ts: Date, payloadSnippet: String? = nil) {
@@ -371,9 +284,6 @@ final class CloudKitSyncEngine {
         enqueue(save: rec.toCKRecord())
     }
 
-    /// Records a NotificationLog row. iOS subscribes to this record type
-    /// (CKQuerySubscription with mutable-content) so each creation produces
-    /// a user-visible push the NSE renders.
     func publishNotification(sessionKey: String, agent: String, phase: String,
                              event: String, title: String, body: String,
                              channel: String, success: Bool, ts: Date,
@@ -389,13 +299,8 @@ final class CloudKitSyncEngine {
         enqueue(save: rec.toCKRecord())
     }
 
-    /// Touches a single settings field with the current timestamp (per-field
-    /// LWW; see §12.6 of the design plan). No-op while remote settings are
-    /// being applied locally — that path must NOT trigger a re-publish or
-    /// every inbound iOS edit creates a write loop.
     func publishSettingsField(_ field: String, applyTo: (inout SettingsRecord) -> Void) {
-        guard isAvailable else { return }
-        guard !applyingRemoteSettings else { return }
+        guard isAvailable, !applyingRemoteSettings else { return }
         var s = currentSettings ?? localSettingsSnapshot()
         applyTo(&s)
         s.touch(field, by: macId)
@@ -403,13 +308,8 @@ final class CloudKitSyncEngine {
         enqueue(save: s.toCKRecord(base: settingsServerRecord))
     }
 
-    /// Snapshots current Mac local state into a SettingsRecord, stamping each
-    /// of `touchedFields` with the current timestamp, and enqueues it for
-    /// publish. Used by call sites where multiple related fields change in
-    /// one user action (e.g. saving the global channels GroupBox).
     func publishSettingsTouching(_ touchedFields: [String]) {
-        guard isAvailable else { return }
-        guard !applyingRemoteSettings else { return }
+        guard isAvailable, !applyingRemoteSettings else { return }
         var s = localSettingsSnapshot()
         s.updatedAt = currentSettings?.updatedAt ?? s.updatedAt
         let now = Date()
@@ -418,14 +318,8 @@ final class CloudKitSyncEngine {
         enqueue(save: s.toCKRecord(base: settingsServerRecord))
     }
 
-    /// v3.2 — per-agent stamping path. Use when toggling a single agent's
-    /// `installed` / `tracking` / `mac` / `ios` sub-key so the LWW merge
-    /// only competes for that exact (agent, sub-key) pair instead of the
-    /// whole bundle. Falls back to the legacy bundle stamp for clients
-    /// that don't yet read the per-agent timestamps.
     func publishSettingsTouchingPerAgent(agent: String, subs: [String]) {
-        guard isAvailable else { return }
-        guard !applyingRemoteSettings else { return }
+        guard isAvailable, !applyingRemoteSettings else { return }
         var s = localSettingsSnapshot()
         s.updatedAt = currentSettings?.updatedAt ?? s.updatedAt
         let now = Date()
@@ -434,44 +328,138 @@ final class CloudKitSyncEngine {
         enqueue(save: s.toCKRecord(base: settingsServerRecord))
     }
 
-    /// Fetches the singleton SettingsRecord, merges with our local snapshot
-    /// (per-field LWW), and applies the result to local state. Updates the
-    /// `settingsServerRecord` cache so subsequent publishes preserve the
-    /// changeTag.
-    func fetchSettings() async {
+    func acknowledgeCommand(_ record: ControlCommandRecord) {
         guard isAvailable else { return }
-        let recordID = SettingsRecord.recordID
-        do {
-            let record = try await database.record(for: recordID)
-            settingsServerRecord = record
-            guard let remote = SettingsRecord(record) else {
-                logger.notice("fetchSettings: decode failed")
-                return
+        enqueue(save: record.toCKRecord())
+    }
+
+    // MARK: - Fetch
+
+    /// Triggers a CKSyncEngine delta fetch. Delivers fetchedRecordZoneChanges
+    /// which handles Settings (via applyRemoteSettings) and ControlCommands
+    /// (via ControlCommandRouter.apply). Replaces the old fetchSettings() +
+    /// drainPending() pair for the push-wakeup path.
+    func fetchSettings() async {
+        try? await syncEngine?.fetchChanges()
+    }
+
+    func fetchChanges() async {
+        try? await syncEngine?.fetchChanges()
+    }
+
+    // MARK: - Enqueue
+
+    private func enqueue(save record: CKRecord) {
+        let isSettings = record.recordType == CloudKitConstants.RecordType.settings
+        if isSettings {
+            settingsRecordsByID[record.recordID] = record
+        } else {
+            regularRecordsByID[record.recordID] = record
+        }
+        pendingWrites = regularRecordsByID.count + settingsRecordsByID.count
+        syncEngine?.state.add(pendingRecordZoneChanges: [.saveRecord(record.recordID)])
+    }
+
+    // MARK: - Incoming record fan-out
+
+    /// Called from `handleEvent` via `await MainActor.run { }` so the
+    /// CKRecord is transferred to the MainActor region before the
+    /// Task.detached captures it — required by Swift 6 region checking.
+    private nonisolated func scheduleHandleFetched(_ record: CKRecord) {
+        Task { @MainActor [self] in
+            switch record.recordType {
+            case CloudKitConstants.RecordType.settings:
+                self.settingsServerRecord = record
+                guard let remote = SettingsRecord(record) else {
+                    self.logger.notice("handleFetched: settings decode failed")
+                    return
+                }
+                var local = self.localSettingsSnapshot()
+                local.merge(with: remote)
+                self.currentSettings = local
+                self.applyRemoteSettings(local)
+
+            case CloudKitConstants.RecordType.controlCommand:
+                if let cmd = ControlCommandRecord(record) {
+                    await ControlCommandRouter.apply(cmd)
+                }
+
+            default:
+                break
             }
-            var local = localSettingsSnapshot()
-            local.merge(with: remote)
-            currentSettings = local
-            applyRemoteSettings(local)
-        } catch let cke as CKError where cke.code == .unknownItem {
-            // No record yet on server — nothing to merge. Initial publish
-            // happens lazily when the user makes the first local edit.
-            logger.info("fetchSettings: no settings record yet")
-        } catch {
-            logger.notice("fetchSettings failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    /// Builds a SettingsRecord from current Mac local state (UserDefaults +
-    /// SleepManager + ChannelStore). Timestamps are NOT touched here — only
-    /// per-field edit paths call `touch(...)`.
+    // MARK: - Settings application
+
+    private func applyRemoteSettings(_ s: SettingsRecord) {
+        applyingRemoteSettings = true
+        defer { applyingRemoteSettings = false }
+
+        let ud = UserDefaults.standard
+        ud.set(s.masterEnabled, forKey: "doomcoder.masterEnabled")
+        if SleepManager.shared.isActive != s.masterEnabled {
+            if s.masterEnabled { SleepManager.shared.enable() }
+            else { SleepManager.shared.disable() }
+        }
+        if let mode = DoomCoderMode(rawValue: s.mode), SleepManager.shared.mode != mode {
+            SleepManager.shared.mode = mode
+        }
+        if SleepManager.shared.sessionTimerHours != s.sessionTimerHrs {
+            SleepManager.shared.sessionTimerHours = s.sessionTimerHrs
+        }
+        if SleepManager.shared.screenOffRearmMinutes != s.screenOffRearmMin {
+            SleepManager.shared.screenOffRearmMinutes = s.screenOffRearmMin
+        }
+        ud.set(s.autoRevertSec, forKey: "doomcoder.session.autoRevertSeconds")
+        EventStore.retentionDays = s.retentionDays
+        ud.set(s.includePayloadSnippets, forKey: "doomcoder.privacy.includePayloadSnippets")
+
+        var store = ChannelStore.load()
+        store.global = ChannelStore.ChannelConfig(
+            macNotification: s.channelMacEnabled,
+            iOSCompanion: s.channeliOSEnabled
+        )
+        if let data = s.perAgentOverridesJSON.data(using: .utf8),
+           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
+            store.perAgent = map.reduce(into: [:]) { acc, kv in
+                acc[kv.key] = ChannelStore.ChannelConfig(
+                    macNotification: kv.value["mac"] ?? true,
+                    iOSCompanion: kv.value["ios"] ?? true
+                )
+            }
+        }
+        ChannelStore.save(store)
+
+        if let data = s.perAgentOverridesJSON.data(using: .utf8),
+           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
+            for agent in TrackedAgent.allCases {
+                if let tracking = map[agent.rawValue]?["tracking"] {
+                    TrackingStore.setEnabled(agent, tracking)
+                }
+            }
+        }
+
+        ChannelStore.savePrefs(ChannelStore.NotificationPrefs(
+            sessionStart: s.prefSessionStart,
+            sessionEnd: s.prefSessionEnd,
+            error: s.prefError,
+            permissionNeeded: s.prefPermissionNeeded,
+            agentResponse: s.prefAgentResponse,
+            subagentStart: s.prefSubagentStart,
+            subagentEnd: s.prefSubagentEnd,
+            toolUse: s.prefToolUse
+        ))
+
+        NotificationCenter.default.post(name: Self.settingsChangedNotification, object: nil)
+    }
+
     private func localSettingsSnapshot() -> SettingsRecord {
         let ud = UserDefaults.standard
         let prefs = ChannelStore.loadPrefs()
         let channels = ChannelStore.load().global
         let perAgent = ChannelStore.load().perAgent
         let perAgentJSON: String = {
-            // Build from allCases so TrackingStore state is always included even
-            // for agents with no per-channel ChannelStore override yet.
             var mapped: [String: [String: Bool]] = [:]
             for agent in TrackedAgent.allCases {
                 let ch = perAgent[agent.rawValue]
@@ -510,212 +498,123 @@ final class CloudKitSyncEngine {
         )
     }
 
-    /// Applies a (presumably merged) SettingsRecord to local Mac state. The
-    /// `applyingRemoteSettings` gate prevents the resulting didSet writes
-    /// from re-publishing the same values back to CloudKit.
-    private func applyRemoteSettings(_ s: SettingsRecord) {
-        applyingRemoteSettings = true
-        defer { applyingRemoteSettings = false }
+    // MARK: - Zone
 
-        let ud = UserDefaults.standard
-        ud.set(s.masterEnabled, forKey: "doomcoder.masterEnabled")
-        if SleepManager.shared.isActive != s.masterEnabled {
-            if s.masterEnabled { SleepManager.shared.enable() }
-            else { SleepManager.shared.disable() }
-        }
-        if let mode = DoomCoderMode(rawValue: s.mode), SleepManager.shared.mode != mode {
-            SleepManager.shared.mode = mode
-        }
-        if SleepManager.shared.sessionTimerHours != s.sessionTimerHrs {
-            SleepManager.shared.sessionTimerHours = s.sessionTimerHrs
-        }
-        if SleepManager.shared.screenOffRearmMinutes != s.screenOffRearmMin {
-            SleepManager.shared.screenOffRearmMinutes = s.screenOffRearmMin
-        }
-        ud.set(s.autoRevertSec, forKey: "doomcoder.session.autoRevertSeconds")
-        EventStore.retentionDays = s.retentionDays
-        ud.set(s.includePayloadSnippets, forKey: "doomcoder.privacy.includePayloadSnippets")
-
-        // Rebuild ChannelStore.Store from the flat fields + per-agent JSON.
-        var store = ChannelStore.load()
-        store.global = ChannelStore.ChannelConfig(
-            macNotification: s.channelMacEnabled,
-            iOSCompanion: s.channeliOSEnabled
-        )
-        if let data = s.perAgentOverridesJSON.data(using: .utf8),
-           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
-            store.perAgent = map.reduce(into: [:]) { acc, kv in
-                acc[kv.key] = ChannelStore.ChannelConfig(
-                    macNotification: kv.value["mac"] ?? true,
-                    iOSCompanion: kv.value["ios"] ?? true
-                )
-            }
-        }
-        ChannelStore.save(store)
-
-        // Sync TrackingStore from the `tracking` bit written by either side.
-        if let data = s.perAgentOverridesJSON.data(using: .utf8),
-           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
-            for agent in TrackedAgent.allCases {
-                if let tracking = map[agent.rawValue]?["tracking"] {
-                    TrackingStore.setEnabled(agent, tracking)
+    private func ensureZone() async throws {
+        let zone = CKRecordZone(zoneID: zoneID)
+        let op = CKModifyRecordZonesOperation(recordZonesToSave: [zone], recordZoneIDsToDelete: nil)
+        op.qualityOfService = .userInitiated
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            op.modifyRecordZonesResultBlock = { result in
+                switch result {
+                case .success:
+                    cont.resume()
+                case .failure(let err):
+                    if Self.isBenignAlreadyExistsError(err) { cont.resume() }
+                    else { cont.resume(throwing: err) }
                 }
             }
+            database.add(op)
         }
-
-        ChannelStore.savePrefs(ChannelStore.NotificationPrefs(
-            sessionStart: s.prefSessionStart,
-            sessionEnd: s.prefSessionEnd,
-            error: s.prefError,
-            permissionNeeded: s.prefPermissionNeeded,
-            agentResponse: s.prefAgentResponse,
-            subagentStart: s.prefSubagentStart,
-            subagentEnd: s.prefSubagentEnd,
-            toolUse: s.prefToolUse
-        ))
-
-        NotificationCenter.default.post(name: Self.settingsChangedNotification, object: nil)
     }
 
-    /// Marks a ControlCommand record as applied (or failed) so iOS can
-    /// reconcile its optimistic UI.
-    func acknowledgeCommand(_ record: ControlCommandRecord) {
+    // MARK: - Subscriptions
+
+    private func ensureSubscriptionsBestEffort() async {
+        let dbSub = CKDatabaseSubscription(subscriptionID: "doomcoder-db-sub")
+        let dbInfo = CKSubscription.NotificationInfo()
+        dbInfo.shouldSendContentAvailable = true
+        dbSub.notificationInfo = dbInfo
+
+        let settingsPredicate = NSPredicate(format: "recordName == %@", SettingsRecord.singletonRecordName)
+        let settingsSub = CKQuerySubscription(
+            recordType: CloudKitConstants.RecordType.settings,
+            predicate: settingsPredicate,
+            subscriptionID: "doomcoder-settings-sub",
+            options: [.firesOnRecordUpdate]
+        )
+        let settingsInfo = CKSubscription.NotificationInfo()
+        settingsInfo.shouldSendContentAvailable = true
+        settingsSub.notificationInfo = settingsInfo
+
+        let op = CKModifySubscriptionsOperation(
+            subscriptionsToSave: [dbSub, settingsSub],
+            subscriptionIDsToDelete: nil
+        )
+        op.qualityOfService = .utility
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            op.modifySubscriptionsResultBlock = { [logger] result in
+                switch result {
+                case .success:
+                    logger.info("ensureSubscriptions: db-sub + settings-sub OK")
+                case .failure(let err):
+                    if Self.isBenignAlreadyExistsError(err) {
+                        logger.info("ensureSubscriptions: subs already exist")
+                    } else {
+                        logger.error("ensureSubscriptions failed (non-fatal): \(err.localizedDescription, privacy: .public)")
+                    }
+                }
+                cont.resume()
+            }
+            database.add(op)
+        }
+    }
+
+    // MARK: - Heartbeat (90 s)
+
+    private func startHeartbeat() {
+        heartbeatTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let screenAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+                let appHidden    = NSApp?.isHidden ?? false
+                if screenAsleep && appHidden { return }
+                self.publishMacStatus()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        heartbeatTimer = timer
+    }
+
+    // MARK: - Event pruning (daily)
+
+    private func startPruneTimer() {
+        pruneTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.pruneOldCloudKitEvents() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pruneTimer = timer
+    }
+
+    /// Deletes CloudKit Event records older than EventStore.retentionDays.
+    /// Mirrors the SQLite pruning DoomCoder already does locally.
+    func pruneOldCloudKitEvents() async {
         guard isAvailable else { return }
-        enqueue(save: record.toCKRecord())
-    }
-
-    /// Manual end-to-end verification entry-point exposed from the
-    /// Configure → Settings → "Send Test Ping" button. Publishes one
-    /// MacStatus record and one NotificationLog record, which together
-    /// exercise the entire write path (zone → record → schema auto-
-    /// create → CK Dashboard visible row).
-    func sendTestPing() {
-        logger.info("sendTestPing tapped (isAvailable=\(self.isAvailable))")
-        publishMacStatus()
-        publishNotification(
-            sessionKey: "test-\(UUID().uuidString.prefix(8))",
-            agent: "claude",
-            phase: "system",
-            event: "test-ping",
-            title: "DoomCoder Test Ping",
-            body: "Manual ping from Configure → Settings.",
-            channel: "iOSCompanion",
-            success: true,
-            ts: Date(),
-            lastTool: nil,
-            cwdBase: "~/"
-        )
-    }
-
-    // MARK: Coalescing queue
-
-    private func enqueue(save record: CKRecord) {
-        pendingSaves.append(record)
-        pendingWrites = pendingSaves.count + pendingDeletes.count
-        scheduleFlush()
-    }
-
-    private func scheduleFlush() {
-        guard !flushScheduled else { return }
-        flushScheduled = true
-        Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            await self?.flush()
-        }
-    }
-
-    private func flush() async {
-        flushScheduled = false
-        let saves = pendingSaves
-        let deletes = pendingDeletes
-        pendingSaves.removeAll()
-        pendingDeletes.removeAll()
-        pendingWrites = 0
-        guard !saves.isEmpty || !deletes.isEmpty else { return }
-
-        // Dedupe by recordID — keep the LAST write for any given record (last
-        // wins for in-flight burst of session aggregate updates).
-        var byID: [CKRecord.ID: CKRecord] = [:]
-        for r in saves { byID[r.recordID] = r }
-        let unique = Array(byID.values)
-
-        // Split SettingsRecord out from everything else. SettingsRecord uses
-        // per-field LWW so it MUST save with .changedKeys (otherwise we
-        // clobber any iOS edits whose timestamps are newer for individual
-        // fields). All other records retain .allKeys for first-launch
-        // schema bootstrap.
-        let settingsRecords = unique.filter { $0.recordType == CloudKitConstants.RecordType.settings }
-        let otherRecords    = unique.filter { $0.recordType != CloudKitConstants.RecordType.settings }
-
-        if !otherRecords.isEmpty || !deletes.isEmpty {
-            let recordTypes = Set(otherRecords.map(\.recordType)).sorted().joined(separator: ",")
-            logger.info("flush(allKeys): \(otherRecords.count) saves [\(recordTypes, privacy: .public)] + \(deletes.count) deletes")
-            let op = CKModifyRecordsOperation(recordsToSave: otherRecords, recordIDsToDelete: deletes)
-            op.savePolicy = .allKeys
-            op.qualityOfService = .utility
-            op.modifyRecordsResultBlock = { [weak self] result in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    switch result {
-                    case .success:
-                        self.lastSyncAt = Date()
-                        self.lastError = nil
-                        self.logger.info("flush OK at \(self.lastSyncAt!)")
-                    case .failure(let err):
-                        self.lastError = err.localizedDescription
-                        self.logger.error("modifyRecords failed: \(err.localizedDescription, privacy: .public)")
-                        if let cke = err as? CKError, cke.code == .notAuthenticated {
-                            self.scheduleReauth()
-                        }
-                    }
+        let cutoff = Date(timeIntervalSinceNow: -Double(EventStore.retentionDays) * 86_400)
+        let pred = NSPredicate(format: "ts < %@", cutoff as NSDate)
+        let query = CKQuery(recordType: CloudKitConstants.RecordType.event, predicate: pred)
+        do {
+            let (matches, _) = try await database.records(matching: query, inZoneWith: zoneID,
+                                                          desiredKeys: [], resultsLimit: 200)
+            let ids = matches.compactMap { _, result in try? result.get().recordID }
+            guard !ids.isEmpty else { return }
+            let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: ids)
+            op.qualityOfService = .background
+            op.modifyRecordsResultBlock = { [logger] result in
+                if case .success = result {
+                    logger.info("pruneOldCloudKitEvents: deleted \(ids.count) events")
                 }
             }
             database.add(op)
-        }
-
-        if !settingsRecords.isEmpty {
-            logger.info("flush(changedKeys): \(settingsRecords.count) settings saves")
-            let op = CKModifyRecordsOperation(recordsToSave: settingsRecords, recordIDsToDelete: nil)
-            op.savePolicy = .changedKeys
-            op.qualityOfService = .utility
-            // Capture per-record results so we can refresh `settingsServerRecord`
-            // with the server-canonical copy (preserves changeTag for next save).
-            op.perRecordSaveBlock = { [weak self] _, result in
-                guard case .success(let saved) = result else { return }
-                Task { @MainActor [weak self] in
-                    self?.settingsServerRecord = saved
-                }
-            }
-            op.modifyRecordsResultBlock = { [weak self] result in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    switch result {
-                    case .success:
-                        self.lastSyncAt = Date()
-                        self.lastError = nil
-                    case .failure(let err):
-                        // .serverRecordChanged means another writer (iOS) beat us
-                        // to it. Re-fetch and re-merge.
-                        if let cke = err as? CKError, cke.code == .serverRecordChanged {
-                            self.logger.notice("settings serverRecordChanged — refetching")
-                            await self.fetchSettings()
-                        } else {
-                            self.lastError = err.localizedDescription
-                            self.logger.error("settings flush failed: \(err.localizedDescription, privacy: .public)")
-                            if let cke = err as? CKError, cke.code == .notAuthenticated {
-                                self.scheduleReauth()
-                            }
-                        }
-                    }
-                }
-            }
-            database.add(op)
+        } catch {
+            logger.notice("pruneOldCloudKitEvents query failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    /// One-shot recovery: if a publish fails because iCloud auth dropped,
-    /// re-run accountStatus 5 s later. Guarded so a burst of failures
-    /// doesn't queue dozens of probes.
+    // MARK: - Reauth
+
     private func scheduleReauth() {
         guard !reauthScheduled else { return }
         reauthScheduled = true
@@ -727,16 +626,171 @@ final class CloudKitSyncEngine {
         }
     }
 
-    // MARK: Helpers
+    // MARK: - Test ping
+
+    func sendTestPing() {
+        logger.info("sendTestPing (isAvailable=\(self.isAvailable))")
+        publishMacStatus()
+        publishNotification(
+            sessionKey: "test-\(UUID().uuidString.prefix(8))",
+            agent: "claude", phase: "system", event: "test-ping",
+            title: "DoomCoder Test Ping",
+            body: "Manual ping from Configure → Settings.",
+            channel: "iOSCompanion", success: true, ts: Date(),
+            lastTool: nil, cwdBase: "~/"
+        )
+    }
+
+    // MARK: - Helpers
 
     private nonisolated func sha256(_ s: String) -> String {
-        // Lightweight non-crypto digest fallback (CryptoKit kept out to avoid
-        // adding a framework just for this). 64-bit hash printed hex.
         var h: UInt64 = 1469598103934665603
         for byte in s.utf8 {
             h ^= UInt64(byte)
             h = h &* 1099511628211
         }
         return String(h, radix: 16)
+    }
+
+    private static func isBenignAlreadyExistsError(_ error: Error) -> Bool {
+        guard let cke = error as? CKError else { return false }
+        let benign: Set<CKError.Code> = [
+            .serverRejectedRequest, .unknownItem, .invalidArguments, .serverRecordChanged
+        ]
+        if benign.contains(cke.code) { return true }
+        if cke.code == .partialFailure,
+           let perItem = cke.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+            return perItem.values.allSatisfy { sub in
+                guard let s = sub as? CKError else { return false }
+                return benign.contains(s.code)
+            }
+        }
+        return false
+    }
+}
+
+// MARK: - CKSyncEngineDelegate
+
+extension CloudKitSyncEngine: CKSyncEngineDelegate {
+
+    /// Extracts the CKRecord.ID from a PendingRecordZoneChange enum case.
+    private nonisolated func id(from change: CKSyncEngine.PendingRecordZoneChange) -> CKRecord.ID? {
+        switch change {
+        case .saveRecord(let recordID):   return recordID
+        case .deleteRecord(let recordID): return recordID
+        @unknown default:                 return nil
+        }
+    }
+
+    nonisolated func handleEvent(
+        _ event: CKSyncEngine.Event,
+        syncEngine: CKSyncEngine
+    ) async {
+        switch event {
+
+        case .stateUpdate(let e):
+            if let data = try? JSONEncoder().encode(e.stateSerialization) {
+                UserDefaults.standard.set(data, forKey: Self.engineStateKey)
+            }
+
+        case .accountChange(let e):
+            await MainActor.run {
+                switch e.changeType {
+                case .signIn:
+                    self.isAvailable = true
+                case .signOut:
+                    self.isAvailable = false
+                    self.regularRecordsByID.removeAll()
+                    self.settingsRecordsByID.removeAll()
+                    self.pendingWrites = 0
+                case .switchAccounts:
+                    self.regularRecordsByID.removeAll()
+                    self.settingsRecordsByID.removeAll()
+                    self.pendingWrites = 0
+                    Task { await self.refreshAccountStatus() }
+                @unknown default:
+                    break
+                }
+            }
+
+        case .fetchedRecordZoneChanges(let e):
+            for change in e.modifications {
+                // Route through MainActor.run first so the CKRecord is in the
+                // MainActor region before scheduleHandleFetched captures it in
+                // the Task.detached closure — required by Swift 6 region checking.
+                await MainActor.run { self.scheduleHandleFetched(change.record) }
+            }
+            await MainActor.run {
+                self.lastSyncAt = Date()
+                self.lastError = nil
+            }
+
+        case .sentRecordZoneChanges(let e):
+            await MainActor.run {
+                for saved in e.savedRecords {
+                    self.regularRecordsByID.removeValue(forKey: saved.recordID)
+                    if saved.recordType == CloudKitConstants.RecordType.settings {
+                        self.settingsRecordsByID.removeValue(forKey: saved.recordID)
+                        self.settingsServerRecord = saved
+                    }
+                }
+                self.pendingWrites = self.regularRecordsByID.count + self.settingsRecordsByID.count
+                if !e.savedRecords.isEmpty {
+                    self.lastSyncAt = Date()
+                    self.lastError  = nil
+                }
+            }
+            for fail in e.failedRecordSaves {
+                // In SDK 26+, fail.error is already typed CKError.
+                let errCode = (fail.error as? CKError)?.code ?? (fail.error as CKError).code
+                if errCode == .serverRecordChanged,
+                   fail.record.recordType == CloudKitConstants.RecordType.settings {
+                    self.logger.notice("settings conflict — re-fetching")
+                    try? await syncEngine.fetchChanges()
+                }
+                if errCode == .notAuthenticated {
+                    await MainActor.run { self.scheduleReauth() }
+                }
+            }
+
+        default:
+            // Covers willSendChanges, didSendChanges, willFetchChanges,
+            // fetchedDatabaseChanges, sentDatabaseChanges, and any future cases.
+            break
+        }
+    }
+
+    /// Provides records to CKSyncEngine. Settings are sent first; both
+    /// batches use the default save policy (.ifServerRecordUnchanged) since
+    /// Settings records always carry the server changeTag from settingsServerRecord
+    /// and we handle .serverRecordChanged by re-fetching and re-merging.
+    /// MacStatus/Session/etc. are written with fresh records each heartbeat so
+    /// there is no prior changeTag — CKSyncEngine treats them as inserts when
+    /// the tag is absent, which is equivalent to .allKeys for first-write.
+    nonisolated func nextRecordZoneChangeBatch(
+        _ context: CKSyncEngine.SendChangesContext,
+        syncEngine: CKSyncEngine
+    ) async -> CKSyncEngine.RecordZoneChangeBatch? {
+        let pending = syncEngine.state.pendingRecordZoneChanges
+
+        // Settings first so conflicts are detected early.
+        let settingsSnap = await MainActor.run { self.settingsRecordsByID }
+        let settingsPending = pending.filter { id(from: $0).map { settingsSnap[$0] != nil } ?? false }
+        if !settingsPending.isEmpty {
+            return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: settingsPending) { [self] id in
+                await MainActor.run { self.settingsRecordsByID[id] }
+            }
+        }
+
+        // Heartbeat / event records.
+        let regularSnap = await MainActor.run { self.regularRecordsByID }
+        let regularPending = pending.filter { id(from: $0).map { regularSnap[$0] != nil } ?? false }
+        if !regularPending.isEmpty {
+            return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: regularPending) { [self] id in
+                await MainActor.run { self.regularRecordsByID[id] }
+            }
+        }
+
+        return nil
     }
 }
