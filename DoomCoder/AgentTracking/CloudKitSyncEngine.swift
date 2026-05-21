@@ -179,6 +179,30 @@ final class CloudKitSyncEngine {
 
         // Step 6: drain any ControlCommand records queued up while offline.
         await ControlCommandRouter.drainPending()
+
+        // Step 7: heartbeat. Republish MacStatus every 5 minutes so iOS sees
+        // a fresh `lastSeen` while the Mac is awake, even with no agent
+        // activity. Paused when the screen is asleep AND the app is hidden
+        // to avoid burning battery on a closed lid (sleep wake events still
+        // fire `publishMacStatus()` directly via SleepManager).
+        startMacStatusHeartbeat()
+    }
+
+    private var macStatusHeartbeatTimer: Timer?
+
+    private func startMacStatusHeartbeat() {
+        macStatusHeartbeatTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let screenAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+                let appHidden    = NSApp?.isHidden ?? false
+                if screenAsleep && appHidden { return }
+                self.publishMacStatus()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        macStatusHeartbeatTimer = timer
     }
 
     private func ensureZone() async throws {

@@ -22,6 +22,10 @@ final class CompanionSyncEngine: NSObject {
     var accountAvailable: Bool = false
     var lastSyncAt: Date?
     var zoneReady: Bool = false
+    /// Flips true the first time `.fetchedRecordZoneChanges` resolves
+    /// (regardless of result count) so the UI can distinguish "first fetch
+    /// is in flight" from "fetch completed but no Mac has paired yet".
+    var firstFetchCompleted: Bool = false
 
     // MARK: - Private CloudKit plumbing
 
@@ -249,6 +253,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             }
             await MainActor.run {
                 self.zoneReady = true
+                self.firstFetchCompleted = true
                 self.lastSyncAt = Date()
             }
 

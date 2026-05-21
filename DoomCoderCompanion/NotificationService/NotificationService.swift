@@ -51,31 +51,33 @@ class NotificationService: UNNotificationServiceExtension {
         let phaseRaw   = field("phase")
         let sessionKey = field("sessionKey")
 
-        // ── Drop empty pushes ───────────────────────────────────────────────
-        // If neither rich copy nor agent identity is present, the push is
-        // malformed (or arrived before its zone fetch). Suppress the OS-level
-        // placeholder ("Agent update") by emitting empty content; the system
-        // drops the banner. The in-app NotificationLog still records it.
-        if (richTitle?.isEmpty ?? true) && (richBody?.isEmpty ?? true) && (agentRaw?.isEmpty ?? true) {
-            contentHandler(UNMutableNotificationContent())
-            return
-        }
+        // ── Always render title / body ──────────────────────────────────────
+        // APNs already delivered `aps.alert = " "` (CompanionSyncEngine sets
+        // the placeholder so iOS will invoke the NSE at all). We MUST replace
+        // both fields with non-empty strings — returning empty content does
+        // NOT suppress the banner; the OS still shows the placeholder space.
+        // Fallback chain: push field → re-render via NotificationCopy from
+        // (agent, phase) → literal "DoomCoder · update".
+        let agent = agentRaw.flatMap { TrackedAgent(rawValue: $0) }
+        let phase = phaseRaw.flatMap { NormalizedEventPhase(rawValue: $0) }
+        let copyContext: NotificationCopy.EventContext? = {
+            guard let agent, let phase else { return nil }
+            return NotificationCopy.EventContext(agent: agent, phase: phase)
+        }()
 
-        // ── Enrich title / body ─────────────────────────────────────────────
-        // Prefer the Mac-rendered copy. If only `agent` + `phase` are present
-        // (older Mac builds, or stripped desiredKeys), re-render via the
-        // shared NotificationCopy so output is byte-identical to the Mac.
         if let t = richTitle, !t.isEmpty {
             mutable.title = t
-        } else if let agent = agentRaw.flatMap({ TrackedAgent(rawValue: $0) }),
-                  let phase = phaseRaw.flatMap({ NormalizedEventPhase(rawValue: $0) }) {
-            mutable.title = NotificationCopy.title(.init(agent: agent, phase: phase))
+        } else if let ctx = copyContext {
+            mutable.title = NotificationCopy.title(ctx)
+        } else {
+            mutable.title = "DoomCoder"
         }
         if let b = richBody, !b.isEmpty {
             mutable.body = b
-        } else if let agent = agentRaw.flatMap({ TrackedAgent(rawValue: $0) }),
-                  let phase = phaseRaw.flatMap({ NormalizedEventPhase(rawValue: $0) }) {
-            mutable.body = NotificationCopy.body(.init(agent: agent, phase: phase))
+        } else if let ctx = copyContext {
+            mutable.body = NotificationCopy.body(ctx)
+        } else {
+            mutable.body = "Update"
         }
 
         // Subtitle is intentionally NOT set — users found "On <MacName>" noisy.
@@ -84,7 +86,7 @@ class NotificationService: UNNotificationServiceExtension {
         if let sk = sessionKey { mutable.threadIdentifier = sk }
 
         // ── Interruption level ───────────────────────────────────────────────
-        if let p = phaseRaw.flatMap({ NormalizedEventPhase(rawValue: $0) }) {
+        if let p = phase {
             switch p.iOSInterruptionLevel {
             case .passive:       mutable.interruptionLevel = .passive
             case .active:        mutable.interruptionLevel = .active
@@ -94,10 +96,17 @@ class NotificationService: UNNotificationServiceExtension {
         }
 
         // ── Agent icon attachment ────────────────────────────────────────────
-        if let slug = agentRaw.flatMap({ TrackedAgent(rawValue: $0) })?.iconSlug,
-           let iconURL = AppGroupCache.iconURL(slug: slug),
-           let attachment = try? UNNotificationAttachment(identifier: "icon", url: iconURL) {
-            mutable.attachments = [attachment]
+        // Bundle (NSE target) → App Group cache. Bundle wins so a freshly
+        // installed iOS build always has icons even before the first
+        // CloudKit AgentIcon fetch resolves.
+        if let slug = agent?.iconSlug {
+            let bundleURL = Bundle(for: NotificationService.self)
+                .url(forResource: slug, withExtension: "png")
+            let iconURL = bundleURL ?? AppGroupCache.iconURL(slug: slug)
+            if let url = iconURL,
+               let attachment = try? UNNotificationAttachment(identifier: "icon", url: url) {
+                mutable.attachments = [attachment]
+            }
         }
 
         contentHandler(mutable)

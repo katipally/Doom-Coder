@@ -18,12 +18,8 @@ struct SettingsView: View {
             Form {
                 masterSection
                 channelsSection
-                phaseSection
-                timersSection
-                privacySection
                 primaryMacSection
                 historySection
-                testSection
                 aboutSection
             }
             .navigationTitle("Settings")
@@ -33,65 +29,38 @@ struct SettingsView: View {
     // MARK: - Sections
 
     private var masterSection: some View {
-        Section("Global") {
+        Section {
             Toggle("DoomCoder enabled", isOn: binding("masterEnabled", \.masterEnabled))
+        } footer: {
+            Text("Pauses all DoomCoder activity on your Mac. Sleep prevention, hook tracking, and notifications stop until you re-enable.")
         }
     }
 
     private var channelsSection: some View {
-        Section("Notification channels") {
-            Toggle("macOS notifications", isOn: binding("channelMacEnabled", \.channelMacEnabled))
-            Toggle("iOS notifications",   isOn: binding("channeliOSEnabled", \.channeliOSEnabled))
-        }
-    }
-
-    private var phaseSection: some View {
-        Section("Phase toggles") {
-            Toggle("Session start",      isOn: binding("prefSessionStart",     \.prefSessionStart))
-            Toggle("Session end",        isOn: binding("prefSessionEnd",       \.prefSessionEnd))
-            Toggle("Error",              isOn: binding("prefError",            \.prefError))
-            Toggle("Permission needed",  isOn: binding("prefPermissionNeeded", \.prefPermissionNeeded))
-            Toggle("Agent response",     isOn: binding("prefAgentResponse",    \.prefAgentResponse))
-            Toggle("Subagent start",     isOn: binding("prefSubagentStart",    \.prefSubagentStart))
-            Toggle("Subagent end",       isOn: binding("prefSubagentEnd",      \.prefSubagentEnd))
-            Toggle("Tool use",           isOn: binding("prefToolUse",          \.prefToolUse))
-        }
-    }
-
-    private var timersSection: some View {
-        Section("Timers") {
-            // Retention days: discrete 1 / 7 / 30 days.
-            Picker("Retention", selection: Binding(
-                get: { store.current.retentionDays },
-                set: { v in store.update(field: "retentionDays") { $0.retentionDays = v } }
-            )) {
-                Text("1 day").tag(1)
-                Text("7 days").tag(7)
-                Text("30 days").tag(30)
-            }
-            .pickerStyle(.segmented)
-
-            VStack(alignment: .leading) {
-                Text("Auto-revert after: \(store.current.autoRevertSec) s")
-                Slider(
-                    value: Binding(
-                        get: { Double(store.current.autoRevertSec) },
-                        set: { v in store.update(field: "autoRevertSec") { $0.autoRevertSec = Int(v) } }
-                    ),
-                    in: 10...120,
-                    step: 5
+        Section {
+            Toggle("iOS notifications", isOn: binding("channeliOSEnabled", \.channeliOSEnabled))
+            Button {
+                guard let macId = primaryMacId else { return }
+                _ = CommandPublisher.shared.send(
+                    verb: .sendTestNotification,
+                    args: ["channel": "iOS"],
+                    targetMacId: macId
                 )
+                testSent = true
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    testSent = false
+                }
+            } label: {
+                Label(testSent ? "Sent ✓" : "Send test notification", systemImage: "bell.badge")
             }
-        }
-    }
-
-    private var privacySection: some View {
-        Section("Privacy") {
-            Toggle("Include payload snippets",
-                   isOn: binding("includePayloadSnippets", \.includePayloadSnippets))
-            Text("When enabled, truncated tool-output snippets are stored in iCloud and shown in notification bodies.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .disabled(primaryMacId == nil || testSent || !store.current.channeliOSEnabled)
+        } header: {
+            Text("Notifications")
+        } footer: {
+            if !store.current.channeliOSEnabled {
+                Text("iOS notifications are off — agent toggles will not deliver alerts to this device.")
+            }
         }
     }
 
@@ -125,27 +94,8 @@ struct SettingsView: View {
         }
     }
 
-    private var testSection: some View {
-        Section("Diagnostics") {
-            Button(testSent ? "Sent ✓" : "Send test notification") {
-                guard let macId = primaryMacId else { return }
-                _ = CommandPublisher.shared.send(
-                    verb: .sendTestNotification,
-                    args: ["channel": "iOS"],
-                    targetMacId: macId
-                )
-                testSent = true
-                Task {
-                    try? await Task.sleep(for: .seconds(3))
-                    testSent = false
-                }
-            }
-            .disabled(primaryMacId == nil || testSent)
-        }
-    }
-
     private var aboutSection: some View {
-        Section("About") {
+        Section {
             LabeledContent("Version") {
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
             }
@@ -159,11 +109,14 @@ struct SettingsView: View {
             } else {
                 ForEach(Array(macStore.byMacId.values), id: \.macId) { mac in
                     LabeledContent(mac.name) {
-                        Text(mac.version)
-                            .foregroundStyle(.secondary)
+                        Text(mac.version).foregroundStyle(.secondary)
                     }
                 }
             }
+        } header: {
+            Text("About")
+        } footer: {
+            Text("Phase, retention, payload, and macOS-channel preferences live on your Mac. Open DoomCoder there for advanced settings.")
         }
     }
 

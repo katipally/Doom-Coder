@@ -18,7 +18,16 @@ final class MacStatusStore {
     static let shared = MacStatusStore()
     private init() {
         primaryMacIdOverride = AppGroupCache.defaults.string(forKey: Self.primaryMacIdKey)
+        // Warm from App Group cache so the cold-launch UI shows the last
+        // known Mac instantly, before the first CloudKit fetch resolves.
+        if let cached = AppGroupCache.read([String: MacStatusRecord].self,
+                                           forKey: Self.cacheKey) {
+            byMacId = cached
+        }
     }
+
+    /// App Group cache key for the full byMacId snapshot.
+    static let cacheKey = "cache.macStatus.byMacId"
 
     /// UserDefaults key (App Group) that pins a specific macId as the primary.
     /// When unset, primary falls back to "most recently seen Mac".
@@ -47,12 +56,14 @@ final class MacStatusStore {
 
     func upsert(_ r: MacStatusRecord) {
         byMacId[r.macId] = r
+        AppGroupCache.write(byMacId, forKey: Self.cacheKey)
     }
 
     func clear() {
         byMacId.removeAll()
         primaryMacIdOverride = nil
         AppGroupCache.defaults.removeObject(forKey: Self.primaryMacIdKey)
+        AppGroupCache.defaults.removeObject(forKey: Self.cacheKey)
     }
 }
 

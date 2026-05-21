@@ -1,6 +1,8 @@
-// RootTabView.swift — DoomCoder Companion
-// Top-level tab container. iOS 26 gives Liquid Glass chrome for free;
-// we just declare the tabs and let the system render them.
+// RootTabView.swift — DoomCoder Companion (v3.1)
+// 3 tabs: Home / Agents / Settings. The "Sessions" tab from v3.0 is
+// retired — the per-session detail screen is reachable via Agents tab
+// drill-in (see AgentsView in SessionsView.swift, which keeps that
+// filename to avoid pbxproj surgery).
 
 import SwiftUI
 
@@ -10,8 +12,8 @@ struct RootTabView: View {
             Tab("Home", systemImage: "house.fill") {
                 HomeView()
             }
-            Tab("Sessions", systemImage: "waveform.path") {
-                SessionsView()
+            Tab("Agents", systemImage: "cpu") {
+                AgentsView()
             }
             Tab("Settings", systemImage: "gearshape.fill") {
                 SettingsView()

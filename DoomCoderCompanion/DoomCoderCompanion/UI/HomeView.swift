@@ -8,14 +8,15 @@ import DoomCoderCore
 
 struct HomeView: View {
 
-    @State private var macStatus  = MacStatusStore.shared
+    @State private var macStatus   = MacStatusStore.shared
     @State private var sessionStore = SessionStore.shared
-    @State private var settings   = SettingsStore.shared
+    @State private var settings    = SettingsStore.shared
+    @State private var sync        = CompanionSyncEngine.shared
 
     var body: some View {
         NavigationStack {
             Group {
-                if macStatus.byMacId.isEmpty {
+                if shouldShowEmptyState {
                     emptyState
                 } else {
                     content
@@ -25,13 +26,27 @@ struct HomeView: View {
         }
     }
 
+    /// Show "No Mac" only after iCloud has positively reported "no Mac
+    /// paired" — never on cold launch while the first fetch is still in
+    /// flight. Prevents the false-positive that v3.0 users hit on every
+    /// app open.
+    private var shouldShowEmptyState: Bool {
+        if !sync.accountAvailable { return true }
+        if !macStatus.byMacId.isEmpty { return false }
+        return sync.firstFetchCompleted
+    }
+
     // MARK: - Empty state
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No Mac Detected",
-            systemImage: "desktopcomputer.trianglebadge.exclamationmark",
-            description: Text("Open DoomCoder on your Mac first — the iPhone app will sync once it sees the Mac.")
+            sync.accountAvailable ? "No Mac Detected" : "iCloud Sign-In Required",
+            systemImage: sync.accountAvailable
+                ? "desktopcomputer.trianglebadge.exclamationmark"
+                : "icloud.slash",
+            description: Text(sync.accountAvailable
+                ? "Sign in on your Mac with the same Apple Account to start syncing."
+                : "Sign in to iCloud in Settings to pair this device with your Mac.")
         )
     }
 
@@ -40,11 +55,18 @@ struct HomeView: View {
     private var content: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if !sync.firstFetchCompleted && macStatus.byMacId.isEmpty {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Syncing with iCloud…").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 4)
+                }
                 if let mac = macStatus.primary {
                     MacStatusCard(mac: mac)
                 }
                 PreventSleepCard(settings: settings)
-                AgentsCard(sessionStore: sessionStore)
             }
             .padding()
         }
@@ -212,137 +234,3 @@ private struct DurationStrip: View {
         h == 0 ? "Prevent sleep indefinitely" : "Prevent sleep for \(h) hour\(h == 1 ? "" : "s")"
     }
 }
-
-// MARK: - AgentsCard
-
-private struct AgentsCard: View {
-    var sessionStore: SessionStore
-
-    var body: some View {
-        GroupBox {
-            VStack(spacing: 10) {
-                // Live session rows surface above the agent grid so a
-                // running session is the first thing the eye lands on.
-                if !sessionStore.live.isEmpty {
-                    VStack(spacing: 6) {
-                        ForEach(sessionStore.live, id: \.sessionKey) { s in
-                            ActiveSessionRow(session: s)
-                        }
-                    }
-                    Divider()
-                }
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 8) {
-                    ForEach(TrackedAgent.allCases, id: \.rawValue) { agent in
-                        AgentTile(agent: agent, sessionStore: sessionStore)
-                    }
-                }
-            }
-        } label: {
-            Label("Agents", systemImage: "cpu")
-        }
-    }
-}
-
-// MARK: - ActiveSessionRow
-
-private struct ActiveSessionRow: View {
-    let session: SessionRecord
-
-    private var startedAgo: String {
-        let interval = Date().timeIntervalSince(session.updatedAt)
-        if interval < 60 { return "just now" }
-        let m = Int(interval / 60)
-        return m < 60 ? "\(m)m" : "\(m / 60)h \(m % 60)m"
-    }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle().fill(Color.green).frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.cwdDisplay)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text(session.displayState)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Text(startedAgo)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-private extension SessionRecord {
-    /// Last path component of cwd; falls back to the whole string.
-    var cwdDisplay: String {
-        let path = cwd
-        if path.isEmpty { return agent }
-        return (path as NSString).lastPathComponent
-    }
-}
-
-private struct AgentTile: View {
-    let agent: TrackedAgent
-    var sessionStore: SessionStore
-
-    @State private var paused: Bool = false
-
-    private var activeSession: SessionRecord? {
-        sessionStore.live.first { $0.agent == agent.rawValue }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(agent.displayName)
-                    .font(.caption.bold())
-                    .lineLimit(1)
-                Spacer()
-                Circle()
-                    .fill(activeSession != nil ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
-            }
-            Text(activeSession?.displayState ?? "Idle")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            // Per-agent pause / resume — fires the matching ControlCommand
-            // verb, which the Mac router applies (sets a runtime gate so the
-            // agent's hook events stop / start firing notifications).
-            Button {
-                togglePaused()
-            } label: {
-                Label(paused ? "Resume" : "Pause",
-                      systemImage: paused ? "play.fill" : "pause.fill")
-                    .font(.caption2.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            .sensoryFeedback(.impact(weight: .light), trigger: paused)
-            .accessibilityLabel("\(paused ? "Resume" : "Pause") \(agent.displayName)")
-        }
-        .padding(10)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func togglePaused() {
-        guard let macId = MacStatusStore.shared.primary?.macId else { return }
-        let next = !paused
-        paused = next
-        _ = CommandPublisher.shared.send(
-            verb: next ? .pauseAgent : .resumeAgent,
-            args: ["agent": agent.rawValue],
-            targetMacId: macId
-        )
-    }
-}
-
-// MARK: - WakeCard removed in v3.0 (Wake-on-LAN deprecated).

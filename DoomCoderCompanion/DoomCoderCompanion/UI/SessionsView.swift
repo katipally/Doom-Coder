@@ -1,41 +1,189 @@
-// SessionsView.swift — DoomCoder Companion
-// Displays live AI-agent sessions in a list and provides a detail drill-down.
-// A 5 s foreground backstop calls fetchChanges() while the view is visible.
+// SessionsView.swift — DoomCoder Companion (v3.1)
+// Hosts the new "Agents" tab UI plus the per-session detail drill-down.
+// File name preserved from v3.0 (Sessions tab) to avoid an Xcode project
+// surgery; the public surface is `AgentsView` which RootTabView now wires
+// in place of the retired SessionsView.
 
 import SwiftUI
+import UIKit
 import DoomCoderCore
 
-struct SessionsView: View {
+// MARK: - AgentIconLoader
 
-    @State private var sessionStore  = SessionStore.shared
-    @State private var notifStore    = NotificationLogStore.shared
+/// Resolves a SwiftUI Image for a TrackedAgent. Bundle Asset catalog wins
+/// (ships with the app, works on cold launch); the App Group icon cache —
+/// populated by CloudKit AgentIcon push from the Mac — is a fallback for
+/// agents added after this build shipped. SF Symbol is the last resort.
+enum AgentIconLoader {
+
+    static func bundleAssetName(for agent: TrackedAgent) -> String? {
+        switch agent {
+        case .claude:     return "agent-claude"
+        case .cursor:     return "agent-cursor"
+        case .windsurf:   return "agent-windsurf"
+        case .codexCLI:   return "agent-codex"
+        case .copilotCLI: return "agent-copilot-cli"
+        case .vscode:     return nil
+        }
+    }
+
+    static func sfSymbol(for agent: TrackedAgent) -> String {
+        switch agent {
+        case .claude:     return "c.circle.fill"
+        case .cursor:     return "cursorarrow.rays"
+        case .vscode:     return "chevron.left.forwardslash.chevron.right"
+        case .copilotCLI: return "terminal.fill"
+        case .windsurf:   return "wind"
+        case .codexCLI:   return "circle.hexagongrid.fill"
+        }
+    }
+
+    @ViewBuilder
+    static func image(for agent: TrackedAgent, size: CGFloat = 28) -> some View {
+        if let name = bundleAssetName(for: agent), UIImage(named: name) != nil {
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        } else if let url = AppGroupCache.iconURL(slug: agent.iconSlug),
+                  let data = try? Data(contentsOf: url),
+                  let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        } else {
+            Image(systemName: sfSymbol(for: agent))
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - PerAgentOverrides codec
+
+/// Wire format mirrors the Mac side: `{"claude":{"mac":true,"ios":false}, ...}`.
+/// Per Q6, iOS treats the agent enable bit as a single global switch — we
+/// keep both `mac` and `ios` in lock-step on every write so a legacy reader
+/// (older Mac build that only reads `mac`) still sees the user's intent.
+enum PerAgentOverrides {
+
+    static func isEnabled(_ agent: TrackedAgent, in json: String) -> Bool {
+        guard
+            let data = json.data(using: .utf8),
+            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Bool]]
+        else { return true }
+        if let entry = dict[agent.rawValue] {
+            // Either flag set to false → disabled.
+            return (entry["mac"] ?? true) && (entry["ios"] ?? true)
+        }
+        return true
+    }
+
+    static func setting(_ agent: TrackedAgent, enabled: Bool, in json: String) -> String {
+        var dict: [String: [String: Bool]] = {
+            guard
+                let data = json.data(using: .utf8),
+                let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Bool]]
+            else { return [:] }
+            return parsed
+        }()
+        var entry = dict[agent.rawValue] ?? [:]
+        entry["mac"] = enabled
+        entry["ios"] = enabled
+        dict[agent.rawValue] = entry
+        guard let out = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: out, encoding: .utf8) else {
+            return json
+        }
+        return str
+    }
+}
+
+// MARK: - Agent status (derived, no new CloudKit data)
+
+enum AgentStatus {
+    case disabled, active, waiting, idle
+
+    var label: String {
+        switch self {
+        case .disabled: return "Off"
+        case .active:   return "Active"
+        case .waiting:  return "Needs you"
+        case .idle:     return "Idle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .disabled: return .secondary
+        case .active:   return .green
+        case .waiting:  return .orange
+        case .idle:     return .secondary
+        }
+    }
+}
+
+@MainActor
+private func currentStatus(for agent: TrackedAgent,
+                           settings: SettingsRecord,
+                           sessions: [SessionRecord]) -> AgentStatus {
+    if PerAgentOverrides.isEnabled(agent, in: settings.perAgentOverridesJSON) == false {
+        return .disabled
+    }
+    let live = sessions.first { $0.agent == agent.rawValue }
+    if let s = live {
+        return s.awaitingPermission ? .waiting : .active
+    }
+    return .idle
+}
+
+// MARK: - AgentsView
+
+struct AgentsView: View {
+
+    @State private var sessionStore = SessionStore.shared
+    @State private var settings     = SettingsStore.shared
 
     var body: some View {
         NavigationStack {
-            Group {
-                if sessionStore.live.isEmpty {
-                    ContentUnavailableView(
-                        "No Active Sessions",
-                        systemImage: "waveform.path.ecg",
-                        description: Text("Start a coding session on your Mac to see it here.")
-                    )
-                } else {
-                    List(sessionStore.live, id: \.sessionKey) { session in
-                        NavigationLink(value: session) {
-                            SessionTile(session: session)
+            List {
+                if !sessionStore.live.isEmpty {
+                    Section("Live") {
+                        ForEach(sessionStore.live, id: \.sessionKey) { s in
+                            NavigationLink(value: s) {
+                                LiveSessionRow(session: s)
+                            }
                         }
                     }
-                    .listStyle(.insetGrouped)
+                }
+                Section("Configured") {
+                    ForEach(TrackedAgent.allCases, id: \.rawValue) { agent in
+                        NavigationLink(value: agent) {
+                            AgentRow(agent: agent,
+                                     settings: settings,
+                                     sessionStore: sessionStore)
+                        }
+                    }
                 }
             }
-            .navigationTitle("Sessions")
+            .listStyle(.insetGrouped)
+            .navigationTitle("Agents")
+            .navigationDestination(for: TrackedAgent.self) { agent in
+                AgentDetailView(agent: agent)
+            }
             .navigationDestination(for: SessionRecord.self) { session in
                 SessionDetailView(session: session)
             }
         }
         .task {
-            // Fetch every 30 s while foregrounded on this tab as a backstop.
-            // Real-time updates arrive via CKDatabaseSubscription silent push.
+            // Foreground backstop — push delivery is the primary path but we
+            // re-fetch every 30 s while the user is on this tab in case a
+            // silent push was dropped.
             while !Task.isCancelled {
                 await CompanionSyncEngine.shared.fetchChanges()
                 try? await Task.sleep(for: .seconds(30))
@@ -44,65 +192,184 @@ struct SessionsView: View {
     }
 }
 
-// MARK: - SessionTile
+// MARK: - LiveSessionRow
 
-private struct SessionTile: View {
+private struct LiveSessionRow: View {
     let session: SessionRecord
 
+    private var agent: TrackedAgent? { TrackedAgent(rawValue: session.agent) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(TrackedAgent(rawValue: session.agent)?.displayName ?? session.agent)
-                    .font(.headline)
-                Spacer()
-                if session.awaitingPermission {
-                    Label("Needs you", systemImage: "hand.raised.fill")
-                        .font(.caption.bold())
-                        .foregroundStyle(.orange)
+        HStack(spacing: 12) {
+            if let agent { AgentIconLoader.image(for: agent, size: 32) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent?.displayName ?? session.agent).font(.headline)
+                if let base = session.cwdBase, !base.isEmpty {
+                    Text(base).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(session.displayState).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            Spacer()
+            if session.awaitingPermission {
+                Label("Needs you", systemImage: "hand.raised.fill")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - AgentRow
+
+private struct AgentRow: View {
+    let agent: TrackedAgent
+    var settings: SettingsStore
+    var sessionStore: SessionStore
+
+    private var status: AgentStatus {
+        currentStatus(for: agent,
+                      settings: settings.current,
+                      sessions: sessionStore.live)
+    }
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { PerAgentOverrides.isEnabled(agent, in: settings.current.perAgentOverridesJSON) },
+            set: { newVal in
+                let next = PerAgentOverrides.setting(agent,
+                                                     enabled: newVal,
+                                                     in: settings.current.perAgentOverridesJSON)
+                settings.update(field: "perAgentOverridesJSON") {
+                    $0.perAgentOverridesJSON = next
                 }
             }
-            if let base = session.cwdBase {
-                Text(base)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AgentIconLoader.image(for: agent, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent.displayName).font(.body)
+                StatusPill(status: status)
             }
-            HStack(spacing: 8) {
-                Label("\(session.toolCallCount) tools", systemImage: "hammer")
-                if session.errorCount > 0 {
-                    Label("\(session.errorCount) err", systemImage: "xmark.circle")
-                        .foregroundStyle(.red)
-                }
-                Spacer()
-                Text(session.updatedAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .font(.caption)
+            Spacer()
+            Toggle("", isOn: isEnabled)
+                .labelsHidden()
+                .accessibilityLabel("Enable \(agent.displayName)")
         }
         .padding(.vertical, 4)
     }
 }
 
-// MARK: - SessionDetailView
+private struct StatusPill: View {
+    let status: AgentStatus
+    var body: some View {
+        Text(status.label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(status.tint.opacity(0.18))
+            .foregroundStyle(status.tint)
+            .clipShape(Capsule())
+    }
+}
+
+// MARK: - AgentDetailView
+
+struct AgentDetailView: View {
+
+    let agent: TrackedAgent
+    @State private var settings     = SettingsStore.shared
+    @State private var sessionStore = SessionStore.shared
+    @State private var notifStore   = NotificationLogStore.shared
+
+    private var status: AgentStatus {
+        currentStatus(for: agent,
+                      settings: settings.current,
+                      sessions: sessionStore.live)
+    }
+
+    private var entries: [NotificationLogRecord] {
+        notifStore.entries.filter { $0.agent == agent.rawValue }
+    }
+
+    private var liveForAgent: [SessionRecord] {
+        sessionStore.live.filter { $0.agent == agent.rawValue }
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { PerAgentOverrides.isEnabled(agent, in: settings.current.perAgentOverridesJSON) },
+            set: { newVal in
+                let next = PerAgentOverrides.setting(agent,
+                                                     enabled: newVal,
+                                                     in: settings.current.perAgentOverridesJSON)
+                settings.update(field: "perAgentOverridesJSON") {
+                    $0.perAgentOverridesJSON = next
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 14) {
+                    AgentIconLoader.image(for: agent, size: 44)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(agent.displayName).font(.title3.weight(.semibold))
+                        StatusPill(status: status)
+                    }
+                }
+                Toggle("Notifications enabled", isOn: enabledBinding)
+            }
+
+            if !liveForAgent.isEmpty {
+                Section("Live sessions") {
+                    ForEach(liveForAgent, id: \.sessionKey) { s in
+                        NavigationLink(value: s) {
+                            LiveSessionRow(session: s)
+                        }
+                    }
+                }
+            }
+
+            Section("History (\(entries.count))") {
+                if entries.isEmpty {
+                    Text("No events recorded yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(entries, id: \.notifId) { entry in
+                        EventRow(entry: entry)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle(agent.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - SessionDetailView (moved from retired SessionsView body)
 
 struct SessionDetailView: View {
 
     let session: SessionRecord
 
-    // NOTE: We reuse NotificationLogStore for per-session event timeline rather
-    // than maintaining a separate EventStore (deferred to v1.1 when EventRecord
-    // volume may warrant its own store).
     @State private var notifStore = NotificationLogStore.shared
 
     private var relatedEntries: [NotificationLogRecord] {
-        notifStore.entries
-            .filter { $0.sessionKey == session.sessionKey }
+        notifStore.entries.filter { $0.sessionKey == session.sessionKey }
     }
 
     var body: some View {
         List {
             Section("Session") {
-                LabeledContent("Agent", value: TrackedAgent(rawValue: session.agent)?.displayName ?? session.agent)
+                LabeledContent("Agent",
+                               value: TrackedAgent(rawValue: session.agent)?.displayName ?? session.agent)
                 LabeledContent("State", value: session.displayState)
                 if let base = session.cwdBase {
                     LabeledContent("Directory", value: base)
@@ -118,8 +385,7 @@ struct SessionDetailView: View {
 
             Section("Timeline (\(relatedEntries.count))") {
                 if relatedEntries.isEmpty {
-                    Text("No events synced yet")
-                        .foregroundStyle(.secondary)
+                    Text("No events synced yet").foregroundStyle(.secondary)
                 } else {
                     ForEach(relatedEntries, id: \.notifId) { entry in
                         EventRow(entry: entry)
@@ -139,7 +405,7 @@ struct SessionDetailView: View {
     }
 }
 
-// MARK: - EventRow
+// MARK: - EventRow (shared)
 
 private struct EventRow: View {
     let entry: NotificationLogRecord
@@ -149,13 +415,14 @@ private struct EventRow: View {
             HStack {
                 phaseLabel
                 Spacer()
-                Text(entry.ts, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                Text(entry.ts, style: .time).font(.caption2).foregroundStyle(.tertiary)
             }
-            Text(entry.body)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !entry.title.isEmpty {
+                Text(entry.title).font(.caption.weight(.semibold))
+            }
+            if !entry.body.isEmpty {
+                Text(entry.body).font(.caption).foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
     }

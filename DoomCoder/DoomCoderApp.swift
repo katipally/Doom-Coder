@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UserNotifications
+import ServiceManagement
 
 @main
 struct DoomCoderApp: App {
@@ -44,6 +45,18 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
         // Start process monitor: NSWorkspace IDE notifications + CLI proc_listpids scan.
         _ = AgentProcessMonitor.shared
+
+        // v3.1 one-shot: default-on launch-at-login. Companion users expect
+        // remote control without first opening DoomCoder on the Mac. The
+        // Configure pane's manual toggle continues to honor opt-out after
+        // this — we only register if the migration flag has never run.
+        let loginItemFlagKey = "migration.v3_1.loginItemRegistered"
+        if UserDefaults.standard.bool(forKey: loginItemFlagKey) == false {
+            if SMAppService.mainApp.status != .enabled {
+                try? SMAppService.mainApp.register()
+            }
+            UserDefaults.standard.set(true, forKey: loginItemFlagKey)
+        }
 
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).

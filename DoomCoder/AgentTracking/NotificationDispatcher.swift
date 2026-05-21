@@ -15,7 +15,14 @@ final class NotificationDispatcher {
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "notify")
     private var lastDispatchAt: [String: Date] = [:]
+    /// Per-(sessionKey, phase) gate. Suppresses dual-fire from agents that
+    /// emit two hooks for the same logical event (Claude Code's PreToolUse +
+    /// Notification both fire on a permission prompt). Independent of the
+    /// rendered-copy `lastDispatchAt` key because copy can vary per-hook
+    /// when context (lastTool, cwdBase) hasn't fully populated yet.
+    private var lastPhaseDispatchAt: [String: Date] = [:]
     private let dedupeWindow: TimeInterval = 10
+    private let phaseDedupeWindow: TimeInterval = 5
 
     // Cached permission status. Updated by `refreshPermissionStatus()` on
     // launch, on channel-toggle, and when the app becomes active.
@@ -124,6 +131,16 @@ final class NotificationDispatcher {
         )
         let title = DoomCoderCore.NotificationCopy.title(copyContext)
         let body  = DoomCoderCore.NotificationCopy.body(copyContext)
+
+        // Coarse gate: per (sessionKey, phase). Catches the Claude PreToolUse
+        // / Notification dual-fire even when rendered copy differs.
+        let phaseKey = "\(ev.sessionKey)::\(ev.phase.rawValue)"
+        if let last = lastPhaseDispatchAt[phaseKey],
+           Date().timeIntervalSince(last) < phaseDedupeWindow {
+            return
+        }
+        lastPhaseDispatchAt[phaseKey] = Date()
+
         let key = "\(ev.sessionKey)::\(ev.phase.rawValue)::\(title)::\(body)"
         if let last = lastDispatchAt[key], Date().timeIntervalSince(last) < dedupeWindow {
             return
@@ -134,6 +151,10 @@ final class NotificationDispatcher {
         if lastDispatchAt.count > 100 {
             let staleThreshold = dedupeWindow * 8
             lastDispatchAt = lastDispatchAt.filter { Date().timeIntervalSince($0.value) < staleThreshold }
+        }
+        if lastPhaseDispatchAt.count > 100 {
+            let staleThreshold = phaseDedupeWindow * 8
+            lastPhaseDispatchAt = lastPhaseDispatchAt.filter { Date().timeIntervalSince($0.value) < staleThreshold }
         }
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
         let ts = Date().timeIntervalSince1970
