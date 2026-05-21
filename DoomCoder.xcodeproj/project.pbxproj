@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -52,6 +52,8 @@
 		DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* ControlCommandRouter.swift */; };
 		DC0000000000002000000202 /* WoLProfileExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* WoLProfileExporter.swift */; };
 		DC0000000000002000000203 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000003 /* DoomCoderCore */; };
+		DD9088762FBFAD4D00CA2FE6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD9088752FBFAD4D00CA2FE6 /* WidgetKit.framework */; };
+		DD9088782FBFAD4D00CA2FE6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD9088772FBFAD4D00CA2FE6 /* SwiftUI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -101,7 +103,25 @@
 		DC0000000000001000000200 /* CloudKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncEngine.swift; sourceTree = "<group>"; };
 		DC0000000000001000000201 /* ControlCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCommandRouter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000202 /* WoLProfileExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoLProfileExporter.swift; sourceTree = "<group>"; };
+		DD9088732FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DoomCoderWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD9088752FBFAD4D00CA2FE6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		DD9088772FBFAD4D00CA2FE6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		DD9088892FBFADDC00CA2FE6 /* DoomCoderWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoderWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DD9088872FBFAD4E00CA2FE6 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DD9088722FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		DD9088792FBFAD4D00CA2FE6 /* DoomCoderWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (DD9088872FBFAD4E00CA2FE6 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = DoomCoderWidget; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		DC0000000000004000000003 /* Frameworks */ = {
@@ -113,13 +133,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD9088702FBFAD4D00CA2FE6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD9088782FBFAD4D00CA2FE6 /* SwiftUI.framework in Frameworks */,
+				DD9088762FBFAD4D00CA2FE6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		DC0000000000003000000001 = {
 			isa = PBXGroup;
 			children = (
+				DD9088892FBFADDC00CA2FE6 /* DoomCoderWidgetExtension.entitlements */,
 				DC0000000000003000000002 /* DoomCoder */,
+				DD9088792FBFAD4D00CA2FE6 /* DoomCoderWidget */,
+				DD9088742FBFAD4D00CA2FE6 /* Frameworks */,
 				DC0000000000003000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -150,6 +182,7 @@
 			isa = PBXGroup;
 			children = (
 				DC0000000000001000000001 /* DoomCoder.app */,
+				DD9088732FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,6 +225,15 @@
 			path = AgentTracking;
 			sourceTree = "<group>";
 		};
+		DD9088742FBFAD4D00CA2FE6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				DD9088752FBFAD4D00CA2FE6 /* WidgetKit.framework */,
+				DD9088772FBFAD4D00CA2FE6 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -217,6 +259,28 @@
 			productReference = DC0000000000001000000001 /* DoomCoder.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DD9088722FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD9088882FBFAD4E00CA2FE6 /* Build configuration list for PBXNativeTarget "DoomCoderWidgetExtension" */;
+			buildPhases = (
+				DD90886F2FBFAD4D00CA2FE6 /* Sources */,
+				DD9088702FBFAD4D00CA2FE6 /* Frameworks */,
+				DD9088712FBFAD4D00CA2FE6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DD9088792FBFAD4D00CA2FE6 /* DoomCoderWidget */,
+			);
+			name = DoomCoderWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = DoomCoderWidgetExtension;
+			productReference = DD9088732FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -224,11 +288,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					DC0000000000007000000001 = {
 						CreatedOnToolsVersion = 26.4;
+					};
+					DD9088722FBFAD4D00CA2FE6 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -250,6 +317,7 @@
 			projectRoot = "";
 			targets = (
 				DC0000000000007000000001 /* DoomCoder */,
+				DD9088722FBFAD4D00CA2FE6 /* DoomCoderWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -261,6 +329,13 @@
 			files = (
 				DC0000000000002000000007 /* Assets.xcassets in Resources */,
 				DC0000000000002000000103 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD9088712FBFAD4D00CA2FE6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,6 +411,13 @@
 				DC0000000000002000000111 /* PIDWatcher.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD90886F2FBFAD4D00CA2FE6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,6 +592,78 @@
 			};
 			name = Release;
 		};
+		DD9088852FBFAD4E00CA2FE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CODE_SIGN_ENTITLEMENTS = DoomCoderWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoomCoderWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoomCoderWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.DoomCoderWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DD9088862FBFAD4E00CA2FE6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CODE_SIGN_ENTITLEMENTS = DoomCoderWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A9P2388PHM;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoomCoderWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoomCoderWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.DoomCoderWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -527,6 +681,15 @@
 			buildConfigurations = (
 				DC0000000000005000000003 /* Debug */,
 				DC0000000000005000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DD9088882FBFAD4E00CA2FE6 /* Build configuration list for PBXNativeTarget "DoomCoderWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD9088852FBFAD4E00CA2FE6 /* Debug */,
+				DD9088862FBFAD4E00CA2FE6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
