@@ -66,10 +66,11 @@ enum AgentIconLoader {
 
 // MARK: - PerAgentOverrides codec
 
-/// Wire format mirrors the Mac side: `{"claude":{"mac":true,"ios":false}, ...}`.
-/// Per Q6, iOS treats the agent enable bit as a single global switch — we
-/// keep both `mac` and `ios` in lock-step on every write so a legacy reader
-/// (older Mac build that only reads `mac`) still sees the user's intent.
+/// Wire format: `{"claude":{"mac":true,"ios":true,"tracking":true}, ...}`.
+/// `tracking` is the global enable/disable gate (mirrors Mac TrackingStore).
+/// `mac`/`ios` are the per-channel routing flags (mirrors Mac ChannelStore).
+/// We keep all three in lock-step on every iOS write so both old and new
+/// Mac builds see the user's intent correctly.
 enum PerAgentOverrides {
 
     static func isEnabled(_ agent: TrackedAgent, in json: String) -> Bool {
@@ -78,7 +79,9 @@ enum PerAgentOverrides {
             let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Bool]]
         else { return true }
         if let entry = dict[agent.rawValue] {
-            // Either flag set to false → disabled.
+            // `tracking` is the primary flag (controls Mac TrackingStore + iOS display).
+            // Fall back to mac && ios AND-gate for records from builds before v3.1.
+            if let tracking = entry["tracking"] { return tracking }
             return (entry["mac"] ?? true) && (entry["ios"] ?? true)
         }
         return true
@@ -93,8 +96,9 @@ enum PerAgentOverrides {
             return parsed
         }()
         var entry = dict[agent.rawValue] ?? [:]
-        entry["mac"] = enabled
-        entry["ios"] = enabled
+        entry["mac"]      = enabled
+        entry["ios"]      = enabled
+        entry["tracking"] = enabled
         dict[agent.rawValue] = entry
         guard let out = try? JSONSerialization.data(withJSONObject: dict),
               let str = String(data: out, encoding: .utf8) else {

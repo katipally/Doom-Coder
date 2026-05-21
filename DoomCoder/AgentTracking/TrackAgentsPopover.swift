@@ -1,4 +1,5 @@
 import SwiftUI
+import DoomCoderCore
 
 // Track Agents window (opened from menu bar).
 //
@@ -120,6 +121,7 @@ struct TrackAgentsView: View {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
+                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                 }
             ))
             .toggleStyle(.switch)
@@ -143,6 +145,7 @@ struct TrackAgentsView: View {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
+            CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
         }
     }
 
@@ -257,6 +260,7 @@ struct TrackAccordion: View {
                         enabled[agent] = v
                     }
                     TrackingStore.setEnabled(agent, v)
+                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                 }
             ))
             .toggleStyle(.switch)
@@ -273,6 +277,7 @@ struct TrackAccordion: View {
                 enabled[agent] = v
             }
             TrackingStore.setEnabled(agent, v)
+            CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
         }
         .transition(.opacity.combined(with: .offset(y: -8)))
     }

@@ -68,6 +68,9 @@ struct ConfigureAgentsViewV2: View {
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
             detectAll()
         }
+        .onReceive(NotificationCenter.default.publisher(for: CloudKitSyncEngine.settingsChangedNotification)) { _ in
+            channelConfig = ChannelStore.load()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .dcSelectConfigureTab)) { note in
             guard let id = note.object as? String else { return }
             withAnimation(DCAnim.fade) {

@@ -431,8 +431,16 @@ final class CloudKitSyncEngine {
         let channels = ChannelStore.load().global
         let perAgent = ChannelStore.load().perAgent
         let perAgentJSON: String = {
-            let mapped: [String: [String: Bool]] = perAgent.reduce(into: [:]) { acc, kv in
-                acc[kv.key] = ["mac": kv.value.macNotification, "ios": kv.value.iOSCompanion]
+            // Build from allCases so TrackingStore state is always included even
+            // for agents with no per-channel ChannelStore override yet.
+            var mapped: [String: [String: Bool]] = [:]
+            for agent in TrackedAgent.allCases {
+                let ch = perAgent[agent.rawValue]
+                mapped[agent.rawValue] = [
+                    "mac":      ch?.macNotification ?? true,
+                    "ios":      ch?.iOSCompanion    ?? true,
+                    "tracking": TrackingStore.isEnabled(agent)
+                ]
             }
             guard let d = try? JSONEncoder().encode(mapped),
                   let s = String(data: d, encoding: .utf8) else { return "{}" }
@@ -500,6 +508,16 @@ final class CloudKitSyncEngine {
             }
         }
         ChannelStore.save(store)
+
+        // Sync TrackingStore from the `tracking` bit written by either side.
+        if let data = s.perAgentOverridesJSON.data(using: .utf8),
+           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
+            for agent in TrackedAgent.allCases {
+                if let tracking = map[agent.rawValue]?["tracking"] {
+                    TrackingStore.setEnabled(agent, tracking)
+                }
+            }
+        }
 
         ChannelStore.savePrefs(ChannelStore.NotificationPrefs(
             sessionStart: s.prefSessionStart,
