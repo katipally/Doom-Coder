@@ -106,12 +106,15 @@ private struct PreventSleepCard: View {
                         _ = sendToggleMaster()
                     }
                 ))
+                .sensoryFeedback(.selection, trigger: settings.current.masterEnabled)
+                .accessibilityHint("Turns DoomCoder on or off on your Mac.")
 
                 Picker("Mode", selection: $localMode) {
                     Text("Screen On").tag(0)
                     Text("Screen Off").tag(1)
                 }
                 .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: localMode)
                 .onChange(of: localMode) { _, new in
                     let modeStr = new == 0 ? "screenOn" : "screenOff"
                     settings.update(field: "mode") { $0.mode = modeStr }
@@ -139,6 +142,7 @@ private struct PreventSleepCard: View {
                             )
                         }
                     }
+                    .sensoryFeedback(.selection, trigger: localHours)
                 }
             }
         } label: {
@@ -321,6 +325,8 @@ private struct AgentTile: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
+            .sensoryFeedback(.impact(weight: .light), trigger: paused)
+            .accessibilityLabel("\(paused ? "Resume" : "Pause") \(agent.displayName)")
         }
         .padding(10)
         .background(.thinMaterial)
