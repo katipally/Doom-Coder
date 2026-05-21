@@ -363,7 +363,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                     // engine will skip it. Either way, holding onto the stale
                     // record only invites the duplicate-save bug.
                     await MainActor.run {
-                        self.recordsByID.removeValue(forKey: recordID)
+                        _ = self.recordsByID.removeValue(forKey: recordID)
                     }
                 }
                 // MUST use Task.detached — calling engine.fetchChanges() from

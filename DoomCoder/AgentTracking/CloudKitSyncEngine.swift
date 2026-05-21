@@ -66,7 +66,7 @@ final class CloudKitSyncEngine {
     // MARK: - CKSyncEngine
 
     private var syncEngine: CKSyncEngine?
-    private nonisolated(unsafe) static let engineStateKey = "ck.mac.engineState"
+    nonisolated static let engineStateKey = "ck.mac.engineState"
 
     /// Records awaiting a `.allKeys` save: MacStatus, Session, Event,
     /// NotificationLog, ControlCommand echo. We do not track change-tags

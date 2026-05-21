@@ -32,17 +32,25 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         // Watch masterEnabled toggle (stored in UserDefaults) so the menu-bar
         // icon swaps between bolt.fill / bolt.slash immediately.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(userDefaultsChanged),
-            name: UserDefaults.didChangeNotification,
-            object: nil
-        )
+        //
+        // IMPORTANT: UserDefaults.didChangeNotification is posted synchronously
+        // on whatever thread called -set:. Use the block-based observer with
+        // queue:.main so the delivery hops onto the main thread; otherwise a
+        // background-thread -set: (e.g. CKSyncEngine.stateUpdate persisting
+        // engine state) would invoke a MainActor-isolated selector off-main
+        // and trip _dispatch_assert_queue_fail under Swift 6 strict checking.
+        userDefaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshIcon() }
+        }
     }
 
-    @objc private func userDefaultsChanged() {
-        Task { @MainActor [weak self] in self?.refreshIcon() }
-    }
+    // Singleton — process-lifetime; no deinit needed. Observer is implicitly
+    // cleaned up at process exit.
+    private var userDefaultsObserver: NSObjectProtocol?
 
     // MARK: - Observation of @Observable state
 
