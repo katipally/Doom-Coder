@@ -43,6 +43,7 @@ final class SleepManager {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "doomcoder.mode")
             handleModeChange()
+            CloudKitSyncEngine.shared.publishSettingsField("mode") { $0.mode = self.mode.rawValue }
         }
     }
 
@@ -50,11 +51,15 @@ final class SleepManager {
         didSet {
             UserDefaults.standard.set(sessionTimerHours, forKey: "doomcoder.sessionTimer")
             resetSessionTimer()
+            CloudKitSyncEngine.shared.publishSettingsField("sessionTimerHrs") { $0.sessionTimerHrs = self.sessionTimerHours }
         }
     }
 
     var screenOffRearmMinutes: Int {
-        didSet { UserDefaults.standard.set(screenOffRearmMinutes, forKey: "doomcoder.screenOffRearm") }
+        didSet {
+            UserDefaults.standard.set(screenOffRearmMinutes, forKey: "doomcoder.screenOffRearm")
+            CloudKitSyncEngine.shared.publishSettingsField("screenOffRearmMin") { $0.screenOffRearmMin = self.screenOffRearmMinutes }
+        }
     }
 
     // MARK: - Launch at Login

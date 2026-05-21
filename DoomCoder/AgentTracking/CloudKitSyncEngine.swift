@@ -54,6 +54,21 @@ final class CloudKitSyncEngine {
     /// Cumulative settings record; CloudKit upserts are merge-aware.
     private var currentSettings: SettingsRecord?
 
+    /// Last server-side CKRecord for the singleton SettingsRecord. We must
+    /// reuse this on every modify so CloudKit preserves its `recordChangeTag`
+    /// — without it every save is treated as an INSERT and fails with code
+    /// 14/2004 ("record to insert already exists"). See §12.6.
+    private var settingsServerRecord: CKRecord?
+
+    /// Set while `applyRemoteSettings(_:)` is mutating local state. Mac
+    /// edit-paths check this flag to avoid re-publishing values that came
+    /// in from CloudKit (write loop).
+    private(set) var applyingRemoteSettings: Bool = false
+
+    /// Fired after `applyRemoteSettings` has updated UserDefaults so any
+    /// observer (PanelRootView, ChannelStore-driven UI) can refresh.
+    static let settingsChangedNotification = Notification.Name("DoomCoderSettingsChanged")
+
     // MARK: Identity
 
     /// Stable per-Mac identifier (hardware UUID).
@@ -157,6 +172,13 @@ final class CloudKitSyncEngine {
             NSApplication.shared.registerForRemoteNotifications()
         }
         logger.info("registerForRemoteNotifications requested")
+
+        // Step 5: pull the singleton SettingsRecord so iOS edits made while
+        // the Mac was offline are merged into local state on launch.
+        await fetchSettings()
+
+        // Step 6: drain any ControlCommand records queued up while offline.
+        await ControlCommandRouter.drainPending()
     }
 
     private func ensureZone() async throws {
@@ -321,14 +343,152 @@ final class CloudKitSyncEngine {
     }
 
     /// Touches a single settings field with the current timestamp (per-field
-    /// LWW; see §12.6 of the design plan).
+    /// LWW; see §12.6 of the design plan). No-op while remote settings are
+    /// being applied locally — that path must NOT trigger a re-publish or
+    /// every inbound iOS edit creates a write loop.
     func publishSettingsField(_ field: String, applyTo: (inout SettingsRecord) -> Void) {
         guard isAvailable else { return }
-        var s = currentSettings ?? SettingsRecord()
+        guard !applyingRemoteSettings else { return }
+        var s = currentSettings ?? localSettingsSnapshot()
         applyTo(&s)
         s.touch(field, by: macId)
         currentSettings = s
-        enqueue(save: s.toCKRecord())
+        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+    }
+
+    /// Snapshots current Mac local state into a SettingsRecord, stamping each
+    /// of `touchedFields` with the current timestamp, and enqueues it for
+    /// publish. Used by call sites where multiple related fields change in
+    /// one user action (e.g. saving the global channels GroupBox).
+    func publishSettingsTouching(_ touchedFields: [String]) {
+        guard isAvailable else { return }
+        guard !applyingRemoteSettings else { return }
+        var s = localSettingsSnapshot()
+        s.updatedAt = currentSettings?.updatedAt ?? s.updatedAt
+        let now = Date()
+        for f in touchedFields { s.touch(f, at: now, by: macId) }
+        currentSettings = s
+        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+    }
+
+    /// Fetches the singleton SettingsRecord, merges with our local snapshot
+    /// (per-field LWW), and applies the result to local state. Updates the
+    /// `settingsServerRecord` cache so subsequent publishes preserve the
+    /// changeTag.
+    func fetchSettings() async {
+        guard isAvailable else { return }
+        let recordID = SettingsRecord.recordID
+        do {
+            let record = try await database.record(for: recordID)
+            settingsServerRecord = record
+            guard let remote = SettingsRecord(record) else {
+                logger.notice("fetchSettings: decode failed")
+                return
+            }
+            var local = localSettingsSnapshot()
+            local.merge(with: remote)
+            currentSettings = local
+            applyRemoteSettings(local)
+        } catch let cke as CKError where cke.code == .unknownItem {
+            // No record yet on server — nothing to merge. Initial publish
+            // happens lazily when the user makes the first local edit.
+            logger.info("fetchSettings: no settings record yet")
+        } catch {
+            logger.notice("fetchSettings failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Builds a SettingsRecord from current Mac local state (UserDefaults +
+    /// SleepManager + ChannelStore). Timestamps are NOT touched here — only
+    /// per-field edit paths call `touch(...)`.
+    private func localSettingsSnapshot() -> SettingsRecord {
+        let ud = UserDefaults.standard
+        let prefs = ChannelStore.loadPrefs()
+        let channels = ChannelStore.load().global
+        let perAgent = ChannelStore.load().perAgent
+        let perAgentJSON: String = {
+            let mapped: [String: [String: Bool]] = perAgent.reduce(into: [:]) { acc, kv in
+                acc[kv.key] = ["mac": kv.value.macNotification, "ios": kv.value.iOSCompanion]
+            }
+            guard let d = try? JSONEncoder().encode(mapped),
+                  let s = String(data: d, encoding: .utf8) else { return "{}" }
+            return s
+        }()
+        return SettingsRecord(
+            masterEnabled: (ud.object(forKey: "doomcoder.masterEnabled") as? Bool) ?? true,
+            mode: SleepManager.shared.mode.rawValue,
+            sessionTimerHrs: SleepManager.shared.sessionTimerHours,
+            autoRevertSec: (ud.object(forKey: "doomcoder.session.autoRevertSeconds") as? Int) ?? 30,
+            retentionDays: EventStore.retentionDays,
+            screenOffRearmMin: SleepManager.shared.screenOffRearmMinutes,
+            channelMacEnabled: channels.macNotification,
+            channeliOSEnabled: channels.iOSCompanion,
+            prefSessionStart: prefs.sessionStart,
+            prefSessionEnd: prefs.sessionEnd,
+            prefError: prefs.error,
+            prefPermissionNeeded: prefs.permissionNeeded,
+            prefAgentResponse: prefs.agentResponse,
+            prefSubagentStart: prefs.subagentStart,
+            prefSubagentEnd: prefs.subagentEnd,
+            prefToolUse: prefs.toolUse,
+            perAgentOverridesJSON: perAgentJSON,
+            includePayloadSnippets: ud.bool(forKey: "doomcoder.privacy.includePayloadSnippets"),
+            updatedAt: currentSettings?.updatedAt ?? [:],
+            updatedBy: currentSettings?.updatedBy ?? macId
+        )
+    }
+
+    /// Applies a (presumably merged) SettingsRecord to local Mac state. The
+    /// `applyingRemoteSettings` gate prevents the resulting didSet writes
+    /// from re-publishing the same values back to CloudKit.
+    private func applyRemoteSettings(_ s: SettingsRecord) {
+        applyingRemoteSettings = true
+        defer { applyingRemoteSettings = false }
+
+        let ud = UserDefaults.standard
+        ud.set(s.masterEnabled, forKey: "doomcoder.masterEnabled")
+        if let mode = DoomCoderMode(rawValue: s.mode), SleepManager.shared.mode != mode {
+            SleepManager.shared.mode = mode
+        }
+        if SleepManager.shared.sessionTimerHours != s.sessionTimerHrs {
+            SleepManager.shared.sessionTimerHours = s.sessionTimerHrs
+        }
+        if SleepManager.shared.screenOffRearmMinutes != s.screenOffRearmMin {
+            SleepManager.shared.screenOffRearmMinutes = s.screenOffRearmMin
+        }
+        ud.set(s.autoRevertSec, forKey: "doomcoder.session.autoRevertSeconds")
+        EventStore.retentionDays = s.retentionDays
+        ud.set(s.includePayloadSnippets, forKey: "doomcoder.privacy.includePayloadSnippets")
+
+        // Rebuild ChannelStore.Store from the flat fields + per-agent JSON.
+        var store = ChannelStore.load()
+        store.global = ChannelStore.ChannelConfig(
+            macNotification: s.channelMacEnabled,
+            iOSCompanion: s.channeliOSEnabled
+        )
+        if let data = s.perAgentOverridesJSON.data(using: .utf8),
+           let map = try? JSONDecoder().decode([String: [String: Bool]].self, from: data) {
+            store.perAgent = map.reduce(into: [:]) { acc, kv in
+                acc[kv.key] = ChannelStore.ChannelConfig(
+                    macNotification: kv.value["mac"] ?? true,
+                    iOSCompanion: kv.value["ios"] ?? true
+                )
+            }
+        }
+        ChannelStore.save(store)
+
+        ChannelStore.savePrefs(ChannelStore.NotificationPrefs(
+            sessionStart: s.prefSessionStart,
+            sessionEnd: s.prefSessionEnd,
+            error: s.prefError,
+            permissionNeeded: s.prefPermissionNeeded,
+            agentResponse: s.prefAgentResponse,
+            subagentStart: s.prefSubagentStart,
+            subagentEnd: s.prefSubagentEnd,
+            toolUse: s.prefToolUse
+        ))
+
+        NotificationCenter.default.post(name: Self.settingsChangedNotification, object: nil)
     }
 
     /// Marks a ControlCommand record as applied (or failed) so iOS can
@@ -399,33 +559,78 @@ final class CloudKitSyncEngine {
         for r in saves { byID[r.recordID] = r }
         let unique = Array(byID.values)
 
-        let recordTypes = Set(unique.map(\.recordType)).sorted().joined(separator: ",")
-        logger.info("flush: \(unique.count) saves [\(recordTypes, privacy: .public)] + \(deletes.count) deletes")
+        // Split SettingsRecord out from everything else. SettingsRecord uses
+        // per-field LWW so it MUST save with .changedKeys (otherwise we
+        // clobber any iOS edits whose timestamps are newer for individual
+        // fields). All other records retain .allKeys for first-launch
+        // schema bootstrap.
+        let settingsRecords = unique.filter { $0.recordType == CloudKitConstants.RecordType.settings }
+        let otherRecords    = unique.filter { $0.recordType != CloudKitConstants.RecordType.settings }
 
-        let op = CKModifyRecordsOperation(recordsToSave: unique, recordIDsToDelete: deletes)
-        // .allKeys ensures the very first write of a new record type carries
-        // every field, so the auto-created schema is complete. .changedKeys
-        // is incompatible with first-launch schema bootstrap.
-        op.savePolicy = .allKeys
-        op.qualityOfService = .utility
-        op.modifyRecordsResultBlock = { [weak self] result in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch result {
-                case .success:
-                    self.lastSyncAt = Date()
-                    self.lastError = nil
-                    self.logger.info("flush OK at \(self.lastSyncAt!)")
-                case .failure(let err):
-                    self.lastError = err.localizedDescription
-                    self.logger.error("modifyRecords failed: \(err.localizedDescription, privacy: .public)")
-                    if let cke = err as? CKError, cke.code == .notAuthenticated {
-                        self.scheduleReauth()
+        if !otherRecords.isEmpty || !deletes.isEmpty {
+            let recordTypes = Set(otherRecords.map(\.recordType)).sorted().joined(separator: ",")
+            logger.info("flush(allKeys): \(otherRecords.count) saves [\(recordTypes, privacy: .public)] + \(deletes.count) deletes")
+            let op = CKModifyRecordsOperation(recordsToSave: otherRecords, recordIDsToDelete: deletes)
+            op.savePolicy = .allKeys
+            op.qualityOfService = .utility
+            op.modifyRecordsResultBlock = { [weak self] result in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch result {
+                    case .success:
+                        self.lastSyncAt = Date()
+                        self.lastError = nil
+                        self.logger.info("flush OK at \(self.lastSyncAt!)")
+                    case .failure(let err):
+                        self.lastError = err.localizedDescription
+                        self.logger.error("modifyRecords failed: \(err.localizedDescription, privacy: .public)")
+                        if let cke = err as? CKError, cke.code == .notAuthenticated {
+                            self.scheduleReauth()
+                        }
                     }
                 }
             }
+            database.add(op)
         }
-        database.add(op)
+
+        if !settingsRecords.isEmpty {
+            logger.info("flush(changedKeys): \(settingsRecords.count) settings saves")
+            let op = CKModifyRecordsOperation(recordsToSave: settingsRecords, recordIDsToDelete: nil)
+            op.savePolicy = .changedKeys
+            op.qualityOfService = .utility
+            // Capture per-record results so we can refresh `settingsServerRecord`
+            // with the server-canonical copy (preserves changeTag for next save).
+            op.perRecordSaveBlock = { [weak self] _, result in
+                guard case .success(let saved) = result else { return }
+                Task { @MainActor [weak self] in
+                    self?.settingsServerRecord = saved
+                }
+            }
+            op.modifyRecordsResultBlock = { [weak self] result in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch result {
+                    case .success:
+                        self.lastSyncAt = Date()
+                        self.lastError = nil
+                    case .failure(let err):
+                        // .serverRecordChanged means another writer (iOS) beat us
+                        // to it. Re-fetch and re-merge.
+                        if let cke = err as? CKError, cke.code == .serverRecordChanged {
+                            self.logger.notice("settings serverRecordChanged — refetching")
+                            await self.fetchSettings()
+                        } else {
+                            self.lastError = err.localizedDescription
+                            self.logger.error("settings flush failed: \(err.localizedDescription, privacy: .public)")
+                            if let cke = err as? CKError, cke.code == .notAuthenticated {
+                                self.scheduleReauth()
+                            }
+                        }
+                    }
+                }
+            }
+            database.add(op)
+        }
     }
 
     /// One-shot recovery: if a publish fails because iCloud auth dropped,

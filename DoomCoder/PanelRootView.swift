@@ -168,6 +168,7 @@ struct PanelRootView: View {
                         withAnimation(DCAnim.smooth) { masterEnabled = on }
                         if on { sleepManager.enable() }
                         else if sleepManager.isActive { sleepManager.disable() }
+                        CloudKitSyncEngine.shared.publishSettingsField("masterEnabled") { $0.masterEnabled = on }
                     }
                 ))
                 .toggleStyle(.switch)

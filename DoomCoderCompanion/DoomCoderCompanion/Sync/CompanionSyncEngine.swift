@@ -232,6 +232,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 case .switchAccounts:
                     MacStatusStore.shared.clear()
                     SessionStore.shared.clear()
+                    SettingsStore.shared.clear()
                     NotificationLogStore.shared.entries.removeAll()
                     self.accountAvailable = true
                 @unknown default:

@@ -149,11 +149,13 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     }
 
     /// Silent push from CloudKit subscriptions — drain pending control
-    /// commands and let CKSyncEngine fetch zone changes.
+    /// commands, fetch the latest singleton SettingsRecord, and let
+    /// CKSyncEngine fetch zone changes.
     func application(_ application: NSApplication,
                      didReceiveRemoteNotification userInfo: [String: Any]) {
         Task { @MainActor in
             await ControlCommandRouter.drainPending()
+            await CloudKitSyncEngine.shared.fetchSettings()
             CloudKitSyncEngine.shared.publishMacStatus()
         }
     }

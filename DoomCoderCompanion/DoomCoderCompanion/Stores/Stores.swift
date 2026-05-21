@@ -139,6 +139,13 @@ final class SettingsStore {
         // never been fetched (unlikely in practice after first sync).
         CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
     }
+
+    /// Wipe local settings + server-record cache. Called on `.switchAccounts`
+    /// so a new iCloud account doesn't see the prior account's preferences.
+    func clear() {
+        current = SettingsRecord()
+        serverRecord = nil
+    }
 }
 
 // MARK: - WoLStore

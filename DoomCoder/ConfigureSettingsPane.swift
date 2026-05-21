@@ -68,6 +68,7 @@ struct ConfigureSettingsPane: View {
                     }
                     .onChange(of: autoRevertSeconds) { _, new in
                         UserDefaults.standard.set(new, forKey: "doomcoder.session.autoRevertSeconds")
+                        CloudKitSyncEngine.shared.publishSettingsField("autoRevertSec") { $0.autoRevertSec = new }
                     }
                     Text("How long the badge shows \"completed\" or \"failed\" before reverting to \"idle\".")
                         .font(.caption)

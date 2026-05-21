@@ -18,7 +18,13 @@ final class CommandPublisher {
     // MARK: - Nested types
 
     enum Status: Sendable {
+        /// We've enqueued the CKRecord locally (CompanionSyncEngine will send it).
         case sent
+        /// >5s since send and Mac has not yet acknowledged. Surfaced so the
+        /// UI can show a "Waiting for Mac…" indicator and reassure the user
+        /// that the request is still in flight (e.g. Mac asleep, push
+        /// pending wake).
+        case waitingForMac
         case applied(String?)
         case failed(String)
     }
@@ -35,8 +41,10 @@ final class CommandPublisher {
     // MARK: - Public API
 
     /// Sends a verb to the target Mac and returns a stream of Status updates.
-    /// The stream emits `.sent` immediately, then `.applied` or `.failed`
-    /// within 10 seconds (or times out with an error).
+    /// The stream emits `.sent` immediately, `.waitingForMac` after 5 seconds
+    /// if the Mac has not yet acknowledged, and finally `.applied` / `.failed`
+    /// — or times out with an error after 60 seconds (covers worst-case
+    /// silent-push wake on a sleeping Mac).
     func send(
         verb: ControlCommandRecord.Verb,
         args: [String: String] = [:],
@@ -58,10 +66,22 @@ final class CommandPublisher {
             CompanionSyncEngine.shared.enqueueSave(cmd.toCKRecord())
             continuation.yield(.sent)
 
-            // 10-second hard timeout.
             let id = cmd.commandId
+
+            // After 5 s, surface "Waiting for Mac…" if no echo yet.
             Task { [weak self] in
-                try await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: .seconds(5))
+                guard let self else { return }
+                if self.waiters[id] != nil {
+                    continuation.yield(.waitingForMac)
+                }
+            }
+
+            // 60-second hard timeout. Long enough for a sleeping Mac to be
+            // woken via silent push and apply the command, short enough that
+            // the UI doesn't spin forever if the Mac is unreachable.
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(60))
                 guard let self else { return }
                 if self.waiters[id] != nil {
                     self.waiters.removeValue(forKey: id)
@@ -88,5 +108,5 @@ final class CommandPublisher {
 
 struct CommandTimeoutError: Error, LocalizedError {
     let commandId: String
-    var errorDescription: String? { "Command \(commandId) timed out after 10 seconds." }
+    var errorDescription: String? { "Command \(commandId) timed out after 60 seconds." }
 }

@@ -416,6 +416,7 @@ struct ConfigureAgentsViewV2: View {
                                     ChannelStore.clearOverride(for: agent)
                                 }
                                 channelConfig = ChannelStore.load()
+                                CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                             }
                         ))
 
@@ -427,6 +428,7 @@ struct ConfigureAgentsViewV2: View {
                                     var c = override; c.macNotification = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
+                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                                     if v { NotificationDispatcher.shared.requestPermission() }
                                 }
                             ))
@@ -436,6 +438,7 @@ struct ConfigureAgentsViewV2: View {
                                     var c = override; c.iOSCompanion = v
                                     ChannelStore.setPerAgent(agent, config: c)
                                     channelConfig = ChannelStore.load()
+                                    CloudKitSyncEngine.shared.publishSettingsTouching(["perAgentOverridesJSON"])
                                 }
                             ))
                         } else {
@@ -566,6 +569,7 @@ struct ConfigureAgentsViewV2: View {
                             set: { v in
                                 channelConfig.global.macNotification = v
                                 ChannelStore.setGlobal(channelConfig.global)
+                                CloudKitSyncEngine.shared.publishSettingsTouching(["channelMacEnabled"])
                                 if v { NotificationDispatcher.shared.requestPermission() }
                             }
                         ))
@@ -589,6 +593,7 @@ struct ConfigureAgentsViewV2: View {
                                 set: { v in
                                     channelConfig.global.iOSCompanion = v
                                     ChannelStore.setGlobal(channelConfig.global)
+                                    CloudKitSyncEngine.shared.publishSettingsTouching(["channeliOSEnabled"])
                                 }
                             ))
                             Spacer()
@@ -905,6 +910,11 @@ struct ConfigureAgentsViewV2: View {
             set: { v in
                 binding.wrappedValue = v
                 ChannelStore.savePrefs(notifPrefs)
+                CloudKitSyncEngine.shared.publishSettingsTouching([
+                    "prefSessionStart", "prefSessionEnd", "prefError",
+                    "prefPermissionNeeded", "prefAgentResponse",
+                    "prefSubagentStart", "prefSubagentEnd", "prefToolUse"
+                ])
             }
         ))
         .toggleStyle(.checkbox)

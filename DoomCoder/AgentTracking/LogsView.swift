@@ -213,6 +213,7 @@ struct LogsView: View {
                     EventStore.retentionDays = v
                     EventStore.shared.purgeOld()
                     reload()
+                    CloudKitSyncEngine.shared.publishSettingsField("retentionDays") { $0.retentionDays = v }
                 }
             )) {
                 Text("1 day").tag(1)
