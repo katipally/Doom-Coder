@@ -68,25 +68,17 @@ final class CommandPublisher {
 
             let id = cmd.commandId
 
-            // After 5 s, surface "Waiting for Mac…" if no echo yet.
+            // Single task: surface "Waiting for Mac…" after 5 s if no echo,
+            // then time out completely after 60 s total.
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(5))
-                guard let self else { return }
-                if self.waiters[id] != nil {
-                    continuation.yield(.waitingForMac)
-                }
-            }
-
-            // 60-second hard timeout. Long enough for a sleeping Mac to be
-            // woken via silent push and apply the command, short enough that
-            // the UI doesn't spin forever if the Mac is unreachable.
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(60))
-                guard let self else { return }
-                if self.waiters[id] != nil {
-                    self.waiters.removeValue(forKey: id)
-                    continuation.finish(throwing: CommandTimeoutError(commandId: id))
-                }
+                guard let self, self.waiters[id] != nil else { return }
+                continuation.yield(.waitingForMac)
+                try? await Task.sleep(for: .seconds(55))   // 5 + 55 = 60 s total
+                // self is already strongly rebound from the first guard; just check waiters.
+                guard self.waiters[id] != nil else { return }
+                self.waiters.removeValue(forKey: id)
+                continuation.finish(throwing: CommandTimeoutError(commandId: id))
             }
         }
     }
