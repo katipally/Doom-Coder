@@ -172,9 +172,17 @@ struct AgentsView: View {
 
     @State private var sessionStore = SessionStore.shared
     @State private var settings     = SettingsStore.shared
+    @State private var navPath      = NavigationPath()
+
+    /// Deeplink from Live Activity or `doomcoder://session/<key>` URL.
+    @Binding var deeplinkSessionKey: String?
+
+    init(deeplinkSessionKey: Binding<String?> = .constant(nil)) {
+        self._deeplinkSessionKey = deeplinkSessionKey
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             let configured = PerAgentOverrides.configuredAgents(in: settings.current.perAgentOverridesJSON)
             List {
                 if !sessionStore.live.isEmpty {
@@ -218,6 +226,13 @@ struct AgentsView: View {
             .navigationDestination(for: SessionRecord.self) { session in
                 SessionDetailView(session: session)
             }
+        }
+        .onChange(of: deeplinkSessionKey) { _, key in
+            guard let key else { return }
+            if let session = sessionStore.live.first(where: { $0.sessionKey == key }) {
+                navPath.append(session)
+            }
+            deeplinkSessionKey = nil
         }
         .task {
             // One-shot warm fetch on appear. Push delivery + pull-to-refresh

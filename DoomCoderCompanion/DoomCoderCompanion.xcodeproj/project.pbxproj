@@ -29,6 +29,7 @@
 		EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */; };
 		F5016A2A71790FAD23811A18 /* CommandPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */; };
 		F738F859CF61C3122A1598E4 /* AgentIconFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F0362D4080511605EBD81F /* AgentIconFetcher.swift */; };
+		A1B2C3D4E5F60011223344AA /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60011223344BB /* LiveActivityManager.swift */; };
 		FA83690CFB244BC0C6EE91ED /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7841884D6F604D75A0B585 /* BackgroundRefresh.swift */; };
 /* End PBXBuildFile section */
 
@@ -66,6 +67,7 @@
 		84F0362D4080511605EBD81F /* AgentIconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconFetcher.swift; sourceTree = "<group>"; };
 		852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPublisher.swift; sourceTree = "<group>"; };
 		87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeOnLAN.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60011223344BB /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		9FB9C264096018D7F1530EB0 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		A001013B397C1A86AA65F66F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B4CCC40290EB871ECB7D9D14 /* DoomCoderCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DoomCoderCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -125,6 +127,7 @@
 				DA7841884D6F604D75A0B585 /* BackgroundRefresh.swift */,
 				852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */,
 				12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */,
+				A1B2C3D4E5F60011223344BB /* LiveActivityManager.swift */,
 				59A0776F05A0DA4111FFB797 /* LocalNotificationPoster.swift */,
 				87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */,
 			);
@@ -337,6 +340,7 @@
 				F5016A2A71790FAD23811A18 /* CommandPublisher.swift in Sources */,
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
+				A1B2C3D4E5F60011223344AA /* LiveActivityManager.swift in Sources */,
 				3A4B25C5A59BB9FD1A9801E8 /* HomeView.swift in Sources */,
 				BF92E0FA81291D820E0FCD34 /* LocalNotificationPoster.swift in Sources */,
 				8A3A3870B8803279FB2D8830 /* LogsView.swift in Sources */,

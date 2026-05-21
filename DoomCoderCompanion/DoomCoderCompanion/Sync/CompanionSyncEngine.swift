@@ -229,16 +229,28 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Record fan-out
 
     nonisolated private func handleFetched(_ record: CKRecord) {
-        // Use Task.detached to stay outside the CKSyncEngine delegate task tree.
-        // An inherited Task here would still be a child of the delegate callback,
-        // which can cause reentrancy crashes if any store mutation triggers
-        // additional CKSyncEngine operations.
-        Task.detached { @MainActor in
+        // Task { @MainActor in } creates an unstructured task (not a child of the
+        // CKSyncEngine delegate tree) that runs on the main actor. This avoids the
+        // reentrancy crash that would occur with a structured child task, and avoids
+        // the Swift 6 region-isolation checker bug triggered by Task.detached { @MainActor in }.
+        Task { @MainActor in
             switch record.recordType {
             case CloudKitConstants.RecordType.macStatus:
                 if let r = MacStatusRecord(record) { MacStatusStore.shared.upsert(r) }
             case CloudKitConstants.RecordType.session:
-                if let r = SessionRecord(record) { SessionStore.shared.upsert(r) }
+                if let r = SessionRecord(record) {
+                    SessionStore.shared.upsert(r)
+                    // Drive Live Activity updates from session record changes.
+                    #if canImport(ActivityKit) && os(iOS)
+                    if #available(iOS 16.1, *) {
+                        if r.hasEnded || r.hasFailed {
+                            await LiveActivityManager.shared.end(sessionKey: r.sessionKey)
+                        } else {
+                            await LiveActivityManager.shared.update(r)
+                        }
+                    }
+                    #endif
+                }
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) { NotificationLogStore.shared.append(r) }
             case CloudKitConstants.RecordType.settings:
