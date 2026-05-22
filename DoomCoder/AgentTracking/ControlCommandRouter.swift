@@ -54,6 +54,12 @@ enum ControlCommandRouter {
             let (matches, _) = try await db.records(matching: query, inZoneWith: zoneID)
             for (_, res) in matches {
                 if case .success(let rec) = res, let cmd = ControlCommandRecord(rec), cmd.appliedAt == nil {
+                    // Cache the CKRecord's system fields (recordChangeTag) before
+                    // applying. Without this, acknowledgeCommand() gets nil base
+                    // and sends a tag-less INSERT that CloudKit rejects (14/2004).
+                    // The fetchedRecordZoneChanges path in scheduleHandleFetched
+                    // already does this; drainPending (CKQuery) must do it manually.
+                    CloudKitSyncEngine.shared.cacheRecord(rec)
                     await apply(cmd)
                 }
             }

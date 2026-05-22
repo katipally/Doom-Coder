@@ -78,6 +78,12 @@ final class CloudKitSyncEngine {
     /// different settings fields survive without being clobbered.
     private var settingsRecordsByID: [CKRecord.ID: CKRecord] = [:]
 
+    /// Tracks in-flight ControlCommand acks (appliedAt stamped locally but
+    /// save not yet confirmed by CloudKit). Used by recoverFromServerRecordChanged
+    /// to re-enqueue the ack against a fresh recordChangeTag after a 14/2004,
+    /// instead of silently dropping the ack and leaving iOS waiting forever.
+    private var pendingCommandAcks: [CKRecord.ID: ControlCommandRecord] = [:]
+
     // MARK: - Settings state
 
     private var currentSettings: SettingsRecord?
@@ -99,6 +105,7 @@ final class CloudKitSyncEngine {
     private var heartbeatTimer: Timer?
     private var pruneTimer: Timer?
     private var reauthScheduled = false
+    private var bootstrapping = false
 
     // MARK: - Init
 
@@ -153,6 +160,17 @@ final class CloudKitSyncEngine {
     }
 
     private func bootstrap() async {
+        // Prevent concurrent or duplicate bootstraps. CKAccountChanged can
+        // fire during ensureSubscriptionsBestEffort(), causing a second call
+        // while the first is still in-flight; a second CKSyncEngine instance
+        // for the same zone creates a conflict storm.
+        guard !bootstrapping && syncEngine == nil else {
+            logger.info("bootstrap: re-entry guard — skipping duplicate invocation")
+            return
+        }
+        bootstrapping = true
+        defer { bootstrapping = false }
+
         // Step 1: zone (idempotent on the server). CKSyncEngine does not
         // create zones automatically — we must ensure it exists first.
         do {
@@ -380,12 +398,23 @@ final class CloudKitSyncEngine {
 
     func acknowledgeCommand(_ record: ControlCommandRecord) {
         guard isAvailable else { return }
+        // Track this ack so recoverFromServerRecordChanged can re-enqueue it
+        // if the first attempt fails with 14/2004 (missing recordChangeTag).
+        pendingCommandAcks[record.recordID] = record
         // Mutate the cached server CKRecord (carrying its recordChangeTag)
         // rather than constructing a fresh one. Without the tag, CloudKit
         // treats the ack as an insert and rejects with 14/2004.
         let base = serverRecords.record(for: record.recordID)
         let ck = record.toCKRecord(base: base)
         enqueue(save: ck)
+    }
+
+    /// Caches a server CKRecord's system fields (including recordChangeTag)
+    /// so subsequent saves of this record are treated as UPDATEs rather than
+    /// INSERTs. Called by ControlCommandRouter.drainPending() which fetches
+    /// via CKQuery (not CKSyncEngine delta) and must prime the cache manually.
+    func cacheRecord(_ ck: CKRecord) {
+        serverRecords.store(ck)
     }
 
     // MARK: - Fetch
@@ -454,10 +483,16 @@ final class CloudKitSyncEngine {
                  where id.recordName == "MacStatus-\(self.macId)":
                 self.publishMacStatus()
             case CloudKitConstants.RecordType.controlCommand:
-                // ControlCommand acks are one-shot. The fetched record
-                // is now cached — if it still needs acking, the router
-                // will re-enqueue on the next remote-change push.
-                break
+                // fresh is now cached with the correct recordChangeTag.
+                // If Mac had a pending ack (appliedAt stamped locally but
+                // save failed with 14/2004), re-enqueue it against the
+                // fresh tag so iOS eventually receives the confirmation.
+                if let pendingAck = self.pendingCommandAcks[id] {
+                    self.enqueue(save: pendingAck.toCKRecord(base: fresh))
+                }
+                // If no pending ack the command hasn't been applied yet —
+                // the next fetchChanges or drainPending will deliver it
+                // correctly now that the tag is cached.
             case CloudKitConstants.RecordType.session:
                 // Re-publish the live session against the fresh tag so the
                 // pending phase/tool/count update isn't silently dropped.
@@ -709,6 +744,12 @@ final class CloudKitSyncEngine {
                 var local = localSettingsSnapshot()
                 local.merge(with: s)
                 currentSettings = local
+                // Apply merged settings to SleepManager, TrackingStore, etc.
+                // Without this, iOS changes written while Mac was offline are
+                // silently merged into currentSettings but never pushed to the
+                // actual Mac subsystems — the delta fetch won't re-deliver them
+                // because the delta token is already past those writes.
+                applyRemoteSettings(local)
             }
         }
         logger.info("prewarmStableRecordCache: fetched=\(fetched.count, privacy: .public)")
@@ -990,6 +1031,8 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                         // Refresh the cached server record so the next ack
                         // (if any) carries the freshest changeTag.
                         self.serverRecords.store(saved)
+                        // Clear the in-flight ack tracker — ack succeeded.
+                        self.pendingCommandAcks.removeValue(forKey: saved.recordID)
                     } else if saved.recordType == CloudKitConstants.RecordType.macStatus,
                               saved.recordID.recordName == "MacStatus-\(self.macId)" {
                         // Cache our own MacStatus tag for the next heartbeat.
