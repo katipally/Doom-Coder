@@ -143,6 +143,19 @@ struct ConfigureSettingsPane: View {
                     Text("Test Ping publishes one MacStatus + one NotificationLog so you can verify CloudKit Dashboard (Development → Private → DoomCoderZone).")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    Divider()
+                    HStack {
+                        Button("Reset CloudKit Zone (dev)") {
+                            Task { await syncEngine.devWipeCloudKitZone() }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                        .disabled(!syncEngine.isAvailable)
+                    }
+                    Text("Development-only: deletes DoomCoderZone in iCloud, clears local engine state + subscription IDs, then re-bootstraps. Use to recover from a stuck sync flood. iOS will reseed on next launch.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 section("Diagnostics") {

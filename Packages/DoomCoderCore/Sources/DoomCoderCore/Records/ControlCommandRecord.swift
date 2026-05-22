@@ -87,8 +87,15 @@ extension ControlCommandRecord {
         return CKRecord.ID(recordName: "ControlCommand-\(commandId)", zoneID: zone)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord() -> CKRecord { toCKRecord(base: nil) }
+
+    /// Builds a CKRecord for this command. If `base` is provided (a server
+    /// CKRecord returned from a previous fetch/save), its `recordChangeTag`
+    /// is preserved by mutating it in place. Without the tag, CloudKit
+    /// treats the save as an INSERT and rejects it with code 14/2004
+    /// ("record to insert already exists") on subsequent acks.
+    public func toCKRecord(base: CKRecord?) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
         r["commandId"]    = commandId as CKRecordValue
         r["macId"]        = macId as CKRecordValue
         r["verb"]         = verb.rawValue as CKRecordValue

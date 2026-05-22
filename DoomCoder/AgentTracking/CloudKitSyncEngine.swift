@@ -82,9 +82,16 @@ final class CloudKitSyncEngine {
 
     private var currentSettings: SettingsRecord?
 
-    /// Server-side CKRecord for the singleton SettingsRecord. Updated by
-    /// sentRecordZoneChanges so subsequent saves carry the latest changeTag.
-    private var settingsServerRecord: CKRecord?
+    /// Persistent server-record cache (system fields only) for all records
+    /// with stable IDs that we re-save across launches: SettingsRecord
+    /// (singleton), MacStatusRecord (per macId), ControlCommandRecord (per
+    /// commandId, Mac acks them). Without on-disk persistence of the
+    /// recordChangeTag, every relaunch re-INSERTs and CloudKit responds
+    /// with 14/2004 ("record to insert already exists") forever.
+    private let serverRecords = ServerRecordCache(
+        defaults: .standard,
+        key: "ck.mac.serverRecords"
+    )
 
     // MARK: - Timers
 
@@ -171,6 +178,15 @@ final class CloudKitSyncEngine {
         )
         syncEngine = CKSyncEngine(config)
 
+        // Step 2b: re-assert the zone in engine state. CKSyncEngine does NOT
+        // auto-track custom zones across launches even when the zone exists
+        // on the server. Without this, restored engine state emits the
+        // "finished fetching changes for a zone that it never started"
+        // warning and skips delta fetches. Idempotent: `.saveZone` is a
+        // no-op if the engine already considers the zone created.
+        let zone = CKRecordZone(zoneID: zoneID)
+        syncEngine?.state.add(pendingDatabaseChanges: [.saveZone(zone)])
+
         // Step 3: signal availability. All publish methods gate on isAvailable.
         isAvailable = true
         accountStatusText = "iCloud synced"
@@ -215,7 +231,7 @@ final class CloudKitSyncEngine {
             lastSeen: Date(),
             thermalState: sm.thermalStateText
         )
-        enqueue(save: rec.toCKRecord())
+        enqueue(save: rec.toCKRecord(base: serverRecords.record(forName: "MacStatus-\(macId)")))
     }
 
     /// Synchronously publishes an "offline" MacStatus before the Mac process
@@ -303,7 +319,7 @@ final class CloudKitSyncEngine {
         applyTo(&s)
         s.touch(field, by: macId)
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
     }
 
     func publishSettingsTouching(_ touchedFields: [String]) {
@@ -313,7 +329,7 @@ final class CloudKitSyncEngine {
         let now = Date()
         for f in touchedFields { s.touch(f, at: now, by: macId) }
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
     }
 
     func publishSettingsTouchingPerAgent(agent: String, subs: [String]) {
@@ -323,12 +339,17 @@ final class CloudKitSyncEngine {
         let now = Date()
         for sub in subs { s.touchPerAgent(agent, sub: sub, at: now, by: macId) }
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: settingsServerRecord))
+        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
     }
 
     func acknowledgeCommand(_ record: ControlCommandRecord) {
         guard isAvailable else { return }
-        enqueue(save: record.toCKRecord())
+        // Mutate the cached server CKRecord (carrying its recordChangeTag)
+        // rather than constructing a fresh one. Without the tag, CloudKit
+        // treats the ack as an insert and rejects with 14/2004.
+        let base = serverRecords.record(for: record.recordID)
+        let ck = record.toCKRecord(base: base)
+        enqueue(save: ck)
     }
 
     // MARK: - Fetch
@@ -343,6 +364,68 @@ final class CloudKitSyncEngine {
 
     func fetchChanges() async {
         try? await syncEngine?.fetchChanges()
+    }
+
+    /// Recovery path for `.serverRecordChanged` (CKError 14/2004). Fetches
+    /// the live record by ID via an explicit CKFetchRecordsOperation so we
+    /// re-acquire the recordChangeTag (CKSyncEngine.fetchChanges only
+    /// delivers deltas; if the server side hasn't changed, the conflicting
+    /// record is never re-delivered). Then either:
+    ///   • For singletons we own (MacStatus, Settings): persist the fresh
+    ///     server record + re-enqueue our local save against the new tag.
+    ///   • For ControlCommand acks: the iOS side keeps writing too — we
+    ///     just refresh the cache; if there's still local state to ack the
+    ///     router will re-enqueue it on the next fetchedRecordZoneChanges.
+    private nonisolated func recoverFromServerRecordChanged(id: CKRecord.ID, recordType: String) async {
+        // Drop stale pending change first; we'll re-enqueue after we have
+        // the fresh tag (avoids the engine retrying the tagless save while
+        // we're fetching).
+        if let engine = await MainActor.run(body: { self.syncEngine }) {
+            engine.state.remove(pendingRecordZoneChanges: [.saveRecord(id)])
+        }
+        await MainActor.run {
+            self.regularRecordsByID.removeValue(forKey: id)
+            self.settingsRecordsByID.removeValue(forKey: id)
+        }
+
+        // Explicit fetch by ID so we get the current tag even when there's
+        // no delta token change.
+        let db: CKDatabase = await MainActor.run { self.database }
+        let fresh: CKRecord? = await withCheckedContinuation { (cont: CheckedContinuation<CKRecord?, Never>) in
+            let op = CKFetchRecordsOperation(recordIDs: [id])
+            op.qualityOfService = .userInitiated
+            var got: CKRecord?
+            op.perRecordResultBlock = { _, result in
+                if case .success(let r) = result { got = r }
+            }
+            op.fetchRecordsResultBlock = { _ in cont.resume(returning: got) }
+            db.add(op)
+        }
+        guard let fresh else {
+            self.logger.notice("recover: fetch by ID returned nil for \(id.recordName, privacy: .public) — dropping")
+            return
+        }
+
+        await MainActor.run {
+            self.serverRecords.store(fresh)
+            // Re-enqueue our local save against the freshly tagged record.
+            switch recordType {
+            case CloudKitConstants.RecordType.settings:
+                if let s = self.currentSettings {
+                    self.enqueue(save: s.toCKRecord(base: fresh))
+                }
+            case CloudKitConstants.RecordType.macStatus
+                 where id.recordName == "MacStatus-\(self.macId)":
+                self.publishMacStatus()
+            case CloudKitConstants.RecordType.controlCommand:
+                // ControlCommand acks are one-shot. The fetched record
+                // is now cached — if it still needs acking, the router
+                // will re-enqueue on the next remote-change push.
+                break
+            default:
+                break
+            }
+        }
     }
 
     // MARK: - Enqueue
@@ -367,7 +450,7 @@ final class CloudKitSyncEngine {
         Task { @MainActor [self] in
             switch record.recordType {
             case CloudKitConstants.RecordType.settings:
-                self.settingsServerRecord = record
+                self.serverRecords.store(record)
                 guard let remote = SettingsRecord(record) else {
                     self.logger.notice("handleFetched: settings decode failed")
                     return
@@ -377,7 +460,18 @@ final class CloudKitSyncEngine {
                 self.currentSettings = local
                 self.applyRemoteSettings(local)
 
+            case CloudKitConstants.RecordType.macStatus:
+                // Cache our own MacStatus server record so the next
+                // heartbeat carries the recordChangeTag.
+                if record.recordID.recordName == "MacStatus-\(self.macId)" {
+                    self.serverRecords.store(record)
+                }
+
             case CloudKitConstants.RecordType.controlCommand:
+                // Cache the server CKRecord so acknowledgeCommand can mutate
+                // it (preserving recordChangeTag) instead of creating a
+                // fresh CKRecord that CloudKit treats as an insert.
+                self.serverRecords.store(record)
                 if let cmd = ControlCommandRecord(record) {
                     await ControlCommandRouter.apply(cmd)
                 }
@@ -626,6 +720,64 @@ final class CloudKitSyncEngine {
 
     // MARK: - Test ping
 
+    // MARK: - Dev reset
+
+    /// Development-only: deletes the DoomCoderZone from iCloud, clears all
+    /// local engine state + subscription IDs + record caches, and re-runs
+    /// bootstrap so a fresh CKSyncEngine + zone are created from scratch.
+    /// Use to recover from a stuck CloudKit error flood (e.g. the 14/2004
+    /// "record to insert already exists" loop). iOS will reseed its state
+    /// on next launch (the .CKAccountChanged-equivalent zone-not-found
+    /// recovery happens naturally on re-fetch).
+    func devWipeCloudKitZone() async {
+        logger.notice("devWipeCloudKitZone: starting")
+        // 1) Pause heartbeats & in-flight pushes by flipping availability.
+        isAvailable = false
+        heartbeatTimer?.invalidate(); heartbeatTimer = nil
+        pruneTimer?.invalidate();     pruneTimer = nil
+        syncEngine = nil
+        regularRecordsByID.removeAll()
+        settingsRecordsByID.removeAll()
+        serverRecords.clear()
+        pendingWrites = 0
+
+        // 2) Delete the zone on the server (idempotent).
+        let zone = CKRecordZone(zoneID: zoneID)
+        let op = CKModifyRecordZonesOperation(recordZonesToSave: nil, recordZoneIDsToDelete: [zone.zoneID])
+        op.qualityOfService = .userInitiated
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            op.modifyRecordZonesResultBlock = { [logger] result in
+                switch result {
+                case .success:
+                    logger.notice("devWipeCloudKitZone: zone deleted")
+                case .failure(let err):
+                    logger.notice("devWipeCloudKitZone: delete returned \(err.localizedDescription, privacy: .public) (ignored)")
+                }
+                cont.resume()
+            }
+            database.add(op)
+        }
+
+        // 3) Clear all locally persisted engine + subscription state.
+        UserDefaults.standard.removeObject(forKey: Self.engineStateKey)
+
+        // 4) Delete known subscription IDs so ensureSubscriptionsBestEffort
+        //    re-registers them against the new zone.
+        let subsOp = CKModifySubscriptionsOperation(
+            subscriptionsToSave: nil,
+            subscriptionIDsToDelete: ["doomcoder-db-sub", "doomcoder-settings-sub"]
+        )
+        subsOp.qualityOfService = .utility
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            subsOp.modifySubscriptionsResultBlock = { _ in cont.resume() }
+            database.add(subsOp)
+        }
+
+        // 5) Re-bootstrap from scratch.
+        await bootstrap()
+        logger.notice("devWipeCloudKitZone: re-bootstrap complete")
+    }
+
     func sendTestPing() {
         logger.info("sendTestPing (isAvailable=\(self.isAvailable))")
         publishMacStatus()
@@ -729,7 +881,15 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                     self.regularRecordsByID.removeValue(forKey: saved.recordID)
                     if saved.recordType == CloudKitConstants.RecordType.settings {
                         self.settingsRecordsByID.removeValue(forKey: saved.recordID)
-                        self.settingsServerRecord = saved
+                        self.serverRecords.store(saved)
+                    } else if saved.recordType == CloudKitConstants.RecordType.controlCommand {
+                        // Refresh the cached server record so the next ack
+                        // (if any) carries the freshest changeTag.
+                        self.serverRecords.store(saved)
+                    } else if saved.recordType == CloudKitConstants.RecordType.macStatus,
+                              saved.recordID.recordName == "MacStatus-\(self.macId)" {
+                        // Cache our own MacStatus tag for the next heartbeat.
+                        self.serverRecords.store(saved)
                     }
                 }
                 self.pendingWrites = self.regularRecordsByID.count + self.settingsRecordsByID.count
@@ -740,10 +900,18 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
             }
             for fail in e.failedRecordSaves {
                 let errCode = fail.error.code
-                if errCode == .serverRecordChanged,
-                   fail.record.recordType == CloudKitConstants.RecordType.settings {
-                    self.logger.notice("settings conflict — re-fetching")
-                    try? await syncEngine.fetchChanges()
+                if errCode == .serverRecordChanged {
+                    // Recovery for the 14/2004 "record to insert already
+                    // exists" flood: the engine retried a save without our
+                    // recordChangeTag (e.g. after a crash that lost the
+                    // in-memory cache, or because the record predates the
+                    // persistent cache). Explicitly fetch the server record
+                    // by ID so we re-acquire the tag, then re-enqueue (or
+                    // drop, for one-shot inserts like ControlCommand acks).
+                    let id = fail.record.recordID
+                    let rtype = fail.record.recordType
+                    self.logger.notice("save conflict on \(id.recordName, privacy: .public) (\(rtype, privacy: .public)) — recovering")
+                    await self.recoverFromServerRecordChanged(id: id, recordType: rtype)
                 }
                 if errCode == .notAuthenticated {
                     await MainActor.run { self.scheduleReauth() }
@@ -757,37 +925,55 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
         }
     }
 
-    /// Provides records to CKSyncEngine. Settings are sent first; both
-    /// batches use the default save policy (.ifServerRecordUnchanged) since
-    /// Settings records always carry the server changeTag from settingsServerRecord
-    /// and we handle .serverRecordChanged by re-fetching and re-merging.
-    /// MacStatus/Session/etc. are written with fresh records each heartbeat so
-    /// there is no prior changeTag — CKSyncEngine treats them as inserts when
-    /// the tag is absent, which is equivalent to .allKeys for first-write.
+    /// Provides records to CKSyncEngine.
+    ///
+    /// Canonical pattern (matching iOS CompanionSyncEngine): take ALL
+    /// pending changes filtered only by `context.options.scope`, return a
+    /// recordProvider closure that maps recordID → CKRecord (or nil if the
+    /// record was dropped — CKSyncEngine then removes the change from its
+    /// state instead of looping forever).
+    ///
+    /// Settings are sent first with the default save policy
+    /// (`.ifServerRecordUnchanged`) so per-field LWW continues to work via
+    /// `changedKeys` against the server changeTag carried in
+    /// `settingsServerRecord`.
+    ///
+    /// All other record types (MacStatus heartbeat, Session, Event,
+    /// NotificationLog, ControlCommand ack) ship with `savePolicy = .allKeys`
+    /// so fresh records without a server changeTag don't get rejected as
+    /// "record to insert already exists" (CKError 14/2004). ControlCommand
+    /// acks separately keep the server changeTag via the
+    /// `controlCommandServerRecords` cache.
     nonisolated func nextRecordZoneChangeBatch(
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        let pending = syncEngine.state.pendingRecordZoneChanges
+        let scope = context.options.scope
+        let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !pending.isEmpty else { return nil }
 
-        // Settings first so conflicts are detected early.
-        let settingsSnap = await MainActor.run { self.settingsRecordsByID }
-        let settingsPending = pending.filter { id(from: $0).map { settingsSnap[$0] != nil } ?? false }
+        let (settingsSnap, regularSnap) = await MainActor.run {
+            (self.settingsRecordsByID, self.regularRecordsByID)
+        }
+
+        // 1) Settings batch first. Default policy = .ifServerRecordUnchanged.
+        let settingsPending = pending.filter { change in
+            id(from: change).map { settingsSnap[$0] != nil } ?? false
+        }
         if !settingsPending.isEmpty {
-            return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: settingsPending) { [self] id in
-                await MainActor.run { self.settingsRecordsByID[id] }
-            }
+            return await CKSyncEngine.RecordZoneChangeBatch(
+                pendingChanges: settingsPending,
+                recordProvider: { id in settingsSnap[id] }
+            )
         }
 
-        // Heartbeat / event records.
-        let regularSnap = await MainActor.run { self.regularRecordsByID }
-        let regularPending = pending.filter { id(from: $0).map { regularSnap[$0] != nil } ?? false }
-        if !regularPending.isEmpty {
-            return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: regularPending) { [self] id in
-                await MainActor.run { self.regularRecordsByID[id] }
-            }
-        }
-
-        return nil
+        // 2) Regular batch — provide records via recordProvider so any
+        // pending changes whose record has been dropped from our local
+        // cache return nil (CKSyncEngine then drops that change from its
+        // state, preventing the orphan-pending-change retry loop).
+        return await CKSyncEngine.RecordZoneChangeBatch(
+            pendingChanges: pending,
+            recordProvider: { id in regularSnap[id] }
+        )
     }
 }

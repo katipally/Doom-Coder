@@ -57,7 +57,7 @@ targets:
           - remote-notification
           - processing
         UIRequiredDeviceCapabilities:
-          - armv7
+          - arm64
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

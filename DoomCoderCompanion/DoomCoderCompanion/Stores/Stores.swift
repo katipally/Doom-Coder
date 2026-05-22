@@ -140,6 +140,17 @@ final class NotificationLogStore {
 final class SettingsStore {
 
     static let shared = SettingsStore()
+
+    /// Persistent server-record cache (system fields only). Without on-disk
+    /// persistence of `Settings-singleton`'s recordChangeTag, every cold
+    /// launch attempts a blind INSERT and CloudKit returns CKError 14/2004
+    /// forever. Storage lives in the app-group defaults so the main app and
+    /// any future widget extension share the same view.
+    private let serverRecords = ServerRecordCache(
+        defaults: AppGroupCache.defaults,
+        key: "ck.ios.serverRecords"
+    )
+
     private init() {
         // Seed deviceId once per install.
         if AppGroupCache.defaults.string(forKey: "device.id") == nil {
@@ -150,8 +161,16 @@ final class SettingsStore {
     private(set) var current: SettingsRecord = SettingsRecord()
 
     /// The raw CKRecord last fetched from the server, including its changeTag.
-    /// MUST be reused when saving so CloudKit performs an UPDATE (not INSERT).
-    var serverRecord: CKRecord?
+    /// Reads through the persistent cache so the first save after a cold
+    /// launch carries the recordChangeTag → CloudKit performs UPDATE, not
+    /// INSERT.
+    var serverRecord: CKRecord? {
+        get { serverRecords.record(forName: SettingsRecord.singletonRecordName) }
+        set {
+            if let v = newValue { serverRecords.store(v) }
+            else { serverRecords.remove(name: SettingsRecord.singletonRecordName) }
+        }
+    }
 
     private var deviceId: String {
         AppGroupCache.defaults.string(forKey: "device.id") ?? "iOS"
@@ -192,6 +211,6 @@ final class SettingsStore {
     /// so a new iCloud account doesn't see the prior account's preferences.
     func clear() {
         current = SettingsRecord()
-        serverRecord = nil
+        serverRecords.clear()
     }
 }

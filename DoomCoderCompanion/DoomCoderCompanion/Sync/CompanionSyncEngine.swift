@@ -53,6 +53,38 @@ final class CompanionSyncEngine: NSObject {
 
     func start() {
         Task { await setupSyncEngine() }
+        // Re-bootstrap when the iCloud account changes mid-session
+        // (sign-in after first launch, switch accounts, etc.) so the engine
+        // doesn't stay stuck in "not available" until app relaunch.
+        NotificationCenter.default.addObserver(
+            forName: .CKAccountChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.setupSyncEngine() }
+        }
+    }
+
+    /// Idempotently creates DoomCoderZone in the private DB. CKSyncEngine
+    /// does NOT auto-create custom zones; without this, iOS pushes fail with
+    /// `.zoneNotFound` on a fresh iCloud account or after a dev zone wipe.
+    /// Mirrors the Mac's `ensureZone()` path.
+    private func ensureZone() async {
+        let z = CKRecordZone(zoneID: zone.zoneID)
+        let op = CKModifyRecordZonesOperation(recordZonesToSave: [z], recordZoneIDsToDelete: nil)
+        op.qualityOfService = .userInitiated
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            op.modifyRecordZonesResultBlock = { result in
+                if case .failure(let err) = result {
+                    if let cke = err as? CKError,
+                       cke.code == .serverRecordChanged || cke.code == .unknownItem {
+                        // Already exists or transient — treat as success.
+                    } else {
+                        print("[CompanionSyncEngine] ensureZone error: \(err)")
+                    }
+                }
+                cont.resume()
+            }
+            db.add(op)
+        }
     }
 
     private func setupSyncEngine() async {
@@ -66,6 +98,16 @@ final class CompanionSyncEngine: NSObject {
         }
 
         guard accountAvailable else { return }
+
+        // Ensure the zone exists before constructing the engine. Today this
+        // works only because the Mac creates the zone; after a dev wipe or
+        // on a fresh iCloud account where the iOS app launches first, the
+        // engine would otherwise loop with .zoneNotFound on every push.
+        await ensureZone()
+
+        // If the engine was already constructed on a previous account, tear
+        // it down so we re-init with the (possibly different) state.
+        if syncEngine != nil { syncEngine = nil }
 
         // Restore persisted engine state so CKSyncEngine can resume correctly.
         let serialization: CKSyncEngine.State.Serialization? = {
@@ -81,7 +123,14 @@ final class CompanionSyncEngine: NSObject {
             delegate: self
         )
 
-        syncEngine = CKSyncEngine(config)
+        let engine = CKSyncEngine(config)
+        syncEngine = engine
+        // Re-assert the zone in the engine's database state. CKSyncEngine
+        // does NOT auto-track custom zones across launches even when they
+        // exist on the server — without this, restored state emits the
+        // "finished fetching changes for a zone that it never started"
+        // warning and skips delta fetches. Idempotent.
+        engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone.zoneID))])
 
         // Register subscriptions once per launch after the engine is up.
         if !subscriptionsReady {
@@ -336,6 +385,11 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 }
             }
             for save in e.savedRecords {
+                if save.recordType == CloudKitConstants.RecordType.settings {
+                    // Persist the server changeTag so the next user edit
+                    // performs an UPDATE rather than another INSERT.
+                    await MainActor.run { SettingsStore.shared.serverRecord = save }
+                }
                 if save.recordType == CloudKitConstants.RecordType.controlCommand,
                    let cmd = ControlCommandRecord(save) {
                     await MainActor.run {
@@ -391,9 +445,38 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         let changes = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         guard !changes.isEmpty else { return nil }
         let snapshot: [CKRecord.ID: CKRecord] = await MainActor.run { self.recordsByID }
-        return await CKSyncEngine.RecordZoneChangeBatch(
+
+        // Split into Settings vs everything-else so each batch uses the
+        // appropriate savePolicy.
+        //
+        // Settings: .ifServerRecordUnchanged so per-field LWW survives
+        //   concurrent Mac edits. SettingsStore caches the server CKRecord
+        //   and passes it as `base` to toCKRecord, so each write carries the
+        //   server changeTag. Conflicts resurface as .serverRecordChanged
+        //   and are recovered via re-fetch in sentRecordZoneChanges.
+        //
+        // ControlCommand / others: .allKeys so freshly-created records with
+        //   no prior server changeTag don't get rejected as
+        //   "record to insert already exists" (CKError 14/2004).
+        let settingsName = SettingsRecord.singletonRecordName
+        let settingsChanges = changes.filter { change in
+            switch change {
+            case .saveRecord(let id):   return id.recordName == settingsName
+            case .deleteRecord(let id): return id.recordName == settingsName
+            @unknown default:           return false
+            }
+        }
+        if !settingsChanges.isEmpty {
+            return await CKSyncEngine.RecordZoneChangeBatch(
+                pendingChanges: settingsChanges,
+                recordProvider: { id in snapshot[id] }
+            )
+        }
+
+        let batch = await CKSyncEngine.RecordZoneChangeBatch(
             pendingChanges: changes,
             recordProvider: { id in snapshot[id] }
         )
+        return batch
     }
 }

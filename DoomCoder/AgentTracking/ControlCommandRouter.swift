@@ -44,12 +44,16 @@ enum ControlCommandRouter {
         let db = container.privateCloudDatabase
         let zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
                                      ownerName: CKCurrentUserDefaultName)
-        let predicate = NSPredicate(format: "appliedAt == nil")
+        let myId = CloudKitSyncEngine.shared.macId
+        // CKQuery cannot compare a literal `nil`. Query by macId only and
+        // filter `appliedAt == nil` client-side. The Mac only ever has a
+        // handful of pending commands so the bandwidth cost is negligible.
+        let predicate = NSPredicate(format: "macId == %@", myId)
         let query = CKQuery(recordType: ControlCommandRecord.recordType, predicate: predicate)
         do {
             let (matches, _) = try await db.records(matching: query, inZoneWith: zoneID)
             for (_, res) in matches {
-                if case .success(let rec) = res, let cmd = ControlCommandRecord(rec) {
+                if case .success(let rec) = res, let cmd = ControlCommandRecord(rec), cmd.appliedAt == nil {
                     await apply(cmd)
                 }
             }

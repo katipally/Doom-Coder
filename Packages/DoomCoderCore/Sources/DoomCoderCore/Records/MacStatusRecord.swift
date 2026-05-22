@@ -49,14 +49,22 @@ extension MacStatusRecord {
         return CKRecord.ID(recordName: "MacStatus-\(macId)", zoneID: zone)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord() -> CKRecord { toCKRecord(base: nil) }
+
+    /// Builds a CKRecord for this status. If `base` is provided (the server
+    /// CKRecord cached from the most recent fetch/save), its
+    /// `recordChangeTag` is preserved by mutating it in place. Without the
+    /// tag, every heartbeat looks like an INSERT to CloudKit and the second
+    /// one fails with code 14/2004 ("record to insert already exists").
+    public func toCKRecord(base: CKRecord?) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
         r["macId"]         = macId as CKRecordValue
         r["name"]          = name as CKRecordValue
         r["version"]       = version as CKRecordValue
         r["sleepActive"]   = (sleepActive ? 1 : 0) as CKRecordValue
         r["mode"]          = mode as CKRecordValue
         if let e = sessionEndsAt { r["sessionEndsAt"] = e as CKRecordValue }
+        else { r["sessionEndsAt"] = nil }
         r["lastSeen"]      = lastSeen as CKRecordValue
         r["thermalState"]  = thermalState as CKRecordValue
         r["schemaVersion"] = schemaVersion as CKRecordValue
