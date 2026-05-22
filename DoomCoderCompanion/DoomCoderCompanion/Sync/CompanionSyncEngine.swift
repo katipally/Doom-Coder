@@ -43,6 +43,7 @@ final class CompanionSyncEngine: NSObject {
     /// of producing two `.saveRecord(sameID)` entries (which CloudKit rejects
     /// as "You can't save the same record twice").
     private var recordsByID: [CKRecord.ID: CKRecord] = [:]
+    private var settingsSaveSerial: UInt64 = 0
 
     // MARK: - Defaults key for engine state
 
@@ -139,9 +140,11 @@ final class CompanionSyncEngine: NSObject {
         }
 
         // Pre-populate the ServerRecordCache so the first user toggle after a
-        // cold launch carries a valid recordChangeTag. Without this, the
-        // first edit lands as a tag-less INSERT against the server-side
-        // Settings-singleton and CloudKit rejects it with 14/2004.
+        // cold launch carries a valid recordChangeTag. This must be an
+        // explicit fetch-by-ID: CKSyncEngine.fetchChanges() is delta-based and
+        // can return nothing when its token is already current, leaving a
+        // freshly installed app-group cache empty.
+        await prewarmSettingsRecordCache()
         try? await engine.fetchChanges()
     }
 
@@ -154,6 +157,35 @@ final class CompanionSyncEngine: NSObject {
 
     func handleRemoteNotification() async {
         await fetchChanges()
+    }
+
+    private func fetchSettingsServerRecord() async -> CKRecord? {
+        await withCheckedContinuation { (cont: CheckedContinuation<CKRecord?, Never>) in
+            let op = CKFetchRecordsOperation(recordIDs: [SettingsRecord.recordID])
+            op.qualityOfService = .userInitiated
+            var out: CKRecord?
+            op.perRecordResultBlock = { _, result in
+                if case .success(let record) = result { out = record }
+            }
+            op.fetchRecordsResultBlock = { _ in cont.resume(returning: out) }
+            db.add(op)
+        }
+    }
+
+    private func prewarmSettingsRecordCache() async {
+        guard let fresh = await fetchSettingsServerRecord(),
+              let remote = SettingsRecord(fresh) else { return }
+        SettingsStore.shared.applyRemote(remote, rawRecord: fresh)
+        print("[CompanionSyncEngine] prewarm Settings-singleton OK")
+    }
+
+    private func enqueueSettingsSaveAfterPreflight(_ settings: SettingsRecord, serial: UInt64) async {
+        let fresh = await fetchSettingsServerRecord()
+        if let fresh, let remote = SettingsRecord(fresh) {
+            SettingsStore.shared.applyRemote(remote, rawRecord: fresh)
+        }
+        guard serial == settingsSaveSerial else { return }
+        enqueueSave(SettingsStore.shared.current.toCKRecord(base: fresh ?? SettingsStore.shared.serverRecord))
     }
 
     private func ensureSubscriptions() async {
@@ -170,6 +202,14 @@ final class CompanionSyncEngine: NSObject {
         syncEngine?.state.add(pendingRecordZoneChanges: [
             CKSyncEngine.PendingRecordZoneChange.saveRecord(record.recordID)
         ])
+    }
+
+    func enqueueSettingsSave(_ settings: SettingsRecord) {
+        settingsSaveSerial &+= 1
+        let serial = settingsSaveSerial
+        Task { @MainActor [self] in
+            await enqueueSettingsSaveAfterPreflight(settings, serial: serial)
+        }
     }
 
     // MARK: - Subscriptions

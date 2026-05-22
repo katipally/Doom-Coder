@@ -81,6 +81,7 @@ final class CloudKitSyncEngine {
     // MARK: - Settings state
 
     private var currentSettings: SettingsRecord?
+    private var settingsSaveSerial: UInt64 = 0
 
     /// Persistent server-record cache (system fields only) for all records
     /// with stable IDs that we re-save across launches: SettingsRecord
@@ -329,7 +330,7 @@ final class CloudKitSyncEngine {
         applyTo(&s)
         s.touch(field, by: macId)
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
+        scheduleSettingsSave(s)
     }
 
     func publishSettingsTouching(_ touchedFields: [String]) {
@@ -339,7 +340,7 @@ final class CloudKitSyncEngine {
         let now = Date()
         for f in touchedFields { s.touch(f, at: now, by: macId) }
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
+        scheduleSettingsSave(s)
     }
 
     func publishSettingsTouchingPerAgent(agent: String, subs: [String]) {
@@ -349,7 +350,32 @@ final class CloudKitSyncEngine {
         let now = Date()
         for sub in subs { s.touchPerAgent(agent, sub: sub, at: now, by: macId) }
         currentSettings = s
-        enqueue(save: s.toCKRecord(base: serverRecords.record(forName: SettingsRecord.singletonRecordName)))
+        scheduleSettingsSave(s)
+    }
+
+    private func scheduleSettingsSave(_ settings: SettingsRecord) {
+        settingsSaveSerial &+= 1
+        let serial = settingsSaveSerial
+        Task { @MainActor [self] in
+            await enqueueSettingsSaveAfterPreflight(settings, serial: serial)
+        }
+    }
+
+    private func enqueueSettingsSaveAfterPreflight(_ settings: SettingsRecord, serial: UInt64) async {
+        guard isAvailable, !applyingRemoteSettings else { return }
+
+        let fresh = await fetchRecordByID(SettingsRecord.recordID)
+        var merged = settings
+        if let fresh {
+            serverRecords.store(fresh)
+            if let remote = SettingsRecord(fresh) {
+                merged.merge(with: remote)
+            }
+        }
+
+        guard serial == settingsSaveSerial else { return }
+        currentSettings = merged
+        enqueue(save: merged.toCKRecord(base: fresh ?? serverRecords.record(forName: SettingsRecord.singletonRecordName)))
     }
 
     func acknowledgeCommand(_ record: ControlCommandRecord) {
@@ -640,6 +666,19 @@ final class CloudKitSyncEngine {
     }
 
     // MARK: - Cache pre-warm
+
+    private func fetchRecordByID(_ id: CKRecord.ID) async -> CKRecord? {
+        await withCheckedContinuation { (cont: CheckedContinuation<CKRecord?, Never>) in
+            let op = CKFetchRecordsOperation(recordIDs: [id])
+            op.qualityOfService = .userInitiated
+            var out: CKRecord?
+            op.perRecordResultBlock = { _, result in
+                if case .success(let record) = result { out = record }
+            }
+            op.fetchRecordsResultBlock = { _ in cont.resume(returning: out) }
+            database.add(op)
+        }
+    }
 
     /// Best-effort fetch of the two stable records the Mac re-saves
     /// across launches (`MacStatus-{macId}` + `Settings-singleton`).

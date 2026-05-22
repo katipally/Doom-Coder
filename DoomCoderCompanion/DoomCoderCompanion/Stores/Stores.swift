@@ -188,10 +188,10 @@ final class SettingsStore {
     func update(field: String, mutate: (inout SettingsRecord) -> Void) {
         mutate(&current)
         current.touch(field, by: deviceId)
-        // Patch the server record (preserves changeTag → UPDATE, not INSERT).
-        // Falls back to creating a new record only if the server record has
-        // never been fetched (unlikely in practice after first sync).
-        CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
+        // The sync engine preflights Settings-singleton by ID before enqueueing
+        // so cold launches and concurrent Mac edits don't save with a missing
+        // or stale recordChangeTag.
+        CompanionSyncEngine.shared.enqueueSettingsSave(current)
     }
 
     /// v3.2 — toggling per-agent overrides bumps per-(agent, sub-key) LWW
@@ -204,7 +204,7 @@ final class SettingsStore {
         for sub in subs {
             current.touchPerAgent(agent, sub: sub, by: deviceId)
         }
-        CompanionSyncEngine.shared.enqueueSave(current.toCKRecord(base: serverRecord))
+        CompanionSyncEngine.shared.enqueueSettingsSave(current)
     }
 
     /// Wipe local settings + server-record cache. Called on `.switchAccounts`
