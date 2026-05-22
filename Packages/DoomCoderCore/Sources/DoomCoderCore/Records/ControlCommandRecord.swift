@@ -102,9 +102,9 @@ extension ControlCommandRecord {
         r["argsJSON"]     = argsJSON as CKRecordValue
         r["requestedAt"]  = requestedAt as CKRecordValue
         r["requestedBy"]  = requestedBy as CKRecordValue
-        if let a = appliedAt { r["appliedAt"] = a as CKRecordValue }
-        if let res = result  { r["result"]    = res as CKRecordValue }
-        if let err = error   { r["error"]     = err as CKRecordValue }
+        if let a = appliedAt { r["appliedAt"] = a as CKRecordValue } else { r["appliedAt"] = nil }
+        if let res = result  { r["result"]    = res as CKRecordValue } else { r["result"]    = nil }
+        if let err = error   { r["error"]     = err as CKRecordValue } else { r["error"]     = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }

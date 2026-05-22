@@ -137,6 +137,12 @@ final class CompanionSyncEngine: NSObject {
             subscriptionsReady = true
             await ensureSubscriptions()
         }
+
+        // Pre-populate the ServerRecordCache so the first user toggle after a
+        // cold launch carries a valid recordChangeTag. Without this, the
+        // first edit lands as a tag-less INSERT against the server-side
+        // Settings-singleton and CloudKit rejects it with 14/2004.
+        try? await engine.fetchChanges()
     }
 
     // MARK: - Public API
@@ -275,6 +281,71 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
+    // MARK: - Conflict recovery
+
+    /// Mirrors the Mac's `CloudKitSyncEngine.recoverFromServerRecordChanged`
+    /// path. When CloudKit rejects a save with `.serverRecordChanged`
+    /// (the 14/2004 "record to insert already exists" flood the iOS
+    /// companion was looping on), do an explicit `CKFetchRecordsOperation`
+    /// for *this* recordID so we re-acquire its `recordChangeTag`, then
+    /// re-cache + re-enqueue against the fresh base. A delta
+    /// `fetchChanges()` is not sufficient — if no other client has moved
+    /// the server side since our last token, the delta is empty and we
+    /// stay stuck.
+    nonisolated private func recoverFromServerRecordChanged(
+        id: CKRecord.ID,
+        recordType: String,
+        localCopy: CKRecord
+    ) async {
+        // Drop the stale pending change first so the engine doesn't retry
+        // the tag-less save while we're fetching.
+        if let engine = await MainActor.run(body: { self.syncEngine }) {
+            engine.state.remove(pendingRecordZoneChanges: [.saveRecord(id)])
+        }
+        await MainActor.run {
+            _ = self.recordsByID.removeValue(forKey: id)
+        }
+
+        let db: CKDatabase = await MainActor.run { self.db }
+        let fresh: CKRecord? = await withCheckedContinuation { (cont: CheckedContinuation<CKRecord?, Never>) in
+            let op = CKFetchRecordsOperation(recordIDs: [id])
+            op.qualityOfService = .userInitiated
+            var got: CKRecord?
+            op.perRecordResultBlock = { _, result in
+                if case .success(let r) = result { got = r }
+            }
+            op.fetchRecordsResultBlock = { _ in cont.resume(returning: got) }
+            db.add(op)
+        }
+        guard let fresh else {
+            print("[CompanionSyncEngine] recover: fetch by ID returned nil for \(id.recordName)")
+            return
+        }
+
+        await MainActor.run {
+            switch recordType {
+            case CloudKitConstants.RecordType.settings:
+                // Cache the fresh tag, merge server values into local
+                // state, then re-enqueue the user's pending edit so it
+                // isn't silently dropped.
+                if let remote = SettingsRecord(fresh) {
+                    SettingsStore.shared.applyRemote(remote, rawRecord: fresh)
+                }
+                let merged = SettingsStore.shared.current
+                self.enqueueSave(merged.toCKRecord(base: SettingsStore.shared.serverRecord))
+            case CloudKitConstants.RecordType.controlCommand:
+                // iOS commands are one-shot inserts — the conflict means
+                // the Mac already acked. Apply the freshly-fetched ack so
+                // the optimistic UI state reconciles.
+                if let cmd = ControlCommandRecord(fresh) {
+                    CommandPublisher.shared.handleEcho(cmd)
+                }
+            default:
+                break
+            }
+        }
+    }
+
     // MARK: - Record fan-out
 
     nonisolated private func handleFetched(_ record: CKRecord) {
@@ -398,34 +469,32 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 }
             }
             // When a record fails with .serverRecordChanged, the server already
-            // has a newer copy. Re-fetch so our local state catches up.
-            // Do NOT re-enqueue a save — iOS is a read-mostly client for Settings.
+            // has a newer copy. Industry best practice (and what the Mac side
+            // does in CloudKitSyncEngine.recoverFromServerRecordChanged) is
+            // to fetch that specific record by ID via CKFetchRecordsOperation
+            // so we re-acquire its recordChangeTag, then re-upsert against
+            // the fresh `base`. A delta `fetchChanges()` may return nothing
+            // (the server hasn't moved since our last token) and leaves us
+            // stuck in a tag-less-INSERT loop.
             if !e.failedRecordSaves.isEmpty {
                 for fail in e.failedRecordSaves {
-                    print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(fail.error.localizedDescription)")
-                    let recordID = fail.record.recordID
-                    // If Settings-singleton conflicts, clear our cached server record
-                    // so the next user edit doesn't re-use a stale changeTag.
-                    if recordID.recordName == SettingsRecord.singletonRecordName {
-                        await MainActor.run { SettingsStore.shared.serverRecord = nil }
-                    }
-                    // Drop the failed record from our queue. CKSyncEngine
-                    // already removed the pending change from its state for
-                    // non-retryable errors; for retryable ones it keeps the
-                    // pending change and will call us again — at which point
-                    // recordProvider will return nil for this ID and the
-                    // engine will skip it. Either way, holding onto the stale
-                    // record only invites the duplicate-save bug.
-                    await MainActor.run {
-                        _ = self.recordsByID.removeValue(forKey: recordID)
+                    let cke = fail.error
+                    print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(cke.localizedDescription)")
+                    if cke.code == .serverRecordChanged {
+                        await self.recoverFromServerRecordChanged(
+                            id: fail.record.recordID,
+                            recordType: fail.record.recordType,
+                            localCopy: fail.record
+                        )
+                    } else {
+                        // Non-conflict failures: drop the stale record from
+                        // our queue. The engine has already decided whether
+                        // to keep or drop the pending change.
+                        await MainActor.run {
+                            _ = self.recordsByID.removeValue(forKey: fail.record.recordID)
+                        }
                     }
                 }
-                // MUST use Task.detached — calling engine.fetchChanges() from
-                // inside a delegate callback causes a CKSyncEngine reentrancy
-                // crash (Task 840: "BUG IN CLIENT OF CLOUDKIT"). Detached task
-                // runs outside the delegate's task tree, satisfying CKSyncEngine's
-                // serial-delegate guarantee.
-                Task.detached { [weak self] in await self?.fetchChanges() }
             }
 
         default:

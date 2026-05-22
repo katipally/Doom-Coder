@@ -191,6 +191,16 @@ final class CloudKitSyncEngine {
         isAvailable = true
         accountStatusText = "iCloud synced"
 
+        // Step 3b: pre-warm ServerRecordCache for the two stable records we
+        // always own (MacStatus-{macId} + Settings-singleton). On the very
+        // first launch after a re-install / new build / account switch the
+        // on-disk cache is empty, so without this the first publishMacStatus
+        // emits a tag-less INSERT that CloudKit rejects with 14/2004
+        // ("record to insert already exists") until the recovery path
+        // catches up. Best-effort: missing records are normal on a true
+        // first-ever launch.
+        await prewarmStableRecordCache()
+
         // Step 4: initial MacStatus heartbeat.
         publishMacStatus()
         logger.info("initial MacStatus enqueued")
@@ -280,7 +290,7 @@ final class CloudKitSyncEngine {
             hasEnded: s.hasEnded, hasFailed: s.hasFailed,
             displayState: s.displayState.rawValue
         )
-        enqueue(save: rec.toCKRecord())
+        enqueue(save: rec.toCKRecord(base: serverRecords.record(for: rec.recordID)))
     }
 
     func publishEvent(sessionKey: String, agent: String, event: String,
@@ -422,6 +432,19 @@ final class CloudKitSyncEngine {
                 // is now cached — if it still needs acking, the router
                 // will re-enqueue on the next remote-change push.
                 break
+            case CloudKitConstants.RecordType.session:
+                // Re-publish the live session against the fresh tag so the
+                // pending phase/tool/count update isn't silently dropped.
+                // sessionKey is the recordName without the "Session-" prefix
+                // (publishSession only replaces ' ' with '_', and our
+                // sessionKey "{agentRaw}::{sessionId}" never contains
+                // spaces in practice).
+                let prefix = "Session-"
+                guard id.recordName.hasPrefix(prefix) else { break }
+                let sessionKey = String(id.recordName.dropFirst(prefix.count))
+                if let live = AgentTrackingManager.shared.sessions[sessionKey] {
+                    self.publishSession(live)
+                }
             default:
                 break
             }
@@ -466,6 +489,12 @@ final class CloudKitSyncEngine {
                 if record.recordID.recordName == "MacStatus-\(self.macId)" {
                     self.serverRecords.store(record)
                 }
+
+            case CloudKitConstants.RecordType.session:
+                // Cache server CKRecord so subsequent publishSession calls
+                // (toolCallCount / lastEvent / phase updates) carry the
+                // recordChangeTag and avoid the 14/2004 conflict flood.
+                self.serverRecords.store(record)
 
             case CloudKitConstants.RecordType.controlCommand:
                 // Cache the server CKRecord so acknowledgeCommand can mutate
@@ -608,6 +637,42 @@ final class CloudKitSyncEngine {
             }
             database.add(op)
         }
+    }
+
+    // MARK: - Cache pre-warm
+
+    /// Best-effort fetch of the two stable records the Mac re-saves
+    /// across launches (`MacStatus-{macId}` + `Settings-singleton`).
+    /// Storing the fresh CKRecord into `serverRecords` ensures the first
+    /// publish after launch carries a valid `recordChangeTag` and avoids
+    /// the 14/2004 "record to insert already exists" noise on
+    /// re-installs / new builds / account-switch flows. Missing records
+    /// are normal on first-ever launch and silently ignored.
+    private func prewarmStableRecordCache() async {
+        let macStatusID = CKRecord.ID(recordName: "MacStatus-\(macId)", zoneID: zoneID)
+        let settingsID  = CKRecord.ID(recordName: SettingsRecord.singletonRecordName, zoneID: zoneID)
+        let fetched: [CKRecord] = await withCheckedContinuation { (cont: CheckedContinuation<[CKRecord], Never>) in
+            let op = CKFetchRecordsOperation(recordIDs: [macStatusID, settingsID])
+            op.qualityOfService = .userInitiated
+            var out: [CKRecord] = []
+            op.perRecordResultBlock = { _, result in
+                if case .success(let r) = result { out.append(r) }
+            }
+            op.fetchRecordsResultBlock = { _ in cont.resume(returning: out) }
+            database.add(op)
+        }
+        for record in fetched {
+            serverRecords.store(record)
+            // Also seed currentSettings from the server-known Settings so
+            // the first publishSettingsField patches the right base.
+            if record.recordType == CloudKitConstants.RecordType.settings,
+               let s = SettingsRecord(record) {
+                var local = localSettingsSnapshot()
+                local.merge(with: s)
+                currentSettings = local
+            }
+        }
+        logger.info("prewarmStableRecordCache: fetched=\(fetched.count, privacy: .public)")
     }
 
     // MARK: - Subscriptions
@@ -889,6 +954,11 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                     } else if saved.recordType == CloudKitConstants.RecordType.macStatus,
                               saved.recordID.recordName == "MacStatus-\(self.macId)" {
                         // Cache our own MacStatus tag for the next heartbeat.
+                        self.serverRecords.store(saved)
+                    } else if saved.recordType == CloudKitConstants.RecordType.session {
+                        // Cache the Session tag so the next publishSession
+                        // (toolCallCount/lastEvent/phase update) is an UPDATE,
+                        // not an INSERT.
                         self.serverRecords.store(saved)
                     }
                 }

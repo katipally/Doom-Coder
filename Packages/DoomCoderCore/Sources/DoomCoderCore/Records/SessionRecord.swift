@@ -67,19 +67,29 @@ extension SessionRecord {
         return CKRecord.ID(recordName: "Session-\(safe)", zoneID: zone)
     }
 
-    public func toCKRecord() -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord() -> CKRecord { toCKRecord(base: nil) }
+
+    /// Builds a CKRecord for this session. If `base` is provided (the server
+    /// CKRecord cached from the most recent fetch/save), its
+    /// `recordChangeTag` is preserved by mutating it in place. Without the
+    /// tag, every re-publish during a live session (toolCallCount /
+    /// lastEvent / phase change) looks like an INSERT to CloudKit and fails
+    /// with code 14/2004 ("record to insert already exists").
+    public func toCKRecord(base: CKRecord?) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
         r["sessionKey"]         = sessionKey as CKRecordValue
         r["macId"]              = macId as CKRecordValue
         r["agent"]              = agent as CKRecordValue
         r["sessionId"]          = sessionId as CKRecordValue
         r["cwd"]                = cwd as CKRecordValue
         if let b = cwdBase { r["cwdBase"] = b as CKRecordValue }
+        else                { r["cwdBase"] = nil }
         r["startedAt"]          = startedAt as CKRecordValue
         r["updatedAt"]          = updatedAt as CKRecordValue
         r["lastEvent"]          = lastEvent as CKRecordValue
         r["lastPhase"]          = lastPhase as CKRecordValue
         if let t = lastTool { r["lastTool"] = t as CKRecordValue }
+        else                 { r["lastTool"] = nil }
         r["toolCallCount"]      = toolCallCount as CKRecordValue
         r["errorCount"]         = errorCount as CKRecordValue
         r["awaitingPermission"] = (awaitingPermission ? 1 : 0) as CKRecordValue
