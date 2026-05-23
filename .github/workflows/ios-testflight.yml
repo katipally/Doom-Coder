@@ -123,8 +123,9 @@ jobs:
 
           # Auto-detect: raw PEM (starts with -----BEGIN) or base64-encoded.
           if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
-            # Raw PEM — strip carriage returns (Windows \r\n → \n) then write.
-            printf '%s' "$API_KEY" | tr -d '\r' > "$KEY_FILE"
+            # Raw PEM — strip carriage returns and trailing whitespace per line
+            # (CryptoKit rejects trailing spaces on -----END PRIVATE KEY-----).
+            printf '%s' "$API_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//' > "$KEY_FILE"
             echo "Detected raw PEM format"
           else
             # Base64-encoded .p8 — decode then strip carriage returns.
