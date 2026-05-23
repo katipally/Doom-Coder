@@ -454,9 +454,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # CRITICAL: stage ONLY appcast.xml. `git add -A` was picking up
+          # spurious workspace mutations (likely .github/workflows/release.yml
+          # touched by checkout/version-bump steps) which then caused the push
+          # to be rejected — GITHUB_TOKEN cannot modify workflow files at all,
+          # regardless of `permissions:`. Restricting the stage to the file we
+          # actually want to commit avoids the entire class of issue.
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
-            git add -A
+            git add appcast.xml
             if ! git diff --cached --quiet; then
               git commit -m "chore: update appcast.xml for ${{ env.TAG }}"
             fi
