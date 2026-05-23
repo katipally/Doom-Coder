@@ -66,6 +66,14 @@ struct SyncDiagnosticsView: View {
             } label: {
                 Label("Clear event log", systemImage: "trash")
             }
+            Button(role: .destructive) {
+                Task { await sync.resetLocalSyncState() }
+            } label: {
+                Label("Reset local sync state", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+            }
+        } footer: {
+            Text("Reset clears this device's CKSyncEngine state and cached server records, then re-bootstraps. Use if iOS→Mac changes stop landing. Server data is untouched.")
+                .font(.caption2)
         }
     }
 

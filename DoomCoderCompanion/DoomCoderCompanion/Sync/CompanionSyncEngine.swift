@@ -49,6 +49,10 @@ final class CompanionSyncEngine: NSObject {
     /// of producing two `.saveRecord(sameID)` entries (which CloudKit rejects
     /// as "You can't save the same record twice").
     private var recordsByID: [CKRecord.ID: CKRecord] = [:]
+    /// RecordIDs whose CKRecord landed in `recordsByID` before the
+    /// CKSyncEngine was constructed (cold launch racing UI). Drained by
+    /// `replayPendingEnqueues()` once the engine exists.
+    private var pendingPreEngineChangeIDs: Set<CKRecord.ID> = []
     private var settingsSaveSerial: UInt64 = 0
 
     // MARK: - Defaults key for engine state
@@ -163,6 +167,10 @@ final class CompanionSyncEngine: NSObject {
 
         let engine = CKSyncEngine(config)
         syncEngine = engine
+        // Drain any saves the user enqueued before the engine was ready
+        // (cold-launch race, post-reset). Must happen BEFORE the first
+        // fetchChanges() so the very first push batch carries them.
+        replayPendingEnqueues()
         // Re-assert the zone in the engine's database state. CKSyncEngine
         // does NOT auto-track custom zones across launches even when they
         // exist on the server — without this, restored state emits the
@@ -193,7 +201,35 @@ final class CompanionSyncEngine: NSObject {
     }
 
     func handleRemoteNotification() async {
+        SyncTelemetry.shared.record(.pushReceived, side: .ios)
         await fetchChanges()
+    }
+
+    // MARK: - Emergency reset
+
+    /// Tears down the local CKSyncEngine + persisted state and re-bootstraps.
+    /// Does NOT touch the server zone — only local caches that can desync
+    /// after a force-quit / OS kill mid-write or an aborted dev reset.
+    /// Surfaced from Sync Diagnostics so the user can recover without having
+    /// to reach the Mac.
+    func resetLocalSyncState() async {
+        print("[CompanionSyncEngine] resetLocalSyncState: starting")
+        SyncTelemetry.shared.record(.engineError, side: .ios,
+                                    detail: "user-initiated local sync reset")
+        // Tear down engine + queues. Server state is untouched.
+        syncEngine = nil
+        recordsByID.removeAll()
+        pendingPreEngineChangeIDs.removeAll()
+        subscriptionsReady = false
+        zoneReady = false
+        firstFetchCompleted = false
+        // Purge persisted CKSyncEngine state token + cached server records.
+        // Next setupSyncEngine() will rebuild from a clean slate.
+        sharedDefaults.removeObject(forKey: Self.engineStateKey)
+        sharedDefaults.synchronize()
+        SettingsStore.shared.serverRecord = nil
+        await setupSyncEngine()
+        print("[CompanionSyncEngine] resetLocalSyncState: done")
     }
 
     private func fetchSettingsServerRecord() async -> CKRecord? {
@@ -225,11 +261,34 @@ final class CompanionSyncEngine: NSObject {
 
     /// Enqueue a CKRecord for the next outbound sync batch.
     /// Latest write per recordID wins (overwrites in-flight queued copy).
+    ///
+    /// If the engine hasn't constructed yet (very early launch, account still
+    /// resolving, or mid-reset), the change is parked in `recordsByID` AND
+    /// `pendingPreEngineChangeIDs`. Once `setupSyncEngine()` finishes building
+    /// the engine, `replayPendingEnqueues()` flushes the parked changes into
+    /// the engine state so the user's edit is never silently lost.
     func enqueueSave(_ record: CKRecord) {
         recordsByID[record.recordID] = record
-        syncEngine?.state.add(pendingRecordZoneChanges: [
-            CKSyncEngine.PendingRecordZoneChange.saveRecord(record.recordID)
-        ])
+        if let engine = syncEngine {
+            engine.state.add(pendingRecordZoneChanges: [
+                CKSyncEngine.PendingRecordZoneChange.saveRecord(record.recordID)
+            ])
+        } else {
+            pendingPreEngineChangeIDs.insert(record.recordID)
+            SyncTelemetry.shared.record(.engineError, side: .ios,
+                                        recordType: record.recordType,
+                                        detail: "enqueueSave: engine not ready — parked for replay")
+            print("[CompanionSyncEngine] enqueueSave: engine not ready — parked \(record.recordID.recordName) for replay")
+        }
+    }
+
+    /// Drain any pre-engine parked changes into the freshly constructed engine.
+    private func replayPendingEnqueues() {
+        guard let engine = syncEngine, !pendingPreEngineChangeIDs.isEmpty else { return }
+        let ids = Array(pendingPreEngineChangeIDs)
+        pendingPreEngineChangeIDs.removeAll()
+        engine.state.add(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+        print("[CompanionSyncEngine] replayPendingEnqueues: replayed \(ids.count) parked save(s)")
     }
 
     /// Enqueue a Settings change. We rely on:
@@ -536,9 +595,10 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 await MainActor.run {
                     self.handleFetched(change.record)
                 }
-                if rtype == CloudKitConstants.RecordType.macStatus {
-                    SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
-                }
+                // Surface .applied for every record type so the iOS Diagnostics
+                // view can prove an iOS→server→iOS-echo or Mac→iOS Settings
+                // push actually landed in the local store.
+                SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
             }
             await MainActor.run {
                 self.zoneReady = true
