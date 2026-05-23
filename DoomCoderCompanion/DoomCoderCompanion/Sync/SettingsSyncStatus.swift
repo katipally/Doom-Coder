@@ -31,13 +31,19 @@ final class SettingsSyncStatus {
     let visibilityThresholdMs: Int = 2_000
 
     private init() {
+        // Observer runs on the main queue (queue: .main) but the closure type
+        // is nonisolated. assumeIsolated tells the compiler what we already
+        // know — we're on the MainActor — so consume() can be called
+        // directly without an extra Task hop.
         NotificationCenter.default.addObserver(
             forName: SyncTelemetry.eventRecordedNotification,
             object: nil,
             queue: .main
         ) { [weak self] note in
             guard let self, let ev = note.object as? SyncEvent else { return }
-            self.consume(ev)
+            MainActor.assumeIsolated {
+                self.consume(ev)
+            }
         }
     }
 

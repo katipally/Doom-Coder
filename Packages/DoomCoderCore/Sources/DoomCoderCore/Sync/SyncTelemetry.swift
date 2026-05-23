@@ -87,14 +87,24 @@ public final class SyncTelemetry: @unchecked Sendable {
         signposter.emitEvent("sync", "\(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public)")
         if let latencyMs {
             logger.info("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) latency=\(latencyMs)ms")
-
-            NotificationCenter.default.post(name: SyncTelemetry.roundTripCompletedNotification,
-                                            object: nil,
-                                            userInfo: ["latencyMs": latencyMs, "recordType": recordType ?? ""])
         } else {
             logger.debug("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) \(detail ?? "", privacy: .public)")
         }
-        NotificationCenter.default.post(name: SyncTelemetry.eventRecordedNotification, object: event)
+        // Hop NotificationCenter posts to the main queue so SwiftUI @Observable
+        // and @State listeners never receive updates on the CKSyncEngine
+        // worker thread (which triggers
+        // "Publishing changes from background threads is not allowed").
+        let capturedLatency = latencyMs
+        let capturedRecordType = recordType
+        DispatchQueue.main.async {
+            if let ms = capturedLatency {
+                NotificationCenter.default.post(name: SyncTelemetry.roundTripCompletedNotification,
+                                                object: nil,
+                                                userInfo: ["latencyMs": ms,
+                                                           "recordType": capturedRecordType ?? ""])
+            }
+            NotificationCenter.default.post(name: SyncTelemetry.eventRecordedNotification, object: event)
+        }
     }
 
     public func snapshot() -> [SyncEvent] {
