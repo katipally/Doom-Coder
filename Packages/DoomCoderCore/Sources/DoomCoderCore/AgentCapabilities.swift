@@ -76,7 +76,7 @@ public enum AgentCapabilityCatalog {
         case .claude:
             return [completed, failed, waitingApproval, sessionStart, toolCalls]
         case .cursor:
-            return [completed, failed, waitingInput, sessionStart]
+            return [completed, failed, sessionStart]
         case .vscode:
             return [completed, failed, waitingInput, sessionStart]
         case .copilotCLI:
