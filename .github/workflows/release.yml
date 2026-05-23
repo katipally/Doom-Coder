@@ -91,26 +91,29 @@ jobs:
           API_KEY_ID_RAW: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           API_ISSUER_RAW: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          KEY_ID=$(echo "$API_KEY_ID_RAW" | tr -d '[:space:]')
-          ISSUER_ID=$(echo "$API_ISSUER_RAW" | tr -d '[:space:]')
-          KEY_DIR=~/.appstoreconnect/private_keys
-          mkdir -p "$KEY_DIR"
-          KEY_PATH="$KEY_DIR/AuthKey_${KEY_ID}.p8"
-          # Reconstruct proper PEM with 64-char line wraps
-          RAW=$(echo "$API_KEY" | tr -d '[:space:]')
-          if echo "$RAW" | grep -q "BEGINPRIVATEKEY\|BEGIN PRIVATE KEY"; then
-            B64=$(echo "$RAW" | sed 's/-----BEGIN PRIVATE KEY-----//;s/-----END PRIVATE KEY-----//')
+          set -euo pipefail
+          API_KEY_ID=$(printf '%s' "$API_KEY_ID_RAW" | tr -d '[:space:]')
+          API_ISSUER=$(printf '%s' "$API_ISSUER_RAW" | tr -d '[:space:]')
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          RAW_FILE="$RUNNER_TEMP/api_key_raw.p8"
+          KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
+          if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
+            printf '%s' "$API_KEY" | tr -d '\r' > "$RAW_FILE"
           else
-            B64="$RAW"
+            printf '%s' "$API_KEY" | tr -d '\r ' | base64 -D > "$RAW_FILE"
           fi
-          { printf -- "-----BEGIN PRIVATE KEY-----\n"
+          RAW_CONTENT=$(cat "$RAW_FILE" | tr -d '\r')
+          KEY_TYPE=$(printf '%s' "$RAW_CONTENT" | grep -o -- "-----BEGIN [^-]*-----" | head -1 | sed 's/-----BEGIN //;s/-----//')
+          B64=$(printf '%s' "$RAW_CONTENT" | grep -v "^-----" | tr -d '\n\r ')
+          { printf -- "-----BEGIN %s-----\n" "$KEY_TYPE"
             printf '%s' "$B64" | fold -w 64
-            printf -- "\n-----END PRIVATE KEY-----\n"; } > "$KEY_PATH"
-          chmod 600 "$KEY_PATH"
-          echo "key_id=${KEY_ID}"     >> "$GITHUB_OUTPUT"
-          echo "issuer_id=${ISSUER_ID}" >> "$GITHUB_OUTPUT"
-          echo "key_path=${KEY_PATH}"  >> "$GITHUB_OUTPUT"
-          echo "ASC API key written for key ID: ${KEY_ID}"
+            printf "\n-----END %s-----\n" "$KEY_TYPE"; } > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          rm -f "$RAW_FILE"
+          echo "key_id=${API_KEY_ID}"   >> "$GITHUB_OUTPUT"
+          echo "issuer_id=${API_ISSUER}" >> "$GITHUB_OUTPUT"
+          echo "key_path=${KEY_FILE}"    >> "$GITHUB_OUTPUT"
+          echo "ASC API key written ($(wc -l < "$KEY_FILE") lines) for key ID: ${API_KEY_ID}"
 
       - name: Build Release Archive
         run: |
