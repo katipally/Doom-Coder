@@ -2,6 +2,7 @@ import Foundation
 import UserNotifications
 import AppKit
 import OSLog
+import DoomCoderCore
 
 // Fan-out for DoomCoder agent notifications. Honors the TrackingStore
 // per-agent opt-out and the global ChannelStore (macOS local + ntfy).
@@ -128,11 +129,11 @@ final class NotificationDispatcher {
                 title: title, body: body, channel: "macOS", success: true, ts: ts
             )
         }
-        if channels.ntfy {
-            postNtfy(title: title, body: body)
+        if channels.cloudkit {
+            postCloudKit(ev: ev, title: title, body: body)
             EventStore.shared.insertNotification(
                 sessionKey: ev.sessionKey, agent: ev.agent.rawValue, event: ev.event,
-                title: title, body: body, channel: "ntfy", success: true, ts: ts
+                title: title, body: body, channel: "iOS", success: true, ts: ts
             )
         }
     }
@@ -149,13 +150,13 @@ final class NotificationDispatcher {
             guard ok else { return false }
             postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
             return true
-        case .ntfy:
-            postNtfy(title: "DoomCoder", body: "ntfy channel is working ✨")
+        case .cloudKit:
+            postCloudKit(ev: nil, title: "DoomCoder", body: "iPhone push channel is working ✨")
             return true
         }
     }
 
-    enum TestChannel { case macOS, ntfy }
+    enum TestChannel { case macOS, cloudKit }
 
     // MARK: - Copy
 
@@ -279,19 +280,26 @@ final class NotificationDispatcher {
         }
     }
 
-    // MARK: - ntfy
+    // MARK: - CloudKit (iOS companion push)
 
-    private func postNtfy(title: String, body: String) {
-        let topic = NtfyTopic.getOrCreate()
-        let server = NtfyTopic.server ?? "https://ntfy.sh"
-        guard let url = URL(string: "\(server)/\(topic)") else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue(title, forHTTPHeaderField: "Title")
-        req.setValue("default", forHTTPHeaderField: "Priority")
-        req.httpBody = Data(body.utf8)
-        URLSession.shared.dataTask(with: req) { [weak self] _, _, err in
-            if let err { self?.logger.error("ntfy failed: \(err.localizedDescription, privacy: .public)") }
-        }.resume()
+    private func postCloudKit(ev: Event?, title: String, body: String) {
+        let pusher = CloudKitPusher.shared
+        let session = ev.flatMap { AgentTrackingManager.shared.sessions[$0.sessionKey] }
+        let rec = NotificationLogRecord(
+            sessionKey: ev?.sessionKey ?? "test",
+            macId: pusher.macId,
+            macName: pusher.macName,
+            agent: ev?.agent.rawValue ?? "doomcoder",
+            phase: ev?.phase.rawValue ?? "test",
+            rawEvent: ev?.event ?? "test",
+            title: title,
+            body: body,
+            channel: "iOS",
+            success: true,
+            ts: Date(),
+            lastTool: session?.lastTool,
+            cwdBase: session.flatMap { shortCwd($0.cwd) }
+        )
+        pusher.publishNotificationLog(rec)
     }
 }

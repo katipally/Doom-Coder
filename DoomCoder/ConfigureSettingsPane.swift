@@ -6,7 +6,6 @@ import AppKit
 /// real, persistent preference — no stubs.
 struct ConfigureSettingsPane: View {
     @Bindable var sleepManager: SleepManager
-    @State private var ntfyRegenerated = false
     @State private var autoRevertSeconds: Int = {
         UserDefaults.standard.object(forKey: "doomcoder.session.autoRevertSeconds") as? Int ?? 30
     }()
@@ -81,32 +80,18 @@ struct ConfigureSettingsPane: View {
                         }
                     Divider()
                     HStack {
-                        Text("ntfy topic")
+                        Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
+                            .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
+                        Text("iPhone / iPad sync")
                         Spacer()
-                        Text(NtfyTopic.getOrCreate())
-                            .font(.system(.body, design: .monospaced))
+                        Text(CloudKitPusher.shared.isReady ? "Connected" : "Connecting…")
+                            .font(.callout)
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                     }
-                    HStack {
-                        Button {
-                            _ = NtfyTopic.regenerate()
-                            ntfyRegenerated = true
-                            Task {
-                                try? await Task.sleep(for: .seconds(2))
-                                ntfyRegenerated = false
-                            }
-                        } label: {
-                            if ntfyRegenerated {
-                                Label("Regenerated", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Text("Regenerate ntfy topic")
-                            }
-                        }
-                        Spacer()
-                    }
-                    .buttonStyle(.bordered)
+                    Text("Install the DoomCoder companion app from the App Store and sign in to the same iCloud account to mirror notifications on your iPhone or iPad.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 section("Diagnostics") {

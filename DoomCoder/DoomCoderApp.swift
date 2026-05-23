@@ -49,6 +49,12 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
         ChannelStore.migratePrefsIfNeeded()
 
+        // Start the iCloud push pipeline (writes NotificationLog / MacStatus
+        // / AgentConfig / AgentIcon CKRecords that the iOS companion app
+        // subscribes to). Safe to call before iCloud account is ready —
+        // the pusher waits for accountStatus internally.
+        CloudKitPusher.shared.start()
+
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
 

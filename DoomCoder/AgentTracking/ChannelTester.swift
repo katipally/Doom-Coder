@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import UserNotifications
 import OSLog
+import DoomCoderCore
 
 // Fires a real test notification to a single channel, bypassing dedupe logic.
 enum ChannelTester {
@@ -12,28 +13,28 @@ enum ChannelTester {
         switch channel {
         case .macNotification:
             sendMacTest(completion: completion)
-        case .ntfy:
-            sendNtfyTest(completion: completion)
+        case .cloudKit:
+            sendCloudKitTest(completion: completion)
         }
     }
 
     enum Channel: String, CaseIterable, Identifiable {
         case macNotification = "macOS"
-        case ntfy = "ntfy"
+        case cloudKit = "iPhone / iPad"
 
         var id: String { rawValue }
 
         var displayName: String {
             switch self {
             case .macNotification: return "macOS Notification"
-            case .ntfy:            return "ntfy"
+            case .cloudKit:        return "iPhone / iPad (iCloud)"
             }
         }
 
         var icon: String {
             switch self {
             case .macNotification: return "bell.badge.fill"
-            case .ntfy:            return "paperplane.fill"
+            case .cloudKit:        return "iphone.gen3"
             }
         }
     }
@@ -75,38 +76,29 @@ enum ChannelTester {
         }
     }
 
-    // MARK: - ntfy Test
+    // MARK: - CloudKit (iPhone / iPad) Test
 
-    private static func sendNtfyTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
-        let topic = NtfyTopic.getOrCreate()
-
-        let server = NtfyTopic.server ?? "https://ntfy.sh"
-        guard let url = URL(string: "\(server)/\(topic)") else {
-            Task { @MainActor in
-                completion(false, "Invalid ntfy URL.")
-            }
+    @MainActor
+    private static func sendCloudKitTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
+        let pusher = CloudKitPusher.shared
+        guard pusher.isReady else {
+            completion(false, "iCloud sync isn't ready yet. Make sure you're signed in to iCloud and the DoomCoder iPhone app is installed.")
             return
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("DoomCoder — Test", forHTTPHeaderField: "Title")
-        request.setValue("high", forHTTPHeaderField: "Priority")
-        request.setValue("white_check_mark", forHTTPHeaderField: "Tags")
-        request.httpBody = "ntfy channel is working! You'll see agent alerts here.".data(using: .utf8)
-        request.timeoutInterval = 10
-
-        URLSession.shared.dataTask(with: request) { _, response, error in
-            Task { @MainActor in
-                if let error {
-                    completion(false, "ntfy error: \(error.localizedDescription)")
-                } else if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    completion(true, "ntfy test sent (topic: \(topic))")
-                } else {
-                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    completion(false, "ntfy returned HTTP \(code)")
-                }
-            }
-        }.resume()
+        let rec = NotificationLogRecord(
+            sessionKey: "test",
+            macId: pusher.macId,
+            macName: pusher.macName,
+            agent: "doomcoder",
+            phase: "test",
+            rawEvent: "test",
+            title: "DoomCoder — Test",
+            body: "✅ iPhone push channel is working! You'll see agent alerts on your iOS device.",
+            channel: "iOS",
+            success: true,
+            ts: Date()
+        )
+        pusher.publishNotificationLog(rec)
+        completion(true, "Test push queued — check your iPhone in a few seconds.")
     }
 }

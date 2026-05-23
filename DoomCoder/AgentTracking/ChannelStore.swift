@@ -8,7 +8,40 @@ struct ChannelStore {
 
     struct ChannelConfig: Codable, Sendable, Equatable {
         var macNotification: Bool = true
-        var ntfy: Bool = false
+        /// Send notifications to the iOS companion app via CloudKit.
+        /// Legacy on-disk JSON used the key `ntfy`; we transparently read it
+        /// into `cloudkit` so users upgrading from v2.3 don't lose their
+        /// channel preference.
+        var cloudkit: Bool = false
+
+        enum CodingKeys: String, CodingKey {
+            case macNotification
+            case cloudkit
+            case ntfy
+        }
+
+        init(macNotification: Bool = true, cloudkit: Bool = false) {
+            self.macNotification = macNotification
+            self.cloudkit = cloudkit
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.macNotification = (try? c.decode(Bool.self, forKey: .macNotification)) ?? true
+            if let ck = try? c.decode(Bool.self, forKey: .cloudkit) {
+                self.cloudkit = ck
+            } else if let n = try? c.decode(Bool.self, forKey: .ntfy) {
+                self.cloudkit = n
+            } else {
+                self.cloudkit = false
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(macNotification, forKey: .macNotification)
+            try c.encode(cloudkit, forKey: .cloudkit)
+        }
     }
 
     /// Which event phases should trigger a push notification.
