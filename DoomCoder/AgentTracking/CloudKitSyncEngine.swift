@@ -612,6 +612,7 @@ final class CloudKitSyncEngine {
     private func applyRemoteSettings(_ s: SettingsRecord) {
         applyingRemoteSettings = true
         defer { applyingRemoteSettings = false }
+        SyncTelemetry.shared.record(.applied, side: .mac, recordType: CloudKitConstants.RecordType.settings)
 
         let ud = UserDefaults.standard
         ud.set(s.masterEnabled, forKey: "doomcoder.masterEnabled")
@@ -1059,6 +1060,7 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
             if let data = try? JSONEncoder().encode(e.stateSerialization) {
                 UserDefaults.standard.set(data, forKey: Self.engineStateKey)
             }
+            SyncTelemetry.shared.record(.stateUpdate, side: .mac)
 
         case .accountChange(let e):
             await MainActor.run {
@@ -1085,6 +1087,8 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                 // Route through MainActor.run first so the CKRecord is in the
                 // MainActor region before scheduleHandleFetched captures it in
                 // the Task.detached closure — required by Swift 6 region checking.
+                let rtype = change.record.recordType
+                SyncTelemetry.shared.record(.fetched, side: .mac, recordType: rtype)
                 await MainActor.run { self.scheduleHandleFetched(change.record) }
             }
             await MainActor.run {

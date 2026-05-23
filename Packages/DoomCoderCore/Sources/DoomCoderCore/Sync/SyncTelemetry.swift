@@ -1,0 +1,118 @@
+import Foundation
+import OSLog
+
+public enum SyncEventKind: String, Sendable, Codable {
+    case localEdit
+    case enqueued
+    case sent
+    case pushReceived
+    case fetched
+    case applied
+    case nacked
+    case roundTripCompleted
+    case engineError
+    case stateUpdate
+}
+
+public enum SyncSide: String, Sendable, Codable { case mac, ios, unknown }
+
+public struct SyncEvent: Sendable, Codable, Identifiable {
+    public let id: UUID
+    public let timestamp: Date
+    public let kind: SyncEventKind
+    public let side: SyncSide
+    public let recordType: String?
+    public let detail: String?
+    public let latencyMs: Int?
+
+    public init(id: UUID = UUID(),
+                timestamp: Date = Date(),
+                kind: SyncEventKind,
+                side: SyncSide,
+                recordType: String? = nil,
+                detail: String? = nil,
+                latencyMs: Int? = nil) {
+        self.id = id
+        self.timestamp = timestamp
+        self.kind = kind
+        self.side = side
+        self.recordType = recordType
+        self.detail = detail
+        self.latencyMs = latencyMs
+    }
+}
+
+/// Lightweight, thread-safe ring buffer + os_signpost emitter for diagnosing
+/// the iOS↔Mac sync round-trip. Cross-process: the signposts go to OSLog so
+/// Instruments can profile across both apps; the in-memory buffer is per-process
+/// and is what the in-app Sync Diagnostics view renders.
+public final class SyncTelemetry: @unchecked Sendable {
+    public static let shared = SyncTelemetry()
+
+    private let lock = NSLock()
+    private var buffer: [SyncEvent] = []
+    private let capacity = 200
+
+    private let signposter = OSSignposter(subsystem: "com.doomcoder.sync", category: "telemetry")
+    private let logger = Logger(subsystem: "com.doomcoder.sync", category: "telemetry")
+
+    // pendingLocalEdits[recordType] = time of the most recent local edit, used to
+    // compute the round-trip latency when the matching push/fetch lands.
+    private var pendingLocalEdits: [String: Date] = [:]
+
+    private init() {}
+
+    public func record(_ kind: SyncEventKind,
+                       side: SyncSide,
+                       recordType: String? = nil,
+                       detail: String? = nil) {
+        let now = Date()
+        var latencyMs: Int? = nil
+
+        lock.lock()
+        if kind == .localEdit, let rt = recordType {
+            pendingLocalEdits[rt] = now
+        }
+        if kind == .applied, let rt = recordType, let start = pendingLocalEdits.removeValue(forKey: rt) {
+            latencyMs = Int(now.timeIntervalSince(start) * 1000)
+        }
+        let event = SyncEvent(timestamp: now, kind: kind, side: side,
+                              recordType: recordType, detail: detail, latencyMs: latencyMs)
+        buffer.append(event)
+        if buffer.count > capacity {
+            buffer.removeFirst(buffer.count - capacity)
+        }
+        lock.unlock()
+
+        signposter.emitEvent("sync", "\(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public)")
+        if let latencyMs {
+            logger.info("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) latency=\(latencyMs)ms")
+
+            NotificationCenter.default.post(name: SyncTelemetry.roundTripCompletedNotification,
+                                            object: nil,
+                                            userInfo: ["latencyMs": latencyMs, "recordType": recordType ?? ""])
+        } else {
+            logger.debug("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) \(detail ?? "", privacy: .public)")
+        }
+        NotificationCenter.default.post(name: SyncTelemetry.eventRecordedNotification, object: event)
+    }
+
+    public func snapshot() -> [SyncEvent] {
+        lock.lock(); defer { lock.unlock() }
+        return buffer
+    }
+
+    public func lastRoundTripLatencyMs() -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        return buffer.reversed().first(where: { $0.latencyMs != nil })?.latencyMs
+    }
+
+    public func clear() {
+        lock.lock(); defer { lock.unlock() }
+        buffer.removeAll()
+        pendingLocalEdits.removeAll()
+    }
+
+    public static let eventRecordedNotification = Notification.Name("SyncTelemetry.eventRecorded")
+    public static let roundTripCompletedNotification = Notification.Name("SyncTelemetry.roundTripCompleted")
+}

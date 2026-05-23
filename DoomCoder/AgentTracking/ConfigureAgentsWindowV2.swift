@@ -6,7 +6,7 @@ import UserNotifications
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels, logs, settings }
+    enum Tab: Hashable { case agents, channels, logs, settings, diagnostics }
     @State private var tab: Tab = .agents
     @State private var selected: TrackedAgent? = .claude
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
@@ -50,6 +50,8 @@ struct ConfigureAgentsViewV2: View {
                 LogsView()
             case .settings:
                 ConfigureSettingsPane(sleepManager: SleepManager.shared)
+            case .diagnostics:
+                SyncDiagnosticsPane()
             }
         }
         .frame(minWidth: 820, minHeight: 580)
@@ -161,6 +163,18 @@ struct ConfigureAgentsViewV2: View {
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .settings ? Color.accentColor.opacity(0.15) : Color.clear)
                 .animation(DCAnim.fade, value: tab == .settings)
+
+                Button {
+                    withAnimation(DCAnim.fade) {
+                        tab = .diagnostics
+                        selected = nil
+                    }
+                } label: {
+                    Label("Sync Diagnostics", systemImage: "wave.3.right")
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(tab == .diagnostics ? Color.accentColor.opacity(0.15) : Color.clear)
+                .animation(DCAnim.fade, value: tab == .diagnostics)
             }
         }
         .listStyle(.sidebar)

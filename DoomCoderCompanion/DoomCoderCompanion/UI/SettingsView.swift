@@ -93,6 +93,11 @@ struct SettingsView: View {
             } label: {
                 Label("Notification history", systemImage: "bell.badge")
             }
+            NavigationLink {
+                SyncDiagnosticsView()
+            } label: {
+                Label("Sync diagnostics", systemImage: "wave.3.right")
+            }
         }
     }
 

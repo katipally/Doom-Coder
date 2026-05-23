@@ -243,7 +243,11 @@ final class CompanionSyncEngine: NSObject {
     func enqueueSettingsSave(_ settings: SettingsRecord) {
         settingsSaveSerial &+= 1
         let base = SettingsStore.shared.serverRecord
+        SyncTelemetry.shared.record(.localEdit, side: .ios,
+                                    recordType: CloudKitConstants.RecordType.settings)
         enqueueSave(settings.toCKRecord(base: base))
+        SyncTelemetry.shared.record(.enqueued, side: .ios,
+                                    recordType: CloudKitConstants.RecordType.settings)
         maybeFireWakeOnLAN()
     }
 
@@ -503,6 +507,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                     self.lastSyncAt = Date()
                 }
             }
+            SyncTelemetry.shared.record(.stateUpdate, side: .ios)
 
         case .accountChange(let e):
             await MainActor.run {
@@ -526,8 +531,13 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
 
         case .fetchedRecordZoneChanges(let e):
             for change in e.modifications {
+                let rtype = change.record.recordType
+                SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
                 await MainActor.run {
                     self.handleFetched(change.record)
+                }
+                if rtype == CloudKitConstants.RecordType.macStatus {
+                    SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
                 }
             }
             await MainActor.run {
@@ -548,6 +558,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 }
             }
             for save in e.savedRecords {
+                SyncTelemetry.shared.record(.sent, side: .ios, recordType: save.recordType)
                 if save.recordType == CloudKitConstants.RecordType.settings {
                     // Persist the server changeTag so the next user edit
                     // performs an UPDATE rather than another INSERT.
@@ -571,6 +582,9 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             if !e.failedRecordSaves.isEmpty {
                 for fail in e.failedRecordSaves {
                     let cke = fail.error
+                    SyncTelemetry.shared.record(.nacked, side: .ios,
+                                                recordType: fail.record.recordType,
+                                                detail: "\(cke.code.rawValue): \(cke.localizedDescription)")
                     print("[CompanionSyncEngine] save conflict on \(fail.record.recordID.recordName): \(cke.localizedDescription)")
                     if cke.code == .serverRecordChanged {
                         await self.recoverFromServerRecordChanged(
