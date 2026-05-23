@@ -21,6 +21,9 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     CODE_SIGN_STYLE: Automatic
     OTHER_LDFLAGS: "$(inherited) -ObjC"
+  configs:
+    Release:
+      CODE_SIGN_IDENTITY: "Apple Distribution"
 
 packages:
   DoomCoderCore:
@@ -72,6 +75,7 @@ targets:
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.Release.entitlements
+          CODE_SIGN_IDENTITY: "Apple Distribution"
     dependencies:
       - package: DoomCoderCore
       - target: NotificationService
@@ -99,6 +103,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.doomcoder.app.companion.NotificationService
         CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
+      configs:
+        Release:
+          CODE_SIGN_IDENTITY: "Apple Distribution"
     dependencies:
       - package: DoomCoderCore
 
