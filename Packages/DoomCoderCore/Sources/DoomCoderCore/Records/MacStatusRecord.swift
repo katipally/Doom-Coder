@@ -18,6 +18,14 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     public var lastSeen: Date
     public var thermalState: String
     public var schemaVersion: Int
+    /// Primary Ethernet/Wi-Fi MAC address ("aa:bb:cc:dd:ee:ff") so the
+    /// iOS companion can send a magic packet over the local subnet when
+    /// the Mac is asleep. Optional — over cellular WoL is impossible
+    /// anyway and APNs wake-for-network is the canonical wake path.
+    public var macAddress: String?
+    /// IPv4 broadcast address of the primary interface (e.g. "192.168.1.255")
+    /// so the magic packet reaches the correct subnet.
+    public var broadcastIPv4: String?
 
     public init(macId: String,
                 name: String,
@@ -27,6 +35,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 sessionEndsAt: Date? = nil,
                 lastSeen: Date = Date(),
                 thermalState: String = "Normal",
+                macAddress: String? = nil,
+                broadcastIPv4: String? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -36,6 +46,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.sessionEndsAt = sessionEndsAt
         self.lastSeen = lastSeen
         self.thermalState = thermalState
+        self.macAddress = macAddress
+        self.broadcastIPv4 = broadcastIPv4
         self.schemaVersion = schemaVersion
     }
 }
@@ -67,6 +79,8 @@ extension MacStatusRecord {
         else { r["sessionEndsAt"] = nil }
         r["lastSeen"]      = lastSeen as CKRecordValue
         r["thermalState"]  = thermalState as CKRecordValue
+        if let m = macAddress { r["macAddress"] = m as CKRecordValue } else { r["macAddress"] = nil }
+        if let b = broadcastIPv4 { r["broadcastIPv4"] = b as CKRecordValue } else { r["broadcastIPv4"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -85,6 +99,8 @@ extension MacStatusRecord {
             sessionEndsAt: r["sessionEndsAt"] as? Date,
             lastSeen: lastSeen,
             thermalState: (r["thermalState"] as? String) ?? "Normal",
+            macAddress: r["macAddress"] as? String,
+            broadcastIPv4: r["broadcastIPv4"] as? String,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

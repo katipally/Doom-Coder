@@ -59,6 +59,12 @@ struct ConfigureAgentsViewV2: View {
             refreshPermStatus()
             validateAllHooks()
         }
+        .onAppear {
+            CloudKitSyncEngine.shared.setUIVisible(true)
+        }
+        .onDisappear {
+            CloudKitSyncEngine.shared.setUIVisible(false)
+        }
         .onReceive(healthTimer) { _ in
             validateAllHooks()
         }

@@ -169,6 +169,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     /// so iOS sees the Mac go offline within seconds rather than waiting for
     /// the next 90 s heartbeat.
     func applicationWillTerminate(_ notification: Notification) {
+        CloudKitSyncEngine.shared.persistEngineStateNow()
         CloudKitSyncEngine.shared.publishOfflineMacStatusSync()
     }
 

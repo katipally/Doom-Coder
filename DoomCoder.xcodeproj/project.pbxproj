@@ -48,6 +48,7 @@
 		DC0000000000002000000104 /* PayloadRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000104 /* PayloadRendererView.swift */; };
 		DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000110 /* AgentProcessMonitor.swift */; };
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
+		DC0000000000002000000112 /* NetworkInterfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000112 /* NetworkInterfaces.swift */; };
 		DC0000000000002000000200 /* CloudKitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000200 /* CloudKitSyncEngine.swift */; };
 		DC0000000000002000000201 /* ControlCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* ControlCommandRouter.swift */; };
 		DC0000000000002000000203 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000003 /* DoomCoderCore */; };
@@ -97,6 +98,7 @@
 		DC0000000000001000000104 /* PayloadRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadRendererView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000110 /* AgentProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProcessMonitor.swift; sourceTree = "<group>"; };
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
+		DC0000000000001000000112 /* NetworkInterfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInterfaces.swift; sourceTree = "<group>"; };
 		DC0000000000001000000200 /* CloudKitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncEngine.swift; sourceTree = "<group>"; };
 		DC0000000000001000000201 /* ControlCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCommandRouter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -189,6 +191,7 @@
 				DC0000000000001000000100 /* PIDLiveness.swift */,
 				DC0000000000001000000110 /* AgentProcessMonitor.swift */,
 				DC0000000000001000000111 /* PIDWatcher.swift */,
+				DC0000000000001000000112 /* NetworkInterfaces.swift */,
 				DC0000000000001000000101 /* RateLimiter.swift */,
 				DC0000000000001000000102 /* IconDownloader.swift */,
 			);
@@ -335,6 +338,7 @@
 				DC0000000000002000000100 /* PIDLiveness.swift in Sources */,
 				DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */,
 				DC0000000000002000000111 /* PIDWatcher.swift in Sources */,
+				DC0000000000002000000112 /* NetworkInterfaces.swift in Sources */,
 				DC0000000000002000000101 /* RateLimiter.swift in Sources */,
 				DC0000000000002000000102 /* IconDownloader.swift in Sources */,
 			);
@@ -490,7 +494,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
+				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 3000;

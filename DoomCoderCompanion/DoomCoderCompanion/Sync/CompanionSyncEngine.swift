@@ -6,6 +6,7 @@
 
 import Foundation
 import CloudKit
+import UIKit
 import DoomCoderCore
 
 @MainActor
@@ -67,6 +68,27 @@ final class CompanionSyncEngine: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in await self?.setupSyncEngine() }
         }
+        // Defensive: flush CKSyncEngine state to disk when iOS suspends us,
+        // so a force-quit / OS kill mid-write doesn't strand the delta token.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.persistEngineStateNow() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.persistEngineStateNow() }
+        }
+    }
+
+    /// Defensive flush hook for app background/terminate. The `.stateUpdate`
+    /// event handler is the canonical persistence path; this just forces the
+    /// shared App Group defaults to flush dirty pages to disk so an OS kill
+    /// immediately after a recent .stateUpdate cannot strand the token.
+    func persistEngineStateNow() {
+        sharedDefaults.synchronize()
+        print("[CompanionSyncEngine] persistEngineStateNow: shared defaults synchronized")
     }
 
     /// Idempotently creates DoomCoderZone in the private DB. CKSyncEngine
@@ -194,15 +216,6 @@ final class CompanionSyncEngine: NSObject {
         print("[CompanionSyncEngine] prewarm Settings-singleton OK")
     }
 
-    private func enqueueSettingsSaveAfterPreflight(_ settings: SettingsRecord, serial: UInt64) async {
-        let fresh = await fetchSettingsServerRecord()
-        if let fresh, let remote = SettingsRecord(fresh) {
-            SettingsStore.shared.applyRemote(remote, rawRecord: fresh)
-        }
-        guard serial == settingsSaveSerial else { return }
-        enqueueSave(SettingsStore.shared.current.toCKRecord(base: fresh ?? SettingsStore.shared.serverRecord))
-    }
-
     private func ensureSubscriptions() async {
         await setupDatabaseSubscription()
         await setupNotificationLogSubscription()
@@ -219,11 +232,35 @@ final class CompanionSyncEngine: NSObject {
         ])
     }
 
+    /// Enqueue a Settings change. We rely on:
+    ///   1) the cold-launch `prewarmSettingsRecordCache()` + `fetchChanges()`,
+    ///   2) the engine's normal delta-fetch / push-driven cache updates,
+    ///   3) CKSyncEngine's built-in conflict recovery (.serverRecordChanged)
+    /// to keep `SettingsStore.serverRecord` carrying a current
+    /// recordChangeTag. The old per-write preflight fetch raced with the
+    /// engine, occasionally clobbering the user's just-typed value with a
+    /// stale server snapshot.
     func enqueueSettingsSave(_ settings: SettingsRecord) {
         settingsSaveSerial &+= 1
-        let serial = settingsSaveSerial
-        Task { @MainActor [self] in
-            await enqueueSettingsSaveAfterPreflight(settings, serial: serial)
+        let base = SettingsStore.shared.serverRecord
+        enqueueSave(settings.toCKRecord(base: base))
+        maybeFireWakeOnLAN()
+    }
+
+    /// Fire a magic packet only when (a) the Mac is reported as sleeping or
+    /// hasn't checked in for > 2 minutes AND (b) we have a usable MAC +
+    /// broadcast address from the latest MacStatusRecord. Best-effort: WoL
+    /// only works on the same LAN — over cellular the packet has nowhere
+    /// to go and we silently rely on APNs wake-for-network.
+    private func maybeFireWakeOnLAN() {
+        guard let mac = MacStatusStore.shared.primary,
+              let macAddr = mac.macAddress,
+              let bcast = mac.broadcastIPv4 else { return }
+        let stale = Date().timeIntervalSince(mac.lastSeen) > 120
+        guard mac.sleepActive || stale else { return }
+        // Off-main to avoid blocking the actor with the synchronous sendto loop.
+        Task.detached(priority: .utility) {
+            _ = WakeOnLAN.wake(macAddress: macAddr, broadcastIPv4: bcast)
         }
     }
 

@@ -224,6 +224,13 @@ final class CloudKitSyncEngine {
         isAvailable = true
         accountStatusText = "iCloud synced"
 
+        // Step 3a: register for APNs as early as possible. CKSubscription pushes
+        // are silent (content-available); the device must be registered before
+        // the first push or it is dropped. Doing this before fetchChanges()
+        // closes the window where the very first iOS->Mac edit could be missed.
+        await MainActor.run { NSApplication.shared.registerForRemoteNotifications() }
+        logger.info("registerForRemoteNotifications requested (early)")
+
         // Step 3b: pre-warm ServerRecordCache for the two stable records we
         // always own (MacStatus-{macId} + Settings-singleton). On the very
         // first launch after a re-install / new build / account switch the
@@ -240,10 +247,6 @@ final class CloudKitSyncEngine {
 
         // Step 5: subscriptions (best-effort; push is a nice-to-have).
         await ensureSubscriptionsBestEffort()
-
-        // Step 6: register for APNs so silent pushes can wake the Mac.
-        await MainActor.run { NSApplication.shared.registerForRemoteNotifications() }
-        logger.info("registerForRemoteNotifications requested")
 
         // Step 7: delta-fetch to apply any Settings or ControlCommand records
         // written by iOS while the Mac was offline.
@@ -268,6 +271,7 @@ final class CloudKitSyncEngine {
     func publishMacStatus() {
         guard isAvailable else { return }
         let sm = SleepManager.shared
+        let net = NetworkInterfaces.primaryWoLDescriptor()
         let rec = MacStatusRecord(
             macId: macId, name: macName,
             version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0",
@@ -275,7 +279,9 @@ final class CloudKitSyncEngine {
             mode: sm.mode.rawValue,
             sessionEndsAt: nil,
             lastSeen: Date(),
-            thermalState: sm.thermalStateText
+            thermalState: sm.thermalStateText,
+            macAddress: net.macAddress,
+            broadcastIPv4: net.broadcastIPv4
         )
         enqueue(save: rec.toCKRecord(base: serverRecords.record(forName: "MacStatus-\(macId)")))
     }
@@ -309,6 +315,17 @@ final class CloudKitSyncEngine {
         }
         database.add(op)
         _ = sema.wait(timeout: .now() + 3)
+    }
+
+    /// Defensive flush hook called from `applicationWillTerminate`. The
+    /// `.stateUpdate` event handler is the canonical persistence path — it
+    /// fires after every state mutation and writes to UserDefaults. This
+    /// just forces the standard defaults to flush dirty pages to disk so a
+    /// hard crash immediately after a recent .stateUpdate cannot strand the
+    /// delta-change token in the in-memory plist.
+    nonisolated func persistEngineStateNow() {
+        UserDefaults.standard.synchronize()
+        logger.info("persistEngineStateNow: UserDefaults synchronized")
     }
 
     func publishSession(_ s: AgentTrackingManager.Session) {
@@ -553,7 +570,8 @@ final class CloudKitSyncEngine {
             case CloudKitConstants.RecordType.settings:
                 self.serverRecords.store(record)
                 guard let remote = SettingsRecord(record) else {
-                    self.logger.notice("handleFetched: settings decode failed")
+                    let keys = record.allKeys().joined(separator: ",")
+                    self.logger.error("handleFetched: SettingsRecord decode FAILED — record=\(record.recordID.recordName, privacy: .public) tag=\(record.recordChangeTag ?? "nil", privacy: .public) keys=[\(keys, privacy: .public)]. Push silently dropped — investigate schema drift.")
                     return
                 }
                 var local = self.localSettingsSnapshot()
@@ -833,18 +851,38 @@ final class CloudKitSyncEngine {
 
     // MARK: - Fetch safety-net (30 s)
 
-    /// Starts a 30 s repeating timer that calls fetchChanges() as a backstop
-    /// for missed silent pushes. The primary real-time path is:
+    /// Adaptive backstop fetch timer.
+    /// - 15 s when any Mac UI surface (Configure / Settings / menu panel) is
+    ///   visible — the user expects iOS toggles to apply within seconds.
+    /// - 30 s otherwise — preserves battery while keeping iOS edits bounded.
+    /// Toggled at runtime via `setUIVisible(_:)` from window controllers.
+    private var uiVisibleFastFetch = false
+    private var fetchIntervalSeconds: TimeInterval { uiVisibleFastFetch ? 15 : 30 }
+
+    /// Starts the backstop fetch timer at the current adaptive interval.
+    /// Primary real-time path remains:
     ///   APNs silent push → didReceiveRemoteNotification → fetchChanges()
-    /// This timer ensures iOS→Mac sync recovers within ~30 s even if push
-    /// delivery fails (Mac asleep at push time, APNs quota, etc.).
+    /// This timer ensures iOS→Mac sync recovers even if push delivery fails.
     private func startFetchTimer() {
         fetchTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: fetchIntervalSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in await self?.fetchChanges() }
         }
         RunLoop.main.add(timer, forMode: .common)
         fetchTimer = timer
+    }
+
+    /// UI surfaces (Configure window, status panel, etc.) call this when they
+    /// appear / disappear so the backstop fetch interval tightens while the
+    /// user can observe stale state.
+    func setUIVisible(_ visible: Bool) {
+        guard visible != uiVisibleFastFetch else { return }
+        uiVisibleFastFetch = visible
+        if fetchTimer != nil { startFetchTimer() }
+        logger.info("setUIVisible(\(visible, privacy: .public)) — fetch interval=\(self.fetchIntervalSeconds, privacy: .public)s")
+        if visible {
+            Task { await fetchChanges() }
+        }
     }
 
     // MARK: - Event pruning (daily)
