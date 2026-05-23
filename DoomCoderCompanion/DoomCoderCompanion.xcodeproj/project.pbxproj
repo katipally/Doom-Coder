@@ -20,11 +20,13 @@
 		AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */; };
 		AF7FB6DD1454B0DE8AB4E39D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */; };
 		B87084239BB62CDDF5387361 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED52275E7367F2AB4E383199 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BEAD612E3C4A8403349E54D1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */; };
 		BFFC28F060F2A7CCC2B4A6AC /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53232581AADB8C337671BB09 /* EmptyStateView.swift */; };
 		C454F8A9D858B87680B15C02 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = C8C6B66E763641B3CB2A309A /* DoomCoderCore */; };
 		C82290D0589BA1DAF39B2912 /* SyncDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */; };
 		D636B6479C595F7C776E1639 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A001013B397C1A86AA65F66F /* Assets.xcassets */; };
 		DE3BC7A18DE362080C7EFCCA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1FD10F71AB58F8526779A2D /* AppDelegate.swift */; };
+		E026D85627FC6B3EAFCC4E04 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */; };
 		EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */; };
 		F738F859CF61C3122A1598E4 /* AgentIconFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F0362D4080511605EBD81F /* AgentIconFetcher.swift */; };
 /* End PBXBuildFile section */
@@ -58,6 +60,7 @@
 		12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSyncEngine.swift; sourceTree = "<group>"; };
 		16A67B01FA77C05717991E37 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
+		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		53232581AADB8C337671BB09 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		577E6F8848446B47EA914860 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
 		84F0362D4080511605EBD81F /* AgentIconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconFetcher.swift; sourceTree = "<group>"; };
@@ -72,6 +75,7 @@
 		E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsView.swift; sourceTree = "<group>"; };
 		E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionApp.swift; sourceTree = "<group>"; };
 		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -99,6 +103,7 @@
 			isa = PBXGroup;
 			children = (
 				A001013B397C1A86AA65F66F /* Assets.xcassets */,
+				243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -159,6 +164,7 @@
 			isa = PBXGroup;
 			children = (
 				9FB9C264096018D7F1530EB0 /* NotificationService.swift */,
+				F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */,
 			);
 			path = NotificationService;
 			sourceTree = "<group>";
@@ -218,6 +224,7 @@
 			buildConfigurationList = 9E24D8CBB1330300A76E5EDE /* Build configuration list for PBXNativeTarget "NotificationService" */;
 			buildPhases = (
 				0289F8ACA19552DF556E2DC8 /* Sources */,
+				265EA63450CB361EA702E5FD /* Resources */,
 				E4B407D28D1F9817DFDE0E8A /* Frameworks */,
 			);
 			buildRules = (
@@ -302,6 +309,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				D636B6479C595F7C776E1639 /* Assets.xcassets in Resources */,
+				E026D85627FC6B3EAFCC4E04 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		265EA63450CB361EA702E5FD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BEAD612E3C4A8403349E54D1 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
