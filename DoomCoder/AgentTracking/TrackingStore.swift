@@ -17,6 +17,7 @@ enum TrackingStore {
         var map = load()
         map[agent.rawValue] = on
         save(map)
+        NotificationCenter.default.post(name: .trackingStoreChanged, object: nil)
     }
 
     static func enabledCount() -> Int {
