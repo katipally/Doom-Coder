@@ -23,7 +23,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
         switch event {
         case .stateUpdate(let upd):
-            persistState(upd.stateSerialization)
+            await persistState(upd.stateSerialization)
 
         case .accountChange(let change):
             // Lesson #3 — wipe local server-record cache and let
@@ -82,6 +82,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
     // MARK: - State persistence
 
+    @MainActor
     private func persistState(_ state: CKSyncEngine.State.Serialization) {
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: stateKey)
