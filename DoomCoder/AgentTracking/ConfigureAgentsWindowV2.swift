@@ -242,6 +242,34 @@ struct ConfigureAgentsViewV2: View {
                     Label("Detection", systemImage: "magnifyingglass")
                 }
 
+                // Capabilities — what notifications this agent can emit.
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("These notifications will be delivered to your Mac (and mirrored to the iPhone companion if installed).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.bottom, 2)
+                        ForEach(AgentCapabilityCatalog.capabilities(for: agent)) { cap in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: cap.symbolName)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 16)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(cap.title)
+                                        .font(.callout.weight(.medium))
+                                    Text(cap.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label("What you'll be notified about", systemImage: "bell.badge")
+                }
+
                 // Health Monitoring
                 if installedCache[agent] == true {
                     GroupBox {
