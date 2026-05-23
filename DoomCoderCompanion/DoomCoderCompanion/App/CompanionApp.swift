@@ -1,10 +1,8 @@
 // CompanionApp.swift — DoomCoder Companion
 // Entry point for the iOS companion app.
-// Boots CompanionSyncEngine, registers the BGAppRefreshTask, and gates the
-// main UI behind OnboardingView until setup is completed.
+// Boots CompanionSyncEngine and gates main UI behind OnboardingView.
 
 import SwiftUI
-import BackgroundTasks
 import DoomCoderCore
 
 @main
@@ -17,15 +15,11 @@ struct CompanionApp: App {
         AppGroupCache.defaults.object(forKey: "onboarding.completedAt") != nil
     }()
 
-    /// Session key extracted from a `doomcoder://session/<key>` deeplink.
-    /// AgentsView observes this to push SessionDetailView automatically.
-    @State private var deeplinkSessionKey: String? = nil
-
     var body: some Scene {
         WindowGroup {
             Group {
                 if onboardingDone {
-                    RootTabView(deeplinkSessionKey: $deeplinkSessionKey)
+                    RootTabView()
                 } else {
                     OnboardingView(onComplete: {
                         AppGroupCache.defaults.set(Date(), forKey: "onboarding.completedAt")
@@ -39,14 +33,15 @@ struct CompanionApp: App {
         }
     }
 
-    /// Handles `doomcoder://session/<sessionKey>` URLs produced by tapping a
-    /// Live Activity or Dynamic Island. The Xcode project must declare the
-    /// `doomcoder` URL scheme in CFBundleURLTypes (Info.plist) for this to fire.
+    /// Handles `doomcoder://agent/<slug>` URLs.
+    /// Navigates to AgentLogsView for the specified agent.
     private func handleDeeplink(_ url: URL) {
         guard url.scheme?.lowercased() == "doomcoder",
-              url.host?.lowercased() == "session",
-              let key = url.pathComponents.dropFirst().first, !key.isEmpty
+              url.host?.lowercased() == "agent",
+              let slug = url.pathComponents.dropFirst().first, !slug.isEmpty
         else { return }
-        deeplinkSessionKey = key
+        // TODO: Navigate to AgentLogsView for the agent with raw value = slug
+        // For now, this is a placeholder — full navigation requires environment object routing
+        print("[CompanionApp] Deeplink to agent: \(slug)")
     }
 }
