@@ -167,3 +167,157 @@ it. The key ID must match.)
 - [ ] Mac build runs clean locally (`xcodebuild -scheme DoomCoder -configuration Release`).
 - [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCoderCompanion -configuration Release -destination 'generic/platform=iOS'`).
 - [ ] Both tags pushed. CI green on both workflows.
+
+---
+
+## First-time iOS App Store setup (do once)
+
+This is the walkthrough you only do once per app, before the very first
+TestFlight upload. Allow ~60 minutes the first time.
+
+### 1. App Store Connect — create the app record
+
+1. Visit [appstoreconnect.apple.com](https://appstoreconnect.apple.com)
+   → **My Apps** → **+** → **New App**.
+2. Fill in:
+   - **Platform**: iOS
+   - **Name**: `DoomCoder Companion`
+   - **Primary Language**: English (U.S.)
+   - **Bundle ID**: `com.doomcoder.app.companion` (must already exist
+     in the Developer Portal under Identifiers)
+   - **SKU**: `doomcoder-companion-ios`
+   - **User Access**: Full Access
+3. Apple assigns a numeric **Apple ID** (e.g. `6480000000`). Note it.
+   Update `companionAppStoreURL` in
+   `DoomCoder/ConfigureSettingsPane.swift` to replace the
+   `id0000000000` placeholder.
+
+### 2. App Store listing metadata
+
+In the app record → **App Store** tab:
+
+- **Category**: Developer Tools / Productivity
+- **Content rights**: No third-party content
+- **Age rating**: questionnaire (defaults yield 4+)
+- **Privacy policy URL**: link to `PRIVACY.md` raw URL on GitHub
+- **Support URL**: `https://github.com/katipally/Doom-Coder`
+- **Marketing URL**: optional
+
+### 3. Privacy nutrition label
+
+App Store Connect → **App Privacy** → **Get Started**.
+
+DoomCoder Companion collects **nothing**. The correct answers:
+
+- Data collected: **No**
+- Tracking: **No**
+
+This nutrition label is shown on the App Store product page and is
+mandatory before submission.
+
+### 4. Screenshots (required)
+
+Apple requires screenshots for at least **one device class**. The
+6.7-inch iPhone class (e.g. iPhone 17 Pro Max) is the easiest because
+its screenshots are reused for every smaller class automatically.
+
+Required: 3-10 PNG/JPEG screenshots, **1290×2796** (portrait) or
+**2796×1290** (landscape).
+
+Quick way:
+```bash
+xcrun simctl boot "iPhone 17 Pro Max"
+open -a Simulator
+# Build & run the companion in this simulator
+xcrun simctl io booted screenshot ~/Desktop/companion-1.png
+```
+
+Suggested shots: agent list, agent detail view, log empty state,
+onboarding step, notification arriving (lock screen demo if possible).
+
+### 5. Certificates & provisioning (one-time)
+
+In **Developer Portal → Certificates, Identifiers & Profiles**:
+
+1. **Identifiers** — verify all three App IDs exist:
+   - `com.doomcoder.app.companion` (App, with iCloud + Push + App Groups)
+   - `com.doomcoder.app.companion.NotificationService` (App Extension, with App Groups)
+   - `com.doomcoder.app` (Mac, with iCloud + App Groups)
+2. **App Groups** — verify `group.com.doomcoder.app.companion` exists
+   and is enabled on all three identifiers.
+3. **Certificates** — create an **Apple Distribution** certificate
+   (covers both iOS and macOS App Store). Download as `.cer`, double-click
+   into Keychain, then export from Keychain Access as a **.p12** with a
+   password. Base64-encode it (`base64 -i AppleDistribution.p12 -o cert.b64`)
+   and store as the `IOS_DISTRIBUTION_CERTIFICATE` GitHub secret.
+4. **Profiles** — leave to Xcode automatic signing. The CI workflow
+   uses `-allowProvisioningUpdates` so profiles are minted on demand.
+
+### 6. App Store Connect API key (one-time)
+
+Used by `xcodebuild -exportArchive` to authenticate uploads non-interactively.
+
+1. App Store Connect → **Users and Access** → **Integrations** → **App Store Connect API**.
+2. **+** → name `DoomCoder CI`, access `App Manager`.
+3. Download the `.p8` (you can only download it **once**).
+4. Note the **Issuer ID** (top of the page) and **Key ID** (next to the key).
+5. Add as GitHub repo secrets:
+   - `APP_STORE_CONNECT_KEY_ID`
+   - `APP_STORE_CONNECT_ISSUER_ID`
+   - `APP_STORE_CONNECT_PRIVATE_KEY` — paste the **raw .p8 contents**
+     (including `-----BEGIN PRIVATE KEY-----` lines).
+
+### 7. CloudKit production deploy (one-time per schema change)
+
+[CloudKit Dashboard](https://icloud.developer.apple.com/dashboard/) →
+container `iCloud.com.doomcoder.app` → **Schema** → **Deploy Schema to
+Production**. Required before the App Store build can talk to the
+production CloudKit environment.
+
+### 8. First TestFlight build
+
+After everything above is done:
+
+```bash
+git tag ios-v2.4.0
+git push origin ios-v2.4.0
+```
+
+The `ios-testflight.yml` workflow runs and uploads to App Store
+Connect. The build appears under **TestFlight** in ~10-20 min.
+
+### 9. Submit for App Store review
+
+1. App Store Connect → your app → **App Store** tab → **+ Version**.
+2. Fill **What's New in This Version** (paste from CHANGELOG.md).
+3. **Build** → pick the TestFlight build you just uploaded.
+4. **Submit for Review**.
+
+Review usually takes 24-48 hours. Common rejections to pre-empt:
+
+- Missing privacy policy URL.
+- Demo account credentials required if the app has a login. DoomCoder
+  Companion does not — call this out in the **Notes for Reviewer**
+  field: _"App requires iCloud sign-in plus a running Mac with
+  DoomCoder installed. No demo account needed."_
+- Background modes not justified. Our `Info.plist` only enables
+  `remote-notification`, which CloudKit subscriptions legitimately
+  require.
+
+---
+
+## Does iOS use GitHub Releases or Sparkle?
+
+**No.** App Store apps cannot be updated by Sparkle (Apple prohibits
+side-loaded update mechanisms in App Store binaries) and cannot be
+distributed as `.ipa` from GitHub Releases (Apple TOS).
+
+The iOS pipeline ends at App Store Connect. We do still cut a matching
+GitHub Release for the iOS tag (`ios-v2.4.0`) but it carries only the
+changelog and a link to the App Store — no binary attachment.
+
+If you want the GitHub Release to be created automatically on tag
+push, extend `ios-testflight.yml` with a final
+`softprops/action-gh-release@v2` step that publishes notes from
+`CHANGELOG.md`. We're keeping that manual for now so the Release
+goes live only after Apple actually approves the build.

@@ -45,6 +45,18 @@ Carthage/Build/
 guide/0[0-9]-*.md
 guide/README.md
 
+# Local reference docs (vendor docs, not for public repo)
+Ref/
+
+# Distributable artifacts — these belong on GitHub Releases, not in the repo
+*.dmg
+
+# Signing material — never commit certificates or private keys
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+
 # Assets tracked in assets/ — nothing here is ignored.
 
 # Editor

@@ -17,9 +17,12 @@
 
 ## What is Doom Coder?
 
-A tiny macOS menu bar utility that prevents your Mac from sleeping while you're away. That's it — just a sleep blocker with two modes.
+A macOS menu bar app that does two things:
 
-When you kick off a long task (big build, download, render) and walk away, macOS decides it's a great time to sleep and the job dies. **Doom Coder fixes this.**
+1. **Keeps your Mac awake** while long-running jobs (builds, downloads, agents) finish — without changing system settings.
+2. **Tracks coding agents** (Claude Code, Cursor, VS Code, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention — on your Mac and on your iPhone via the free **DoomCoder Companion** iOS app.
+
+No accounts, no servers, no telemetry. Notifications travel through your own private iCloud container.
 
 ---
 
@@ -34,7 +37,7 @@ Toggle from the menu bar, or globally with **⌥ Space**.
 
 ## How it works
 
-Doom Coder holds an `IOPMAssertion` — the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`. That's the whole app.
+**Sleep blocker.** Doom Coder holds an `IOPMAssertion` — the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
 
 - ✅ **Zero CPU / < 10 MB RAM** — one flag in the kernel, no polling
 - ✅ **Auto-released** on crash, quit, or disable
@@ -42,6 +45,12 @@ Doom Coder holds an `IOPMAssertion` — the same kernel-level flag used by Amphe
 - ✅ **Session timer** — auto-disable after 1 / 2 / 4 / 8 hours
 - ✅ **Launch at login** (optional)
 - ✅ **Sparkle auto-updates**
+
+**Agent tracker.** Doom Coder installs lightweight hooks into each agent's config so it knows when sessions start, finish, fail, or stall. Notifications are rendered locally on the Mac and mirrored to your iPhone through your private CloudKit database — no third-party server.
+
+## iPhone companion
+
+`DoomCoder Companion` (iOS 26+) mirrors every Mac notification to your iPhone in 1–5 seconds. It shows the same agent list, per-agent status, and a 7-day notification log. Install from the App Store and sign into the same iCloud account as your Mac — that's the entire setup.
 
 ---
 

@@ -30,14 +30,12 @@ struct OnboardingView: View {
             
             // App logo
             VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.accentColor.gradient)
-                        .frame(width: 96, height: 96)
-                    Image(systemName: "moon.zzz.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.white)
-                }
+                Image("logo-doomcoder")
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 96, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 
                 Text("DoomCoder")
                     .font(.largeTitle.bold())
