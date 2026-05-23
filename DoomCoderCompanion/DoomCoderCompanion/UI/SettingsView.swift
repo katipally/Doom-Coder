@@ -1,6 +1,8 @@
-// SettingsView.swift — DoomCoder Companion
-// Full-featured settings screen: phase toggles, channel toggles, sliders,
-// master switch, privacy toggle, test notification, and About section.
+// SettingsView.swift — DoomCoder Companion (v4)
+// 1:1 mirror of the Mac Configure → Settings pane so the user has a single
+// mental model regardless of which device they're on. All controls back a
+// real, sync'd SettingsRecord field (no stubs); each toggle/stepper shows a
+// PendingBadge if the iOS→CloudKit→Mac round-trip exceeds 2 s.
 
 import SwiftUI
 import DoomCoderCore
@@ -10,6 +12,7 @@ struct SettingsView: View {
     @State private var store     = SettingsStore.shared
     @State private var macStore  = MacStatusStore.shared
     @State private var sync      = CompanionSyncEngine.shared
+    @State private var syncStatus = SettingsSyncStatus.shared
     @State private var testSent  = false
 
     private var primaryMacId: String? { macStore.primary?.macId }
@@ -17,30 +20,96 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                masterSection
-                channelsSection
+                generalSection
+                screenOffSection
+                sessionLifecycleSection
+                notificationChannelsSection
+                eventPreferencesSection
+                privacySection
                 primaryMacSection
-                historySection
+                activitySection
                 aboutSection
             }
             .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if syncStatus.pending || syncStatus.lastErrorText != nil {
+                        PendingBadge()
+                    }
+                }
+            }
             .refreshable { await sync.fetchChanges() }
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Sections (matching the Mac Configure pane 1:1)
 
-    private var masterSection: some View {
+    private var generalSection: some View {
         Section {
-            Toggle("DoomCoder enabled", isOn: binding("masterEnabled", \.masterEnabled))
+            HStack {
+                Toggle("DoomCoder enabled", isOn: boolBinding("masterEnabled", \.masterEnabled))
+                if syncStatus.pending { PendingBadge() }
+            }
+            Picker("Mode", selection: stringBinding("mode", \.mode)) {
+                Text("Screen On").tag("screenOn")
+                Text("Screen Off").tag("screenOff")
+            }
+            Stepper(value: intBinding("sessionTimerHrs", \.sessionTimerHrs), in: 1...24) {
+                HStack {
+                    Text("Session timer")
+                    Spacer()
+                    Text("\(store.current.sessionTimerHrs) hr")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        } header: {
+            Text("General")
         } footer: {
-            Text("Pauses all DoomCoder activity on your Mac. Sleep prevention, hook tracking, and notifications stop until you re-enable.")
+            Text("Master switch pauses all DoomCoder activity. Mode selects how the Mac stays awake; the timer auto-disables after the chosen number of hours.")
         }
     }
 
-    private var channelsSection: some View {
+    private var screenOffSection: some View {
         Section {
-            Toggle("iOS notifications", isOn: binding("channeliOSEnabled", \.channeliOSEnabled))
+            Stepper(value: intBinding("screenOffRearmMin", \.screenOffRearmMin), in: 1...60) {
+                HStack {
+                    Text("Re-sleep display after")
+                    Spacer()
+                    Text("\(store.current.screenOffRearmMin) min idle")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        } header: {
+            Text("Screen Off")
+        } footer: {
+            Text("In Screen Off mode, the display returns to sleep after this many minutes of no input.")
+        }
+    }
+
+    private var sessionLifecycleSection: some View {
+        Section {
+            Stepper(value: intBinding("autoRevertSec", \.autoRevertSec), in: 10...120, step: 5) {
+                HStack {
+                    Text("Auto-revert after")
+                    Spacer()
+                    Text("\(store.current.autoRevertSec)s")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        } header: {
+            Text("Session Lifecycle")
+        } footer: {
+            Text("How long a completed or failed session badge shows before reverting to “idle”.")
+        }
+    }
+
+    private var notificationChannelsSection: some View {
+        Section {
+            Toggle("macOS Notification", isOn: boolBinding("channelMacEnabled", \.channelMacEnabled))
+            Toggle("iOS Companion",      isOn: boolBinding("channeliOSEnabled", \.channeliOSEnabled))
             Button {
                 guard let macId = primaryMacId else { return }
                 _ = CommandPublisher.shared.send(
@@ -58,11 +127,50 @@ struct SettingsView: View {
             }
             .disabled(primaryMacId == nil || testSent || !store.current.channeliOSEnabled)
         } header: {
-            Text("Notifications")
+            Text("Notification Channels")
         } footer: {
             if !store.current.channeliOSEnabled {
-                Text("iOS notifications are off — agent toggles will not deliver alerts to this device.")
+                Text("iOS notifications are off — agent alerts will not deliver to this device.")
+            } else {
+                Text("Global channel defaults. Per-agent overrides live on the Mac Configure window.")
             }
+        }
+    }
+
+    private var eventPreferencesSection: some View {
+        Section {
+            Toggle("Session start",        isOn: boolBinding("prefSessionStart", \.prefSessionStart))
+            Toggle("Session end",          isOn: boolBinding("prefSessionEnd",   \.prefSessionEnd))
+            Toggle("Errors",               isOn: boolBinding("prefError",        \.prefError))
+            Toggle("Permission needed",    isOn: boolBinding("prefPermissionNeeded", \.prefPermissionNeeded))
+            Toggle("Agent response",       isOn: boolBinding("prefAgentResponse",    \.prefAgentResponse))
+            Toggle("Subagent start",       isOn: boolBinding("prefSubagentStart",    \.prefSubagentStart))
+            Toggle("Subagent end",         isOn: boolBinding("prefSubagentEnd",      \.prefSubagentEnd))
+            Toggle("Tool use",             isOn: boolBinding("prefToolUse",          \.prefToolUse))
+        } header: {
+            Text("Event Preferences")
+        } footer: {
+            Text("Which agent lifecycle events trigger a notification. Applies to whichever channels are enabled above.")
+        }
+    }
+
+    private var privacySection: some View {
+        Section {
+            Toggle("Include payload snippets",
+                   isOn: boolBinding("includePayloadSnippets", \.includePayloadSnippets))
+            Stepper(value: intBinding("retentionDays", \.retentionDays), in: 1...90) {
+                HStack {
+                    Text("Local history retention")
+                    Spacer()
+                    Text("\(store.current.retentionDays) day\(store.current.retentionDays == 1 ? "" : "s")")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        } header: {
+            Text("Privacy")
+        } footer: {
+            Text("Payload snippets help debugging but may contain prompt text. History older than this is auto-purged on both devices.")
         }
     }
 
@@ -86,7 +194,7 @@ struct SettingsView: View {
         }
     }
 
-    private var historySection: some View {
+    private var activitySection: some View {
         Section("Activity") {
             NavigationLink {
                 LogsView()
@@ -121,7 +229,6 @@ struct SettingsView: View {
             } label: {
                 Label("Sync now", systemImage: "arrow.clockwise")
             }
-
             if macStore.byMacId.isEmpty {
                 Text("No paired Macs detected")
                     .foregroundStyle(.secondary)
@@ -135,17 +242,30 @@ struct SettingsView: View {
         } header: {
             Text("About")
         } footer: {
-            Text("Pull down on any tab to fetch the latest from iCloud. Phase, retention, and payload preferences live on your Mac.")
+            Text("Pull down on any tab to fetch the latest from iCloud.")
         }
     }
 
     // MARK: - Binding helpers
 
-    /// Creates a two-way binding for a Bool settings field, touching the LWW timestamp on write.
-    private func binding(
-        _ field: String,
-        _ keyPath: WritableKeyPath<SettingsRecord, Bool>
-    ) -> Binding<Bool> {
+    private func boolBinding(_ field: String,
+                             _ keyPath: WritableKeyPath<SettingsRecord, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { store.current[keyPath: keyPath] },
+            set: { newVal in store.update(field: field) { $0[keyPath: keyPath] = newVal } }
+        )
+    }
+
+    private func intBinding(_ field: String,
+                            _ keyPath: WritableKeyPath<SettingsRecord, Int>) -> Binding<Int> {
+        Binding(
+            get: { store.current[keyPath: keyPath] },
+            set: { newVal in store.update(field: field) { $0[keyPath: keyPath] = newVal } }
+        )
+    }
+
+    private func stringBinding(_ field: String,
+                               _ keyPath: WritableKeyPath<SettingsRecord, String>) -> Binding<String> {
         Binding(
             get: { store.current[keyPath: keyPath] },
             set: { newVal in store.update(field: field) { $0[keyPath: keyPath] = newVal } }

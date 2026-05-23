@@ -19,6 +19,8 @@
 		79164E3CF2DF6556EB4912E6 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */; };
 		8A3A3870B8803279FB2D8830 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D9D643A8FD265E614D1CD0 /* LogsView.swift */; };
 		DC0000000000DC000000A001 /* SyncDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000DC000000A002 /* SyncDiagnosticsView.swift */; };
+		DC0000000000DC000000A003 /* SettingsSyncStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000DC000000A004 /* SettingsSyncStatus.swift */; };
+		DC0000000000DC000000A005 /* PendingBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000DC000000A006 /* PendingBadge.swift */; };
 		8C3533E68E47487FA8B67469 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67B63788D58B1EE3766DCB4 /* LiveActivityManager.swift */; };
 		9A60B782EEA5AE1A90A470CC /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB9C264096018D7F1530EB0 /* NotificationService.swift */; };
 		AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */; };
@@ -72,6 +74,8 @@
 		B67B63788D58B1EE3766DCB4 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		B9D9D643A8FD265E614D1CD0 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
 		DC0000000000DC000000A002 /* SyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsView.swift; sourceTree = "<group>"; };
+		DC0000000000DC000000A004 /* SettingsSyncStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSyncStatus.swift; sourceTree = "<group>"; };
+		DC0000000000DC000000A006 /* PendingBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingBadge.swift; sourceTree = "<group>"; };
 		C1FD10F71AB58F8526779A2D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		DA7841884D6F604D75A0B585 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
@@ -127,6 +131,7 @@
 				DA7841884D6F604D75A0B585 /* BackgroundRefresh.swift */,
 				852D78AD5E7AC9974A3291E5 /* CommandPublisher.swift */,
 				12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */,
+				DC0000000000DC000000A004 /* SettingsSyncStatus.swift */,
 				B67B63788D58B1EE3766DCB4 /* LiveActivityManager.swift */,
 				87BA8E9E1C9C2C7D33A63159 /* WakeOnLAN.swift */,
 			);
@@ -147,6 +152,7 @@
 				F4DA4FB5F5754B7516043CF0 /* HomeView.swift */,
 				B9D9D643A8FD265E614D1CD0 /* LogsView.swift */,
 				DC0000000000DC000000A002 /* SyncDiagnosticsView.swift */,
+				DC0000000000DC000000A006 /* PendingBadge.swift */,
 				FBE088471B3BCCBCE53DAE3D /* NSEDebugView.swift */,
 				FC5FB1F4B6C27ADE20EC787A /* OnboardingView.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
@@ -340,6 +346,8 @@
 				F5016A2A71790FAD23811A18 /* CommandPublisher.swift in Sources */,
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
+				DC0000000000DC000000A003 /* SettingsSyncStatus.swift in Sources */,
+				DC0000000000DC000000A005 /* PendingBadge.swift in Sources */,
 				3A4B25C5A59BB9FD1A9801E8 /* HomeView.swift in Sources */,
 				8C3533E68E47487FA8B67469 /* LiveActivityManager.swift in Sources */,
 				8A3A3870B8803279FB2D8830 /* LogsView.swift in Sources */,
