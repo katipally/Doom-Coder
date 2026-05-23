@@ -36,6 +36,7 @@ targets:
           - "Resources/Info.plist"
           - "Resources/DoomCoderCompanion.entitlements"
           - "Resources/DoomCoderCompanion.Release.entitlements"
+      - path: SharedCache
     resources:
       - DoomCoderCompanion/Resources/Assets.xcassets
     info:
@@ -84,8 +85,7 @@ targets:
         excludes:
           - "Info.plist"
           - "NotificationService.entitlements"
-      - path: DoomCoderCompanion/SharedCache
-        group: SharedCache
+      - path: SharedCache
     info:
       path: NotificationService/Info.plist
       properties:

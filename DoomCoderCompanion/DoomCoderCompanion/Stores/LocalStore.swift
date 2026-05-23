@@ -6,9 +6,9 @@ import Foundation
 import SQLite3
 import DoomCoderCore
 
-final class LocalStore {
+final class LocalStore: @unchecked Sendable {
     
-    nonisolated(unsafe) static let shared = LocalStore()
+    static let shared = LocalStore()
     
     private var db: OpaquePointer?
     private let queue = DispatchQueue(label: "com.doomcoder.localstore", qos: .userInitiated)
