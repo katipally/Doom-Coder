@@ -84,6 +84,34 @@ jobs:
             -project DoomCoder.xcodeproj \
             -scheme DoomCoder
 
+      - name: Write App Store Connect API key
+        id: write-asc-key
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID_RAW: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_RAW: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          KEY_ID=$(echo "$API_KEY_ID_RAW" | tr -d '[:space:]')
+          ISSUER_ID=$(echo "$API_ISSUER_RAW" | tr -d '[:space:]')
+          KEY_DIR=~/.appstoreconnect/private_keys
+          mkdir -p "$KEY_DIR"
+          KEY_PATH="$KEY_DIR/AuthKey_${KEY_ID}.p8"
+          # Reconstruct proper PEM with 64-char line wraps
+          RAW=$(echo "$API_KEY" | tr -d '[:space:]')
+          if echo "$RAW" | grep -q "BEGINPRIVATEKEY\|BEGIN PRIVATE KEY"; then
+            B64=$(echo "$RAW" | sed 's/-----BEGIN PRIVATE KEY-----//;s/-----END PRIVATE KEY-----//')
+          else
+            B64="$RAW"
+          fi
+          { printf -- "-----BEGIN PRIVATE KEY-----\n"
+            printf '%s' "$B64" | fold -w 64
+            printf -- "\n-----END PRIVATE KEY-----\n"; } > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          echo "key_id=${KEY_ID}"     >> "$GITHUB_OUTPUT"
+          echo "issuer_id=${ISSUER_ID}" >> "$GITHUB_OUTPUT"
+          echo "key_path=${KEY_PATH}"  >> "$GITHUB_OUTPUT"
+          echo "ASC API key written for key ID: ${KEY_ID}"
+
       - name: Build Release Archive
         run: |
           xcodebuild \
@@ -91,11 +119,14 @@ jobs:
             -scheme DoomCoder \
             -configuration Release \
             -archivePath build/DoomCoder.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.write-asc-key.outputs.key_path }}" \
+            -authenticationKeyID "${{ steps.write-asc-key.outputs.key_id }}" \
+            -authenticationKeyIssuerID "${{ steps.write-asc-key.outputs.issuer_id }}" \
             archive \
-            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_STYLE=Automatic \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
 
@@ -421,4 +452,5 @@ jobs:
         run: |
           security delete-keychain build.keychain 2>/dev/null || true
           rm -f certificate.p12 /tmp/AuthKey.p8
+          rm -rf ~/.appstoreconnect/private_keys
 
