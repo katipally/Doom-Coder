@@ -117,6 +117,11 @@ jobs:
 
       - name: Build Release Archive
         run: |
+          # Archive with Automatic signing + allowProvisioningUpdates.
+          # The API key lets Xcode auto-create/download the Mac Development
+          # provisioning profile for iCloud/App Groups entitlements.
+          # CODE_SIGN_IDENTITY is NOT overridden here — that conflicts with
+          # Automatic style. The export + re-sign steps apply Developer ID.
           xcodebuild \
             -project DoomCoder.xcodeproj \
             -scheme DoomCoder \
@@ -128,7 +133,6 @@ jobs:
             -authenticationKeyIssuerID "${{ steps.write-asc-key.outputs.issuer_id }}" \
             archive \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
@@ -139,7 +143,11 @@ jobs:
             -exportArchive \
             -archivePath build/DoomCoder.xcarchive \
             -exportPath build/export \
-            -exportOptionsPlist scripts/ExportOptions.plist
+            -exportOptionsPlist scripts/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.write-asc-key.outputs.key_path }}" \
+            -authenticationKeyID "${{ steps.write-asc-key.outputs.key_id }}" \
+            -authenticationKeyIssuerID "${{ steps.write-asc-key.outputs.issuer_id }}"
 
       - name: Re-sign all embedded code (inside-out)
         run: |
