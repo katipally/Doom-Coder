@@ -106,10 +106,17 @@ jobs:
           rm "$RUNNER_TEMP/dist.p12"
 
       - name: Write App Store Connect API key
+        id: write-api-key
         env:
           API_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_KEY_ID_RAW: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_RAW: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          set -euo pipefail
+          # Strip any accidental whitespace/newlines from ID values pasted into secrets.
+          API_KEY_ID=$(printf '%s' "$API_KEY_ID_RAW" | tr -d '[:space:]')
+          API_ISSUER=$(printf '%s' "$API_ISSUER_RAW" | tr -d '[:space:]')
+
           if [[ -z "$API_KEY" ]]; then
             echo "::error::APP_STORE_CONNECT_PRIVATE_KEY secret is empty or not set"
             exit 1
@@ -118,42 +125,62 @@ jobs:
             echo "::error::APP_STORE_CONNECT_KEY_ID secret is empty or not set"
             exit 1
           fi
-          mkdir -p ~/.appstoreconnect/private_keys
-          KEY_FILE=~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          RAW_FILE="$RUNNER_TEMP/api_key_raw.p8"
+          KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
 
           # Auto-detect: raw PEM (starts with -----BEGIN) or base64-encoded.
           if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
-            # Raw PEM — strip carriage returns and trailing whitespace per line
-            # (CryptoKit rejects trailing spaces on -----END PRIVATE KEY-----).
-            printf '%s' "$API_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//' > "$KEY_FILE"
+            # Raw PEM: strip CR and trailing whitespace per line.
+            printf '%s' "$API_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//' > "$RAW_FILE"
             echo "Detected raw PEM format"
           else
-            # Base64-encoded .p8 — decode then strip carriage returns.
-            printf '%s' "$API_KEY" | tr -d '\r ' | base64 -D > "$KEY_FILE"
-            echo "Detected base64-encoded format, decoded successfully"
+            # Base64-encoded: decode then strip CR.
+            printf '%s' "$API_KEY" | tr -d '\r ' | base64 -D > "$RAW_FILE"
+            echo "Detected base64-encoded format"
           fi
 
-          # Ensure file ends with a single newline (CryptoKit requires it)
-          if [[ "$(tail -c 1 "$KEY_FILE" | xxd -p)" != "0a" ]]; then
-            printf '\n' >> "$KEY_FILE"
+          # Ensure file ends with exactly one newline.
+          if [[ "$(tail -c 1 "$RAW_FILE" | xxd -p)" != "0a" ]]; then
+            printf '\n' >> "$RAW_FILE"
           fi
 
+          # Normalize via openssl so CryptoKit gets a canonical PEM structure
+          # (correct line width, no stray bytes, clean header/footer).
+          if openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" 2>/dev/null; then
+            echo "Key normalized via openssl pkey"
+          else
+            cp "$RAW_FILE" "$KEY_FILE"
+            echo "Warning: openssl normalization skipped — using cleaned raw key"
+          fi
+          rm -f "$RAW_FILE"
+          chmod 600 "$KEY_FILE"
+
+          # Validate written file
           if ! head -c 20 "$KEY_FILE" | grep -q "^-----BEGIN"; then
-            echo "::error::Written .p8 doesn't look like PEM."
+            echo "::error::Written .p8 doesn't look like PEM"
             exit 1
           fi
           SIZE=$(wc -c < "$KEY_FILE" | tr -d ' ')
-          FIRST=$(head -1 "$KEY_FILE")
-          LAST=$(tail -1 "$KEY_FILE")
-          echo "API key: ${SIZE} bytes | first: '${FIRST}' | last: '${LAST}'"
+          echo "API key written: ${SIZE} bytes → $(basename "$KEY_FILE")"
+
+          # Emit trimmed values as step outputs so downstream steps use the exact same strings.
+          echo "key_id=${API_KEY_ID}" >> "$GITHUB_OUTPUT"
+          echo "issuer_id=${API_ISSUER}" >> "$GITHUB_OUTPUT"
+          echo "key_path=${KEY_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Archive (Release)
         working-directory: DoomCoderCompanion
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
+          ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
+          ASC_KEY_PATH: ${{ steps.write-api-key.outputs.key_path }}
         run: |
           # Strip the agent's stale GIT_CONFIG vars so SwiftPM can resolve bare repos.
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+          echo "Using key: $(basename "${ASC_KEY_PATH}")"
           xcodebuild \
             -project DoomCoderCompanion.xcodeproj \
             -scheme DoomCoderCompanion \
@@ -161,10 +188,10 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/DoomCoderCompanion.xcarchive" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8 \
-            -authenticationKeyID ${{ secrets.APP_STORE_CONNECT_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }} \
-            DEVELOPMENT_TEAM=${APPLE_TEAM_ID} \
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
+            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
             archive
 
       - name: Write ExportOptions.plist
@@ -186,6 +213,10 @@ jobs:
           EOF
 
       - name: Export & upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
+          ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
+          ASC_KEY_PATH: ${{ steps.write-api-key.outputs.key_path }}
         run: |
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
           xcodebuild \
@@ -194,9 +225,9 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8 \
-            -authenticationKeyID ${{ secrets.APP_STORE_CONNECT_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
 
       - name: Clean up API key
         if: always()
