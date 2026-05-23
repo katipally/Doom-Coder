@@ -146,29 +146,40 @@ jobs:
             printf '\n' >> "$RAW_FILE"
           fi
 
-          # Normalize via openssl so CryptoKit gets a canonical PEM structure
-          # (correct line width, no stray bytes, clean header/footer).
+          # Normalize via openssl so CryptoKit gets a canonical PEM structure.
           # Use || RC=$? to prevent set -e from triggering — we handle the failure.
+          # Try 1: unencrypted PKCS8 (standard Apple API key format)
           OPENSSL_RC=0
           OPENSSL_OUT="$(openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" 2>&1)" || OPENSSL_RC=$?
           if [ $OPENSSL_RC -eq 0 ]; then
-            echo "Key normalized via openssl pkey"
+            echo "Key normalized via openssl pkey (unencrypted)"
           else
             echo "openssl pkey failed (rc=${OPENSSL_RC}): ${OPENSSL_OUT}"
-            # Try pkcs8 sub-command as fallback
+            # Try 2: encrypted PKCS8 with empty passphrase → strip encryption
             OPENSSL_RC2=0
-            OPENSSL_OUT2="$(openssl pkcs8 -nocrypt -in "$RAW_FILE" -out "$KEY_FILE" 2>&1)" || OPENSSL_RC2=$?
+            OPENSSL_OUT2="$(openssl pkey -in "$RAW_FILE" -out "$KEY_FILE" -passin pass: 2>&1)" || OPENSSL_RC2=$?
             if [ $OPENSSL_RC2 -eq 0 ]; then
-              echo "Key normalized via openssl pkcs8"
+              echo "Key decrypted (empty passphrase) and normalized"
             else
-              echo "openssl pkcs8 also failed (rc=${OPENSSL_RC2}): ${OPENSSL_OUT2}"
-              cp "$RAW_FILE" "$KEY_FILE"
-              echo "Warning: using cleaned raw key without openssl normalization"
+              echo "openssl pkey (empty passphrase) failed (rc=${OPENSSL_RC2}): ${OPENSSL_OUT2}"
+              # Try 3: explicit pkcs8 decode with empty passphrase
+              OPENSSL_RC3=0
+              OPENSSL_OUT3="$(openssl pkcs8 -nocrypt -in "$RAW_FILE" -out "$KEY_FILE" -passin pass: 2>&1)" || OPENSSL_RC3=$?
+              if [ $OPENSSL_RC3 -eq 0 ]; then
+                echo "Key normalized via openssl pkcs8 (empty passphrase)"
+              else
+                echo "openssl pkcs8 (empty passphrase) also failed (rc=${OPENSSL_RC3}): ${OPENSSL_OUT3}"
+                cp "$RAW_FILE" "$KEY_FILE"
+                echo "::warning::All openssl normalization attempts failed — using raw key as-is"
+                echo "::warning::If xcodebuild fails with invalidPEMDocument, the key in APP_STORE_CONNECT_PRIVATE_KEY may be corrupted."
+                echo "::warning::Verify locally: openssl pkey -in AuthKey_*.p8 -noout"
+                echo "::warning::If that fails, re-download the key from App Store Connect and update the secret."
+              fi
             fi
           fi
-          # Print PEM header for diagnostics (not secret content)
+          # Print PEM header for diagnostics (not secret content — header is masked)
           HEADER=$(head -1 "$RAW_FILE")
-          echo "PEM header line: '${HEADER}'"
+          echo "PEM header: '${HEADER}'"
           rm -f "$RAW_FILE"
           chmod 600 "$KEY_FILE"
 
