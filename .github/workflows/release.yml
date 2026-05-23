@@ -78,6 +78,25 @@ jobs:
 
           security find-identity -v -p codesigning build.keychain
 
+      - name: Install Mac Developer ID provisioning profile
+        env:
+          MAC_PROFILE: ${{ secrets.MAC_PROVISIONING_PROFILE }}
+        run: |
+          if [ -z "${MAC_PROFILE:-}" ]; then
+            echo "::error::MAC_PROVISIONING_PROFILE secret is empty"
+            exit 1
+          fi
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/DoomCoder_Mac_DevID.provisionprofile"
+          printf '%s' "$MAC_PROFILE" | base64 -D > "$PROFILE_PATH"
+          # Save the path so later steps can embed it
+          echo "MAC_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
+          # Validate it parses + show its name
+          echo "Installed profile:"
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Name xml1 -o - - | grep '<string>'
+          echo "Profile platform:"
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Platform xml1 -o - - | grep '<string>'
+
       - name: Resolve Swift Packages
         run: |
           xcodebuild -resolvePackageDependencies \
@@ -153,6 +172,17 @@ jobs:
           cp -R "$APP_IN_ARCHIVE" build/export/DoomCoder.app
           echo "✅ Extracted DoomCoder.app from archive"
           echo "   Size: $(du -sh build/export/DoomCoder.app | cut -f1)"
+
+      - name: Embed Developer ID provisioning profile
+        run: |
+          APP="build/export/DoomCoder.app"
+          # Replace the auto-generated Mac Development profile (from the
+          # archive's Automatic signing) with our Developer ID profile.
+          # Gatekeeper verifies signing identity is listed in this profile.
+          cp "${MAC_PROFILE_PATH}" "${APP}/Contents/embedded.provisionprofile"
+          echo "✅ Embedded Developer ID profile"
+          security cms -D -i "${APP}/Contents/embedded.provisionprofile" \
+            | plutil -extract Name xml1 -o - - | grep '<string>'
 
       - name: Re-sign all embedded code (inside-out)
         run: |
