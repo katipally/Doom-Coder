@@ -137,23 +137,28 @@ jobs:
             MARKETING_VERSION="${{ env.VERSION }}" \
             CURRENT_PROJECT_VERSION="${{ env.BUILD }}"
 
-      - name: Export Archive (Developer ID)
+      - name: Extract app from archive
         run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/DoomCoder.xcarchive \
-            -exportPath build/export \
-            -exportOptionsPlist scripts/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.write-asc-key.outputs.key_path }}" \
-            -authenticationKeyID "${{ steps.write-asc-key.outputs.key_id }}" \
-            -authenticationKeyIssuerID "${{ steps.write-asc-key.outputs.issuer_id }}"
+          # Skip xcodebuild -exportArchive — it requires downloading a
+          # Developer ID provisioning profile via cloud signing (needs Admin
+          # role). The archive already contains the built .app; we extract it
+          # directly and the re-sign step will apply the correct Developer ID.
+          mkdir -p build/export
+          APP_IN_ARCHIVE="build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app"
+          if [ ! -d "$APP_IN_ARCHIVE" ]; then
+            echo "::error::App not found in archive at $APP_IN_ARCHIVE"
+            ls -laR build/DoomCoder.xcarchive/Products/ || true
+            exit 1
+          fi
+          cp -R "$APP_IN_ARCHIVE" build/export/DoomCoder.app
+          echo "✅ Extracted DoomCoder.app from archive"
+          echo "   Size: $(du -sh build/export/DoomCoder.app | cut -f1)"
 
       - name: Re-sign all embedded code (inside-out)
         run: |
           APP="build/export/DoomCoder.app"
           IDENTITY="Developer ID Application"
-          ENTS="DoomCoder/DoomCoder.entitlements"
+          ENTS="DoomCoder/DoomCoder.Release.entitlements"
 
           # Fail loudly if the app wasn't exported where we expect
           if [ ! -d "$APP" ]; then
