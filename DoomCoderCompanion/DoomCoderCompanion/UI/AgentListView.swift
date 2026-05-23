@@ -24,7 +24,13 @@ struct AgentListView: View {
                             NavigationLink {
                                 AgentLogsView(agent: agent)
                             } label: {
-                                AgentRow(agent: agent)
+                                AgentRow(
+                                    agent: agent,
+                                    status: agentStore.statuses[agent],
+                                    isInstalled: agentStore.installedAgents.isEmpty
+                                        ? true
+                                        : agentStore.installedAgents.contains(agent)
+                                )
                             }
                         }
                     } header: {
@@ -73,29 +79,68 @@ struct AgentListView: View {
 
 struct AgentRow: View {
     let agent: TrackedAgent
-    
+    let status: String?
+    let isInstalled: Bool
+
+    init(agent: TrackedAgent, status: String? = nil, isInstalled: Bool = true) {
+        self.agent = agent
+        self.status = status
+        self.isInstalled = isInstalled
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             AgentIcon(agent: agent, size: 32)
-            
+                .opacity(isInstalled ? 1.0 : 0.5)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(agent.displayName)
-                    .font(.body.weight(.medium))
-                
-                if agent.isIDEAgent {
-                    Text("IDE")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(agent.displayName)
+                        .font(.body.weight(.medium))
+                    if !isInstalled {
+                        Text("not installed")
+                            .font(.caption2)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 5) {
+                    if let status, !status.isEmpty {
+                        Circle()
+                            .fill(statusColor(for: status))
+                            .frame(width: 7, height: 7)
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if agent.isIDEAgent {
+                        Text("IDE")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            
+
             Spacer()
-            
+
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "running":              return .green
+        case "waiting for approval": return .orange
+        case "waiting for input":    return .yellow
+        case "completed":            return .blue
+        case "failed":               return .red
+        case "idle", "open":         return .gray
+        default:                     return .secondary
+        }
     }
 }
 
@@ -106,8 +151,8 @@ struct AgentIcon: View {
     var body: some View {
         Group {
             // Try bundled imageset first
-            if let _ = UIImage(named: "agent-\(agent.iconSlug)") {
-                Image("agent-\(agent.iconSlug)")
+            if let _ = UIImage(named: agent.bundledAssetName) {
+                Image(agent.bundledAssetName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else if let url = AppGroupCache.iconURL(slug: agent.iconSlug),

@@ -43,9 +43,18 @@ final class CloudKitPusherLifecycle {
             Task { @MainActor in self?.publishAgentConfig() }
         }
 
+        // Agent installed or uninstalled → republish AgentConfig immediately.
+        nc.addObserver(forName: .agentInstalledStateChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.publishAgentConfig() }
+        }
+
         // Heartbeat
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.publishMacStatus() }
+            Task { @MainActor in
+                self?.publishMacStatus()
+                // Refresh AgentConfig too so per-agent statuses on iOS stay current.
+                self?.publishAgentConfig()
+            }
         }
 
         // Hourly reaper
@@ -73,8 +82,26 @@ final class CloudKitPusherLifecycle {
 
     private func publishAgentConfig() {
         guard CloudKitPusher.shared.isReady else { return }
-        let agents = TrackedAgent.allCases.filter { TrackingStore.isEnabled($0) }
-        CloudKitPusher.shared.publishAgentConfig(agents: agents)
+        let enabledAgents = TrackedAgent.allCases.filter { TrackingStore.isEnabled($0) }
+        let installedAgents = TrackedAgent.allCases.filter { AgentInstallerV2.isInstalled($0) }
+        let manager = AgentTrackingManager.shared
+        var statuses: [TrackedAgent: String] = [:]
+        for agent in TrackedAgent.allCases {
+            let state: AgentSessionState
+            if let live = manager.liveSessions.first(where: { $0.agent == agent }) {
+                state = live.displayState
+            } else if manager.processMonitor.isAppRunning[agent] == true {
+                state = agent.isIDEAgent ? .open : .running
+            } else {
+                state = .notRunning
+            }
+            statuses[agent] = state.humanReadable
+        }
+        CloudKitPusher.shared.publishAgentConfig(
+            agents: enabledAgents,
+            installed: installedAgents,
+            statuses: statuses
+        )
         didPublishConfig = true
     }
 
@@ -134,4 +161,8 @@ extension Notification.Name {
     /// Posted by TrackingStore.setEnabled so listeners can react to user
     /// toggles in the Tracking pane.
     static let trackingStoreChanged = Notification.Name("doomcoder.trackingStore.changed")
+
+    /// Posted by AgentInstallerV2 after a successful install or uninstall.
+    /// userInfo: ["agent": String, "installed": Bool].
+    static let agentInstalledStateChanged = Notification.Name("doomcoder.agentInstalledState.changed")
 }

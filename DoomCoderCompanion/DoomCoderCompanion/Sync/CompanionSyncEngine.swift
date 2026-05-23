@@ -253,17 +253,31 @@ final class CompanionSyncEngine: NSObject {
 
     /// NotificationLog subscription with pre-baked alertTitle/alertBody (v8 format)
     private func setupNotificationLogSubscription() async {
+        // Clean up legacy subscription IDs so a single live subscription owns the channel.
+        for legacyID in ["notif-log-v6", "notif-log-v7", "notif-log-v8"] {
+            _ = try? await db.deleteSubscription(withID: legacyID)
+        }
+
         let predicate = NSPredicate(value: true)
         let sub = CKQuerySubscription(
             recordType: CloudKitConstants.RecordType.notificationLog,
             predicate: predicate,
-            subscriptionID: "notif-log-v8",
+            subscriptionID: "notif-log-v9",
             options: [.firesOnRecordCreation]
         )
         sub.zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName)
         
         let info = CKSubscription.NotificationInfo()
-        // Simplified for iOS 26 - rely on NSE to populate title/body
+        // For iOS to display a banner (not silent push), the NotificationInfo
+        // must include user-visible alert content. Map the CKRecord's "title"
+        // and "body" fields straight into aps.alert via APNs localization
+        // substitution. The NSE then runs (because shouldSendMutableContent)
+        // and can further enrich (icon attachment, interruption level, thread
+        // id) without changing the title/body.
+        info.titleLocalizationKey = "%@"
+        info.titleLocalizationArgs = ["title"]
+        info.alertLocalizationKey = "%@"
+        info.alertLocalizationArgs = ["body"]
         info.soundName = "default"
         info.shouldBadge = true
         info.shouldSendMutableContent = true
@@ -297,13 +311,24 @@ final class CompanionSyncEngine: NSObject {
                 }
                 
             case "AgentConfig":
-                // Custom record type: { macId, agents: [String], updatedAt, schemaVersion }
-                guard let macId = record["macId"] as? String,
-                      let agentStrings = record["agents"] as? [String]
-                else { return }
-                
-                let agents = agentStrings.compactMap { TrackedAgent(rawValue: $0) }
-                AgentListStore.shared.updateAgents(agents, macId: macId)
+                // Custom record type: { macId, agents, installedAgents, statuses, updatedAt, schemaVersion }
+                guard let r = AgentConfigRecord(record) else { return }
+                let agents = r.agents.compactMap { TrackedAgent(rawValue: $0) }
+                let installed = r.installedAgents.compactMap { TrackedAgent(rawValue: $0) }
+                var statusMap: [TrackedAgent: String] = [:]
+                if !r.statuses.isEmpty,
+                   let data = r.statuses.data(using: .utf8),
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
+                    for (k, v) in dict {
+                        if let a = TrackedAgent(rawValue: k) { statusMap[a] = v }
+                    }
+                }
+                AgentListStore.shared.updateState(
+                    agents: agents,
+                    installed: installed,
+                    statuses: statusMap,
+                    macId: r.macId
+                )
                 
             case CloudKitConstants.RecordType.agentIcon:
                 guard let agentStr = record["agent"] as? String,

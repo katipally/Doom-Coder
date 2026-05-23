@@ -41,4 +41,19 @@ public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
         case .codexCLI:   return "openai"
         }
     }
+
+    /// Name of the bundled PNG imageset in both the Mac and iOS asset
+    /// catalogs. Distinct from `iconSlug` because the lobehub CDN uses
+    /// different naming for some agents (e.g. `github-copilot` vs the
+    /// bundled `agent-copilot-cli.imageset`).
+    public var bundledAssetName: String {
+        switch self {
+        case .claude:     return "agent-claude"
+        case .cursor:     return "agent-cursor"
+        case .vscode:     return "agent-vscode"
+        case .copilotCLI: return "agent-copilot-cli"
+        case .windsurf:   return "agent-windsurf"
+        case .codexCLI:   return "agent-codex"
+        }
+    }
 }
