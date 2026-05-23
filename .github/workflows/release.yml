@@ -185,6 +185,91 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           echo "✅ Archive signing verified"
 
+      - name: Re-sign Sparkle nested helper binaries
+        run: |
+          # Xcode's Manual archive signs the outer .app and Sparkle.framework
+          # wrapper, but it does NOT deep-sign the helper executables nested
+          # inside Sparkle (Updater.app, Autoupdate, Downloader.xpc, Installer.xpc).
+          # Those ship from the SPM artifact pre-signed by Sparkle Project's
+          # "Developer ID" — which is NOT our Developer ID, so notarization
+          # rejects them with "not signed with a valid Developer ID certificate".
+          #
+          # We re-sign ONLY those inner helpers with OUR Developer ID +
+          # --timestamp + --options=runtime. We do NOT touch the outer .app,
+          # its embedded.provisionprofile, or its entitlements — so AMFI's
+          # strict profile↔entitlement match for the main app is preserved.
+          APP="build/export/DoomCoder.app"
+          SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+          IDENTITY="Developer ID Application: Yashwanth Reddy Katipally (A9P2388PHM)"
+
+          if [ ! -d "$SPARKLE" ]; then
+            echo "⚠️  Sparkle.framework not found — skipping"
+            exit 0
+          fi
+
+          # Inside-out re-sign: deepest first, then wrappers, then the
+          # framework itself. Use the helper's existing entitlements (Sparkle
+          # ships its own correct hardened-runtime entitlements per helper).
+          resign() {
+            local target="$1"
+            if [ ! -e "$target" ]; then
+              echo "  skip (missing): $target"
+              return
+            fi
+            # Preserve the helper's existing entitlements rather than embedding
+            # the main app's entitlements (which would be wrong for a helper).
+            local ent_file
+            ent_file=$(mktemp)
+            if codesign -d --entitlements - --xml "$target" 2>/dev/null \
+                | plutil -convert xml1 -o "$ent_file" - 2>/dev/null \
+                && [ -s "$ent_file" ]; then
+              codesign --force --sign "$IDENTITY" \
+                --timestamp --options=runtime \
+                --entitlements "$ent_file" \
+                "$target"
+            else
+              codesign --force --sign "$IDENTITY" \
+                --timestamp --options=runtime \
+                "$target"
+            fi
+            rm -f "$ent_file"
+            echo "  ✅ re-signed: ${target#$APP/}"
+          }
+
+          echo "=== Re-signing Sparkle inner helpers ==="
+
+          # 1. Deepest Mach-O binaries first
+          resign "$SPARKLE/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader"
+          resign "$SPARKLE/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer"
+          resign "$SPARKLE/Versions/B/Updater.app/Contents/MacOS/Updater"
+          resign "$SPARKLE/Versions/B/Autoupdate"
+
+          # 2. XPC service bundles
+          resign "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+          resign "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+
+          # 3. Updater.app bundle
+          resign "$SPARKLE/Versions/B/Updater.app"
+
+          # 4. Sparkle.framework itself (re-seal after inner changes)
+          resign "$SPARKLE"
+
+          # 5. Finally, re-sign the main app so its CodeDirectory hash matches
+          # the now-modified Sparkle inside. CRITICAL: use --preserve-metadata
+          # to keep the byte-exact entitlements blob Xcode embedded during
+          # archive — re-serializing via --entitlements caused the v2.4.2
+          # AMFI rejection (icloud-services string-vs-array mismatch).
+          codesign --force --sign "$IDENTITY" \
+            --timestamp --options=runtime \
+            --preserve-metadata=entitlements,requirements,flags,runtime \
+            "$APP"
+          echo "  ✅ re-signed main app (entitlements preserved byte-exact)"
+
+          echo ""
+          echo "=== Verifying re-signed bundle ==="
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "✅ Sparkle re-sign pass complete"
+
       - name: Audit all binary signatures
         run: |
           APP="build/export/DoomCoder.app"
