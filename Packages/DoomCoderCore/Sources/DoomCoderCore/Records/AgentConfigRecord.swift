@@ -11,15 +11,26 @@ import CloudKit
 public struct AgentConfigRecord: Sendable, Codable, Equatable {
     public var macId: String
     public var agents: [String]
+    /// Subset of `TrackedAgent.allCases` rawValues currently installed on this Mac.
+    /// Drives the "not installed" badge on iOS.
+    public var installedAgents: [String]
+    /// JSON-encoded `[String: String]` mapping agent rawValue → human-readable
+    /// status (e.g. "running", "waiting for approval", "closed"). Empty when
+    /// status tracking is unavailable.
+    public var statuses: String
     public var updatedAt: Date
     public var schemaVersion: Int
 
     public init(macId: String,
                 agents: [String],
+                installedAgents: [String] = [],
+                statuses: String = "",
                 updatedAt: Date = Date(),
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.agents = agents
+        self.installedAgents = installedAgents
+        self.statuses = statuses
         self.updatedAt = updatedAt
         self.schemaVersion = schemaVersion
     }
@@ -40,10 +51,12 @@ extension AgentConfigRecord {
     /// CKError 14/2004 on the second save.
     public func toCKRecord(base: CKRecord?) -> CKRecord {
         let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
-        r["macId"]         = macId as CKRecordValue
-        r["agents"]        = agents as CKRecordValue
-        r["updatedAt"]     = updatedAt as CKRecordValue
-        r["schemaVersion"] = schemaVersion as CKRecordValue
+        r["macId"]           = macId as CKRecordValue
+        r["agents"]          = agents as CKRecordValue
+        r["installedAgents"] = installedAgents as CKRecordValue
+        r["statuses"]        = statuses as CKRecordValue
+        r["updatedAt"]       = updatedAt as CKRecordValue
+        r["schemaVersion"]   = schemaVersion as CKRecordValue
         return r
     }
 
@@ -55,6 +68,8 @@ extension AgentConfigRecord {
         else { return nil }
         self.init(
             macId: macId, agents: agents,
+            installedAgents: (r["installedAgents"] as? [String]) ?? [],
+            statuses: (r["statuses"] as? String) ?? "",
             updatedAt: updatedAt,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )

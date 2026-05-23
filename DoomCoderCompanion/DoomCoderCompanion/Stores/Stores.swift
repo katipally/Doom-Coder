@@ -81,14 +81,32 @@ final class AgentListStore {
     }
 
     private(set) var agents: [TrackedAgent] = []
+    /// Subset of `agents` that are installed on the Mac. Read by the UI to
+    /// dim or badge non-installed rows.
+    private(set) var installedAgents: Set<TrackedAgent> = []
+    /// Per-agent human-readable status (e.g. "running", "waiting for approval",
+    /// "closed"). Empty means status is unknown.
+    private(set) var statuses: [TrackedAgent: String] = [:]
 
     func updateAgents(_ newAgents: [TrackedAgent], macId: String) {
         agents = newAgents.sorted { $0.displayName < $1.displayName }
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
     }
 
+    func updateState(agents newAgents: [TrackedAgent],
+                     installed: [TrackedAgent],
+                     statuses newStatuses: [TrackedAgent: String],
+                     macId: String) {
+        agents = newAgents.sorted { $0.displayName < $1.displayName }
+        installedAgents = Set(installed)
+        statuses = newStatuses
+        LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
+    }
+
     func clear() {
         agents.removeAll()
+        installedAgents.removeAll()
+        statuses.removeAll()
     }
 }
 

@@ -104,6 +104,7 @@ struct AgentInstallerV2 {
             let postHash = sha256(of: path) ?? "?"
             let n = expectedEvents(for: agent).count
             logger.notice("installer op=install agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) events_asserted=\(n)/\(n) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
+            NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": true])
             return .success(())
         } catch {
             // Attempt revert from the backup we took before writing.
@@ -132,6 +133,7 @@ struct AgentInstallerV2 {
             try? FileManager.default.removeItem(atPath: path)
             unpatchVSCodeSettings()
             logger.notice("installer op=uninstall agent=vscode outcome=ok")
+            NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": false])
             return .success(())
         }
         // Copilot CLI now owns ~/.copilot/hooks/doomcoder.json outright; just
@@ -139,6 +141,7 @@ struct AgentInstallerV2 {
         if agent == .copilotCLI {
             try? FileManager.default.removeItem(atPath: path)
             logger.notice("installer op=uninstall agent=copilot_cli outcome=ok")
+            NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": false])
             return .success(())
         }
         guard FileManager.default.fileExists(atPath: path) else {
@@ -158,6 +161,7 @@ struct AgentInstallerV2 {
             try verifyUninstalled(at: path, agent: agent)
             let postHash = sha256(of: path) ?? "absent"
             logger.notice("installer op=uninstall agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
+            NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": false])
             return .success(())
         } catch {
             var revertNote = "no_backup"

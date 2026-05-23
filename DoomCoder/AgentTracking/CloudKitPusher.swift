@@ -226,13 +226,27 @@ final class CloudKitPusher {
         pendingMacStatus = rec
     }
 
-    /// Publish the list of tracked agents on this Mac. Called on launch and
-    /// whenever the user toggles agents in Tracking pane.
-    func publishAgentConfig(agents: [TrackedAgent]) {
+    /// Publish the list of tracked agents on this Mac plus installed-state
+    /// and per-agent status text. Called on launch and whenever the user
+    /// toggles agents in Tracking pane, installs/uninstalls an agent, or on
+    /// the 60s heartbeat.
+    func publishAgentConfig(agents: [TrackedAgent],
+                            installed: [TrackedAgent] = [],
+                            statuses: [TrackedAgent: String] = [:]) {
         guard let engine else { return }
+        var statusDict: [String: String] = [:]
+        for (k, v) in statuses { statusDict[k.rawValue] = v }
+        let statusesJSON: String = {
+            guard !statusDict.isEmpty,
+                  let data = try? JSONSerialization.data(withJSONObject: statusDict),
+                  let str  = String(data: data, encoding: .utf8) else { return "" }
+            return str
+        }()
         let rec = AgentConfigRecord(
             macId: macId,
             agents: agents.map(\.rawValue),
+            installedAgents: installed.map(\.rawValue),
+            statuses: statusesJSON,
             updatedAt: Date()
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
