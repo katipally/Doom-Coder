@@ -94,7 +94,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          echo "$DIST_CERT_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          echo "$DIST_CERT_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
           security import "$RUNNER_TEMP/dist.p12" \
             -k "$KEYCHAIN_PATH" \
             -P "$DIST_CERT_PASSWORD" \
@@ -119,9 +119,23 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.appstoreconnect/private_keys
-          # .p8 is a text/PEM file — write directly, no base64 needed.
-          printf '%s' "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
-          echo "API key written: $(wc -c < ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8) bytes"
+          KEY_FILE=~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+
+          # Auto-detect: raw PEM (starts with -----BEGIN) or base64-encoded.
+          # Both formats are accepted so users don't have to re-set the secret.
+          if printf '%s' "$API_KEY" | head -c 20 | grep -q "^-----BEGIN"; then
+            printf '%s\n' "$API_KEY" > "$KEY_FILE"
+            echo "Detected raw PEM format"
+          else
+            printf '%s' "$API_KEY" | base64 -D > "$KEY_FILE"
+            echo "Detected base64-encoded format, decoded successfully"
+          fi
+
+          if ! head -c 20 "$KEY_FILE" | grep -q "^-----BEGIN"; then
+            echo "::error::Written .p8 doesn't look like PEM. First 20 chars: $(head -c 20 "$KEY_FILE")"
+            exit 1
+          fi
+          echo "API key validated: $(wc -c < "$KEY_FILE" | tr -d ' ') bytes"
 
       - name: Archive (Release)
         working-directory: DoomCoderCompanion
