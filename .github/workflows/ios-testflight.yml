@@ -81,11 +81,13 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD}" \
             NotificationService/Info.plist
 
-      - name: Create temporary keychain
+      - name: Create temporary keychain & install signing assets
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
           DIST_CERT_B64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}
           DIST_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          PROFILE_APP_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_APP }}
+          PROFILE_NS_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_NS }}
         run: |
           set -euo pipefail
           KEYCHAIN_PATH="$RUNNER_TEMP/ios-build.keychain-db"
@@ -94,29 +96,32 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          # Import the distribution certificate if provided.
-          # If the cert is revoked, skip import — allowProvisioningUpdates will
-          # create a fresh distribution certificate via the App Manager API key.
-          if [[ -n "$DIST_CERT_B64" ]]; then
-            echo "$DIST_CERT_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
-            IMPORT_RC=0
-            security import "$RUNNER_TEMP/dist.p12" \
-              -k "$KEYCHAIN_PATH" \
-              -P "$DIST_CERT_PASSWORD" \
-              -T /usr/bin/codesign \
-              -T /usr/bin/security 2>&1 || IMPORT_RC=$?
-            rm -f "$RUNNER_TEMP/dist.p12"
-            if [ $IMPORT_RC -ne 0 ]; then
-              echo "::warning::Distribution cert import failed (rc=${IMPORT_RC}) — may be revoked. allowProvisioningUpdates will create a fresh cert."
-            else
-              security set-key-partition-list \
-                -S apple-tool:,apple:,codesign: \
-                -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-              echo "Distribution certificate imported successfully."
-            fi
-          else
-            echo "::warning::IOS_DISTRIBUTION_CERTIFICATE not set — relying on allowProvisioningUpdates."
-          fi
+          # Import distribution certificate (must be valid — not revoked).
+          echo "$DIST_CERT_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$DIST_CERT_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/dist.p12"
+          echo "Distribution certificate imported."
+
+          # Install provisioning profiles.
+          PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PP_DIR"
+          echo "$PROFILE_APP_B64" | base64 -D > "$RUNNER_TEMP/app.mobileprovision"
+          echo "$PROFILE_NS_B64"  | base64 -D > "$RUNNER_TEMP/ns.mobileprovision"
+          # Install using the UUID embedded in the profile as the filename.
+          for f in "$RUNNER_TEMP/app.mobileprovision" "$RUNNER_TEMP/ns.mobileprovision"; do
+            UUID=$(security cms -D -i "$f" 2>/dev/null | \
+              /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin 2>/dev/null || \
+              grep -a -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' "$f" | head -1)
+            cp "$f" "$PP_DIR/${UUID}.mobileprovision"
+            echo "Installed profile: $UUID"
+          done
 
       - name: Write App Store Connect API key
         id: write-api-key
@@ -210,40 +215,39 @@ jobs:
         working-directory: DoomCoderCompanion
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
-          ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
-          ASC_KEY_PATH: ${{ steps.write-api-key.outputs.key_path }}
         run: |
-          # Strip the agent's stale GIT_CONFIG vars so SwiftPM can resolve bare repos.
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
-          echo "Using key: $(basename "${ASC_KEY_PATH}")"
+          # Manual signing: uses the distribution cert + profiles installed above.
+          # No allowProvisioningUpdates / cloud signing — avoids "Cloud signing
+          # permission error" which requires team-level cloud cert opt-in.
           xcodebuild \
             -project DoomCoderCompanion.xcodeproj \
             -scheme DoomCoderCompanion \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/DoomCoderCompanion.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${ASC_KEY_PATH}" \
-            -authenticationKeyID "${ASC_KEY_ID}" \
-            -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+            PROVISIONING_PROFILE_SPECIFIER="DoomCoder Companion AppStore" \
             archive
 
       - name: Write ExportOptions.plist
         run: |
-          # method=app-store: traditional cert-based signing (uses dist cert from keychain).
-          # destination=export: produce a signed IPA locally; upload is a separate step.
-          # This avoids "Cloud signing permission error" from method=app-store-connect
-          # which requires cloud-managed distribution certificates.
           TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
           cat > "$RUNNER_TEMP/ExportOptions.plist" << PLIST_EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store</string>
+            <key>method</key><string>app-store-connect</string>
             <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.doomcoder.app.companion</key><string>DoomCoder Companion AppStore</string>
+              <key>com.doomcoder.app.companion.NotificationService</key><string>DoomCoder Companion NS AppStore</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict>
@@ -251,21 +255,13 @@ jobs:
           PLIST_EOF
 
       - name: Export archive to IPA
-        env:
-          ASC_KEY_ID: ${{ steps.write-api-key.outputs.key_id }}
-          ASC_ISSUER_ID: ${{ steps.write-api-key.outputs.issuer_id }}
-          ASC_KEY_PATH: ${{ steps.write-api-key.outputs.key_path }}
         run: |
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
           xcodebuild \
             -exportArchive \
             -archivePath "$RUNNER_TEMP/DoomCoderCompanion.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "${ASC_KEY_PATH}" \
-            -authenticationKeyID "${ASC_KEY_ID}" \
-            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+            -exportPath "$RUNNER_TEMP/export"
           echo "IPA exported:"
           ls -lh "$RUNNER_TEMP/export/"*.ipa 2>/dev/null || ls -lh "$RUNNER_TEMP/export/"
 
@@ -280,7 +276,7 @@ jobs:
             ls -la "$RUNNER_TEMP/export/"
             exit 1
           fi
-          echo "Uploading: $IPA_PATH"
+          echo "Uploading: $(basename "$IPA_PATH")"
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA_PATH" \
