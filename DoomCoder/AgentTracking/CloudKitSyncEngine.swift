@@ -103,6 +103,10 @@ final class CloudKitSyncEngine {
     // MARK: - Timers
 
     private var heartbeatTimer: Timer?
+    /// Safety-net fetch timer (30 s) — catches changes missed by silent push
+    /// (APNs delivery is best-effort; Mac may be asleep, push may be dropped).
+    /// Primary instant-sync path is push → fetchChanges(); this is the backstop.
+    private var fetchTimer: Timer?
     private var pruneTimer: Timer?
     private var reauthScheduled = false
     private var bootstrapping = false
@@ -122,6 +126,16 @@ final class CloudKitSyncEngine {
                 forName: .CKAccountChanged, object: nil, queue: .main
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in await self?.refreshAccountStatus() }
+            }
+        }
+        // Fetch immediately when the Mac wakes from sleep — iOS may have sent
+        // commands or settings changes while the Mac was offline.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.logger.info("Mac wake detected — fetching CloudKit changes")
+                await self?.fetchChanges()
             }
         }
     }
@@ -241,6 +255,9 @@ final class CloudKitSyncEngine {
 
         // Step 9: 90 s heartbeat so iOS sees a fresh lastSeen regularly.
         startHeartbeat()
+
+        // Step 9b: 30 s fetch safety-net — catches iOS changes missed by push.
+        startFetchTimer()
 
         // Step 10: daily CloudKit Event pruning.
         startPruneTimer()
@@ -797,7 +814,7 @@ final class CloudKitSyncEngine {
         }
     }
 
-    // MARK: - Heartbeat (90 s)
+    // MARK: - Heartbeat (90 s — MacStatus only)
 
     private func startHeartbeat() {
         heartbeatTimer?.invalidate()
@@ -812,6 +829,22 @@ final class CloudKitSyncEngine {
         }
         RunLoop.main.add(timer, forMode: .common)
         heartbeatTimer = timer
+    }
+
+    // MARK: - Fetch safety-net (30 s)
+
+    /// Starts a 30 s repeating timer that calls fetchChanges() as a backstop
+    /// for missed silent pushes. The primary real-time path is:
+    ///   APNs silent push → didReceiveRemoteNotification → fetchChanges()
+    /// This timer ensures iOS→Mac sync recovers within ~30 s even if push
+    /// delivery fails (Mac asleep at push time, APNs quota, etc.).
+    private func startFetchTimer() {
+        fetchTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.fetchChanges() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        fetchTimer = timer
     }
 
     // MARK: - Event pruning (daily)
@@ -879,6 +912,7 @@ final class CloudKitSyncEngine {
         // 1) Pause heartbeats & in-flight pushes by flipping availability.
         isAvailable = false
         heartbeatTimer?.invalidate(); heartbeatTimer = nil
+        fetchTimer?.invalidate();     fetchTimer = nil
         pruneTimer?.invalidate();     pruneTimer = nil
         syncEngine = nil
         regularRecordsByID.removeAll()

@@ -38,6 +38,11 @@ final class CompanionSyncEngine: NSObject {
     /// Prevents subscriptions from being registered more than once per launch.
     private var subscriptionsReady = false
 
+    /// Re-entry guard: CKAccountChanged can fire during ensureZone() /
+    /// ensureSubscriptions(), triggering a second concurrent setupSyncEngine().
+    /// Two concurrent engines for the same zone cause a race and crash.
+    private var setupInProgress = false
+
     /// Records queued for the next CKSyncEngine push batch, keyed by recordID
     /// so a rapid second edit to the same record overwrites the first instead
     /// of producing two `.saveRecord(sameID)` entries (which CloudKit rejects
@@ -89,6 +94,16 @@ final class CompanionSyncEngine: NSObject {
     }
 
     private func setupSyncEngine() async {
+        // Prevent concurrent setups. CKAccountChanged fires during ensureZone()
+        // which would trigger a second setupSyncEngine() while the first is
+        // still in flight, tearing down syncEngine out from under it.
+        guard !setupInProgress else {
+            print("[CompanionSyncEngine] setupSyncEngine: re-entry guard — skipping")
+            return
+        }
+        setupInProgress = true
+        defer { setupInProgress = false }
+
         // Verify account status first.
         do {
             let status = try await container.accountStatus()

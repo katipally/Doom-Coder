@@ -27,10 +27,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // the user has any frame of reference and is the #1 cause of users
         // permanently denying the permission.
 
-        // Start sync engine and register BGTask on the main actor.
+        // BGTaskScheduler registration MUST happen synchronously before
+        // didFinishLaunchingWithOptions returns — the scheduler ignores (and
+        // in iOS 17+ kills) apps that register handlers after launch completes.
+        BackgroundRefresh.register()
+
+        // Sync engine + BGTask scheduling can be async (no launch deadline).
         Task { @MainActor in
             CompanionSyncEngine.shared.start()
-            BackgroundRefresh.register()
             BackgroundRefresh.schedule()
         }
 
