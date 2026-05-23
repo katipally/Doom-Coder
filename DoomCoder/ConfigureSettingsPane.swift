@@ -152,7 +152,7 @@ struct ConfigureSettingsPane: View {
     /// App Store landing page for the DoomCoder Companion iOS app.
     /// Falls back to a search URL until the App Store ID is locked in.
     private static let companionAppStoreURL =
-        "https://apps.apple.com/app/doomcoder-companion/id0000000000"
+        "https://apps.apple.com/app/doomcoder-companion/id6772514212"
     private static let companionHelpURL =
         "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
 
