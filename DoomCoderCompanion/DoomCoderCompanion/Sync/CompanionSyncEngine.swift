@@ -125,6 +125,21 @@ final class CompanionSyncEngine: NSObject {
 
         if syncEngine != nil { syncEngine = nil }
 
+        // ── Engine state migration ───────────────────────────────────────
+        // Prior to v2.4.1 the engine state may have been written when the Mac
+        // was using Development CloudKit (before we added the explicit
+        // icloud-container-environment: Production entitlement). Stale sync
+        // tokens from Development will cause the Production engine to skip
+        // records that were never fetched from Production. Clear once.
+        let envKey = "ck.ios.environment.v1"
+        if sharedDefaults.string(forKey: envKey) != "production" {
+            print("[CompanionSyncEngine] env migration: wiping stale engine state & server-record cache")
+            sharedDefaults.removeObject(forKey: Self.engineStateKey)
+            serverRecords.clear()
+            MacStatusStore.shared.clear()
+            sharedDefaults.set("production", forKey: envKey)
+        }
+
         // Restore persisted engine state
         let serialization: CKSyncEngine.State.Serialization? = {
             guard let data = sharedDefaults.data(forKey: Self.engineStateKey),
