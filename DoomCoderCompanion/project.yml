@@ -72,6 +72,7 @@ targets:
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.Release.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: "DoomCoder Companion AppStore"
     dependencies:
       - package: DoomCoderCore
       - target: NotificationService
@@ -99,6 +100,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.doomcoder.app.companion.NotificationService
         CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: "DoomCoder Companion NS AppStore"
     dependencies:
       - package: DoomCoderCore
 
