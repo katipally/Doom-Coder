@@ -104,7 +104,7 @@ struct SettingsView: View {
                     } else {
                         Image(systemName: "arrow.clockwise")
                     }
-                    Text(isSyncingNow ? "Syncing..." : syncDone ? "Done" : "Sync now")
+                    Text(isSyncingNow ? "Syncing..." : syncDone ? "Up to date" : "Sync now")
                 }
             }
             .disabled(isSyncingNow)

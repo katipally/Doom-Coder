@@ -59,7 +59,7 @@ struct SyncDiagnosticsView: View {
                 guard !isForceSyncing else { return }
                 isForceSyncing = true
                 Task {
-                    await sync.fetchChanges()
+                    await sync.forceFetchAll()
                     isForceSyncing = false
                 }
             } label: {

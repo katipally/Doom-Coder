@@ -10,46 +10,50 @@ struct AgentListView: View {
     @State private var engine = CompanionSyncEngine.shared
     
     var body: some View {
-        Group {
+        List {
             if agentStore.agents.isEmpty {
                 if engine.firstFetchCompleted {
                     EmptyStateView()
                 } else {
-                    ProgressView("Syncing with Mac...")
+                    HStack {
+                        Spacer()
+                        ProgressView("Syncing with Mac...")
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .padding(.vertical, 40)
                 }
             } else {
-                List {
-                    Section {
-                        ForEach(agentStore.agents, id: \.rawValue) { agent in
-                            NavigationLink {
-                                AgentLogsView(agent: agent)
-                            } label: {
-                                AgentRow(
-                                    agent: agent,
-                                    status: agentStore.statuses[agent],
-                                    isInstalled: agentStore.installedAgents.isEmpty
-                                        ? true
-                                        : agentStore.installedAgents.contains(agent)
-                                )
-                            }
-                        }
-                    } header: {
-                        if let mac = macStore.primary {
-                            HStack {
-                                Image(systemName: "desktopcomputer")
-                                Text(mac.name)
-                                Spacer()
-                                Text(relativeTime(mac.lastSeen))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .font(.caption)
+                Section {
+                    ForEach(agentStore.agents, id: \.rawValue) { agent in
+                        NavigationLink {
+                            AgentLogsView(agent: agent)
+                        } label: {
+                            AgentRow(
+                                agent: agent,
+                                status: agentStore.statuses[agent],
+                                isInstalled: agentStore.installedAgents.isEmpty
+                                    ? true
+                                    : agentStore.installedAgents.contains(agent)
+                            )
                         }
                     }
-                }
-                .refreshable {
-                    await CompanionSyncEngine.shared.fetchChanges()
+                } header: {
+                    if let mac = macStore.primary {
+                        HStack {
+                            Image(systemName: "desktopcomputer")
+                            Text(mac.name)
+                            Spacer()
+                            Text(relativeTime(mac.lastSeen))
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                    }
                 }
             }
+        }
+        .refreshable {
+            await CompanionSyncEngine.shared.forceFetchAll()
         }
         .navigationTitle("Agents")
         .toolbar {
