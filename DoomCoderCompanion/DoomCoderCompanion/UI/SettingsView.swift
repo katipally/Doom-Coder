@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var macStore = MacStatusStore.shared
     @State private var sync = CompanionSyncEngine.shared
     @State private var testSent = false
+    @State private var isSyncingNow = false
+    @State private var syncDone = false
     
     var body: some View {
         List {
@@ -83,10 +85,29 @@ struct SettingsView: View {
             }
             
             Button {
-                Task { await sync.fetchChanges() }
+                guard !isSyncingNow else { return }
+                isSyncingNow = true
+                syncDone = false
+                Task {
+                    await sync.fetchChanges()
+                    isSyncingNow = false
+                    syncDone = true
+                    try? await Task.sleep(for: .seconds(2))
+                    syncDone = false
+                }
             } label: {
-                Label("Sync now", systemImage: "arrow.clockwise")
+                HStack(spacing: 8) {
+                    if isSyncingNow {
+                        ProgressView().controlSize(.small)
+                    } else if syncDone {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(isSyncingNow ? "Syncing..." : syncDone ? "Done" : "Sync now")
+                }
             }
+            .disabled(isSyncingNow)
         }
     }
     

@@ -79,21 +79,27 @@ final class CompanionSyncEngine: NSObject {
 
     // MARK: - Zone creation
 
-    private func ensureZone() async {
+    private func ensureZone() async -> Bool {
         let z = CKRecordZone(zoneID: zone.zoneID)
         let op = CKModifyRecordZonesOperation(recordZonesToSave: [z], recordZoneIDsToDelete: nil)
         op.qualityOfService = .userInitiated
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             op.modifyRecordZonesResultBlock = { result in
-                if case .failure(let err) = result {
+                switch result {
+                case .success:
+                    cont.resume(returning: true)
+                case .failure(let err):
                     if let cke = err as? CKError,
                        cke.code == .serverRecordChanged || cke.code == .unknownItem {
                         // Already exists — treat as success
+                        cont.resume(returning: true)
                     } else {
                         print("[CompanionSyncEngine] ensureZone error: \(err)")
+                        SyncTelemetry.shared.record(.engineError, side: .ios,
+                                                    detail: "ensureZone: \(err.localizedDescription)")
+                        cont.resume(returning: false)
                     }
                 }
-                cont.resume()
             }
             db.add(op)
         }
@@ -121,22 +127,34 @@ final class CompanionSyncEngine: NSObject {
         guard accountAvailable else { return }
 
         // Ensure zone exists BEFORE constructing engine
-        await ensureZone()
+        guard await ensureZone() else {
+            SyncTelemetry.shared.record(.engineError, side: .ios, detail: "ensureZone failed — aborting setup")
+            return
+        }
 
-        if syncEngine != nil { syncEngine = nil }
+        if syncEngine != nil {
+            syncEngine = nil
+            subscriptionsReady = false
+        }
 
         // ── Engine state migration ───────────────────────────────────────
         // Prior to v2.4.1 the engine state may have been written when the Mac
         // was using Development CloudKit (before we added the explicit
         // icloud-container-environment: Production entitlement). Stale sync
         // tokens from Development will cause the Production engine to skip
-        // records that were never fetched from Production. Clear once.
+        // records that were never fetched from Production. Clear once, but ONLY
+        // if there is actually stale engine state to clear — fresh installs have
+        // no prior state and should not have their empty stores wiped.
         let envKey = "ck.ios.environment.v1"
-        if sharedDefaults.string(forKey: envKey) != "production" {
-            print("[CompanionSyncEngine] env migration: wiping stale engine state & server-record cache")
-            sharedDefaults.removeObject(forKey: Self.engineStateKey)
-            serverRecords.clear()
-            MacStatusStore.shared.clear()
+        let previousEnv = sharedDefaults.string(forKey: envKey)
+        if previousEnv != "production" {
+            let hasStaleState = sharedDefaults.data(forKey: Self.engineStateKey) != nil
+            if hasStaleState {
+                print("[CompanionSyncEngine] env migration: wiping stale engine state & server-record cache")
+                sharedDefaults.removeObject(forKey: Self.engineStateKey)
+                serverRecords.clear()
+                MacStatusStore.shared.clear()
+            }
             sharedDefaults.set("production", forKey: envKey)
         }
 
@@ -166,14 +184,32 @@ final class CompanionSyncEngine: NSObject {
             await ensureSubscriptions()
         }
 
-        try? await engine.fetchChanges()
+        do {
+            try await engine.fetchChanges()
+        } catch {
+            SyncTelemetry.shared.record(.engineError, side: .ios,
+                                        detail: "initial fetchChanges: \(error.localizedDescription)")
+            print("[CompanionSyncEngine] initial fetchChanges error: \(error)")
+            // Schedule one retry after 5 s so a transient CloudKit error on first
+            // launch doesn't leave the user permanently stuck at "Mac not visible."
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                await self?.fetchChanges()
+            }
+        }
     }
 
     // MARK: - Public API
 
     func fetchChanges() async {
         guard let engine = syncEngine else { return }
-        try? await engine.fetchChanges()
+        do {
+            try await engine.fetchChanges()
+        } catch {
+            SyncTelemetry.shared.record(.engineError, side: .ios,
+                                        detail: "fetchChanges: \(error.localizedDescription)")
+            print("[CompanionSyncEngine] fetchChanges error: \(error)")
+        }
     }
 
     func handleRemoteNotification() async {
