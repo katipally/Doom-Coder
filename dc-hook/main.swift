@@ -218,6 +218,53 @@ private func chainContains(_ chain: [String], anyOf needles: [String]) -> Bool {
     return false
 }
 
+// Returns the command-line arguments of the given PID using KERN_PROCARGS2.
+// Used to detect Claude Desktop internal sub-agents (--allowed-tools mcp__computer-use__*).
+private func procArgs(_ pid: Int32) -> [String] {
+    // CTL_KERN=1, KERN_ARGMAX=8, KERN_PROCARGS2=49 (from <sys/sysctl.h>)
+    var argmaxMib: [Int32] = [1, 8]
+    var argmax = 0
+    var argmaxSize = size_t(MemoryLayout<Int>.size)
+    sysctl(&argmaxMib, 2, &argmax, &argmaxSize, nil, 0)
+    if argmax <= 0 { argmax = 4096 }
+
+    var mib: [Int32] = [1, 49, pid]
+    var buf = [UInt8](repeating: 0, count: argmax)
+    var size = size_t(argmax)
+    guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return [] }
+
+    // First 4 bytes = argc (int32 little-endian on Apple Silicon & Intel)
+    var argc: Int32 = 0
+    withUnsafeMutableBytes(of: &argc) { dst in
+        dst.copyBytes(from: buf.prefix(4))
+    }
+    guard argc > 0 else { return [] }
+
+    // Skip the exec-path string (first null-terminated string after argc bytes)
+    var i = 4
+    while i < Int(size) && buf[i] != 0 { i += 1 }
+    while i < Int(size) && buf[i] == 0 { i += 1 }
+
+    // Parse exactly argc argument strings
+    var args: [String] = []
+    var start = i
+    var collected = 0
+    while i < Int(size) && collected < Int(argc) {
+        if buf[i] == 0 {
+            if i > start {
+                let bytes = Array(buf[start..<i])
+                if let s = String(bytes: bytes, encoding: .utf8), !s.isEmpty {
+                    args.append(s)
+                    collected += 1
+                }
+            }
+            start = i + 1
+        }
+        i += 1
+    }
+    return args
+}
+
 // Per-agent ancestor patterns. Matching is case-insensitive substring on
 // either the full comm string or its trailing path component.
 //
@@ -245,7 +292,14 @@ func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
 
     switch declaredAgent {
     case "claude":
-        return !chainContains(chain, anyOf: kClaudePatterns)
+        // Must look like a claude CLI invocation.
+        if !chainContains(chain, anyOf: kClaudePatterns) { return true }
+        // Skip hooks fired by Claude Desktop's internal computer-use sub-agents.
+        // Those sessions are always spawned with --allowed-tools containing
+        // mcp__computer-use__* and are unrelated to the user's Claude Code work.
+        let parentArgs = procArgs(getppid())
+        if parentArgs.contains(where: { $0.contains("mcp__computer-use") }) { return true }
+        return false
     case "cursor":
         return !chainContains(chain, anyOf: kCursorPatterns)
     case "vscode":
