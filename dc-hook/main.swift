@@ -295,15 +295,25 @@ func shouldSkipDueToCrossAgent(declaredAgent: String) -> Bool {
         // Must look like a claude CLI invocation.
         if !chainContains(chain, anyOf: kClaudePatterns) { return true }
         // Skip hooks fired by Claude Desktop's internal sessions, which are NOT
-        // initiated by the user in a terminal:
-        //   --bg-spare  : pre-warmed spare sessions the daemon keeps ready for
-        //                 Claude Desktop to claim on startup (fires Stop/SessionEnd
-        //                 as soon as Claude Desktop opens — the false positive).
-        //   mcp__computer-use : Claude Desktop computer-use sub-agent sessions.
+        // initiated by the user in a terminal. There are two kinds:
+        //
+        //   1. "startup" sessions: Claude Desktop fires SessionStart + SessionEnd
+        //      with source="startup" and cwd=HOME immediately on launch. These
+        //      inherit HOME as cwd from the daemon (PPID=1). A real user coding
+        //      session always has a project directory as cwd (not bare HOME).
+        //
+        //   2. --bg-spare sessions: pre-warmed spare sessions the daemon keeps
+        //      ready for Claude Desktop to claim. These also have cwd=HOME.
+        //
+        // The most reliable signal for BOTH is: cwd == $HOME.
+        // (If the user genuinely runs `claude` from HOME we may miss that one
+        //  notification, but that is an acceptable edge case.)
+        let cwd  = FileManager.default.currentDirectoryPath
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? ""
+        if !home.isEmpty && cwd == home { return true }
+        // Extra defence: bare --bg-spare sessions (parent arg check).
         let parentArgs = procArgs(getppid())
-        if parentArgs.contains(where: { arg in
-            arg.hasPrefix("--bg-spare") || arg.contains("mcp__computer-use")
-        }) { return true }
+        if parentArgs.contains(where: { $0.hasPrefix("--bg-spare") }) { return true }
         return false
     case "cursor":
         return !chainContains(chain, anyOf: kCursorPatterns)
