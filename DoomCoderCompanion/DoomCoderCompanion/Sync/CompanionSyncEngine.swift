@@ -123,21 +123,39 @@ final class CompanionSyncEngine: NSObject {
         setupInProgress = true
         defer { setupInProgress = false }
 
-        // Verify account status — retry up to 3 times for .couldNotDetermine
-        // (common on first launch before iCloud finishes initializing).
+        // Verify account status — retry up to 3 times for transient statuses
+        // (.couldNotDetermine, .temporarilyUnavailable) common on first launch.
         var lastStatus: CKAccountStatus = .couldNotDetermine
         for attempt in 1...3 {
             do {
                 lastStatus = try await container.accountStatus()
-                if lastStatus != .couldNotDetermine { break }
+                if lastStatus != .couldNotDetermine && lastStatus != .temporarilyUnavailable { break }
             } catch {
                 print("[CompanionSyncEngine] accountStatus error (attempt \(attempt)): \(error)")
             }
             if attempt < 3 { try? await Task.sleep(for: .seconds(2)) }
         }
+        let statusName: String
+        switch lastStatus {
+        case .available:              statusName = "available"
+        case .noAccount:              statusName = "noAccount"
+        case .restricted:             statusName = "restricted"
+        case .couldNotDetermine:      statusName = "couldNotDetermine"
+        case .temporarilyUnavailable: statusName = "temporarilyUnavailable"
+        @unknown default:             statusName = "unknown(\(lastStatus.rawValue))"
+        }
+        print("[CompanionSyncEngine] accountStatus: \(statusName)")
         accountAvailable = (lastStatus == .available)
 
-        guard accountAvailable else { return }
+        guard accountAvailable else {
+            // Schedule a retry in 30 s so a transient account unavailability at
+            // launch self-heals without requiring the user to reopen the app.
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(30))
+                await self?.setupSyncEngine()
+            }
+            return
+        }
 
         // Ensure zone exists BEFORE constructing engine
         guard await ensureZone() else {
@@ -151,24 +169,31 @@ final class CompanionSyncEngine: NSObject {
         }
 
         // ── Engine state migration ───────────────────────────────────────
-        // Prior to v2.4.1 the engine state may have been written when the Mac
-        // was using Development CloudKit (before we added the explicit
-        // icloud-container-environment: Production entitlement). Stale sync
-        // tokens from Development will cause the Production engine to skip
-        // records that were never fetched from Production. Clear once, but ONLY
-        // if there is actually stale engine state to clear — fresh installs have
-        // no prior state and should not have their empty stores wiped.
-        let envKey = "ck.ios.environment.v1"
+        // Detect which CloudKit environment this binary targets. Without an
+        // explicit icloud-container-environment entitlement, Apple routes:
+        //   Debug (dev certificate)   → Development CloudKit
+        //   Release / TestFlight / AS → Production CloudKit
+        // If the environment ever changes (e.g. a debug build briefly ran with a
+        // Production entitlement), stale sync tokens from the old environment
+        // will confuse the new engine. Wipe and re-fetch whenever the detected
+        // environment differs from what was last recorded.
+        #if DEBUG
+        let currentEnv = "development"
+        #else
+        let currentEnv = "production"
+        #endif
+        let envKey = "ck.ios.environment.v2"
         let previousEnv = sharedDefaults.string(forKey: envKey)
-        if previousEnv != "production" {
+        if previousEnv != currentEnv {
             let hasStaleState = sharedDefaults.data(forKey: Self.engineStateKey) != nil
             if hasStaleState {
-                print("[CompanionSyncEngine] env migration: wiping stale engine state & server-record cache")
+                print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
                 sharedDefaults.removeObject(forKey: Self.engineStateKey)
                 serverRecords.clear()
                 MacStatusStore.shared.clear()
             }
-            sharedDefaults.set("production", forKey: envKey)
+            sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
+            sharedDefaults.set(currentEnv, forKey: envKey)
         }
 
         // Restore persisted engine state
@@ -291,6 +316,8 @@ final class CompanionSyncEngine: NSObject {
         firstFetchCompleted = false
         
         sharedDefaults.removeObject(forKey: Self.engineStateKey)
+        sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
+        sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
         sharedDefaults.synchronize()
         
         await setupSyncEngine()
