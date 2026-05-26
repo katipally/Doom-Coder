@@ -158,4 +158,10 @@ final class NotificationLogStore {
         AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
         LocalStore.shared.clearNotifications(forAgent: agent)
     }
+
+    func delete(_ record: NotificationLogRecord) {
+        entries.removeAll { $0.notifId == record.notifId }
+        AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
+        LocalStore.shared.deleteNotification(notifId: record.notifId)
+    }
 }
