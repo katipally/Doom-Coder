@@ -83,10 +83,7 @@ struct TrackAgentsView: View {
         }()
 
         HStack(alignment: .center, spacing: 10) {
-            Image(nsImage: AgentIconProvider.icon(for: agent, size: 28))
-                .resizable()
-                .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            AgentIconView(agent: agent, size: 28)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -236,10 +233,7 @@ struct TrackAccordion: View {
             return .notRunning
         }()
         HStack(alignment: .center, spacing: 10) {
-            Image(nsImage: AgentIconProvider.icon(for: agent, size: 20))
-                .resizable()
-                .frame(width: 20, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+            AgentIconView(agent: agent, size: 20)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.displayName).font(.caption.weight(.medium))

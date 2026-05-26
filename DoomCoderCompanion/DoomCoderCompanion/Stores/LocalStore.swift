@@ -257,7 +257,11 @@ final class LocalStore: @unchecked Sendable {
                     return
                 }
                 
-                let sql = "SELECT DISTINCT agent_slug FROM agents ORDER BY agent_slug;"
+                let sql = """
+                    SELECT agent_slug FROM agents
+                    WHERE mac_id = (SELECT mac_id FROM mac_status ORDER BY last_seen DESC LIMIT 1)
+                    ORDER BY agent_slug;
+                    """
                 var stmt: OpaquePointer?
                 var result: [TrackedAgent] = []
                 

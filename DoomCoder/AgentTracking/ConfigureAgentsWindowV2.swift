@@ -166,10 +166,7 @@ struct ConfigureAgentsViewV2: View {
         let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
         let hasWarning = hookWarnings[agent] != nil
         HStack(spacing: 8) {
-            Image(nsImage: AgentIconProvider.icon(for: agent, size: 24))
-                .resizable()
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+            AgentIconView(agent: agent, size: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.displayName).font(.body)
                 Text(d?.installed == true ? (d?.version ?? "installed") : "not found")
@@ -209,10 +206,7 @@ struct ConfigureAgentsViewV2: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 HStack(spacing: 12) {
-                    Image(nsImage: AgentIconProvider.icon(for: agent, size: 48))
-                        .resizable()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    AgentIconView(agent: agent, size: 48)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(agent.displayName).font(.title.bold())
                         Text(subtitle(agent)).foregroundStyle(.secondary)

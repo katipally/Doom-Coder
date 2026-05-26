@@ -21,81 +21,92 @@ struct ConfigureSettingsPane: View {
                     .padding(.top, 8)
 
                 GroupBox {
-                    Toggle("Launch at Login", isOn: Binding(
-                        get: { sleepManager.isLaunchAtLoginEnabled },
-                        set: { _ in sleepManager.toggleLaunchAtLogin() }
-                    ))
-                    Divider()
-                    HStack {
-                        Text("Open DoomCoder")
-                        Spacer()
-                        Text(GlobalHotkey.shared.current.descriptionForUI)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    if GlobalHotkey.shared.conflictDetected {
-                        Label("Another app may be using this shortcut. It won't fire until you change it.",
-                              systemImage: "exclamationmark.triangle.fill")
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Launch at Login", isOn: Binding(
+                            get: { sleepManager.isLaunchAtLoginEnabled },
+                            set: { _ in sleepManager.toggleLaunchAtLogin() }
+                        ))
+                        Divider()
+                        HStack {
+                            Text("Open DoomCoder")
+                            Spacer()
+                            Text(GlobalHotkey.shared.current.descriptionForUI)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        if GlobalHotkey.shared.conflictDetected {
+                            Label(
+                                "Another app may be using this shortcut. It won't fire until you change it.",
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
                             .foregroundStyle(.orange)
                             .font(.caption)
-                    } else {
-                        Text("Works anywhere — no extra permission needed.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        } else {
+                            Text("Works anywhere — no extra permission needed.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     Label("General", systemImage: "gear")
                 }
 
                 GroupBox {
-                    Stepper(value: $sleepManager.screenOffRearmMinutes, in: 1...60) {
-                        HStack {
-                            Text("Re-sleep display after")
-                            Spacer()
-                            Text("\(sleepManager.screenOffRearmMinutes) min idle")
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Stepper(value: $sleepManager.screenOffRearmMinutes, in: 1...60) {
+                            HStack {
+                                Text("Re-sleep display after")
+                                Spacer()
+                                Text("\(sleepManager.screenOffRearmMinutes) min idle")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     Label("Screen Off", systemImage: "moon.fill")
                 }
 
                 GroupBox {
-                    Stepper(value: $autoRevertSeconds, in: 10...120, step: 5) {
-                        HStack {
-                            Text("Auto-revert completed sessions to idle after")
-                            Spacer()
-                            Text("\(autoRevertSeconds)s")
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Stepper(value: $autoRevertSeconds, in: 10...120, step: 5) {
+                            HStack {
+                                Text("Auto-revert completed sessions to idle after")
+                                Spacer()
+                                Text("\(autoRevertSeconds)s")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .onChange(of: autoRevertSeconds) { _, new in
+                            UserDefaults.standard.set(new, forKey: "doomcoder.session.autoRevertSeconds")
+                        }
+                        Text("How long the badge shows \"completed\" or \"failed\" before reverting to \"idle\".")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .onChange(of: autoRevertSeconds) { _, new in
-                        UserDefaults.standard.set(new, forKey: "doomcoder.session.autoRevertSeconds")
-                    }
-                    Text("How long the badge shows \"completed\" or \"failed\" before reverting to \"idle\".")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     Label("Session Lifecycle", systemImage: "clock.arrow.circlepath")
                 }
 
                 GroupBox {
-                    Toggle("Redact prompt text in local history", isOn: $redact)
-                        .onChange(of: redact) { _, new in
-                            UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
-                        }
-                    Divider()
-                    companionBanner
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Redact prompt text in local history", isOn: $redact)
+                            .onChange(of: redact) { _, new in
+                                UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
+                            }
+                        Divider()
+                        companionBanner
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     Label("Notifications & Privacy", systemImage: "bell.badge")
                 }
 
                 GroupBox {
-                    HStack {
-                        Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
-                        Spacer()
-                    }
-                    .buttonStyle(.bordered)
+                    Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
+                        .buttonStyle(.bordered)
                 } label: {
                     Label("Diagnostics", systemImage: "stethoscope")
                 }
