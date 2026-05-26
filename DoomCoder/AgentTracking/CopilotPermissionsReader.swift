@@ -5,8 +5,10 @@ import Foundation
 // built-in allowlist. When auto-approved, Copilot shows no UI, so DoomCoder
 // suppresses the notification to avoid phantom alerts.
 //
-// Called synchronously from AgentTrackingManager (MainActor), so no locking
-// is required. The file is tiny (~5 KB) and read at most once every 5 seconds.
+// Isolated to @MainActor because it is always called from AgentTrackingManager
+// (which is @MainActor). MainActor serialisation makes explicit locking
+// unnecessary; the tiny config file (~5 KB) is read at most once every 5 s.
+@MainActor
 final class CopilotPermissionsReader {
     static let shared = CopilotPermissionsReader()
 
