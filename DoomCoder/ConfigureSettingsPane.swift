@@ -57,6 +57,7 @@ struct ConfigureSettingsPane: View {
                         Stepper(value: $sleepManager.screenOffRearmMinutes, in: 1...60) {
                             HStack {
                                 Text("Re-sleep display after")
+                                HelpTip("After you move the mouse to wake the display in Screen Off mode, DoomCoder will put it back to sleep again after this many minutes of idle time.")
                                 Spacer()
                                 Text("\(sleepManager.screenOffRearmMinutes) min idle")
                                     .foregroundStyle(.secondary)
@@ -73,6 +74,7 @@ struct ConfigureSettingsPane: View {
                         Stepper(value: $autoRevertSeconds, in: 10...120, step: 5) {
                             HStack {
                                 Text("Auto-revert completed sessions to idle after")
+                                HelpTip("How long the 'completed' or 'failed' status badge stays on an agent row before it automatically reverts to 'idle'. Increase this if you miss notifications.")
                                 Spacer()
                                 Text("\(autoRevertSeconds)s")
                                     .foregroundStyle(.secondary)
@@ -92,10 +94,13 @@ struct ConfigureSettingsPane: View {
 
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Redact prompt text in local history", isOn: $redact)
-                            .onChange(of: redact) { _, new in
-                                UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
-                            }
+                        HStack(spacing: 6) {
+                            Toggle("Redact prompt text in local history", isOn: $redact)
+                                .onChange(of: redact) { _, new in
+                                    UserDefaults.standard.set(new, forKey: "doomcoder.agents.redact")
+                                }
+                            HelpTip("Hides agent prompt and response content in the local event log and Logs view. Event type, timing, and status are still recorded. Enabled by default for privacy.")
+                        }
                         Divider()
                         companionBanner
                     }
