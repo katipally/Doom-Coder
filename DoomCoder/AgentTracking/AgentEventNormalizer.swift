@@ -427,14 +427,9 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
             let promptReq = payload["promptRequest"] as? [String: Any]
                 ?? payload["permissionRequest"] as? [String: Any]
                 ?? [:]
-            if !promptReq.isEmpty {
-                // CopilotPermissionsReader is @MainActor; normalize() is always
-                // called from AgentTrackingManager (@MainActor), so this is safe.
-                let isAllowed = MainActor.assumeIsolated {
-                    CopilotPermissionsReader.shared.isAutoApproved(
-                        promptRequest: promptReq, cwd: cwd)
-                }
-                if isAllowed { phase = .other }
+            if !promptReq.isEmpty,
+               CopilotPermissionsReader.shared.isAutoApproved(promptRequest: promptReq, cwd: cwd) {
+                phase = .other
             }
         }
 
