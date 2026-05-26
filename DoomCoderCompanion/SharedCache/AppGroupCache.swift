@@ -58,6 +58,7 @@ enum AppGroupCache {
     // MARK: - NotificationLog mirror key
 
     static let notificationLogKey = "cache.notificationLog"
+    static let installedAgentsKey  = "cache.installedAgents"
 
     // MARK: - Schema version guard
     //

@@ -75,6 +75,10 @@ final class AgentListStore {
 
     static let shared = AgentListStore()
     private init() {
+        // Warm installedAgents from cache so the filter works before first sync.
+        if let slugs = AppGroupCache.read([String].self, forKey: AppGroupCache.installedAgentsKey) {
+            installedAgents = Set(slugs.compactMap { TrackedAgent(rawValue: $0) })
+        }
         Task {
             agents = await LocalStore.shared.fetchAgents()
         }
@@ -101,6 +105,8 @@ final class AgentListStore {
         installedAgents = Set(installed)
         statuses = newStatuses
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
+        // Persist so the filter is correct on next cold launch before first sync.
+        AppGroupCache.write(installed.map { $0.rawValue }, forKey: AppGroupCache.installedAgentsKey)
     }
 
     func clear() {
