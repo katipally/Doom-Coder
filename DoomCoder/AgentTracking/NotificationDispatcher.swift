@@ -200,6 +200,8 @@ final class NotificationDispatcher {
 
         case .permissionNeeded:
             if let tool = lastTool, !tool.isEmpty {
+                if tool == "ask_user"       { return "Has a question for you" }
+                if tool == "exit_plan_mode" { return "Needs plan approval" }
                 return "Waiting for your approval · \(tool)"
             }
             return "Waiting for your approval"

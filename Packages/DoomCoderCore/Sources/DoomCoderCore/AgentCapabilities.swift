@@ -80,7 +80,7 @@ public enum AgentCapabilityCatalog {
         case .vscode:
             return [completed, failed, waitingInput, sessionStart]
         case .copilotCLI:
-            return [completed, failed, sessionStart, toolCalls]
+            return [completed, failed, waitingApproval, sessionStart, toolCalls]
         case .windsurf:
             return [completed, failed, waitingInput, sessionStart]
         case .codexCLI:
