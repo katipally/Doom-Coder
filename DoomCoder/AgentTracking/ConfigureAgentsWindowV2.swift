@@ -175,11 +175,13 @@ struct ConfigureAgentsViewV2: View {
             }
             Spacer()
             if hasWarning {
+                HelpTip("DoomCoder detected that the installed hook config no longer matches what it wrote — likely edited by the agent or another tool. Select this agent and click Repair to restore it.")
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                     .font(.caption)
             } else if isInst {
                 // Health dot: green if events in last hour, grey otherwise
+                HelpTip("Green = at least one hook event received in the last hour. Grey = no recent activity (agent may be idle or not running).")
                 Circle()
                     .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
                     .frame(width: 8, height: 8)
@@ -431,17 +433,20 @@ struct ConfigureAgentsViewV2: View {
                 GroupBox {
                     let hasOverride = ChannelStore.hasOverride(for: agent)
                     VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Use custom channels (override global)", isOn: Binding(
-                            get: { hasOverride },
-                            set: { on in
-                                if on {
-                                    ChannelStore.setPerAgent(agent, config: channelConfig.global)
-                                } else {
-                                    ChannelStore.clearOverride(for: agent)
+                        HStack(spacing: 6) {
+                            Toggle("Use custom channels (override global)", isOn: Binding(
+                                get: { hasOverride },
+                                set: { on in
+                                    if on {
+                                        ChannelStore.setPerAgent(agent, config: channelConfig.global)
+                                    } else {
+                                        ChannelStore.clearOverride(for: agent)
+                                    }
+                                    channelConfig = ChannelStore.load()
                                 }
-                                channelConfig = ChannelStore.load()
-                            }
-                        ))
+                            ))
+                            HelpTip("By default this agent uses the global channel settings from the Notification Channels tab. Enable this to set macOS and iPhone channels independently for just this agent.")
+                        }
 
                         if hasOverride {
                             let override = channelConfig.perAgent[agent.rawValue] ?? channelConfig.global
@@ -636,6 +641,7 @@ struct ConfigureAgentsViewV2: View {
                                  : "Connecting to iCloud…")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                            HelpTip("Must show green for iPhone mirroring to work. If it stays grey, make sure you're signed in to iCloud in System Settings and that iCloud Drive is enabled.")
                             Spacer()
                         }
 
@@ -678,14 +684,21 @@ struct ConfigureAgentsViewV2: View {
                 // Notification event preferences
                 GroupBox {
                     VStack(alignment: .leading, spacing: 6) {
-                        notifPrefToggle("Session completed", $notifPrefs.sessionEnd)
-                        notifPrefToggle("Errors", $notifPrefs.error)
-                        notifPrefToggle("Permission requests", $notifPrefs.permissionNeeded)
-                        notifPrefToggle("Agent responses", $notifPrefs.agentResponse)
+                        notifPrefToggle("Session completed", $notifPrefs.sessionEnd,
+                            tip: "Notifies when an agent finishes its task successfully. On by default.")
+                        notifPrefToggle("Errors", $notifPrefs.error,
+                            tip: "Notifies on tool errors, permission errors, or aborted runs. On by default.")
+                        notifPrefToggle("Permission requests", $notifPrefs.permissionNeeded,
+                            tip: "Notifies when an agent is waiting for you to approve a tool call (e.g. Claude elicitations). On by default.")
+                        notifPrefToggle("Agent responses", $notifPrefs.agentResponse,
+                            tip: "Notifies each time the agent sends a reply. Verbose — off by default.")
                         Divider()
-                        notifPrefToggle("Session started", $notifPrefs.sessionStart)
-                        notifPrefToggle("Sub-agent activity", $notifPrefs.subagentStart)
-                        notifPrefToggle("Tool usage", $notifPrefs.toolUse)
+                        notifPrefToggle("Session started", $notifPrefs.sessionStart,
+                            tip: "Notifies at the very beginning of a new agent session. Verbose — off by default.")
+                        notifPrefToggle("Sub-agent activity", $notifPrefs.subagentStart,
+                            tip: "Notifies when the agent spawns sub-agents or parallel tasks. Off by default.")
+                        notifPrefToggle("Tool usage", $notifPrefs.toolUse,
+                            tip: "Notifies on every file read/write/run tool call. Very verbose — off by default.")
                     }
                 } label: {
                     Label("Notify me when…", systemImage: "bell.badge")
@@ -960,16 +973,21 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
-    private func notifPrefToggle(_ label: String, _ binding: Binding<Bool>) -> some View {
-        Toggle(label, isOn: Binding(
-            get: { binding.wrappedValue },
-            set: { v in
-                binding.wrappedValue = v
-                ChannelStore.savePrefs(notifPrefs)
+    private func notifPrefToggle(_ label: String, _ binding: Binding<Bool>, tip: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            Toggle(label, isOn: Binding(
+                get: { binding.wrappedValue },
+                set: { v in
+                    binding.wrappedValue = v
+                    ChannelStore.savePrefs(notifPrefs)
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.callout)
+            if let tip {
+                HelpTip(tip)
             }
-        ))
-        .toggleStyle(.checkbox)
-        .font(.callout)
+        }
     }
 
     private func resultMessage(_ r: Result<Void, Error>, verb: String) -> String {
