@@ -5,12 +5,12 @@ import Foundation
 // built-in allowlist. When auto-approved, Copilot shows no UI, so DoomCoder
 // suppresses the notification to avoid phantom alerts.
 //
-// Isolated to @MainActor because it is always called from AgentTrackingManager
-// (which is @MainActor). MainActor serialisation makes explicit locking
-// unnecessary; the tiny config file (~5 KB) is read at most once every 5 s.
-@MainActor
+// nonisolated(unsafe) is intentional: this singleton is only ever accessed
+// from AgentTrackingManager (@MainActor), so there are no actual data races.
+// Avoiding @MainActor on the class prevents the [String:Any] non-Sendable
+// capture issue when calling from a Sendable normalizer struct.
 final class CopilotPermissionsReader {
-    static let shared = CopilotPermissionsReader()
+    nonisolated(unsafe) static let shared = CopilotPermissionsReader()
 
     private var cachedConfig: [String: Any] = [:]
     private var cacheDate: Date = .distantPast
