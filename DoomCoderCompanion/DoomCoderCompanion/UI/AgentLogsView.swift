@@ -1,5 +1,5 @@
 // AgentLogsView.swift — DoomCoder Companion
-// Per-agent view: capability card at top, notification tray below (capped height, inner scroll).
+// Per-agent view: capability card at top, full-height notification log below.
 
 import SwiftUI
 import DoomCoderCore
@@ -13,12 +13,12 @@ struct AgentLogsView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 capabilityCard
                 notificationTray
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle(agent.displayName)
@@ -39,9 +39,9 @@ struct AgentLogsView: View {
     // MARK: - Capability card
 
     private var capabilityCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("What this agent delivers")
-                .font(.subheadline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             let caps = AgentCapabilityCatalog.capabilities(for: agent)
@@ -51,11 +51,11 @@ struct AgentLogsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(caps) { cap in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Image(systemName: cap.symbolName)
                             .foregroundStyle(.tint)
-                            .frame(width: 18)
-                        VStack(alignment: .leading, spacing: 1) {
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(cap.title).font(.callout.weight(.medium))
                             Text(cap.detail)
                                 .font(.caption)
@@ -66,20 +66,19 @@ struct AgentLogsView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Notification tray
 
     private var notificationTray: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
             HStack {
                 Text("Notification Activity")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                 Text("(\(logs.count))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -90,47 +89,38 @@ struct AgentLogsView: View {
                         .foregroundStyle(.red)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
 
             Divider()
 
-            // Content
             if isLoading {
                 HStack {
                     Spacer()
                     ProgressView()
-                        .padding(.vertical, 24)
+                        .padding(.vertical, 32)
                     Spacer()
                 }
             } else if logs.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "tray")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                    Text("No notifications yet")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
+                ContentUnavailableView(
+                    "No Activity Yet",
+                    systemImage: "tray",
+                    description: Text("Notifications for \(agent.displayName) will appear here.")
+                )
                 .padding(.vertical, 24)
             } else {
-                let trayHeight = min(CGFloat(logs.count), 4) * 100
-                ScrollView(.vertical) {
-                    LazyVStack(spacing: 0) {
-                        ForEach(logs, id: \.notifId) { log in
-                            LogRow(log: log)
-                                .padding(.horizontal, 16)
-                            Divider()
-                                .padding(.leading, 16)
-                        }
+                LazyVStack(spacing: 0) {
+                    ForEach(logs, id: \.notifId) { log in
+                        LogRow(log: log)
+                            .padding(.horizontal, 20)
+                        Divider()
+                            .padding(.leading, 20)
                     }
                 }
-                .frame(height: trayHeight)
             }
         }
         .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Actions
@@ -147,7 +137,7 @@ struct AgentLogsView: View {
     }
 }
 
-// MARK: - LogRow (unchanged)
+// MARK: - LogRow
 
 struct LogRow: View {
     let log: NotificationLogRecord
@@ -184,7 +174,7 @@ struct LogRow: View {
                 .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
     }
 
     private func formatTime(_ date: Date) -> String {
@@ -205,7 +195,7 @@ struct LogRow: View {
     }
 }
 
-// MARK: - PhasePill (unchanged)
+// MARK: - PhasePill
 
 struct PhasePill: View {
     let phase: String
@@ -245,10 +235,10 @@ struct PhasePill: View {
     private var backgroundColor: Color {
         guard let p = normalizedPhase else { return .gray.opacity(0.2) }
         switch p.iOSInterruptionLevel {
-        case .timeSensitive: return .red.opacity(0.2)
-        case .active: return .blue.opacity(0.2)
-        case .passive: return .gray.opacity(0.2)
-        case .critical: return .red.opacity(0.3)
+        case .timeSensitive: return .red.opacity(0.15)
+        case .active: return Color.accentColor.opacity(0.15)
+        case .passive: return .gray.opacity(0.15)
+        case .critical: return .red.opacity(0.2)
         }
     }
 
@@ -256,7 +246,7 @@ struct PhasePill: View {
         guard let p = normalizedPhase else { return .secondary }
         switch p.iOSInterruptionLevel {
         case .timeSensitive: return .red
-        case .active: return .blue
+        case .active: return Color.accentColor
         case .passive: return .secondary
         case .critical: return .red
         }

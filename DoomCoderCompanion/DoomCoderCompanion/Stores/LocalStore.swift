@@ -364,6 +364,21 @@ final class LocalStore: @unchecked Sendable {
         }
     }
     
+    // MARK: - Delete single notification
+
+    func deleteNotification(notifId: String) {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            let sql = "DELETE FROM notifications WHERE notif_id = ?;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (notifId as NSString).utf8String, -1, nil)
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+
     // MARK: - Clear per-agent notifications
 
     func clearNotifications(forAgent agent: TrackedAgent) {
