@@ -53,6 +53,7 @@
 		DC0000000000002000000110 /* AgentProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000110 /* AgentProcessMonitor.swift */; };
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
 		DC0000000000002000000120 /* AgentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000120 /* AgentCapabilities.swift */; };
+		DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000121 /* CopilotPermissionsReader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -104,6 +105,7 @@
 		DC0000000000001000000110 /* AgentProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProcessMonitor.swift; sourceTree = "<group>"; };
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000120 /* AgentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCapabilities.swift; sourceTree = "<group>"; };
+		DC0000000000001000000121 /* CopilotPermissionsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotPermissionsReader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -193,6 +195,7 @@
 				CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */,
 				AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */,
 				DC0000000000001000000120 /* AgentCapabilities.swift */,
+				DC0000000000001000000121 /* CopilotPermissionsReader.swift */,
 			);
 			path = AgentTracking;
 			sourceTree = "<group>";
@@ -342,6 +345,7 @@
 				1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */,
 				581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */,
 				DC0000000000002000000120 /* AgentCapabilities.swift in Sources */,
+				DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
