@@ -104,13 +104,10 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
                 FloatingPanelController.shared.toggle()
             }
 
-            // DoomCoder ON = Mac stays awake. If the master toggle was on at
-            // last quit (or this is first launch), start sleep prevention now.
-            // Mode and duration are just configuration — enabling is automatic.
-            let masterOn = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
-            if masterOn {
-                SleepManager.shared.enable()
-            }
+            // Keep-awake intent (Off/On/Auto) is persisted and re-applied by
+            // SleepManager.init, including the pre-2.5 migration. No need to
+            // force-enable here — doing so would override a saved Auto/Off.
+            _ = SleepManager.shared
         }
 
         // Show the most recent What's New sheet (checked newest-first).

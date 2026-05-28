@@ -316,6 +316,62 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
+    // MARK: - Remote control (iOS → Mac)
+
+    /// Stable per-install identifier used as the command issuer. Lets the Mac
+    /// (and future multi-device setups) attribute a command to this device.
+    static var issuerDeviceId: String {
+        let key = "doomcoder.companion.deviceId"
+        if let existing = AppGroupCache.defaults.string(forKey: key) { return existing }
+        let new = UUID().uuidString
+        AppGroupCache.defaults.set(new, forKey: key)
+        return new
+    }
+
+    private static var clientVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
+    /// Writes a `ControlCommandRecord` targeting the primary Mac. The Mac applies
+    /// it on its next fetch (launch / foreground / wake / push) and acks via
+    /// `MacStatusRecord.lastAppliedCommandId`. Returns the `commandId` on a
+    /// successful CloudKit write (so the caller can reconcile the ack), or nil
+    /// on failure. A successful write does NOT mean the Mac has applied it yet.
+    @discardableResult
+    func sendControlCommand(verb: ControlCommandRecord.Verb, value: String) async -> String? {
+        guard let primary = MacStatusStore.shared.primary else {
+            print("[CompanionSyncEngine] sendControlCommand: no primary Mac")
+            return nil
+        }
+        let command = ControlCommandRecord(
+            targetMacId: primary.macId,
+            issuerDeviceId: Self.issuerDeviceId,
+            verb: verb,
+            value: value,
+            clientVersion: Self.clientVersion
+        )
+        let op = CKModifyRecordsOperation(recordsToSave: [command.toCKRecord()],
+                                          recordIDsToDelete: nil)
+        op.qualityOfService = .userInitiated
+        op.savePolicy = .allKeys
+        SyncTelemetry.shared.record(.localEdit, side: .ios,
+                                    recordType: ControlCommandRecord.recordType,
+                                    detail: "\(verb.rawValue)=\(value)")
+        return await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
+            op.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    print("[CompanionSyncEngine] control command sent: \(verb.rawValue)=\(value)")
+                    cont.resume(returning: command.commandId)
+                case .failure(let error):
+                    print("[CompanionSyncEngine] control command failed: \(error)")
+                    cont.resume(returning: nil)
+                }
+            }
+            db.add(op)
+        }
+    }
+
     // MARK: - Emergency reset
 
     func resetLocalSyncState() async {
