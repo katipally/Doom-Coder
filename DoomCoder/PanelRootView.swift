@@ -335,8 +335,8 @@ struct PanelRootView: View {
 
     private var keepAwakeIcon: String {
         switch sleepManager.keepAwakeMode {
-        case .off:  return "bolt.slash"
-        case .on:   return "bolt.fill"
+        case .off:  return "powersleep"
+        case .on:   return "cup.and.saucer.fill"
         case .auto: return "sparkles"
         }
     }
@@ -561,8 +561,8 @@ private struct KeepAwakeModeControl: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            segment(.off,  label: "Off",  icon: "moon.zzz.fill")
-            segment(.on,   label: "On",   icon: "bolt.fill")
+            segment(.off,  label: "Off",  icon: "powersleep")
+            segment(.on,   label: "On",   icon: "cup.and.saucer.fill")
             segment(.auto, label: "Auto", icon: "sparkles")
         }
         .padding(3)

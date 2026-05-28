@@ -27,6 +27,9 @@ struct HomeView: View {
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("DoomCoder")
+        .refreshable {
+            await CompanionSyncEngine.shared.fetchChanges()
+        }
         .sheet(isPresented: $showConnect) {
             ConnectFlowView(onFinished: {})
         }
@@ -93,9 +96,9 @@ struct HomeView: View {
 
     private var keepAwakeGuide: some View {
         InfoCard(title: "Keep your Mac awake", systemImage: "powersleep") {
-            GuideRow(symbol: "moon.zzz", title: "Off",
+            GuideRow(symbol: "powersleep", title: "Off",
                      detail: "Your Mac follows its normal sleep settings.")
-            GuideRow(symbol: "sun.max.fill", title: "On",
+            GuideRow(symbol: "cup.and.saucer.fill", title: "On",
                      detail: "Stays awake until you turn it off or the auto-off timer fires.")
             GuideRow(symbol: "sparkles", title: "Auto",
                      detail: "Stays awake only while an agent is actively working, then sleeps shortly after it finishes.")

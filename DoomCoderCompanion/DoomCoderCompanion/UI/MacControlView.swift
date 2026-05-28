@@ -161,9 +161,9 @@ struct MacControlCard: View {
 
     private var statusSymbol: String {
         switch mode {
-        case .off:  return "moon.zzz"
-        case .on:   return awakeActive ? "sun.max.fill" : "hourglass"
-        case .auto: return awakeActive ? "sparkles" : "moon.zzz"
+        case .off:  return "powersleep"
+        case .on:   return awakeActive ? "cup.and.saucer.fill" : "hourglass"
+        case .auto: return awakeActive ? "sparkles" : "powersleep"
         }
     }
 
