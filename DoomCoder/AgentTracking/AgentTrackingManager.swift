@@ -51,6 +51,10 @@ final class AgentTrackingManager {
         var cwd: String
         var startedAt: Date
         var updatedAt: Date
+        /// Last reported OS process id for this session. Meaningful only for
+        /// CLI agents (they spawn dc-hook directly); IDE agents report a
+        /// throwaway shell pid, so liveness must not be inferred from it.
+        var pid: pid_t = 0
 
         // Counters
         var toolCallCount: Int = 0
@@ -154,11 +158,17 @@ final class AgentTrackingManager {
         let now = Date()
         for key in sessions.keys {
             guard let s = sessions[key] else { continue }
-            if now.timeIntervalSince(s.updatedAt) > evictionDelay {
-                sessions.removeValue(forKey: key)
-                revertTokens.removeValue(forKey: key)
-                changed = true
+            guard now.timeIntervalSince(s.updatedAt) > evictionDelay else { continue }
+            // Never evict a live CLI session whose process is still alive: a
+            // long-running CLI agent can run quietly (no hook events) for well
+            // over evictionDelay. Evicting it would drop activeAgentCount and
+            // let the Mac sleep mid-task. PIDWatcher flips it terminal on exit.
+            if s.isLive, !s.agent.isIDEAgent, s.pid > 0, PIDLiveness.isAlive(s.pid) {
+                continue
             }
+            sessions.removeValue(forKey: key)
+            revertTokens.removeValue(forKey: key)
+            changed = true
         }
         if changed { NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil) }
     }
@@ -216,6 +226,9 @@ final class AgentTrackingManager {
             updatedAt: normalized.timestamp
         )
         s.apply(normalized)
+        // Track the latest reported pid (CLI agents only — used by Auto mode
+        // liveness checks). Keep the last known pid if this event lacks one.
+        if env.pid > 0 { s.pid = pid_t(env.pid) }
 
         // Assign without wrapping in withAnimation. Animation is applied at
         // the view layer via .animation(value:) on the sessions list, which

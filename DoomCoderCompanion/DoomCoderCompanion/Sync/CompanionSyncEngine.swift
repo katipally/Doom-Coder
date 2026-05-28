@@ -33,6 +33,13 @@ final class CompanionSyncEngine: NSObject {
     private var syncEngine: CKSyncEngine?
     private var subscriptionsReady = false
     private var setupInProgress = false
+    private var fetchInProgress = false
+
+    /// Repeating fetch while the app is foregrounded. Silent CloudKit pushes are
+    /// throttled by iOS, so without this an open-but-idle app could go many
+    /// minutes without picking up new Mac/agent state. Runs only in foreground.
+    @ObservationIgnored private var _foregroundPollTimer: Timer?
+    private let foregroundPollInterval: TimeInterval = 30
 
     /// Persistent server-record cache so MacStatus updates carry recordChangeTag
     private let serverRecords = ServerRecordCache(
@@ -49,7 +56,8 @@ final class CompanionSyncEngine: NSObject {
 
     func start() {
         Task { await setupSyncEngine() }
-        
+        startForegroundPolling()
+
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
             forName: .CKAccountChanged, object: nil, queue: .main
@@ -57,11 +65,14 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in await self?.setupSyncEngine() }
         }
         
-        // Flush CKSyncEngine state to disk when iOS suspends us
+        // Flush CKSyncEngine state to disk when iOS suspends us; stop polling.
         NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.persistEngineStateNow() }
+            Task { @MainActor [weak self] in
+                self?.persistEngineStateNow()
+                self?.stopForegroundPolling()
+            }
         }
         
         // Fetch changes when app becomes active; re-attempt full setup if engine
@@ -71,6 +82,7 @@ final class CompanionSyncEngine: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.startForegroundPolling()
                 if self.syncEngine == nil {
                     await self.setupSyncEngine()
                 } else {
@@ -78,6 +90,21 @@ final class CompanionSyncEngine: NSObject {
                 }
             }
         }
+    }
+
+    /// Starts (or restarts) the foreground fetch timer. Idempotent.
+    private func startForegroundPolling() {
+        stopForegroundPolling()
+        let t = Timer(timeInterval: foregroundPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.fetchChanges() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        _foregroundPollTimer = t
+    }
+
+    private func stopForegroundPolling() {
+        _foregroundPollTimer?.invalidate()
+        _foregroundPollTimer = nil
     }
 
     func persistEngineStateNow() {
@@ -240,8 +267,17 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Public API
 
     func fetchChanges() async {
-        guard let engine = syncEngine else { return }
+        guard let engine = syncEngine else {
+            // Engine not initialised yet (e.g. pull-to-refresh fired before
+            // setup finished, or setup failed at launch). Attempt setup so a
+            // manual refresh always does real work instead of silently no-oping.
+            if !setupInProgress { await setupSyncEngine() }
+            return
+        }
         do {
+            guard !fetchInProgress else { return }
+            fetchInProgress = true
+            defer { fetchInProgress = false }
             try await engine.fetchChanges()
         } catch {
             SyncTelemetry.shared.record(.engineError, side: .ios,

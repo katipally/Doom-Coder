@@ -94,9 +94,10 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     /// Applies fetched ControlCommands to SleepManager (on the main actor).
     ///
     /// Ordering/idempotency: commands are sorted by `issuedAt` ascending and
-    /// applied in order so the newest intent for each field wins. A persisted
-    /// high-water `issuedAt` plus the last-applied `commandId` ensure a command
-    /// re-fetched after a newer one (or after a state reset) is never re-applied.
+    /// applied in order so the newest intent for each field wins. Dedup is by
+    /// `commandId` against a bounded set of recently-applied IDs — this is
+    /// clock-independent, so cross-device clock skew can never wedge delivery.
+    /// The existing 10-min `isExpired` bound keeps the applied-ID set small.
     /// Commands for other Macs, expired commands, and (when the master suspend
     /// gate is off) all commands are ignored.
     @MainActor
@@ -112,19 +113,21 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         }
 
         let ud = UserDefaults.standard
-        let lastId = ud.string(forKey: CloudKitPusher.lastAppliedCommandIdKey)
-        let highWater = (ud.object(forKey: Self.lastAppliedIssuedAtKey) as? Date) ?? .distantPast
+        var appliedIds = Self.loadAppliedCommandIds(ud)
+        let appliedSet = Set(appliedIds)
 
         let applicable = commands
-            .filter { $0.targetMacId == pusher.macId && !$0.isExpired }
-            .filter { $0.issuedAt > highWater && $0.commandId != lastId }
+            .filter { $0.targetMacId == pusher.macId && !$0.isExpired && !appliedSet.contains($0.commandId) }
             .sorted { $0.issuedAt < $1.issuedAt }
 
         guard !applicable.isEmpty else { return }
 
         let sm = SleepManager.shared
-        var applied = false
+        var changed = false
         for cmd in applicable {
+            // Mark as seen first so an unknown/invalid command is never
+            // reprocessed on every subsequent fetch.
+            appliedIds.append(cmd.commandId)
             switch cmd.verb {
             case .setKeepAwakeMode:
                 guard let m = KeepAwakeMode(rawValue: cmd.value) else { continue }
@@ -140,19 +143,31 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 continue
             }
             ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
-            ud.set(cmd.issuedAt, forKey: Self.lastAppliedIssuedAtKey)
-            applied = true
+            changed = true
             logger.notice("ckpusher.delegate: applied \(cmd.command, privacy: .public)=\(cmd.value, privacy: .public)")
         }
 
-        guard applied else { return }
+        // Persist the bounded applied-ID ring (keeps the most recent N).
+        Self.saveAppliedCommandIds(appliedIds, ud)
+
+        guard changed else { return }
         ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
         // Publish fresh status so iOS confirms the command(s) landed.
         pusher.publishMacStatus()
     }
 
-    /// High-water mark for the most recent applied command's `issuedAt`.
-    private static let lastAppliedIssuedAtKey = "doomcoder.ckpusher.lastAppliedIssuedAt"
+    /// Bounded set of recently-applied command IDs (clock-independent dedup).
+    private static let appliedCommandIdsKey = "doomcoder.ckpusher.appliedCommandIds"
+    private static let maxAppliedCommandIds = 50
+
+    private static func loadAppliedCommandIds(_ ud: UserDefaults) -> [String] {
+        ud.stringArray(forKey: appliedCommandIdsKey) ?? []
+    }
+
+    private static func saveAppliedCommandIds(_ ids: [String], _ ud: UserDefaults) {
+        let trimmed = Array(ids.suffix(maxAppliedCommandIds))
+        ud.set(trimmed, forKey: appliedCommandIdsKey)
+    }
 
     // MARK: - State persistence
 
