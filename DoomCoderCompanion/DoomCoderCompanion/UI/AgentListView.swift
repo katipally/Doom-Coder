@@ -61,18 +61,9 @@ struct AgentListView: View {
             }
         }
         .refreshable {
-            await CompanionSyncEngine.shared.forceFetchAll()
+            await CompanionSyncEngine.shared.fetchChanges()
         }
         .navigationTitle("Agents")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gear")
-                }
-            }
-        }
     }
     
     private func relativeTime(_ date: Date) -> String {

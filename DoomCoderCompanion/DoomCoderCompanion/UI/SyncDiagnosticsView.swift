@@ -69,7 +69,7 @@ struct SyncDiagnosticsView: View {
                     } else {
                         Image(systemName: "arrow.clockwise")
                     }
-                    Text(isForceSyncing ? "Syncing..." : "Force re-sync now")
+                    Text(isForceSyncing ? "Syncing..." : "Force Sync Now")
                 }
             }
             .disabled(isForceSyncing)

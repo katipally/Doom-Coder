@@ -3,6 +3,7 @@ import IOKit.pwr_mgt
 import CoreGraphics
 import AppKit
 import ServiceManagement
+import DoomCoderCore
 
 // MARK: - Types
 
@@ -39,10 +40,23 @@ final class SleepManager {
 
     // MARK: - Persisted settings
 
+    /// Single source of truth for the keep-awake intent. `.off` / `.on` map to
+    /// the legacy manual toggle; `.auto` holds the assertion only while at
+    /// least one tracked agent is in a live state (with a grace period).
+    var keepAwakeMode: KeepAwakeMode {
+        didSet {
+            guard oldValue != keepAwakeMode else { return }
+            UserDefaults.standard.set(keepAwakeMode.rawValue, forKey: "doomcoder.keepAwakeMode")
+            applyKeepAwakeMode()
+            notifyStateChanged()
+        }
+    }
+
     var mode: DoomCoderMode {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "doomcoder.mode")
             handleModeChange()
+            notifyStateChanged()
         }
     }
 
@@ -50,6 +64,7 @@ final class SleepManager {
         didSet {
             UserDefaults.standard.set(sessionTimerHours, forKey: "doomcoder.sessionTimer")
             resetSessionTimer()
+            notifyStateChanged()
         }
     }
 
@@ -134,9 +149,25 @@ final class SleepManager {
         }
         self.sessionTimerHours = UserDefaults.standard.object(forKey: "doomcoder.sessionTimer") as? Int ?? 0
         self.screenOffRearmMinutes = UserDefaults.standard.object(forKey: "doomcoder.screenOffRearm") as? Int ?? 10
+        let savedKeepAwake = UserDefaults.standard.string(forKey: "doomcoder.keepAwakeMode")
+        if let s = savedKeepAwake, let m = KeepAwakeMode(rawValue: s) {
+            self.keepAwakeMode = m
+        } else {
+            // Migration from pre-2.5 (no keepAwakeMode key): the app used to
+            // auto-enable keep-awake on launch whenever the master toggle was
+            // on. Preserve that behaviour so upgrading users don't suddenly
+            // start letting their Mac sleep.
+            let masterOn = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+            self.keepAwakeMode = masterOn ? .on : .off
+            UserDefaults.standard.set(self.keepAwakeMode.rawValue, forKey: "doomcoder.keepAwakeMode")
+        }
         startThermalMonitoring()
         updateThermalState()
         hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
+        // Apply the persisted intent. `.on` re-acquires the assertion on launch
+        // (explicit user intent). `.auto` does NOT acquire without fresh agent
+        // evidence (crash-safety — never restore a stale assertion).
+        applyKeepAwakeMode()
     }
 
     // MARK: - Global Hotkey
@@ -150,9 +181,41 @@ final class SleepManager {
         }
     }
 
-    // MARK: - Enable / Disable / Toggle
+    // MARK: - Enable / Disable / Toggle (public intent)
+    //
+    // These now drive `keepAwakeMode` so the panel master toggle, the global
+    // hotkey, the menu-bar item and remote (iOS) commands all converge on a
+    // single source of truth. `.on`/`.off` map to the legacy manual behaviour.
 
-    func enable() {
+    func enable()  { keepAwakeMode = .on }
+    func disable() { keepAwakeMode = .off }
+    func toggle()  { keepAwakeMode = (keepAwakeMode == .off) ? .on : .off }
+
+    /// Releases the IOPM assertion without changing the persisted keep-awake
+    /// intent. Use on app termination so On/Auto are restored on next launch.
+    func prepareForTermination() {
+        if isActive { releaseAssertion() }
+    }
+
+    // MARK: - Apply keep-awake intent
+
+    private func applyKeepAwakeMode() {
+        switch keepAwakeMode {
+        case .off:
+            stopAutoEval()
+            if isActive { releaseAssertion() }
+        case .on:
+            stopAutoEval()
+            if !isActive { acquireAssertion() }
+        case .auto:
+            startAutoEval()
+            evaluateAuto()
+        }
+    }
+
+    // MARK: - Assertion mechanics (low level)
+
+    private func acquireAssertion() {
         guard !isActive else { return }
         guard let id = createAssertion() else { return }
         assertionID = id
@@ -165,9 +228,10 @@ final class SleepManager {
         startElapsedTimer()
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
+        notifyStateChanged()
     }
 
-    func disable() {
+    private func releaseAssertion() {
         guard isActive else { return }
         stopScreenOff()
         IOPMAssertionRelease(assertionID)
@@ -185,10 +249,98 @@ final class SleepManager {
         sessionEndDate = nil
         stopElapsedTimer()
         stopSessionTimer()
+        notifyStateChanged()
     }
 
-    func toggle() {
-        isActive ? disable() : enable()
+    // MARK: - Auto mode
+
+    /// Tracked-agent states that count as "working" for Auto mode. Idle / open /
+    /// not-running / completed / failed do NOT keep the Mac awake.
+    private static let autoLiveStates: Set<AgentSessionState> = [.running, .waitingInput, .waitingApproval]
+    private let autoGraceSeconds: Int = 300        // 5-min grace before releasing
+    private let autoStaleTTLSeconds: TimeInterval = 900 // ignore agents with no update for 15 min
+
+    @ObservationIgnored nonisolated(unsafe) private var _autoEvalTimer: Timer?
+    @ObservationIgnored nonisolated(unsafe) private var _autoGraceTask: Task<Void, Never>?
+    /// Bumped on every start/stopAutoEval so a stale withObservationTracking
+    /// callback from a previous Auto session never re-arms the observer.
+    @ObservationIgnored private var _autoObservationGeneration: Int = 0
+
+    /// Number of tracked agents currently in a live state and not stale.
+    var activeAgentCount: Int {
+        let now = Date.now
+        return AgentTrackingManager.shared.sessions.values.filter { session in
+            guard now.timeIntervalSince(session.updatedAt) < autoStaleTTLSeconds else { return false }
+            return Self.autoLiveStates.contains(session.displayState)
+        }.count
+    }
+
+    /// Seconds the assertion has been held (0 when inactive). Published to iOS.
+    var elapsedSeconds: Int {
+        guard let since = activeSince else { return 0 }
+        return max(0, Int(Date.now.timeIntervalSince(since)))
+    }
+
+    private func startAutoEval() {
+        _autoObservationGeneration += 1
+        observeAgentsForAuto()
+        _autoEvalTimer?.invalidate()
+        // Backstop poll: re-evaluates so the stale-TTL and grace expiry are
+        // honoured even when `sessions` doesn't mutate.
+        let t = Timer(timeInterval: 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.evaluateAuto() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        _autoEvalTimer = t
+    }
+
+    private func stopAutoEval() {
+        _autoObservationGeneration += 1
+        _autoEvalTimer?.invalidate()
+        _autoEvalTimer = nil
+        cancelAutoGrace()
+    }
+
+    private func observeAgentsForAuto() {
+        let generation = _autoObservationGeneration
+        withObservationTracking {
+            _ = AgentTrackingManager.shared.sessions
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self,
+                      self._autoObservationGeneration == generation,
+                      self.keepAwakeMode == .auto else { return }
+                self.evaluateAuto()
+                self.observeAgentsForAuto()
+            }
+        }
+    }
+
+    private func evaluateAuto() {
+        guard keepAwakeMode == .auto else { return }
+        if activeAgentCount > 0 {
+            cancelAutoGrace()
+            if !isActive { acquireAssertion() }
+        } else if isActive, _autoGraceTask == nil {
+            _autoGraceTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(for: .seconds(self.autoGraceSeconds))
+                guard !Task.isCancelled, self.keepAwakeMode == .auto else { return }
+                if self.activeAgentCount == 0, self.isActive { self.releaseAssertion() }
+                self._autoGraceTask = nil
+            }
+        }
+    }
+
+    private func cancelAutoGrace() {
+        _autoGraceTask?.cancel()
+        _autoGraceTask = nil
+    }
+
+    // MARK: - State-change broadcast (CloudKit publish + UI)
+
+    private func notifyStateChanged() {
+        NotificationCenter.default.post(name: .sleepManagerStateChanged, object: nil)
     }
 
 
@@ -386,7 +538,10 @@ final class SleepManager {
         stopSessionTimer()
         sessionTimerRemainingText = nil
         sessionEndDate = nil
-        guard isActive, sessionTimerHours > 0 else { return }
+        // The auto-off cap only applies to the explicit `.on` mode. In `.auto`
+        // the assertion is governed by agent activity, so a hard time cap would
+        // either fight the activity logic or permanently disable Auto on expiry.
+        guard isActive, keepAwakeMode == .on, sessionTimerHours > 0 else { return }
         sessionEndDate = Date.now.addingTimeInterval(Double(sessionTimerHours) * 3600)
         updateSessionTimerRemaining()
         let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
@@ -420,6 +575,8 @@ final class SleepManager {
 
     deinit {
         _screenOffTask?.cancel()
+        _autoEvalTimer?.invalidate()
+        _autoGraceTask?.cancel()
         if assertionID != 0 { IOPMAssertionRelease(assertionID) }
         _elapsedTimer?.invalidate()
         _sessionTimer?.invalidate()
@@ -428,4 +585,11 @@ final class SleepManager {
         if let obs = _screenWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         if let monitor = _hotkeyMonitor { NSEvent.removeMonitor(monitor) }
     }
+}
+
+extension Notification.Name {
+    /// Posted whenever the keep-awake intent, active assertion, screen mode or
+    /// session timer changes. CloudKitPusherLifecycle observes this to publish
+    /// a fresh MacStatus (so iOS reflects local + remote edits promptly).
+    static let sleepManagerStateChanged = Notification.Name("doomcoder.sleepManager.stateChanged")
 }

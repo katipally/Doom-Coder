@@ -83,19 +83,28 @@ final class CloudKitPusher {
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
         }
-        // Wake from sleep → ask engine to flush any pending writes.
+        // Wake from sleep → flush pending writes AND fetch (pick up any
+        // ControlCommand the iOS app wrote while we were asleep).
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.kickEngine() }
+            Task { @MainActor in
+                self?.kickEngine()
+                self?.fetchNow()
+            }
         }
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.publishMacStatus(sleepActive: true)
+                self?.publishMacStatus()
                 UserDefaults.standard.synchronize()
             }
+        }
+        // Foreground / activation → fetch promptly so remote commands land
+        // quickly while the user is interacting with either device.
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.fetchNow() }
         }
         nc.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -106,9 +115,13 @@ final class CloudKitPusher {
             }
         }
 
-        // Safety-net 30s flush
+        // Safety-net 30s flush + fetch (so iOS ControlCommands land within 30s
+        // even if no push arrives).
         safetyTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.kickEngine() }
+            Task { @MainActor in
+                self?.kickEngine()
+                self?.fetchNow()
+            }
         }
     }
 
@@ -192,6 +205,8 @@ final class CloudKitPusher {
 
         logger.notice("ckpusher: ready (macId=\(self.macId, privacy: .public), zone=\(CloudKitConstants.zoneName, privacy: .public))")
         NotificationCenter.default.post(name: .cloudKitPusherReady, object: nil)
+        // Pull any ControlCommand records written by iOS before we launched.
+        fetchNow()
     }
 
     private func ensureZone() async -> Bool {
@@ -229,19 +244,42 @@ final class CloudKitPusher {
         pendingNotificationLogs[rec.recordID.recordName] = rec
     }
 
-    /// Heartbeat / status singleton. Called every 60s + on sleep/wake.
-    func publishMacStatus(sleepActive: Bool = false) {
+    /// Heartbeat / status singleton. Called every 60s + on sleep/wake + on any
+    /// SleepManager state change. Reflects the LIVE keep-awake state so iOS can
+    /// mirror it and confirm remote commands via the ack fields.
+    func publishMacStatus(sleepActive: Bool? = nil) {
         guard let engine else { return }
+        let sm = SleepManager.shared
+        let ud = UserDefaults.standard
         let rec = MacStatusRecord(
             macId: macId,
             name: macName,
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
-            sleepActive: sleepActive,
-            mode: "screenOn",
-            lastSeen: Date()
+            sleepActive: sleepActive ?? sm.isActive,
+            mode: sm.mode.rawValue,
+            lastSeen: Date(),
+            thermalState: sm.thermalStateText,
+            keepAwakeMode: sm.keepAwakeMode.rawValue,
+            activeAgentCount: sm.activeAgentCount,
+            sessionTimerHours: sm.sessionTimerHours,
+            elapsedSeconds: sm.elapsedSeconds,
+            lastAppliedCommandId: ud.string(forKey: Self.lastAppliedCommandIdKey),
+            lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
+    }
+
+    /// UserDefaults keys for the remote-command ack channel (written by the
+    /// delegate when a ControlCommand is applied, read here when publishing).
+    static let lastAppliedCommandIdKey = "doomcoder.ckpusher.lastAppliedCommandId"
+    static let lastAppliedAtKey        = "doomcoder.ckpusher.lastAppliedAt"
+
+    /// Pull zone changes now. Used to pick up iOS-written ControlCommand
+    /// records promptly (launch, foreground, wake, and the safety timer).
+    func fetchNow() {
+        guard let engine else { return }
+        Task { try? await engine.fetchChanges() }
     }
 
     /// Publish the list of tracked agents on this Mac plus installed-state

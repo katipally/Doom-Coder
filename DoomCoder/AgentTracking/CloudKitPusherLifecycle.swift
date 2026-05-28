@@ -48,6 +48,12 @@ final class CloudKitPusherLifecycle {
             Task { @MainActor in self?.publishAgentConfig() }
         }
 
+        // Keep-awake state changed (local toggle, hotkey, Auto transition, or a
+        // remote command) → publish a fresh MacStatus so iOS mirrors it.
+        nc.addObserver(forName: .sleepManagerStateChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.publishMacStatus() }
+        }
+
         // Heartbeat
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -107,7 +113,7 @@ final class CloudKitPusherLifecycle {
 
     private func publishMacStatus() {
         guard CloudKitPusher.shared.isReady else { return }
-        CloudKitPusher.shared.publishMacStatus(sleepActive: false)
+        CloudKitPusher.shared.publishMacStatus()
     }
 
     // MARK: - Icons
