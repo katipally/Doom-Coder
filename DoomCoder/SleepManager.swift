@@ -269,8 +269,11 @@ final class SleepManager {
     /// Tracked-agent states that count as "working" for Auto mode. Idle / open /
     /// not-running / completed / failed do NOT keep the Mac awake.
     private static let autoLiveStates: Set<AgentSessionState> = [.running, .waitingInput, .waitingApproval]
-    private let autoGraceSeconds: Int = 300        // 5-min grace before releasing
-    private let autoStaleTTLSeconds: TimeInterval = 900 // ignore agents with no update for 15 min
+    private let autoGraceSeconds: Int = 300            // 5-min grace before releasing
+    /// IDE agents (Cursor/VS Code/Windsurf) report a throwaway shell pid, so we
+    /// can't trust PID liveness for them — fall back to hook recency. A live
+    /// IDE session with no hook activity for this long is treated as idle.
+    private let autoIdleWindowSeconds: TimeInterval = 1800 // 30 min
 
     @ObservationIgnored nonisolated(unsafe) private var _autoEvalTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _autoGraceTask: Task<Void, Never>?
@@ -278,18 +281,31 @@ final class SleepManager {
     /// callback from a previous Auto session never re-arms the observer.
     @ObservationIgnored private var _autoObservationGeneration: Int = 0
 
-    /// Number of tracked agents currently in a live state and not stale.
+    /// Number of tracked agents currently considered "working" for Auto mode.
     ///
-    /// Agents the user has switched OFF in Agent Tracking are excluded: their
-    /// hooks may still arrive, but the user has opted out of tracking them, so
-    /// they must not hold the Mac awake in Auto mode. With no other live agents
-    /// this lets macOS resume its normal sleep behaviour.
+    /// Uses every signal we capture and picks the trustworthy one per agent type:
+    ///   • Agents the user switched OFF in Agent Tracking are always excluded —
+    ///     their hooks may still arrive, but the user opted out, so they must not
+    ///     hold the Mac awake. With no other working agents macOS resumes normal
+    ///     sleep behaviour.
+    ///   • CLI agents (Claude / Copilot CLI / Codex) spawn dc-hook directly, so
+    ///     their pid is the live agent process — trust PID liveness with NO time
+    ///     limit (a quiet long-running task stays "working" until the process
+    ///     exits; PIDWatcher also flips the session to completed on exit).
+    ///   • IDE agents (Cursor / VS Code / Windsurf) report a throwaway shell pid,
+    ///     so PID liveness is meaningless — fall back to hook recency (active if a
+    ///     hook arrived within `autoIdleWindowSeconds`).
     var activeAgentCount: Int {
         let now = Date.now
         return AgentTrackingManager.shared.sessions.values.filter { session in
             guard TrackingStore.isEnabled(session.agent) else { return false }
-            guard now.timeIntervalSince(session.updatedAt) < autoStaleTTLSeconds else { return false }
-            return Self.autoLiveStates.contains(session.displayState)
+            guard Self.autoLiveStates.contains(session.displayState) else { return false }
+            if session.agent.isIDEAgent || session.pid <= 0 {
+                // No reliable pid — trust recent hook activity.
+                return now.timeIntervalSince(session.updatedAt) < autoIdleWindowSeconds
+            }
+            // CLI agent with a known pid — trust liveness, no time limit.
+            return PIDLiveness.isAlive(session.pid)
         }.count
     }
 

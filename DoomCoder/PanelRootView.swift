@@ -218,18 +218,6 @@ struct PanelRootView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    if sleepManager.isActive, !compactElapsed.isEmpty {
-                        HStack(spacing: 4) {
-                            Text(compactElapsed)
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                                .contentTransition(.numericText())
-                            HelpTip("Time the Mac has been kept awake this session.")
-                        }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.white.opacity(0.06)))
-                    }
                 }
 
                 // Off / On / Auto — the keep-awake intent.
@@ -241,28 +229,40 @@ struct PanelRootView: View {
                     }
                 ))
 
-                // Screen mode — only meaningful while keeping awake.
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionLabel("SCREEN", help: "Keep screen on holds the display lit. Allow screen off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces burn-in.")
-                    ModeSegmentedControl(mode: $sleepManager.mode, isActive: sleepManager.isActive)
-                }
-                .opacity(sleepManager.keepAwakeMode == .off ? 0.45 : 1.0)
-                .disabled(sleepManager.keepAwakeMode == .off)
-                .animation(DCAnim.smooth, value: sleepManager.keepAwakeMode)
+                // Mode-specific options. Each mode shows only the controls that
+                // apply to it (rather than dimming irrelevant ones).
+                switch sleepManager.keepAwakeMode {
+                case .off:
+                    Label("macOS manages sleep normally", systemImage: "powersleep")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
 
-                // Auto-off timer (hard cap, applies to On mode only).
-                HStack(spacing: 6) {
-                    sectionLabel("AUTO-OFF", help: "Automatically turns keep-awake off after the chosen time. Applies to On mode. (In Auto, the Mac sleeps automatically once agents finish.)")
-                    Spacer()
-                    autoOffMenu
+                case .on:
+                    VStack(alignment: .leading, spacing: 6) {
+                        sectionLabel("SCREEN", help: "Keep screen on holds the display lit. Allow screen off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces burn-in.")
+                        ModeSegmentedControl(mode: $sleepManager.mode, isActive: sleepManager.isActive)
+                    }
+                    .transition(.opacity)
+                    HStack(spacing: 6) {
+                        sectionLabel("AUTO-OFF", help: "Automatically turns keep-awake off after the chosen time.")
+                        Spacer()
+                        autoOffMenu
+                    }
+                    .transition(.opacity)
+
+                case .auto:
+                    VStack(alignment: .leading, spacing: 6) {
+                        sectionLabel("SCREEN", help: "Keep screen on holds the display lit. Allow screen off lets the display sleep after a short delay while the Mac CPU stays awake — saves power and reduces burn-in.")
+                        ModeSegmentedControl(mode: $sleepManager.mode, isActive: sleepManager.isActive)
+                    }
+                    .transition(.opacity)
                 }
-                .opacity(sleepManager.keepAwakeMode == .on ? 1.0 : 0.45)
-                .disabled(sleepManager.keepAwakeMode != .on)
-                .animation(DCAnim.smooth, value: sleepManager.keepAwakeMode)
 
                 keepAwakeStatus
             }
             .padding(14)
+            .animation(DCAnim.smooth, value: sleepManager.keepAwakeMode)
         }
     }
 
@@ -276,7 +276,7 @@ struct PanelRootView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else if sleepManager.keepAwakeMode == .auto {
             let n = sleepManager.activeAgentCount
-            statusPill(icon: n > 0 ? "sparkles" : "moon.zzz",
+            statusPill(icon: n > 0 ? "sparkles" : "powersleep",
                        text: n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s") working"
                                    : "Waiting · sleeps when agents finish",
                        tint: n > 0 ? .accentColor : .secondary)
@@ -350,11 +350,6 @@ struct PanelRootView: View {
         case .auto:
             return sleepManager.isActive ? "Auto · awake for agents" : "Auto · sleeps when idle"
         }
-    }
-
-    private var compactElapsed: String {
-        sleepManager.elapsedTimeString
-            .replacingOccurrences(of: "Active for ", with: "")
     }
 
     // MARK: - Agents card
