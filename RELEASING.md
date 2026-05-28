@@ -12,10 +12,10 @@ This document explains both, including the one-time setup each requires.
 
 ## TL;DR — release commands
 
-| Pipeline | Tag                 | Workflow                              | Ships via            |
-| -------- | ------------------- | ------------------------------------- | -------------------- |
-| macOS    | `git tag v2.4.0`    | `.github/workflows/release.yml`       | GitHub Releases + Sparkle appcast |
-| iOS      | `git tag ios-v2.4.0` | `.github/workflows/ios-testflight.yml` | TestFlight → App Store review |
+| Pipeline | Tag                  | Workflow                               | Ships via            |
+| -------- | -------------------- | -------------------------------------- | -------------------- |
+| macOS    | `git tag v2.5.0`     | `.github/workflows/release.yml`        | GitHub Releases + Sparkle appcast |
+| iOS      | `git tag ios-v2.5.0` | `.github/workflows/ios-testflight.yml` | TestFlight → App Store review |
 
 Both are pushed with `git push --tags` (or as separate single-tag pushes).
 The user keeps an "exploratory work is local-only" rule, so push the tag
@@ -30,7 +30,7 @@ only when you've explicitly decided to cut the release.
    version into the plist at build time, but committing the bump keeps
    local dev builds in sync with what shipped.
 2. Update `CHANGELOG.md`.
-3. `git tag v2.4.0 && git push origin v2.4.0`.
+3. `git tag v2.5.0 && git push origin v2.5.0`.
 4. `release.yml` (`runs-on: macos-26`) does the rest:
    - Builds + notarizes the `.app` with the existing Developer ID cert.
    - Creates a `.dmg` and signs the Sparkle update with the EdDSA key.

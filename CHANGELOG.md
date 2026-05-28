@@ -2,9 +2,44 @@
 
 All notable changes to Doom Coder will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [2.4.0] - Unreleased
+---
+
+## [2.5.0] - 2026-05-28
+
+### Added — macOS
+- **Auto keep-awake mode** — new third mode (Off / On / **Auto**). When set to Auto, DoomCoder holds the sleep assertion only while at least one tracked agent is actively working, then releases it (with a 5-minute grace) once all agents are idle. Respects per-agent tracking toggles: agents with tracking disabled are excluded from the Auto count.
+- **PID-aware agent detection** — CLI agents (Claude Code, Copilot CLI, Codex CLI) are tracked by OS process ID. DoomCoder detects process exit instantly via `DISPATCH_SOURCE_TYPE_PROC` and verifies liveness with a `kill(pid, 0)` signal — no hook events required. Long-running silent CLI operations no longer lose keep-awake after 30 minutes.
+- **Per-agent toggle awareness in Auto** — toggling an agent's tracking switch off immediately removes it from the Auto active count; toggling it back on re-evaluates immediately.
+
+### Changed — macOS
+- **Mode-specific Keep-Awake UI** — the Prevent Sleep card now shows only controls relevant to the current mode: Off shows a brief explanation; On shows the screen mode picker and session timer; Auto shows live agent status and a note about per-agent toggles.
+- **Removed "Mac awake for Xm" elapsed pill** — the running elapsed time is no longer shown in the panel; the status badge alone conveys whether the assertion is held.
+- **Sleep icons updated** — replaced deprecated symbols with SF Symbols that ship in macOS 26.
+- **Session eviction guard** — a live CLI agent whose process is still running is never swept by the 30-minute idle eviction timer, preventing premature keep-awake release during long silent operations.
+
+### Added — iOS (DoomCoder Companion 2.5.0, build 5)
+- **Foreground sync polling** — the companion now fetches CloudKit changes every 30 seconds while foregrounded, eliminating stale data that previously required a manual refresh.
+- **Fetch coalescing** — concurrent fetch requests (timer + push notification + pull-to-refresh) are coalesced so only one CKSyncEngine fetch runs at a time.
+- **Self-healing sync engine** — if the CKSyncEngine failed to initialise at launch, any subsequent fetch attempt (timer, push, or manual) automatically retries setup.
+- **Pull-to-refresh on all tabs** — Home, Agents, and Settings tabs all support pull-to-refresh.
+
+### Changed — iOS
+- **Mode-specific remote control card** — the "Your Mac" card adapts to the current keep-awake mode; irrelevant controls are hidden.
+- **Removed elapsed time from Mac status** — consistent with the Mac panel; elapsed time is no longer shown in the remote-control card.
+
+### Fixed
+- **iOS → Mac command delivery wedge** — replaced the `issuedAt > highWatermark` filter (vulnerable to cross-device clock skew) with a clock-independent `commandId` dedup ring (bounded to last 50 IDs). Clock skew can no longer permanently block command delivery.
+- **30-minute CLI agent eviction** — a long-running CLI agent with infrequent hook events was incorrectly evicted from the session store at 30 minutes, causing Auto mode to release keep-awake mid-task. Fixed with a PID-liveness guard on eviction.
+
+### Branding
+- **New logo** — updated skull + headphones character art across all surfaces: macOS and iOS app icons (skull crop, RGB no-alpha 1024 marketing icon), in-app logos, `assets/logo.png`, and `README.md`.
+- **Retired** `logo-doomcoder` asset; `logo` / `logo-square` imagesets updated on both platforms.
+
+---
+
+## [2.4.x] — 2026 (Companion launch series)
 
 ### Added
 - **DoomCoder Companion for iPhone & iPad** — a read-only mirror that shows every agent configured on your Mac and renders the exact same notifications (title, body, agent icon) the Mac would display. Built on Apple's CloudKit + APNs stack; no third-party servers, no tokens, no QR codes.
