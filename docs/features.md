@@ -21,14 +21,22 @@ Turning the master back on resumes exactly where it left off.
 
 ### Prevent Sleep card
 
-#### Mode
+#### Keep-Awake mode
+
+| Mode | Behavior |
+|---|---|
+| **Off** | macOS manages sleep normally. DoomCoder holds no IOPMAssertion. |
+| **On** | Always holds the sleep assertion. Choose a screen mode and optional session timer below. |
+| **Auto** | Holds the assertion while any tracked agent is actively working (running, waiting for input, or waiting for approval). Releases after a 5-minute grace once all agents are idle. Respects per-agent tracking toggles — agents toggled off are excluded. |
+
+#### Screen mode (when Keep-Awake is On)
 
 | Mode | Behavior |
 |---|---|
 | **Screen On** | Display stays fully lit the whole time. Mac never sleeps. |
 | **Screen Off** | Display sleeps after a short delay; Mac CPU stays awake. Saves power and reduces screen burn. When you move the mouse the display wakes; DoomCoder re-sleeps it after the re-arm interval. |
 
-#### Duration (session timer)
+#### Duration / session timer (when Keep-Awake is On)
 
 Tap a tile to start the sleep blocker with that time limit. Tap the stop tile to disable immediately.
 
@@ -36,12 +44,6 @@ Tap a tile to start the sleep blocker with that time limit. Tap the stop tile to
 |---|---|
 | **None** | Runs indefinitely until you stop it manually. |
 | **1h / 2h / 4h / 8h** | Auto-disables the sleep blocker when the timer expires. |
-
-The elapsed time since the blocker started is shown live in the card header.
-
-#### Elapsed timer badge
-
-Displays time since the blocker was started this session. Tap the stop tile or toggle the master off to reset it.
 
 ### Agent Tracking card
 
