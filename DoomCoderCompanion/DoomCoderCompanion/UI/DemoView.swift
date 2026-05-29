@@ -61,6 +61,7 @@ struct DemoView: View {
                         macName: "Sample Mac",
                         lastSeen: nil,
                         isDemo: true,
+                        isOffline: false,
                         mode: demoMode,
                         screen: demoScreen,
                         timerHours: demoTimer,

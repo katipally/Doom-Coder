@@ -29,7 +29,7 @@ struct HomeView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("DoomCoder")
         .refreshable {
-            await CompanionSyncEngine.shared.fetchChanges()
+            await CompanionSyncEngine.shared.forceFetchAll()
         }
         .sheet(isPresented: $showConnect) {
             ConnectFlowView(onFinished: {})

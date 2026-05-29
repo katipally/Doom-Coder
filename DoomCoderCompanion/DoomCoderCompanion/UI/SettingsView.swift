@@ -142,7 +142,7 @@ struct SettingsView: View {
             LabeledContent("Build") {
                 Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—")
             }
-            LabeledContent("Last sync") {
+            LabeledContent("iCloud sync") {
                 if let ts = sync.lastSyncAt {
                     Text(ts, style: .relative).foregroundStyle(.secondary)
                 } else {
