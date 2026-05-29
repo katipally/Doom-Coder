@@ -21,6 +21,7 @@ struct MacControlCard: View {
     let macName: String
     let lastSeen: Date?
     let isDemo: Bool
+    let isOffline: Bool       // true when Mac heartbeat is >10 min stale
 
     let mode: KeepAwakeMode
     let screen: ScreenMode
@@ -100,7 +101,7 @@ struct MacControlCard: View {
             }
             Spacer()
             Circle()
-                .fill(awakeActive ? Color.green : Color.secondary.opacity(0.4))
+                .fill(isOffline ? Color.red : (awakeActive ? Color.green : Color.secondary.opacity(0.4)))
                 .frame(width: 10, height: 10)
                 .accessibilityHidden(true)
         }
@@ -146,6 +147,10 @@ struct MacControlCard: View {
             if waiting {
                 ProgressView().controlSize(.small)
                 Text("Sent — waiting for your Mac to check in")
+            } else if isOffline {
+                Image(systemName: "wifi.exclamationmark")
+                    .foregroundStyle(.red)
+                Text("Mac unreachable — commands will apply on reconnect")
             } else {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(awakeActive ? .green : .secondary)
@@ -195,13 +200,18 @@ struct MacControlView: View {
     @State private var waitingCommandId: String?
     @State private var waitTimeout: Task<Void, Never>?
 
+    /// Matches the .offline threshold in MacReachabilityBanner (10 minutes).
+    private let offlineThreshold: TimeInterval = 600
+
     var body: some View {
         Group {
             if let mac = macStore.primary {
+                let offline = Date().timeIntervalSince(mac.lastSeen) >= offlineThreshold
                 MacControlCard(
                     macName: mac.name,
                     lastSeen: mac.lastSeen,
                     isDemo: false,
+                    isOffline: offline,
                     mode: mode,
                     screen: screen,
                     timerHours: timerHours,

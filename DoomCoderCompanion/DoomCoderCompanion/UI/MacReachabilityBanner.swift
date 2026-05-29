@@ -103,7 +103,16 @@ struct MacReachabilityBanner: View {
 
     private func refresh() async {
         isRefreshing = true
-        await engine.fetchChanges()
+        // When the Mac is in .offline state, the stale heartbeat was already seen
+        // by the sync engine. An incremental fetchChanges() won't return it. Use
+        // forceFetchAll() to wipe the token and do a fresh full fetch so that the
+        // Mac's latest record is retrieved even if it hasn't changed since our last
+        // sync. For .stale (3-10 min), incremental fetch is sufficient.
+        if let mac = macStore.primary, staleness(for: mac) == .offline {
+            await engine.forceFetchAll()
+        } else {
+            await engine.fetchChanges()
+        }
         now = Date()
         isRefreshing = false
     }
