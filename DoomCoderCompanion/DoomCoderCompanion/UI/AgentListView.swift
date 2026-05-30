@@ -57,6 +57,7 @@ struct AgentListView: View {
                         if let mac = macStore.primary {
                             HStack {
                                 Image(systemName: "desktopcomputer")
+                                    .accessibilityHidden(true)
                                 Text(mac.name)
                                 Spacer()
                                 Text(relativeTime(mac.lastSeen))
@@ -125,6 +126,7 @@ struct AgentRow: View {
                         Circle()
                             .fill(statusColor(for: status))
                             .frame(width: 7, height: 7)
+                            .accessibilityHidden(true)
                         Text(status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -141,6 +143,7 @@ struct AgentRow: View {
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
     }

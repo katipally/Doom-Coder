@@ -8,6 +8,7 @@ import SwiftUI
 private func featureRow(icon: String, title: String, body: String) -> some View {
     HStack(alignment: .top, spacing: 12) {
         Image(systemName: icon).font(.title3).frame(width: 28)
+            .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.headline)
             Text(body).foregroundStyle(.secondary).font(.callout)
@@ -153,6 +154,7 @@ struct WhatsNewSheet230: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles").font(.title2).foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
                 Text("Copilot CLI, now first-class.").font(.title2.bold())
             }
 

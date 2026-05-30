@@ -294,6 +294,7 @@ struct PromptsView: View {
                         .font(.body)
                 }
                 .buttonStyle(.borderless)
+                .contentShape(Rectangle())
                 .accessibilityLabel("Copy “\(prompt.title)”")
             }
             .contentShape(Rectangle())

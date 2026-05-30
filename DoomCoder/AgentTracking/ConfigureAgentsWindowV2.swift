@@ -179,12 +179,14 @@ struct ConfigureAgentsViewV2: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                     .font(.caption)
+                    .accessibilityHidden(true)
             } else if isInst {
                 // Health dot: green if events in last hour, grey otherwise
                 HelpTip("Green = at least one hook event received in the last hour. Grey = no recent activity (agent may be idle or not running).")
                 Circle()
                     .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
                     .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
             } else if d?.installed == true {
                 // Agent detected but hooks not installed: nudge
                 Text("Set up →")
@@ -195,6 +197,7 @@ struct ConfigureAgentsViewV2: View {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(.green)
                     .font(.caption)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
@@ -253,6 +256,7 @@ struct ConfigureAgentsViewV2: View {
                                 Image(systemName: cap.symbolName)
                                     .foregroundStyle(.tint)
                                     .frame(width: 16)
+                                    .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(cap.title)
                                         .font(.callout.weight(.medium))
@@ -280,6 +284,7 @@ struct ConfigureAgentsViewV2: View {
                                     .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
                                     .frame(width: 10, height: 10)
                                     .animation(DCAnim.smooth, value: eventCount > 0)
+                                    .accessibilityHidden(true)
                                 Text(eventCount > 0 ? "Active" : "Quiet")
                                     .font(.callout.weight(.medium))
                                     .foregroundStyle(eventCount > 0 ? .primary : .secondary)
@@ -309,6 +314,7 @@ struct ConfigureAgentsViewV2: View {
                         HStack(alignment: .top) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.yellow)
+                                .accessibilityHidden(true)
                             Text(warning)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
@@ -481,6 +487,7 @@ struct ConfigureAgentsViewV2: View {
                     HStack(spacing: 6) {
                         Image(systemName: statusIsError ? "xmark.circle.fill" : "checkmark.circle.fill")
                             .foregroundStyle(statusIsError ? .red : .green)
+                            .accessibilityHidden(true)
                         Text(statusMessage)
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -559,9 +566,11 @@ struct ConfigureAgentsViewV2: View {
                         switch disp.permissionStatus {
                         case .authorized, .provisional, .ephemeral:
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                                .accessibilityHidden(true)
                             Text("Notifications allowed").font(.callout)
                         case .denied:
                             Image(systemName: "lock.circle.fill").foregroundStyle(.orange)
+                                .accessibilityHidden(true)
                             Text("Enable notifications in System Settings").font(.callout)
                             Spacer()
                             Button {
@@ -572,6 +581,7 @@ struct ConfigureAgentsViewV2: View {
                             .controlSize(.small)
                         case .notDetermined:
                             Image(systemName: "bell.badge.circle").foregroundStyle(.blue)
+                                .accessibilityHidden(true)
                             Text("Grant permission to receive notifications").font(.callout)
                             Spacer()
                             Button("Allow Notifications") {
@@ -636,6 +646,7 @@ struct ConfigureAgentsViewV2: View {
                         HStack {
                             Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
                                 .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
+                                .accessibilityHidden(true)
                             Text(CloudKitPusher.shared.isReady
                                  ? "Connected to iCloud as \(CloudKitPusher.shared.macName)"
                                  : "Connecting to iCloud…")
@@ -709,6 +720,7 @@ struct ConfigureAgentsViewV2: View {
                     HStack {
                         Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(ok ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(msg).font(.callout)
                     }
                     .padding(.top, 4)
@@ -1039,6 +1051,7 @@ private struct LiveEventRow: View {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.vertical, 4)
@@ -1046,6 +1059,7 @@ private struct LiveEventRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
 
             if expanded, let json = event.payloadJSON {
                 PayloadRendererView(json: json)
@@ -1110,6 +1124,7 @@ struct ConnectionDoctorSection: View {
                         HStack(spacing: 6) {
                             Image(systemName: summaryIsGood ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                                 .foregroundStyle(summaryIsGood ? .green : .orange)
+                                .accessibilityHidden(true)
                             Text(summary)
                                 .font(.callout.weight(.medium))
                                 .foregroundStyle(.secondary)

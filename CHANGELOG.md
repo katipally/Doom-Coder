@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.6.0] - 2026-05-30
+
+This release makes the iOS companion a **genuinely standalone app** that is fully usable on first launch with zero setup — no Mac connection and no API key required — directly addressing App Review Guideline 4.2.3(i). It also brings a major Mac Tools redesign, on-device AI honesty, and a broad bug/UX/accessibility pass.
+
+### Added — Standalone value (iOS + shared)
+- **Curated Prompt Library** — a shared, hand-written library of high-quality daily-development prompts (write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more). Copy-ready and **fully usable with no AI and no Mac**, grouped by category.
+- **Prompts = Compose | Library** — the Prompts tab is a segmented composer + library. Compose lets you draft a prompt, optionally **Enhance with AI**, copy, and save drafts. Library entries can be copied or opened directly in the composer. Prompts is the cold-open default tab.
+- **Notes with reminders** — notes support pinning, inline checklists, search, reminders (local notifications), and "Turn into prompt". Works entirely on-device.
+
+### Added — Mac Tools window (macOS 26 redesign)
+- **Toolbar-driven editor** for both Prompts and Notes: native window toolbar actions (New / Enhance / Copy / Save / Inspector), a refined sidebar, and a comfortable centered editor.
+- **Mac Notes parity with iOS** — body, inline checklist, pin, search, Turn-into-prompt, and **reminders (new on Mac)** via `UNUserNotificationCenter`, presented in the foreground for the menu-bar app.
+- **Prompt Library segment on Mac** mirroring iOS, with copy and open-in-composer.
+
+### Changed — AI
+- **On-device AI honesty** — Apple Foundation Models are detected per environment. In the iOS Simulator (where model assets do not exist) and on unsupported devices, Settings and Enhance now show clear guidance instead of failing silently; the rest of the app is never blocked.
+- **Model picker** — saving an API key now **auto-tests the key and fetches the live model list** from the provider. A recommended model is selected by default, the selection applies instantly, and an invalid/removed saved model falls back to a valid one. Inline loading and error states.
+- **AI naming cleanup** — engine options are limited to **On-device** and **My API key (BYOK)**; legacy "automatic"/"built-in offline" wording removed.
+
+### Changed — iOS sleep card / remote control
+- Adopted the Mac sleep-card icons and per-mode color tints; fixed a duplicated "Auto-off after" label.
+- **Remote master on/off** — iOS can suspend/resume the whole Mac app (master gate) in addition to the keep-awake modes, applied on the Mac's next check-in.
+
+### Fixed
+- **Notes reminder UX** — choosing a past time no longer silently resets the toggle; an inline "pick a time in the future" warning is shown, and the past-date guard uses a small future buffer. Reminder scheduling, firing, and persistence verified on both platforms.
+
+### Removed
+- **Reference and Tasks features** and their associated GitHub Actions removed from both apps (confusing / low value). Notes absorbs the useful reminder/checklist functionality.
+- Repo-wide dead-code sweep: orphaned views and unused helpers/resources removed; builds remain green with zero warnings.
+
+### Accessibility
+- VoiceOver labels/hints/values, Dynamic Type support, sufficient contrast, Reduce Motion respect, 44pt tap targets, and Mac keyboard navigation across both apps.
+
+---
+
 ## [iOS 2.5.1] - 2026-05-28
 
 ### Added — iOS Companion (build 6)

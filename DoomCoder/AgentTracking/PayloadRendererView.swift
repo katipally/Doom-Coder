@@ -389,6 +389,7 @@ struct FieldView: View {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                         Text(field.displayKey)
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.secondary)
@@ -398,6 +399,7 @@ struct FieldView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
 
                 if expanded {
                     if depth < 3 {
@@ -446,6 +448,7 @@ struct FieldView: View {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                         Text(field.displayKey)
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.secondary)
@@ -455,6 +458,7 @@ struct FieldView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
 
                 if expanded {
                     let capped = Array(items.prefix(10))

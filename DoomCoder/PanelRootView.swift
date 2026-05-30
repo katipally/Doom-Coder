@@ -103,6 +103,7 @@ struct PanelRootView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text("⌥Space shortcut is taken by another app.")
                 .font(.caption)
                 .foregroundStyle(.primary)
@@ -153,6 +154,7 @@ struct PanelRootView: View {
                     .frame(width: 38, height: 38)
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     .opacity(masterEnabled ? 1.0 : 0.5)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("DoomCoder")
                         .font(.system(size: 14, weight: .semibold))
@@ -183,6 +185,8 @@ struct PanelRootView: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
+                .accessibilityLabel("DoomCoder")
+                .accessibilityValue(masterEnabled ? "On" : "Off")
             }
             .padding(14)
         }
@@ -311,6 +315,7 @@ struct PanelRootView: View {
                     .font(.caption.weight(.medium))
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 9)
@@ -320,7 +325,8 @@ struct PanelRootView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel("Auto-off timer, currently \(autoOffLabel(sleepManager.sessionTimerHours))")
+        .accessibilityLabel("Auto-off timer")
+        .accessibilityValue(autoOffLabel(sleepManager.sessionTimerHours))
     }
 
     private func autoOffLabel(_ h: Int) -> String {
@@ -435,6 +441,7 @@ struct PanelRootView: View {
             VStack(spacing: 3) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .regular))
+                    .accessibilityHidden(true)
                 Text(label)
                     .font(.system(size: 10, weight: .medium))
             }
@@ -458,12 +465,14 @@ struct PanelRootView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(active ? activeTint : .secondary)
                 .contentTransition(.symbolEffect(.replace))
+                .accessibilityHidden(true)
         }
     }
 
     private func statusPill(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.caption2)
+                .accessibilityHidden(true)
             Text(text).font(.caption2)
         }
         .foregroundStyle(tint)
@@ -485,11 +494,13 @@ struct PanelRootView: View {
         PressableButton(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.caption2)
+                    .accessibilityHidden(true)
                 Text(label).font(.caption)
                 if chevron {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .bold))
                         .rotationEffect(.degrees(expanded ? -180 : 0))
+                        .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -534,6 +545,7 @@ private struct ModeSegmentedControl: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.caption)
+                    .accessibilityHidden(true)
                 Text(label).font(.caption.weight(.medium))
             }
             .frame(maxWidth: .infinity)
@@ -551,6 +563,9 @@ private struct ModeSegmentedControl: View {
         }
         .buttonStyle(.plain)
         .animation(DCAnim.smooth, value: selected)
+        .accessibilityLabel(label)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -580,6 +595,7 @@ private struct KeepAwakeModeControl: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: icon).font(.caption2)
+                    .accessibilityHidden(true)
                 Text(label).font(.caption.weight(.medium))
             }
             .frame(maxWidth: .infinity)
@@ -599,6 +615,7 @@ private struct KeepAwakeModeControl: View {
         .animation(DCAnim.smooth, value: selected)
         .help(helpText(target))
         .accessibilityLabel("\(label) keep awake")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

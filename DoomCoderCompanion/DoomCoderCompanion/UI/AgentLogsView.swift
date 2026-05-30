@@ -55,6 +55,7 @@ struct AgentLogsView: View {
                         Image(systemName: cap.symbolName)
                             .foregroundStyle(.tint)
                             .frame(width: 20)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(cap.title).font(.callout.weight(.medium))
                             Text(cap.detail)
@@ -168,6 +169,7 @@ struct LogRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.caption2)
+                        .accessibilityHidden(true)
                     Text(tool)
                         .font(.caption2)
                 }
