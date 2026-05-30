@@ -31,15 +31,15 @@ struct WelcomeView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 18) {
-                    FeatureRow(symbol: "bell.badge",
-                               title: "Stay in the loop",
-                               detail: "Get a notification when an AI agent on your Mac needs your attention.")
-                    FeatureRow(symbol: "powersleep",
-                               title: "Keep your Mac awake",
-                               detail: "Stop long agent runs from being interrupted by sleep — control it from your pocket.")
+                    FeatureRow(symbol: "wrench.and.screwdriver",
+                               title: "A toolkit for AI coding",
+                               detail: "Prompt templates, CLI cheat sheets, task lists and notes — all on your device, no Mac or account needed.")
+                    FeatureRow(symbol: "sparkles",
+                               title: "Better prompts, instantly",
+                               detail: "Turn a rough idea into a well-structured prompt to paste into Claude Code, Codex, Copilot and more.")
                     FeatureRow(symbol: "macbook.and.iphone",
-                               title: "Better together",
-                               detail: "DoomCoder is a companion to the DoomCoder Mac app. You can explore everything here first — connect a Mac when you're ready for live data.")
+                               title: "Connect your Mac (optional)",
+                               detail: "Add the free DoomCoder Mac app to monitor live agents and keep your Mac awake from the Dashboard tab.")
                 }
                 .padding(.horizontal, 4)
 
