@@ -1,42 +1,35 @@
 // AIEngineCoordinator.swift — DoomCoderCore
-// The single façade the UI talks to. Picks the right tier(s), runs the fallback
-// policy, and owns the user's engine preference + provider/model selection.
+// The single façade the UI talks to. Owns the user's engine preference +
+// provider/model selection and runs the selected backend.
 //
-// Fallback policy (per design critique):
-//   • Automatic / On-device: try Apple on-device, then Built-in (heuristic).
-//     NEVER sends content to a remote provider automatically (privacy-safe).
-//   • My API key (explicit opt-in): try the provider; surface ACTIONABLE errors
-//     (network/provider/rate-limit/missing-key) instead of silently degrading;
-//     fall back to Built-in only for non-actionable failures (malformed/refusal).
-//   • Built-in: heuristic only.
+// Policy:
+//   • On-device: run Apple FoundationModels; surface the real availability/error.
+//   • My API key (explicit opt-in): run the provider; surface ACTIONABLE errors
+//     (network/provider/rate-limit/missing-key) directly.
+// There is no silent fallback — the user sees exactly which engine answered and
+// why it failed. Manual authoring + Notes always work with no AI.
 
 import Foundation
 import Observation
 
 /// User-facing engine preference.
 public enum AIEngineSelection: String, Codable, CaseIterable, Sendable, Identifiable {
-    case automatic
     case appleOnDevice
     case remoteKey
-    case heuristic
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .automatic:     return "Automatic"
-        case .appleOnDevice: return "On-device (Apple Intelligence)"
+        case .appleOnDevice: return "On-device"
         case .remoteKey:     return "My API key"
-        case .heuristic:     return "Built-in (offline)"
         }
     }
 
     public var detail: String {
         switch self {
-        case .automatic:     return "On-device when available, otherwise built-in. Stays private."
         case .appleOnDevice: return "Apple's on-device model. Free, offline, private."
         case .remoteKey:     return "Your OpenAI/Anthropic key. Content is sent to the provider."
-        case .heuristic:     return "Deterministic, no AI service. Works everywhere."
         }
     }
 }
@@ -66,8 +59,8 @@ public final class AIEngineCoordinator {
     public private(set) var discoveredModels: [AIProvider: [String]] = [:]
 
     private init() {
-        let rawSel = UserDefaults.standard.string(forKey: selectionKey) ?? AIEngineSelection.automatic.rawValue
-        selection = AIEngineSelection(rawValue: rawSel) ?? .automatic
+        let rawSel = UserDefaults.standard.string(forKey: selectionKey) ?? AIEngineSelection.appleOnDevice.rawValue
+        selection = AIEngineSelection(rawValue: rawSel) ?? .appleOnDevice
         let rawProv = UserDefaults.standard.string(forKey: providerKey) ?? AIProvider.openai.rawValue
         provider = AIProvider(rawValue: rawProv) ?? .openai
     }
@@ -137,51 +130,29 @@ public final class AIEngineCoordinator {
         await run { await $0.compose(intent: intent) }
     }
 
-    public func chat(question: String, context: [DocChunk]) async -> AIResult<DocAnswer> {
-        await run { await $0.chat(question: question, context: context) }
-    }
-
     // MARK: - Engine routing
 
-    /// Ordered engines to try for the current selection. Built-in is always the
-    /// last resort so every feature works standalone.
+    /// The engine(s) to run for the current selection. There is no silent
+    /// fallback — each selection maps to exactly one backend so users always
+    /// know which engine answered.
     private func engineChain() -> [any AIEngine] {
-        let apple = AppleFoundationEngine()
-        let heuristic = HeuristicEngine()
         switch selection {
-        case .automatic, .appleOnDevice:
-            return [apple, heuristic]
-        case .heuristic:
-            return [heuristic]
+        case .appleOnDevice:
+            return [AppleFoundationEngine()]
         case .remoteKey:
-            if let remote = makeRemoteEngine() {
-                return [remote, heuristic]
-            }
-            return [heuristic]
+            // Always construct the remote engine (even with an empty key) so its
+            // methods surface an actionable `.missingKey` instead of a vague error.
+            return [RemoteKeyEngine(provider: provider, model: selectedModel(for: provider), apiKey: key(for: provider) ?? "")]
         }
     }
 
-    private func makeRemoteEngine() -> RemoteKeyEngine? {
-        guard let key = key(for: provider), !key.isEmpty else { return nil }
-        return RemoteKeyEngine(provider: provider, model: selectedModel(for: provider), apiKey: key)
-    }
-
-    /// Runs `op` across the engine chain. Stops and surfaces the first ACTIONABLE
-    /// failure (so users see real errors for their own key); otherwise falls
-    /// through to the next engine. Returns the last failure if all fail.
+    /// Runs `op` on the selected engine and returns its result directly. With a
+    /// single engine per selection there is no fallthrough; the engine's own
+    /// success/failure (including actionable errors) is surfaced to the UI.
     private func run<T: Sendable>(_ op: @Sendable (any AIEngine) async -> AIResult<T>) async -> AIResult<T> {
-        let chain = engineChain()
-        var lastFailure: AIResult<T>?
-        for engine in chain {
-            let result = await op(engine)
-            switch result {
-            case .success:
-                return result
-            case .failure(let failure, _):
-                if failure.isActionable { return result }
-                lastFailure = result
-            }
+        guard let engine = engineChain().first else {
+            return .failure(.unavailable(.unknown("No engine available")), tier: nil)
         }
-        return lastFailure ?? .failure(.unavailable(.unknown("No engine available")), tier: nil)
+        return await op(engine)
     }
 }

@@ -23,8 +23,8 @@
 		5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989306766B1ED48EB7EF7A00 /* DemoView.swift */; };
 		653506D5B5B8468A7E91F1EB /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = 577E6F8848446B47EA914860 /* Stores.swift */; };
 		67B76C43DEBEB404BC71B115 /* AgentLogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD9392DB3081F0376202563D /* AgentLogsView.swift */; };
-		767C9E7BD37D9C2BD6D00A57 /* ReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C359EA2B0EFAADE4E08839E /* ReferenceView.swift */; };
 		7FCDC44AB94F26BDBFC10638 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D9CEB3C8428B662C6D8FDA /* NotesView.swift */; };
+		8203D5C8E27A07CCA8A80CA4 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F39E1FCBF696C55142140DC /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		82C002BB8A77FBCC3C1F21F1 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ACADDDFB3E8168E10965A22 /* NotesStore.swift */; };
 		8791789AFFA7ADEA3856FD3F /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8607336CA377C7808F0A44 /* DashboardView.swift */; };
 		895632B1F3DC7257766878BA /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92946470387A0FC606BDBF2B /* WelcomeView.swift */; };
@@ -84,12 +84,12 @@
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
 		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		30710C1227AE4C2C6A8F82BB /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
-		3C359EA2B0EFAADE4E08839E /* ReferenceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceView.swift; sourceTree = "<group>"; };
 		4A8607336CA377C7808F0A44 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		50439D8C1B55D096C946D56C /* PromptsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptsView.swift; sourceTree = "<group>"; };
 		53232581AADB8C337671BB09 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		577E6F8848446B47EA914860 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
 		5ED5A3BFB2B112F342D7F244 /* JSONFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONFileStore.swift; sourceTree = "<group>"; };
+		5F39E1FCBF696C55142140DC /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 		662F77F68847FCD3D1555C97 /* AppGroupCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupCache.swift; sourceTree = "<group>"; };
 		75D9CEB3C8428B662C6D8FDA /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		84F0362D4080511605EBD81F /* AgentIconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconFetcher.swift; sourceTree = "<group>"; };
@@ -125,6 +125,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				13080AA8AC50EB8EC7B7CE3F /* DoomCoderCore in Frameworks */,
+				8203D5C8E27A07CCA8A80CA4 /* FoundationModels.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -219,6 +220,7 @@
 				7D0960EF81C31CAEDD2AAFA0 /* NotificationService */,
 				EFDB511A7CB2F0D6945D059D /* Packages */,
 				F12A2E1EB0FDDF7A0DC344D6 /* SharedCache */,
+				E6FB28F76B0E3F29FEF29017 /* Frameworks */,
 				B137F1E190C475B8D7351A1E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -262,11 +264,18 @@
 				75D9CEB3C8428B662C6D8FDA /* NotesView.swift */,
 				E68BA5DB0FC935D5B8275C6C /* PromptEditorView.swift */,
 				50439D8C1B55D096C946D56C /* PromptsView.swift */,
-				3C359EA2B0EFAADE4E08839E /* ReferenceView.swift */,
 				F5E5EA84FEC8E064AC203824 /* SharedToolUI.swift */,
 				BE69BD695FE1624054C8B6DA /* ToolsView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		E6FB28F76B0E3F29FEF29017 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5F39E1FCBF696C55142140DC /* FoundationModels.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		E7BDC654EB7A7B8A4B5DF6EF /* DoomCoderCompanion */ = {
@@ -445,7 +454,6 @@
 				C9B2BCEFE081D1A235ECA5E3 /* PromptEditorView.swift in Sources */,
 				21194123A25BC048EAA1FEF6 /* PromptStore.swift in Sources */,
 				F6299C97BC5B1466FF4F60E0 /* PromptsView.swift in Sources */,
-				767C9E7BD37D9C2BD6D00A57 /* ReferenceView.swift in Sources */,
 				3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */,
 				AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */,
 				D0BB7E1FE80FDC66B216818A /* SharedToolUI.swift in Sources */,
