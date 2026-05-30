@@ -70,6 +70,7 @@ struct AccessibilityPermissionSheet: View {
                 Image(systemName: "keyboard")
                     .font(.largeTitle)
                     .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Enable Global Shortcut")
                         .font(.title2.weight(.semibold))

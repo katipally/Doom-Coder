@@ -24,6 +24,8 @@ struct HelpTip: View {
             .font(.system(size: 11, weight: .regular))
             .foregroundStyle(.tertiary)
             .contentShape(Circle())
+            .accessibilityLabel("Help")
+            .accessibilityValue(message)
             .onHover { hovering in
                 hoverTask?.cancel()
                 if hovering {

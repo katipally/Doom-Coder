@@ -738,6 +738,7 @@ private struct MacPromptLibraryView: View {
 
             Button { copy(prompt) } label: { Image(systemName: "doc.on.doc") }
                 .buttonStyle(.borderless)
+                .contentShape(Rectangle())
                 .help("Copy prompt")
                 .accessibilityLabel("Copy “\(prompt.title)”")
         }
@@ -981,6 +982,7 @@ private struct MacNoteEditor: View {
                                         .foregroundStyle(item.isDone ? .green : .secondary)
                                 }
                                 .buttonStyle(.plain)
+                                .contentShape(Rectangle())
                                 .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
                                 TextField("Item", text: $item.text)
                                     .textFieldStyle(.plain)
@@ -990,6 +992,7 @@ private struct MacNoteEditor: View {
                         }
                         HStack(spacing: 8) {
                             Image(systemName: "plus.circle").foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             TextField("Add item", text: $newItem)
                                 .textFieldStyle(.plain)
                                 .onSubmit(addItem)

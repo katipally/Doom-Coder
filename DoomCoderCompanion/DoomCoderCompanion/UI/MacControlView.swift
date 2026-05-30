@@ -51,6 +51,7 @@ private struct IconSegmented<Option: Hashable>: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol(opt)).font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
                 Text(title(opt)).font(.subheadline.weight(.medium))
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
@@ -71,6 +72,7 @@ private struct IconSegmented<Option: Hashable>: View {
         .buttonStyle(.plain)
         .animation(.snappy(duration: 0.18), value: selected)
         .accessibilityLabel(accessibilityLabel(opt))
+        .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
@@ -243,6 +245,7 @@ struct MacControlCard: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .accessibilityLabel("Auto-off timer")
+            .accessibilityValue(timerLabel(timerHours))
         }
     }
 
@@ -255,14 +258,17 @@ struct MacControlCard: View {
             } else if isOffline {
                 Image(systemName: "wifi.exclamationmark")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
                 Text("Mac unreachable — changes apply when it reconnects")
             } else if !masterEnabled {
                 Image(systemName: "moon.zzz.fill")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Text("Suspended — turn DoomCoder on to control your Mac")
             } else {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(awakeActive ? .green : .secondary)
+                    .accessibilityHidden(true)
                 Text(statusText)
             }
             Spacer()

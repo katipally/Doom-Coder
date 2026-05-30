@@ -130,6 +130,7 @@ struct ConfigureSettingsPane: View {
                 .font(.system(size: 26))
                 .foregroundStyle(isReady ? Color.accentColor : .secondary)
                 .frame(width: 36)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -138,6 +139,7 @@ struct ConfigureSettingsPane: View {
                     Spacer()
                     Image(systemName: isReady ? "checkmark.icloud.fill" : "icloud.slash")
                         .foregroundStyle(isReady ? .green : .secondary)
+                        .accessibilityHidden(true)
                     Text(isReady ? "iCloud connected" : "Connecting…")
                         .font(.caption)
                         .foregroundStyle(.secondary)

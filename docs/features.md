@@ -232,16 +232,21 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 
 ---
 
-## iPhone companion
+## iPhone & iPad companion
 
-**DoomCoder Companion** (iOS 26+) mirrors every Mac notification to your iPhone in 1–5 seconds using your private iCloud container (CloudKit). No third-party server, no API keys, no QR codes.
+**DoomCoder Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** — no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
 
-Setup:
-1. Install DoomCoder Companion from the App Store.
-2. Sign in to the **same iCloud account** on your Mac and your iPhone.
-3. Enable iPhone / iPad in Configure → Notification Channels.
+### Works with zero setup (no Mac, no key)
+- **Prompts** — a *Compose | Library* tab. Compose lets you draft a prompt and copy it; the **Library** is a curated collection of high-quality daily-development prompts (write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more) that you can copy or open in the composer.
+- **Notes** — on-device notes with pinning, inline checklists, search, **reminders** (local notifications), and "Turn into prompt".
+- **Dashboard** — shows the standalone experience and, once a Mac is paired, the live agent list and Mac controls.
+- **Settings** — choose the AI engine (On-device Apple Intelligence or your own API key), manage notifications, and pair/unpair a Mac.
 
-The companion app shows: agent list with live status, per-agent notification history, 7-day session log.
+### Optional AI (Enhance)
+Prompt **Enhance** is a graceful bonus that uses either Apple's on-device model or your own provider key (BYOK). On-device AI is unavailable in the iOS Simulator and on unsupported devices, in which case the app shows clear guidance and the rest of the app keeps working.
+
+### Optional Mac connection (mirroring)
+When you sign in to the **same iCloud account** on your Mac and iPhone and enable iPhone / iPad in Configure → Notification Channels, the companion mirrors every Mac notification in 1–5 seconds via your private iCloud container (CloudKit) — no third-party server, no API keys, no QR codes. With a Mac paired you also get the live agent list, per-agent notification history, a 7-day session log, and remote keep-awake / master on-off controls.
 
 ---
 

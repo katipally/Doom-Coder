@@ -43,6 +43,7 @@ struct TrackAgentsView: View {
         HStack(spacing: 8) {
             Image(systemName: "waveform.path.ecg")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Track Agents").font(.headline)
             Spacer()
             HelpTip("Pauses all agent notifications until you un-pause or restart DoomCoder. Hook events are still recorded — only the notifications are suppressed. The sleep blocker keeps running.")
@@ -103,6 +104,7 @@ struct TrackAgentsView: View {
                         .fill(stateColor(state))
                         .frame(width: 7, height: 7)
                         .symbolEffect(.pulse, isActive: state == .running)
+                        .accessibilityHidden(true)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -124,6 +126,8 @@ struct TrackAgentsView: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .disabled(!isInstalled)
+            .accessibilityLabel("\(agent.displayName) notifications")
+            .accessibilityValue((enabled[agent] ?? true) ? "On" : "Off")
         }
         .padding(10)
         .background(
@@ -241,6 +245,7 @@ struct TrackAccordion: View {
                 HStack(spacing: 4) {
                     Circle().fill(stateColor(state)).frame(width: 6, height: 6)
                         .symbolEffect(.pulse, isActive: state == .running)
+                        .accessibilityHidden(true)
                     Text(subtitle(agent: agent, live: live))
                         .font(.caption2).foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
@@ -259,6 +264,8 @@ struct TrackAccordion: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .controlSize(.mini)
+            .accessibilityLabel("\(agent.displayName) notifications")
+            .accessibilityValue((enabled[agent] ?? true) ? "On" : "Off")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 4)
