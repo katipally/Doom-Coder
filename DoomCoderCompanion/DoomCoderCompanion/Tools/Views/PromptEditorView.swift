@@ -18,7 +18,7 @@ struct PromptEditorView: View {
     @State private var showEnhance = false
 
     /// Optional callback; when provided, used instead of the default store write
-    /// (lets other screens, e.g. Tasks, decide what to do with the saved prompt).
+    /// (lets other screens decide what to do with the saved prompt).
     var onSaved: ((Prompt) -> Void)?
 
     init(existing: Prompt?,
