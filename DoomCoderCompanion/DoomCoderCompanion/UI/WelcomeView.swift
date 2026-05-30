@@ -33,7 +33,7 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     FeatureRow(symbol: "wrench.and.screwdriver",
                                title: "A toolkit for AI coding",
-                               detail: "Prompt templates, CLI cheat sheets, task lists and notes — all on your device, no Mac or account needed.")
+                               detail: "An AI prompt composer, agent docs with chat, and smart notes — all on your device, no Mac or account needed.")
                     FeatureRow(symbol: "sparkles",
                                title: "Better prompts, instantly",
                                detail: "Turn a rough idea into a well-structured prompt to paste into Claude Code, Codex, Copilot and more.")
