@@ -65,6 +65,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
 
         installLocalKeyMonitor()
+
+        // Reopen any tool windows that Minimize hid, so the workspace returns to
+        // exactly how it was left. No-op for a normal (hotkey/Escape) re-show.
+        ToolSurfaceManager.restorePendingSurfaces()
     }
 
     func hide() {
@@ -154,7 +158,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = hc
         panel.isFloatingPanel = true
         panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        // No `.transient`: the bar must persist when the user clicks elsewhere.
+        // It hides only via ⌥Space (hotkey toggle), Escape, or Minimize.
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.hasShadow = true
@@ -219,28 +225,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
-    func windowDidResignKey(_ notification: Notification) {
-        Task { @MainActor in
-            // Keep the panel visible while any DoomCoder auxiliary window
-            // (Settings / About / Configure / Updates) is open, so the user
-            // can bounce between surfaces without the panel disappearing.
-            // Any OTHER app becoming active still dismisses the panel.
-            let auxIDs: Set<String> = ["settings", "about", "configureAgents"]
-            let hasAuxWindow = NSApp.windows.contains { w in
-                guard w.isVisible else { return false }
-                if let id = w.identifier?.rawValue, auxIDs.contains(id) { return true }
-                // Sparkle "Check for Updates" dialog has no SwiftUI id;
-                // match by class name / title for defence in depth.
-                let title = w.title
-                if title.contains("Update") || title.contains("DoomCoder") && w !== self.panel {
-                    return true
-                }
-                return false
-            }
-            if hasAuxWindow { return }
-            self.hide()
-        }
-    }
+    // NOTE: We intentionally do NOT implement `windowDidResignKey` to auto-hide.
+    // The bar must persist when the user clicks another app or one of our tool
+    // windows. It is dismissed only by ⌥Space (hotkey toggle), Escape, or the
+    // Minimize footer button.
 
     func windowDidMove(_ notification: Notification) {
         if !isProgrammaticResize { userMovedPanel = true }

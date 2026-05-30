@@ -31,6 +31,13 @@ final class PromptStore {
         prompts.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Re-reads drafts from disk (drives pull-to-refresh).
+    func reload() {
+        if let saved = JSONFileStore.load([Prompt].self, from: fileName) {
+            prompts = saved.filter { !$0.isCurated }
+        }
+    }
+
     // MARK: - Mutations
 
     func add(_ prompt: Prompt) {
