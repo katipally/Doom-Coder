@@ -17,6 +17,7 @@ struct DemoView: View {
     @State private var demoMode: KeepAwakeMode = .auto
     @State private var demoScreen: ScreenMode = .screenOn
     @State private var demoTimer: Int = 2
+    @State private var demoMaster: Bool = true
 
     var body: some View {
         ScrollView {
@@ -62,12 +63,14 @@ struct DemoView: View {
                         lastSeen: nil,
                         isDemo: true,
                         isOffline: false,
+                        masterEnabled: demoMaster,
                         mode: demoMode,
                         screen: demoScreen,
                         timerHours: demoTimer,
-                        awakeActive: demoMode != .off,
+                        awakeActive: demoMaster && demoMode != .off,
                         activeAgentCount: 2,
                         waiting: false,
+                        onChangeMaster: { demoMaster = $0; Haptics.selection() },
                         onChangeMode: { demoMode = $0; Haptics.selection() },
                         onChangeScreen: { demoScreen = $0; Haptics.selection() },
                         onChangeTimer: { demoTimer = $0; Haptics.selection() }

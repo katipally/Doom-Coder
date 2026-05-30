@@ -104,14 +104,6 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     private func applyControlCommands(_ commands: [ControlCommandRecord]) {
         guard let pusher else { return }
 
-        // Respect the local master suspend gate — remote control must not
-        // override an explicit "suspend everything" on the Mac.
-        let masterOn = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
-        guard masterOn else {
-            logger.notice("ckpusher.delegate: master suspended — ignoring \(commands.count, privacy: .public) remote command(s)")
-            return
-        }
-
         let ud = UserDefaults.standard
         var appliedIds = Self.loadAppliedCommandIds(ud)
         let appliedSet = Set(appliedIds)
@@ -124,10 +116,42 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
         let sm = SleepManager.shared
         var changed = false
+
+        // Process strictly in issued order. `setMasterEnabled` bypasses the gate
+        // (so it can always be turned back on); every OTHER verb is dropped while
+        // the gate is off. Each command is consumed (added to the dedup ring)
+        // regardless of outcome, so a dropped command never replays when the
+        // gate later returns — turning master back ON must NOT resurrect stale
+        // keep-awake commands.
         for cmd in applicable {
-            // Mark as seen first so an unknown/invalid command is never
-            // reprocessed on every subsequent fetch.
             appliedIds.append(cmd.commandId)
+
+            if cmd.verb == .setMasterEnabled {
+                guard let on = Bool(cmd.value) else { continue }
+                // Local-change wins: ignore a remote master command issued before
+                // the Mac user's most recent local master change.
+                if let localChangedAt = ud.object(forKey: Self.masterChangedAtKey) as? Date,
+                   cmd.issuedAt < localChangedAt {
+                    logger.notice("ckpusher.delegate: ignoring stale remote master (older than local change)")
+                    continue
+                }
+                ud.set(on, forKey: Self.masterEnabledKey)
+                ud.set(cmd.issuedAt, forKey: Self.masterChangedAtKey)
+                // Turning OFF releases any keep-awake assertion. Turning ON does
+                // NOT force keep-awake — the Off/On/Auto selector owns that.
+                if !on { sm.disable() }
+                ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
+                changed = true
+                logger.notice("ckpusher.delegate: applied setMasterEnabled=\(on, privacy: .public)")
+                continue
+            }
+
+            let masterOn = ud.object(forKey: Self.masterEnabledKey) as? Bool ?? true
+            guard masterOn else {
+                logger.notice("ckpusher.delegate: master suspended — dropping \(cmd.command, privacy: .public)")
+                continue
+            }
+
             switch cmd.verb {
             case .setKeepAwakeMode:
                 guard let m = KeepAwakeMode(rawValue: cmd.value) else { continue }
@@ -138,8 +162,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             case .setSessionTimerHours:
                 guard let raw = Int(cmd.value) else { continue }
                 sm.sessionTimerHours = max(0, min(raw, 24))   // clamp to a sane range
-            case .none:
-                logger.notice("ckpusher.delegate: unknown command verb \(cmd.command, privacy: .public)")
+            case .setMasterEnabled, .none:
                 continue
             }
             ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
@@ -155,6 +178,11 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         // Publish fresh status so iOS confirms the command(s) landed.
         pusher.publishMacStatus()
     }
+
+    /// UserDefaults keys for the app-wide master suspend gate. Shared with
+    /// PanelRootView's `@AppStorage` and the local-change-wins comparison.
+    static let masterEnabledKey = "doomcoder.masterEnabled"
+    static let masterChangedAtKey = "doomcoder.masterEnabledChangedAt"
 
     /// Bounded set of recently-applied command IDs (clock-independent dedup).
     private static let appliedCommandIdsKey = "doomcoder.ckpusher.appliedCommandIds"

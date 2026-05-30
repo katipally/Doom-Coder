@@ -264,7 +264,8 @@ final class CloudKitPusher {
             sessionTimerHours: sm.sessionTimerHours,
             elapsedSeconds: sm.elapsedSeconds,
             lastAppliedCommandId: ud.string(forKey: Self.lastAppliedCommandIdKey),
-            lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date
+            lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
+            masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
