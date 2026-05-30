@@ -11,7 +11,10 @@ let package = Package(
         .library(name: "DoomCoderCore", targets: ["DoomCoderCore"]),
     ],
     targets: [
-        .target(name: "DoomCoderCore"),
+        .target(
+            name: "DoomCoderCore",
+            resources: [.process("Resources")]
+        ),
         .testTarget(name: "DoomCoderCoreTests", dependencies: ["DoomCoderCore"]),
     ]
 )

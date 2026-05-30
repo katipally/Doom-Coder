@@ -19,12 +19,14 @@ struct SettingsView: View {
     @State private var showConnect = false
     @State private var showDisconnectConfirm = false
     @State private var aiKeyInput = ""
-    @State private var keySettings = AIKeySettings.shared
+    @State private var ai = AIEngineCoordinator.shared
     @State private var keyTestState: KeyTestState = .idle
+    @State private var appleStatus: AIFailure? = nil
+    @State private var appleProbed = false
     @State private var showClearDataConfirm = false
 
     private enum KeyTestState: Equatable {
-        case idle, testing, ok, failed(String)
+        case idle, testing, ok(Int), failed(String)
     }
 
     var body: some View {
@@ -63,88 +65,145 @@ struct SettingsView: View {
             isPresented: $showClearDataConfirm,
             titleVisibility: .visible
         ) {
-            Button("Delete prompts, tasks & notes", role: .destructive) {
+            Button("Delete prompts & notes", role: .destructive) {
                 PromptStore.shared.deleteAll()
-                TaskStore.shared.deleteAll()
                 NotesStore.shared.deleteAll()
                 Haptics.success()
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This permanently deletes your prompts, tasks, and notes on this device. Curated starters can be restored from the Prompts screen.")
+            Text("This permanently deletes your prompts and notes on this device. Example prompts can be restored from the Prompts screen.")
         }
-        .task { await refreshNotifStatus() }
+        .task {
+            await refreshNotifStatus()
+            await probeApple()
+        }
     }
 
-    // MARK: - AI enhance (BYO key)
+    // MARK: - AI engine (on-device / BYO key / built-in)
 
     @ViewBuilder
     private var aiSection: some View {
         Section {
-            Picker("Provider", selection: Binding(
-                get: { keySettings.provider },
-                set: { keySettings.provider = $0; keyTestState = .idle }
+            Picker("Engine", selection: Binding(
+                get: { ai.selection },
+                set: { ai.selection = $0; keyTestState = .idle }
             )) {
-                ForEach(AIProvider.allCases) { p in
-                    Text(p.displayName).tag(p)
+                ForEach(AIEngineSelection.allCases) { sel in
+                    Text(sel.displayName).tag(sel)
                 }
             }
 
-            if keySettings.hasKeyForCurrentProvider {
-                LabeledContent("API key") {
-                    Label("Saved", systemImage: "checkmark.circle.fill")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(.green)
-                        .font(.callout)
-                }
-                Button {
-                    Task { await testKey() }
-                } label: {
-                    HStack(spacing: 8) {
-                        switch keyTestState {
-                        case .testing: ProgressView().controlSize(.small)
-                        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                        default: Image(systemName: "checkmark.shield")
-                        }
-                        Text(testLabel)
+            if ai.selection == .automatic || ai.selection == .appleOnDevice {
+                LabeledContent("On-device model") {
+                    if !appleProbed {
+                        ProgressView().controlSize(.small)
+                    } else if appleStatus == nil {
+                        Label("Ready", systemImage: "checkmark.circle.fill")
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.green)
+                            .font(.callout)
+                    } else {
+                        Text("Unavailable")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
                     }
                 }
-                .disabled(keyTestState == .testing)
-                Button(role: .destructive) {
-                    keySettings.clearKey(for: keySettings.provider)
-                    keyTestState = .idle
-                    Haptics.tap()
-                } label: {
-                    Label("Remove key", systemImage: "key.slash")
-                }
-            } else {
-                SecureField(keySettings.provider.keyHint, text: $aiKeyInput)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Button {
-                    keySettings.setKey(aiKeyInput, for: keySettings.provider)
-                    aiKeyInput = ""
-                    keyTestState = .idle
-                    Haptics.success()
-                } label: {
-                    Label("Save key", systemImage: "key.fill")
-                }
-                .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Link(destination: keySettings.provider.consoleURL) {
-                    Label("Where to find your API key", systemImage: "arrow.up.right.square")
-                }
-                .font(.subheadline)
+            }
+
+            if ai.selection == .remoteKey {
+                remoteKeyControls
             }
         } header: {
-            Text("Smart Enhance")
+            Text("AI Engine")
         } footer: {
-            if case let .failed(msg) = keyTestState {
-                Text("Test failed: \(msg)")
-                    .foregroundStyle(.red)
-            } else {
-                Text("Optional. Used only when you tap “Smart enhance” on a prompt. Your key stays in this device's Keychain; your prompt text is sent only to the provider you choose. Without a key, prompts are enhanced offline.")
+            aiFooter
+        }
+    }
+
+    @ViewBuilder
+    private var remoteKeyControls: some View {
+        Picker("Provider", selection: Binding(
+            get: { ai.provider },
+            set: { ai.provider = $0; keyTestState = .idle }
+        )) {
+            ForEach(AIProvider.allCases) { p in
+                Text(p.displayName).tag(p)
             }
+        }
+
+        if ai.hasKeyForCurrentProvider {
+            LabeledContent("API key") {
+                Label("Saved", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.green)
+                    .font(.callout)
+            }
+
+            let models = ai.discoveredModels[ai.provider] ?? []
+            if !models.isEmpty {
+                Picker("Model", selection: Binding(
+                    get: { ai.selectedModel(for: ai.provider) },
+                    set: { ai.setSelectedModel($0, for: ai.provider) }
+                )) {
+                    ForEach(models, id: \.self) { Text($0).tag($0) }
+                }
+            } else {
+                LabeledContent("Model") {
+                    Text(ai.selectedModel(for: ai.provider)).foregroundStyle(.secondary)
+                }
+            }
+
+            Button {
+                Task { await testKey() }
+            } label: {
+                HStack(spacing: 8) {
+                    switch keyTestState {
+                    case .testing: ProgressView().controlSize(.small)
+                    case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                    default: Image(systemName: "checkmark.shield")
+                    }
+                    Text(testLabel)
+                }
+            }
+            .disabled(keyTestState == .testing)
+            Button(role: .destructive) {
+                ai.clearKey(for: ai.provider)
+                keyTestState = .idle
+                Haptics.tap()
+            } label: {
+                Label("Remove key", systemImage: "key.slash")
+            }
+        } else {
+            SecureField(ai.provider.keyHint, text: $aiKeyInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button {
+                ai.setKey(aiKeyInput, for: ai.provider)
+                aiKeyInput = ""
+                keyTestState = .idle
+                Haptics.success()
+            } label: {
+                Label("Save key", systemImage: "key.fill")
+            }
+            .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Link(destination: ai.provider.consoleURL) {
+                Label("Where to find your API key", systemImage: "arrow.up.right.square")
+            }
+            .font(.subheadline)
+        }
+    }
+
+    @ViewBuilder
+    private var aiFooter: some View {
+        if case let .failed(msg) = keyTestState {
+            Text("Test failed: \(msg)").foregroundStyle(.red)
+        } else if case let .ok(count) = keyTestState {
+            Text("Key works — \(count) model\(count == 1 ? "" : "s") available.")
+                .foregroundStyle(.green)
+        } else {
+            Text(ai.selection.detail + " Prompts and notes never leave your device unless you choose “My API key”, in which case only the text you enhance is sent to your chosen provider. Keys are stored in this device's Keychain.")
         }
     }
 
@@ -153,22 +212,26 @@ struct SettingsView: View {
         case .testing: return "Testing…"
         case .ok: return "Key works"
         case .failed: return "Test failed — tap to retry"
-        default: return "Test key"
+        default: return "Test key & load models"
         }
     }
 
     private func testKey() async {
-        guard let key = keySettings.key(for: keySettings.provider) else { return }
         keyTestState = .testing
-        do {
-            _ = try await AIEnhanceService.enhance(
-                "say ok", provider: keySettings.provider, apiKey: key)
-            keyTestState = .ok
+        let result = await ai.testKey(for: ai.provider)
+        switch result {
+        case .success(let models):
+            keyTestState = .ok(models.count)
             Haptics.success()
-        } catch {
-            keyTestState = .failed(error.localizedDescription)
+        case .failure(let failure):
+            keyTestState = .failed(failure.message)
             Haptics.warning()
         }
+    }
+
+    private func probeApple() async {
+        appleStatus = await ai.appleAvailability()
+        appleProbed = true
     }
 
     // MARK: - Manage data
@@ -179,7 +242,7 @@ struct SettingsView: View {
                 Haptics.tap()
                 showClearDataConfirm = true
             } label: {
-                Label("Clear prompts, tasks & notes", systemImage: "trash")
+                Label("Clear prompts & notes", systemImage: "trash")
             }
         } header: {
             Text("Manage Data")

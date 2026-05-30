@@ -1,15 +1,16 @@
-// Keychain.swift — DoomCoder Companion (Tools)
+// Keychain.swift — DoomCoderCore
 // Minimal Keychain wrapper for storing the user's BYO API key securely. The key
 // never leaves the device except as the Authorization header on requests the
-// user explicitly triggers to their chosen provider.
+// user explicitly triggers to their chosen provider. Local-only — never synced
+// (uses ...ThisDeviceOnly accessibility, no kSecAttrSynchronizable).
 
 import Foundation
 import Security
 
-enum Keychain {
+public enum Keychain {
     private static let service = "com.doomcoder.app.companion.aikey"
 
-    static func set(_ value: String, account: String) {
+    public static func set(_ value: String, account: String) {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -23,7 +24,7 @@ enum Keychain {
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    static func get(account: String) -> String? {
+    public static func get(account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -38,7 +39,7 @@ enum Keychain {
         return value
     }
 
-    static func delete(account: String) {
+    public static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

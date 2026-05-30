@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "docsVersion": "2026.05.1",
+  "minimumAppVersion": "2.5.3",
+  "updatedAt": "2026-05-30",
+  "agents": [
+    {
+      "id": "claude",
+      "title": "Claude Code",
+      "tagline": "Anthropic's agentic coding CLI for the terminal.",
+      "source": "https://code.claude.com/docs",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "Claude Code is Anthropic's terminal-based agentic coding assistant. You run it inside a project directory and converse with it in natural language; it reads and edits files, runs commands, and works across your whole repository. It is highly extensible through skills, plugins, subagents, and MCP servers. Sessions are persistent — you can resume, fork, and rewind them. Project guidance lives in a CLAUDE.md file at the repo root, which Claude reads automatically to learn your conventions."
+        },
+        {
+          "heading": "Install & start",
+          "body": "Install with the official installer or your package manager, then run `claude` inside a project folder to start an interactive session. First launch walks you through signing in with your Anthropic account or an API key. Use `claude --help` for the current flag list. Common launch options:\n- `claude` — start an interactive session in the current directory.\n- `claude --resume <session>` — resume a previous session (Ctrl+R lists recent ones).\n- `claude --agent <name>` — start with a specific configured agent.\n- `claude doctor` — diagnose your install, MCP servers, and environment."
+        },
+        {
+          "heading": "Slash commands",
+          "body": "Inside a session, type `/` to open the command menu. Frequently used commands:\n- `/clear` — wipe the current context and start fresh.\n- `/compact [focus]` — summarize the conversation to free up context, optionally focused on a topic.\n- `/rewind` or `/undo` — revert to an earlier checkpoint in the session.\n- `/resume <session>` — switch to a past session.\n- `/context` — show how your token budget is being used.\n- `/cost` and `/usage` — show usage and cost details.\n- `/diff` — open an interactive diff viewer.\n- `/model` — pick the Claude model (Opus / Sonnet / Haiku and versions).\n- `/plugin` — manage and search plugins.\n- `/doctor` — run environment diagnostics.\nCommands change between releases — type `/` to see what your version offers."
+        },
+        {
+          "heading": "Keyboard shortcuts",
+          "body": "- Ctrl+C — cancel the current action.\n- Ctrl+D — exit the session.\n- Ctrl+L — clear the screen.\n- Ctrl+T — toggle the task list (shows running subagents).\n- Shift+Tab — cycle permission modes (ask / auto-accept edits / plan).\n- `!` — run a shell command directly.\n- `@` — autocomplete a file path to add it to context."
+        },
+        {
+          "heading": "Subagents & skills",
+          "body": "Subagents are specialist helpers Claude spawns with their own context window, so heavy work (repo scanning, code review, doc lookup) doesn't bloat the main thread. Background subagents survive resumes and sleep/wake. Skills are user-defined slash commands auto-loaded from `.claude/skills`; bundle them with subagents and hooks into plugins. Scaffold a new one with `claude plugin init <name>`."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Keep a concise CLAUDE.md with build/test commands and conventions — Claude reads it every session.\n- Use `/compact` before long tasks to preserve context.\n- Prefer subagents for large searches to keep the main context clean.\n- Add MCP servers to give Claude access to databases, browsers, and other tools.\n- When commands feel out of date, run `claude --help` or check the official changelog."
+        }
+      ]
+    },
+    {
+      "id": "codex_cli",
+      "title": "Codex CLI",
+      "tagline": "OpenAI's coding agent for the terminal and CI.",
+      "source": "https://developers.openai.com/codex/cli",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "Codex CLI is OpenAI's terminal coding agent. Run `codex` for an interactive session or `codex exec \"task\"` to run a single prompt non-interactively (ideal for scripts and CI). It edits files and runs shell commands under a configurable sandbox and approval policy, so you control how much it can do without asking. Project guidance lives in an AGENTS.md file that Codex reads automatically."
+        },
+        {
+          "heading": "Install & sign in",
+          "body": "Install Codex CLI, then run `codex` and follow the prompt to sign in with your ChatGPT account (browser OAuth) or an API key. For automation:\n`printenv OPENAI_API_KEY | codex login --with-api-key`\nUse `codex --help` for the current flag list. Config lives in `~/.codex/config.toml`."
+        },
+        {
+          "heading": "Approval modes",
+          "body": "Approval policy controls how much autonomy Codex has:\n- `suggest` — every file edit and command needs your approval. Best for production and code review.\n- `auto-edit` — file edits are auto-applied; commands still need approval. Good for trusted iteration.\n- `full-auto` — edits and commands run without pausing. Best for CI, containers, and demos.\nSet per session with `codex --approval-mode <mode>`, or in config with `approval_policy = \"on-request\"`. The legacy flag is `--ask-for-approval untrusted|on-request|never`."
+        },
+        {
+          "heading": "Sandbox modes",
+          "body": "The sandbox controls filesystem access for model-run commands:\n- `--sandbox read-only` — no file or system changes.\n- `--sandbox workspace-write` — only the project workspace can be modified (a sensible default for local work).\n- `--sandbox danger-full-access` — no restrictions; only use in CI or throwaway containers.\nExample: `codex --sandbox workspace-write --approval-mode on-request`."
+        },
+        {
+          "heading": "Common usage",
+          "body": "- `codex` — interactive session in the current directory.\n- `codex exec \"run the tests and fix failures\"` — one-shot, non-interactive run.\n- `codex -m <model>` — choose the model for the session.\n- `codex --profile <name>` — layer a config profile per project.\n- `codex --yolo` / `--dangerously-bypass-approvals-and-sandbox` — disable all gates (trusted automation only).\nCommands change between releases — run `codex --help` for the latest."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Start in `suggest` mode on unfamiliar repos, then relax to `auto-edit` once you trust it.\n- Keep an AGENTS.md with build/test/lint commands so Codex doesn't have to guess.\n- Use `codex exec` in CI with `full-auto` + `danger-full-access` inside a container only.\n- Use config profiles to keep different settings per project."
+        }
+      ]
+    },
+    {
+      "id": "copilot_cli",
+      "title": "Copilot CLI",
+      "tagline": "GitHub Copilot's agentic coding agent in your terminal.",
+      "source": "https://docs.github.com/copilot/cli",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "GitHub Copilot CLI brings agentic coding to the terminal: code generation, debugging, reviews, and project tasks through conversational AI. Run `copilot` for an interactive session or `copilot -p \"<prompt>\"` for a one-shot query. It can reference files with `@`, run project commands, and hand off to specialized built-in agents. Repo-specific guidance lives in a copilot instructions file you create with `copilot init`."
+        },
+        {
+          "heading": "Install & sign in",
+          "body": "Install with your platform's package manager:\n- macOS / Linux: `brew install copilot-cli`\n- Windows: `winget install GitHub.Copilot`\n- Universal: `curl -fsSL https://gh.io/copilot-install | bash`\nThen run `copilot login` (add `--host <URL>` for GitHub Enterprise). Use `copilot --help` for the current command list."
+        },
+        {
+          "heading": "Core commands",
+          "body": "- `copilot` — start an interactive session.\n- `copilot -p \"Add rate limiting to the Express app\"` — one-shot prompt mode.\n- `copilot init` — create custom Copilot instructions for the repo.\n- `copilot mcp` — manage MCP server configs.\n- `copilot plugin` — manage plugins and the marketplace.\n- `copilot update` — install the newest version.\n- `copilot version` — show version and update status.\n- `copilot completion <shell>` — enable tab completion (bash/zsh/fish).\nCommands change between releases — run `copilot --help` for the latest."
+        },
+        {
+          "heading": "Agents & modes",
+          "body": "Copilot CLI routes work to built-in agents:\n- Explore — fast codebase Q&A and analysis.\n- Task — runs scripts/tests/builds and summarizes output.\n- Plan — generates an implementation plan before changes.\n- Code-review — high-signal PR and change reviews.\nModes: Autopilot for hands-off execution, Plan mode for step-by-step transparency with diffs. Use `/model` inside a session to switch models."
+        },
+        {
+          "heading": "Context & sessions",
+          "body": "- `@file` / `@dir` — add files or folders to context.\n- `--resume` or `--continue` — resume a previous session.\n- Copilot Spaces — curated project context you can attach.\n- Auto-compaction keeps long sessions within token limits.\n- `--share` / `--share-gist` — export a session transcript.\nScripting flags: `--silent` for clean output, plus `--available-tools` / `--excluded-tools` for fine-grained control. In CI, use `GITHUB_ASKPASS` for non-interactive auth."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Run `copilot init` early so the agent learns your repo conventions.\n- Use Plan mode on risky changes to review diffs before they apply.\n- Reference exact files with `@` instead of describing them.\n- Add MCP servers and plugins to extend what the agent can do.\n- Run `copilot --help` and `copilot plugin --help` for current options."
+        }
+      ]
+    },
+    {
+      "id": "cursor",
+      "title": "Cursor",
+      "tagline": "AI-first code editor built on the VS Code foundation.",
+      "source": "https://docs.cursor.com",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "Cursor is an AI-first editor built on the VS Code foundation, so most VS Code extensions, themes, and keybindings carry over. Its AI features center on inline edits, a chat/agent sidebar, and an agentic mode that can make multi-file changes, run tests, and iterate. Project conventions are expressed through rules files the AI follows when generating or editing code."
+        },
+        {
+          "heading": "Core AI features",
+          "body": "- Inline edit — select code and describe a change; Cursor rewrites it in place.\n- Chat / Agent sidebar — ask questions or hand off multi-step tasks across files.\n- Agent mode — performs large refactors, generates tests, and runs commands, confirming steps based on your settings.\n- Tab completion — predictive, multi-line completions as you type.\n- Codebase awareness — index your repo so answers and edits use real context."
+        },
+        {
+          "heading": "Common shortcuts",
+          "body": "Defaults (customizable, like VS Code):\n- Cmd/Ctrl+K — inline AI edit on the current selection.\n- Cmd/Ctrl+L — open the AI chat/agent sidebar.\n- Cmd/Ctrl+I — open the composer/agent for multi-file work.\n- Cmd/Ctrl+P — quick file open.\n- Cmd/Ctrl+Shift+P — command palette.\nExact shortcuts vary by version and platform — check Cursor's keyboard shortcuts settings for your build."
+        },
+        {
+          "heading": "Rules",
+          "body": "Rules tell Cursor's AI how to behave in your project — style conventions, architectural patterns, libraries to prefer or avoid. Define them in the project's rules files (e.g. a `.cursor/rules` directory or a project rules file) and the agent applies them when composing or editing. Keep rules short and specific; they work like a persistent system prompt for your repo."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Index your codebase so chat and agent answers use real project context.\n- Write focused rules for conventions you repeat often.\n- Use inline edit (Cmd/Ctrl+K) for quick local changes and the agent for cross-file work.\n- Since Cursor builds on VS Code, bring over your extensions and keybindings.\n- Check the official docs for the current shortcut and rules format — these evolve quickly."
+        }
+      ]
+    },
+    {
+      "id": "vscode",
+      "title": "VS Code Copilot",
+      "tagline": "GitHub Copilot inside Visual Studio Code.",
+      "source": "https://code.visualstudio.com/docs/copilot",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "GitHub Copilot in VS Code combines inline code completions with Copilot Chat and an agent mode. Completions suggest code as you type; Chat answers questions and edits across files; agent mode can plan and carry out multi-step tasks, running tools and tests with your approval. Custom instructions let you tailor Copilot to your project's conventions."
+        },
+        {
+          "heading": "Chat modes",
+          "body": "- Ask — ask questions about your code or general programming.\n- Edit — describe changes and apply them across selected files.\n- Agent — give a high-level goal; Copilot plans, edits multiple files, and runs commands/tools, pausing for confirmation as needed.\nSwitch modes in the Chat view. Slash commands like `/explain`, `/tests`, `/fix`, and `/doc` trigger common workflows."
+        },
+        {
+          "heading": "Common shortcuts",
+          "body": "Defaults (customizable):\n- Cmd/Ctrl+I — inline chat in the editor.\n- Ctrl+Alt+I (Cmd+Ctrl+I on macOS) — open the Chat view.\n- Tab — accept an inline completion; Esc — dismiss.\n- Alt+] / Alt+[ — cycle through completion suggestions.\nUse the command palette (Cmd/Ctrl+Shift+P) and search \"Copilot\" to see all actions and current keybindings."
+        },
+        {
+          "heading": "Context & instructions",
+          "body": "- Use `#` references in chat to add files, symbols, or other context.\n- Add a custom instructions file so Copilot follows your conventions automatically.\n- Reference selections and open editors so answers use the right context.\n- Connect MCP servers and tools to extend agent mode's capabilities."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Use agent mode for multi-file tasks; use Edit for focused, well-scoped changes.\n- Add custom instructions for your stack so you don't repeat conventions.\n- Reference exact files/symbols with `#` instead of pasting code.\n- Review proposed diffs before accepting agent changes.\n- Keybindings and features change with VS Code updates — check the Copilot docs for current details."
+        }
+      ]
+    },
+    {
+      "id": "windsurf",
+      "title": "Windsurf",
+      "tagline": "Agentic editor centered on the Cascade workflow.",
+      "source": "https://docs.windsurf.com",
+      "sections": [
+        {
+          "heading": "Overview",
+          "body": "Windsurf is an agentic code editor whose centerpiece is Cascade — an AI agent that understands your whole project, makes coordinated multi-file changes, and chains steps like edit, run, and test. It blends autocomplete, inline edits, and an agent panel into a single flow, aiming to keep you in sync with the AI as it works."
+        },
+        {
+          "heading": "Cascade & flows",
+          "body": "Cascade is Windsurf's agent: describe a goal and it plans and executes across files, running commands and reacting to results. Flows let you chain steps (e.g. lint → test → commit) so the agent carries a task end to end. You can review and approve changes as they happen, keeping control over what lands."
+        },
+        {
+          "heading": "Core features",
+          "body": "- Cascade agent panel — conversational, project-aware multi-file editing.\n- Inline edits — select code and describe a change.\n- Autocomplete — predictive completions as you type.\n- Command execution — the agent can run terminal commands and use the results.\n- Codebase awareness — Windsurf indexes your repo so the agent reasons over real context."
+        },
+        {
+          "heading": "Shortcuts",
+          "body": "Windsurf uses a familiar editor layout with a context-aware command palette and dedicated shortcuts for invoking Cascade, toggling flows, and pausing/resuming agent actions. Keymaps are customizable, including per project. Exact defaults vary by version and platform — check Windsurf's keyboard shortcut settings for your build."
+        },
+        {
+          "heading": "Tips",
+          "body": "- Give Cascade a clear, outcome-focused goal and let it plan the steps.\n- Use flows to automate repeatable sequences like test-then-commit.\n- Review changes as they stream in rather than all at once.\n- Let Windsurf index your codebase for better multi-file reasoning.\n- Check the official docs for the latest Cascade and flow capabilities — they change often."
+        }
+      ]
+    }
+  ]
+}
