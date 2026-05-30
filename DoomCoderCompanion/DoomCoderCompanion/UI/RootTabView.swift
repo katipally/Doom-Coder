@@ -1,7 +1,8 @@
 // RootTabView.swift — DoomCoder Companion
-// Three-tab structure (Home / Agents / Settings). Each tab is a standalone
-// NavigationStack so the app is fully usable with no Mac, no iCloud, and no
-// notifications — the standalone-functionality requirement (App Store 4.2.3).
+// Three-tab structure (Tools / Dashboard / Settings), launching on Tools. The
+// Tools tab is 100% standalone — prompts, CLI reference, tasks and notes work
+// with no Mac, no iCloud, and no notifications (App Store 4.2.3 standalone
+// functionality). Dashboard adds live Mac monitoring when connected.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
 import SwiftUI
@@ -14,11 +15,11 @@ struct RootTabView: View {
 
     var body: some View {
         TabView {
-            Tab("Home", systemImage: "house") {
-                NavigationStack { HomeView() }
+            Tab("Tools", systemImage: "wrench.and.screwdriver") {
+                NavigationStack { ToolsView() }
             }
-            Tab("Agents", systemImage: "square.stack.3d.up.fill") {
-                NavigationStack { AgentListView() }
+            Tab("Dashboard", systemImage: "macbook.and.iphone") {
+                NavigationStack { DashboardView() }
             }
             Tab("Settings", systemImage: "gearshape") {
                 NavigationStack { SettingsView() }

@@ -18,10 +18,20 @@ struct SettingsView: View {
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
     @State private var showConnect = false
     @State private var showDisconnectConfirm = false
+    @State private var aiKeyInput = ""
+    @State private var keySettings = AIKeySettings.shared
+    @State private var keyTestState: KeyTestState = .idle
+    @State private var showClearDataConfirm = false
+
+    private enum KeyTestState: Equatable {
+        case idle, testing, ok, failed(String)
+    }
 
     var body: some View {
         List {
             connectionSection
+            aiSection
+            manageDataSection
             notificationsSection
             aboutSection
             testSection
@@ -48,7 +58,134 @@ struct SettingsView: View {
         } message: {
             Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCoder Mac app are not affected. You can reconnect any time.")
         }
+        .confirmationDialog(
+            "Clear all tool data?",
+            isPresented: $showClearDataConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete prompts, tasks & notes", role: .destructive) {
+                PromptStore.shared.deleteAll()
+                TaskStore.shared.deleteAll()
+                NotesStore.shared.deleteAll()
+                Haptics.success()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This permanently deletes your prompts, tasks, and notes on this device. Curated starters can be restored from the Prompts screen.")
+        }
         .task { await refreshNotifStatus() }
+    }
+
+    // MARK: - AI enhance (BYO key)
+
+    @ViewBuilder
+    private var aiSection: some View {
+        Section {
+            Picker("Provider", selection: Binding(
+                get: { keySettings.provider },
+                set: { keySettings.provider = $0; keyTestState = .idle }
+            )) {
+                ForEach(AIProvider.allCases) { p in
+                    Text(p.displayName).tag(p)
+                }
+            }
+
+            if keySettings.hasKeyForCurrentProvider {
+                LabeledContent("API key") {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.green)
+                        .font(.callout)
+                }
+                Button {
+                    Task { await testKey() }
+                } label: {
+                    HStack(spacing: 8) {
+                        switch keyTestState {
+                        case .testing: ProgressView().controlSize(.small)
+                        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                        default: Image(systemName: "checkmark.shield")
+                        }
+                        Text(testLabel)
+                    }
+                }
+                .disabled(keyTestState == .testing)
+                Button(role: .destructive) {
+                    keySettings.clearKey(for: keySettings.provider)
+                    keyTestState = .idle
+                    Haptics.tap()
+                } label: {
+                    Label("Remove key", systemImage: "key.slash")
+                }
+            } else {
+                SecureField(keySettings.provider.keyHint, text: $aiKeyInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button {
+                    keySettings.setKey(aiKeyInput, for: keySettings.provider)
+                    aiKeyInput = ""
+                    keyTestState = .idle
+                    Haptics.success()
+                } label: {
+                    Label("Save key", systemImage: "key.fill")
+                }
+                .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Link(destination: keySettings.provider.consoleURL) {
+                    Label("Where to find your API key", systemImage: "arrow.up.right.square")
+                }
+                .font(.subheadline)
+            }
+        } header: {
+            Text("Smart Enhance")
+        } footer: {
+            if case let .failed(msg) = keyTestState {
+                Text("Test failed: \(msg)")
+                    .foregroundStyle(.red)
+            } else {
+                Text("Optional. Used only when you tap “Smart enhance” on a prompt. Your key stays in this device's Keychain; your prompt text is sent only to the provider you choose. Without a key, prompts are enhanced offline.")
+            }
+        }
+    }
+
+    private var testLabel: String {
+        switch keyTestState {
+        case .testing: return "Testing…"
+        case .ok: return "Key works"
+        case .failed: return "Test failed — tap to retry"
+        default: return "Test key"
+        }
+    }
+
+    private func testKey() async {
+        guard let key = keySettings.key(for: keySettings.provider) else { return }
+        keyTestState = .testing
+        do {
+            _ = try await AIEnhanceService.enhance(
+                "say ok", provider: keySettings.provider, apiKey: key)
+            keyTestState = .ok
+            Haptics.success()
+        } catch {
+            keyTestState = .failed(error.localizedDescription)
+            Haptics.warning()
+        }
+    }
+
+    // MARK: - Manage data
+
+    private var manageDataSection: some View {
+        Section {
+            Button(role: .destructive) {
+                Haptics.tap()
+                showClearDataConfirm = true
+            } label: {
+                Label("Clear prompts, tasks & notes", systemImage: "trash")
+            }
+        } header: {
+            Text("Manage Data")
+        } footer: {
+            Text("Your tools data is stored only on this device. Nothing is uploaded.")
+        }
     }
 
     // MARK: - Connection
