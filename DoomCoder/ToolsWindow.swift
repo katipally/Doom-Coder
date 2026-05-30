@@ -602,11 +602,15 @@ private struct MacNoteEditor: View {
 struct MacToolsSettingsPane: View {
     @State private var coordinator = AIEngineCoordinator.shared
     @State private var keyInput = ""
-    @State private var testState: String?
-    @State private var isTesting = false
+    @State private var keyTestState: KeyTestState = .idle
     @State private var appleReason: String?
 
+    private enum KeyTestState: Equatable {
+        case idle, testing, ok(Int), failed(String)
+    }
+
     var body: some View {
+        let _ = coordinator.revision   // re-render on key/model changes
         Form {
             Section("AI") {
                 Picker("Mode", selection: $coordinator.selection) {
@@ -622,31 +626,34 @@ struct MacToolsSettingsPane: View {
 
             if coordinator.selection == .remoteKey {
                 Section("Provider") {
-                    Picker("Provider", selection: $coordinator.provider) {
+                    Picker("Provider", selection: Binding(
+                        get: { coordinator.provider },
+                        set: { newProvider in
+                            coordinator.provider = newProvider
+                            keyTestState = .idle
+                            Task { await coordinator.loadModelsIfNeeded(for: newProvider) }
+                        }
+                    )) {
                         ForEach(AIProvider.allCases) { Text($0.displayName).tag($0) }
                     }
-                    SecureField(coordinator.provider.keyHint, text: $keyInput)
-                    HStack {
-                        Button("Save key") {
-                            coordinator.setKey(keyInput, for: coordinator.provider)
+
+                    if coordinator.hasKey(for: coordinator.provider) {
+                        savedKeyControls
+                    } else {
+                        SecureField(coordinator.provider.keyHint, text: $keyInput)
+                        Button {
+                            let entered = keyInput
                             keyInput = ""
+                            coordinator.setKey(entered, for: coordinator.provider)
+                            Task { await testKey() }   // auto-validate + fetch on save
+                        } label: {
+                            Label("Save & test key", systemImage: "key.fill")
                         }
                         .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button("Test & load models") { testKey() }
-                            .disabled(!coordinator.hasKey(for: coordinator.provider) || isTesting)
-                        if isTesting { ProgressView().controlSize(.small) }
-                        if let testState { Text(testState).font(.caption).foregroundStyle(.secondary) }
                     }
                     Link("Get a key", destination: coordinator.provider.consoleURL).font(.caption)
 
-                    let models = coordinator.discoveredModels[coordinator.provider] ?? []
-                    if !models.isEmpty {
-                        Picker("Model", selection: Binding(
-                            get: { coordinator.selectedModel(for: coordinator.provider) },
-                            set: { coordinator.setSelectedModel($0, for: coordinator.provider) })) {
-                            ForEach(models, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
+                    statusLine
                 }
             }
 
@@ -659,20 +666,81 @@ struct MacToolsSettingsPane: View {
         .navigationTitle("Settings")
         .task {
             appleReason = (await coordinator.appleAvailability())?.message
+            if coordinator.selection == .remoteKey {
+                await coordinator.loadModelsIfNeeded(for: coordinator.provider)
+            }
         }
     }
 
-    private func testKey() {
-        isTesting = true; testState = nil
-        Task {
-            let result = await coordinator.testKey(for: coordinator.provider)
-            await MainActor.run {
-                isTesting = false
-                switch result {
-                case .success(let ids): testState = "\(ids.count) models loaded"
-                case .failure(let f): testState = f.message
+    @ViewBuilder
+    private var savedKeyControls: some View {
+        LabeledContent("API key") {
+            Label("Saved", systemImage: "checkmark.circle.fill")
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.green)
+        }
+
+        let models = coordinator.discoveredModels[coordinator.provider] ?? []
+        if !models.isEmpty {
+            Picker("Model", selection: Binding(
+                get: {
+                    let current = coordinator.selectedModel(for: coordinator.provider)
+                    return models.contains(current) ? current : (models.first ?? current)
+                },
+                set: { coordinator.setSelectedModel($0, for: coordinator.provider) }
+            )) {
+                ForEach(models, id: \.self) { Text($0).tag($0) }
+            }
+        } else if keyTestState == .testing {
+            LabeledContent("Model") {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading…").foregroundStyle(.secondary)
                 }
             }
+        } else {
+            LabeledContent("Model") {
+                Text(coordinator.selectedModel(for: coordinator.provider)).foregroundStyle(.secondary)
+            }
+        }
+
+        HStack {
+            Button { Task { await testKey() } } label: {
+                Label("Test again", systemImage: "checkmark.shield")
+            }
+            .disabled(keyTestState == .testing)
+            Button(role: .destructive) {
+                coordinator.clearKey(for: coordinator.provider)
+                keyTestState = .idle
+            } label: {
+                Label("Remove key", systemImage: "key.slash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        switch keyTestState {
+        case .testing:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Testing…") }
+                .font(.caption).foregroundStyle(.secondary)
+        case .ok(let n):
+            Label("Key works — \(n) model\(n == 1 ? "" : "s") available", systemImage: "checkmark.circle.fill")
+                .font(.caption).foregroundStyle(.green)
+        case .failed(let msg):
+            Label(msg, systemImage: "xmark.circle.fill")
+                .font(.caption).foregroundStyle(.red)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    private func testKey() async {
+        keyTestState = .testing
+        let result = await coordinator.testKey(for: coordinator.provider)
+        switch result {
+        case .success(let ids): keyTestState = .ok(ids.count)
+        case .failure(let f):   keyTestState = .failed(f.message)
         }
     }
 }
