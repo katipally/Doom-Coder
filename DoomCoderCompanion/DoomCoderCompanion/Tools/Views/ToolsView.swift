@@ -1,6 +1,6 @@
 // ToolsView.swift — DoomCoder Companion (Tools)
 // The default tab: a hub of 100%-on-device developer tools that work with NO Mac.
-// Prompts · Reference · Notes. This is the standalone functionality that
+// Prompts · Notes. This is the standalone functionality that
 // makes the app useful on first launch (App Store guideline 4.2.3).
 
 import SwiftUI
@@ -19,14 +19,6 @@ struct ToolsView: View {
                     subtitle: "Compose reusable prompt templates for your AI coding agent. Fill in the blanks and copy.",
                     badge: "\(prompts.prompts.count)"
                 ) { PromptsView() }
-
-                ToolRow(
-                    symbol: "terminal",
-                    tint: .blue,
-                    title: "Reference",
-                    subtitle: "Full docs + AI chat for Claude Code, Codex, Copilot, Cursor & more.",
-                    badge: nil
-                ) { ReferenceView() }
 
                 ToolRow(
                     symbol: "note.text",

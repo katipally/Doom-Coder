@@ -66,44 +66,6 @@ struct TemplateValidatorTests {
     }
 }
 
-@Suite("HeuristicEngine")
-struct HeuristicEngineTests {
-    let engine = HeuristicEngine()
-
-    @Test func enhanceProducesStructuredPrompt() async {
-        let r = await engine.enhance("write tests for my parser")
-        #expect(r.value?.contains("Task:") == true)
-        #expect(r.tier == .heuristic)
-    }
-
-    @Test func composeProducesValidTemplate() async {
-        let r = await engine.compose(intent: "refactor my networking layer")
-        let template = r.value
-        #expect(template != nil)
-        #expect(template?.category == .refactor)
-        // Body tokens all resolve to fields.
-        let keys = Prompt.placeholderKeys(in: template!.body)
-        #expect(Set(keys) == Set(template!.fields.map(\.key)))
-    }
-
-    @Test func chatStaysGroundedAndCitesOnlySuppliedChunks() async {
-        let chunks = [
-            DocChunk(id: "a", title: "Claude Code", text: "Use /clear to reset the conversation."),
-            DocChunk(id: "b", title: "Cursor", text: "Cmd+K edits inline.")
-        ]
-        let r = await engine.chat(question: "how do I reset?", context: chunks)
-        let answer = r.value
-        #expect(answer != nil)
-        // Citations must be a subset of supplied chunk ids.
-        #expect(answer!.citations.allSatisfy { ["a", "b"].contains($0.chunkID) })
-    }
-
-    @Test func chatWithNoContextDoesNotHallucinate() async {
-        let r = await engine.chat(question: "anything", context: [])
-        #expect(r.value?.citations.isEmpty == true)
-    }
-}
-
 @Suite("AIResult")
 struct AIResultTests {
     @Test func actionableFailuresAreClassified() {
@@ -116,31 +78,13 @@ struct AIResultTests {
     }
 }
 
-@Suite("DocsService")
-@MainActor
-struct DocsServiceTests {
-    @Test func bundledDocsLoadForAllSixAgents() {
-        let ids = Set(DocsService.shared.agents.map(\.id))
-        for agent in ["claude", "codex_cli", "copilot_cli", "cursor", "vscode", "windsurf"] {
-            #expect(ids.contains(agent), "Missing bundled docs for \(agent)")
-        }
-        #expect(!ids.contains("gemini"), "Gemini CLI should be dropped")
+@Suite("AIEngineSelection")
+struct AIEngineSelectionTests {
+    @Test func exposesExactlyOnDeviceAndRemoteKey() {
+        #expect(AIEngineSelection.allCases == [.appleOnDevice, .remoteKey])
     }
 
-    @Test func retrievalScopesToAgentAndReturnsStableChunkIDs() {
-        let chunks = DocsService.shared.retrieve(query: "approval sandbox mode", agentID: "codex_cli", limit: 3)
-        #expect(!chunks.isEmpty)
-        for c in chunks {
-            #expect(c.id.hasPrefix("codex_cli#"), "Chunk \(c.id) escaped the agent scope")
-        }
-    }
-
-    @Test func retrievalRanksRelevantSectionFirst() {
-        let chunks = DocsService.shared.retrieve(query: "slash commands compact context", agentID: "claude", limit: 4)
-        #expect(chunks.first?.title.localizedCaseInsensitiveContains("slash") == true)
-    }
-
-    @Test func emptyQueryReturnsNothing() {
-        #expect(DocsService.shared.retrieve(query: "   ", agentID: "claude").isEmpty)
+    @Test func tiersAreOnDeviceAndRemoteKey() {
+        #expect(Set(AITier.allCases) == [.appleOnDevice, .remoteKey])
     }
 }
