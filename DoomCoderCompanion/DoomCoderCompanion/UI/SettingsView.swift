@@ -72,7 +72,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This permanently deletes your prompts and notes on this device. Example prompts can be restored from the Prompts screen.")
+            Text("This permanently deletes your saved prompt drafts and notes on this device. This can’t be undone.")
         }
         .task {
             await refreshNotifStatus()

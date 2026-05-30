@@ -12,6 +12,7 @@ import DoomCoderCore
 
 struct DashboardView: View {
     @State private var macStore = MacStatusStore.shared
+    @State private var agentStore = AgentListStore.shared
     @State private var showConnect = false
 
     private let downloadURL = URL(string: "https://github.com/katipally/Doom-Coder/releases")!
@@ -33,18 +34,56 @@ struct DashboardView: View {
     // MARK: - Connected
 
     private var connected: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        List {
+            Section {
                 MacReachabilityBanner()
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 MacControlView()
-                AgentSummaryCard()
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .padding(20)
+
+            agentsSection
         }
-        .background(Color(.systemGroupedBackground))
+        .listStyle(.insetGrouped)
         .refreshable {
             await CompanionSyncEngine.shared.forceFetchAll()
         }
+    }
+
+    @ViewBuilder
+    private var agentsSection: some View {
+        let agents = visibleAgents
+        Section {
+            if agents.isEmpty {
+                Text("No agent activity yet. Agents appear here as they run on your Mac.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(agents, id: \.rawValue) { agent in
+                    NavigationLink(value: agent) {
+                        AgentRow(
+                            agent: agent,
+                            status: agentStore.statuses[agent],
+                            isInstalled: true
+                        )
+                    }
+                }
+            }
+        } header: {
+            Text("Agents")
+        }
+    }
+
+    private var visibleAgents: [TrackedAgent] {
+        agentStore.installedAgents.isEmpty
+            ? agentStore.agents
+            : agentStore.agents.filter { agentStore.installedAgents.contains($0) }
     }
 
     // MARK: - Not connected
@@ -115,7 +154,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("No Mac? No problem.")
                     .font(.subheadline.weight(.semibold))
-                Text("The Tools tab — AI prompt composer, agent docs with chat, and smart notes — works fully on this device without connecting anything.")
+                Text("The Tools tab — the AI prompt composer and smart notes — works fully on this device without connecting anything.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -125,64 +164,5 @@ struct DashboardView: View {
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
-// MARK: - Inline agents list (no drill-in; full list right on the Dashboard)
-
-private struct AgentSummaryCard: View {
-    @State private var agentStore = AgentListStore.shared
-    @State private var macStore = MacStatusStore.shared
-
-    private var visibleAgents: [TrackedAgent] {
-        agentStore.installedAgents.isEmpty
-            ? agentStore.agents
-            : agentStore.agents.filter { agentStore.installedAgents.contains($0) }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Agents", systemImage: "square.stack.3d.up.fill")
-                    .font(.headline)
-                Spacer()
-                if !visibleAgents.isEmpty {
-                    Text("\(visibleAgents.count)")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("\(visibleAgents.count) agents")
-                }
-            }
-
-            if visibleAgents.isEmpty {
-                Text("No agent activity yet. Agents appear here as they run on your Mac.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(visibleAgents.enumerated()), id: \.element.rawValue) { index, agent in
-                        NavigationLink {
-                            AgentLogsView(agent: agent)
-                        } label: {
-                            AgentRow(
-                                agent: agent,
-                                status: agentStore.statuses[agent],
-                                isInstalled: true
-                            )
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        if index < visibleAgents.count - 1 {
-                            Divider().padding(.leading, 44)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

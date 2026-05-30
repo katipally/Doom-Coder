@@ -1,27 +1,34 @@
 // RootTabView.swift — DoomCoder Companion
 // Three-tab structure (Tools / Dashboard / Settings), launching on Tools. The
-// Tools tab is 100% standalone — AI prompt composer, agent docs + chat, and notes
-// work with no Mac, no account, and no internet (App Store 4.2.3 standalone
-// functionality). Dashboard adds live Mac monitoring when connected.
+// Tools tab is 100% standalone — the AI prompt composer and notes work with no
+// Mac, no account, and no internet (App Store 4.2.3 standalone functionality).
+// Dashboard adds live Mac monitoring when connected.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
 import SwiftUI
+import DoomCoderCore
 
 struct RootTabView: View {
+    @State private var router = AppRouter.shared
     /// First-run welcome is informational and dismissible — it never blocks use.
     @State private var showWelcome: Bool = {
         AppGroupCache.defaults.object(forKey: WelcomeView.shownKey) == nil
     }()
 
     var body: some View {
-        TabView {
-            Tab("Tools", systemImage: "wrench.and.screwdriver") {
+        TabView(selection: $router.selectedTab) {
+            Tab("Tools", systemImage: "wrench.and.screwdriver", value: RootTab.tools) {
                 NavigationStack { ToolsView() }
             }
-            Tab("Dashboard", systemImage: "macbook.and.iphone") {
-                NavigationStack { DashboardView() }
+            Tab("Dashboard", systemImage: "macbook.and.iphone", value: RootTab.dashboard) {
+                NavigationStack(path: $router.agentPath) {
+                    DashboardView()
+                        .navigationDestination(for: TrackedAgent.self) { agent in
+                            AgentLogsView(agent: agent)
+                        }
+                }
             }
-            Tab("Settings", systemImage: "gearshape") {
+            Tab("Settings", systemImage: "gearshape", value: RootTab.settings) {
                 NavigationStack { SettingsView() }
             }
         }

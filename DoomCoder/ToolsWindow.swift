@@ -138,14 +138,13 @@ private struct WindowFocus: NSViewRepresentable {
 // MARK: - Root
 
 enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
-    case prompts, notes, settings, about
+    case prompts, notes, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .prompts: return "Prompts"
         case .notes: return "Notes"
         case .settings: return "Settings"
-        case .about: return "About"
         }
     }
     var symbol: String {
@@ -153,7 +152,6 @@ enum ToolsSection: String, CaseIterable, Identifiable, Hashable {
         case .prompts: return "sparkles"
         case .notes: return "note.text"
         case .settings: return "gearshape"
-        case .about: return "info.circle"
         }
     }
 }
@@ -175,7 +173,6 @@ struct ToolsRootView: View {
             case .prompts:   MacPromptsPane()
             case .notes:     MacNotesPane()
             case .settings:  MacToolsSettingsPane()
-            case .about:     AboutView()
             }
         }
         .frame(minWidth: 820, minHeight: 560)
@@ -183,206 +180,305 @@ struct ToolsRootView: View {
     }
 }
 
-// MARK: - Prompts (Composer + library)
+// MARK: - Prompts (single-screen composer + saved drafts)
 
+/// The Prompt Composer mirrors iOS: a freeform draft editor with an action bar
+/// (Enhance-in-place / Copy / Save / Undo) and a saved-drafts sidebar. The store
+/// is the source of truth; the editor owns only transient state so there are no
+/// stale-snapshot bugs. Writing and copying never require AI.
 struct MacPromptsPane: View {
     @State private var store = MacPromptStore.shared
     @State private var coordinator = AIEngineCoordinator.shared
     @State private var search = ""
-    @State private var selected: Prompt?
-    @State private var showComposer = false
+    @State private var currentID: UUID?
 
+    // Transient editor state (never a captured Prompt value).
+    @State private var draft = ""
+    @State private var preEnhance: String?
+    @State private var isEnhancing = false
+    @State private var errorMessage: String?
+    @State private var statusMessage: String?
+    @State private var suppressSelectionHandling = false
+    @FocusState private var editorFocused: Bool
+
+    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var hasContent: Bool { !trimmed.isEmpty }
+
+    private var sortedDrafts: [Prompt] {
+        store.prompts.sorted { $0.updatedAt > $1.updatedAt }
+    }
     private var filtered: [Prompt] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return store.prompts }
-        return store.prompts.filter {
+        guard !q.isEmpty else { return sortedDrafts }
+        return sortedDrafts.filter {
             $0.title.lowercased().contains(q) || $0.body.lowercased().contains(q)
         }
     }
 
     var body: some View {
         HSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    TextField("Search prompts", text: $search)
-                        .textFieldStyle(.roundedBorder)
-                    Button {
-                        showComposer = true
-                    } label: { Label("Compose", systemImage: "plus") }
-                }
-                .padding(8)
-                Divider()
-                if filtered.isEmpty {
-                    ContentUnavailableView("No prompts yet",
-                        systemImage: "sparkles",
-                        description: Text("Compose a reusable prompt — describe what you want and the built-in AI drafts a template with fill-in fields."))
-                } else {
-                    List(filtered, selection: $selected) { prompt in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(prompt.title).font(.headline).lineLimit(1)
-                            Text(prompt.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        .tag(prompt)
-                    }
-                }
-            }
-            .frame(minWidth: 260, idealWidth: 300)
-
-            Group {
-                if let prompt = selected {
-                    MacPromptDetail(prompt: prompt, store: store)
-                } else {
-                    ContentUnavailableView("Select a prompt", systemImage: "doc.text")
-                }
-            }
-            .frame(minWidth: 380)
+            sidebar.frame(minWidth: 240, idealWidth: 300)
+            composer.frame(minWidth: 440)
         }
         .navigationTitle("Prompts")
-        .sheet(isPresented: $showComposer) {
-            MacComposerView { newPrompt in
-                store.add(newPrompt)
-                selected = newPrompt
-            }
-        }
+        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
+        .onDisappear { saveCurrentIfDirty(asID: currentID) }
     }
-}
 
-private struct MacPromptDetail: View {
-    let prompt: Prompt
-    let store: MacPromptStore
-    @State private var values: [String: String] = [:]
-    @State private var copied = false
+    // MARK: Sidebar
 
-    private var rendered: String { prompt.render(values: values) }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(prompt.title).font(.title2.bold())
-                if !prompt.resolvedFields().isEmpty {
-                    GroupBox("Fill in") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(prompt.resolvedFields()) { field in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(field.label).font(.caption).foregroundStyle(.secondary)
-                                    TextField(field.hint, text: Binding(
-                                        get: { values[field.key] ?? "" },
-                                        set: { values[field.key] = $0 }), axis: .vertical)
-                                        .textFieldStyle(.roundedBorder)
-                                        .lineLimit(field.multiline ? 2...6 : 1...2)
-                                }
-                            }
-                        }
-                    }
-                }
-                GroupBox("Prompt") {
-                    Text(rendered)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(4)
-                }
-                HStack {
-                    Button {
-                        MacClipboard.copy(rendered)
-                        copied = true
-                        Task { try? await Task.sleep(for: .seconds(1.4)); copied = false }
-                    } label: {
-                        Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-                    Spacer()
-                    Button(role: .destructive) { store.delete(prompt) } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-            .padding()
-        }
-    }
-}
-
-struct MacComposerView: View {
-    var onSave: (Prompt) -> Void
-    @State private var coordinator = AIEngineCoordinator.shared
-    @State private var intent = ""
-    @State private var template: ComposedTemplate?
-    @State private var bodyText = ""
-    @State private var title = ""
-    @State private var isWorking = false
-    @State private var error: String?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Compose a prompt").font(.title2.bold())
-            Text("Describe what you want to achieve. The AI drafts a reusable template with fill-in fields you can edit.")
-                .font(.callout).foregroundStyle(.secondary)
-            TextField("e.g. Write thorough unit tests for a function", text: $intent, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(2...4)
+    private var sidebar: some View {
+        VStack(spacing: 0) {
             HStack {
-                Button {
-                    compose()
-                } label: { Label("Draft with AI", systemImage: "sparkles") }
-                .disabled(intent.trimmingCharacters(in: .whitespaces).isEmpty || isWorking)
-                if isWorking { ProgressView().controlSize(.small) }
-                if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                TextField("Search drafts", text: $search)
+                    .textFieldStyle(.roundedBorder)
+                Button { newDraft() } label: { Image(systemName: "square.and.pencil") }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .help("New draft")
+            }
+            .padding(8)
+            Divider()
+            if filtered.isEmpty {
+                ContentUnavailableView(
+                    search.isEmpty ? "No saved drafts" : "No matches",
+                    systemImage: "sparkles",
+                    description: Text(search.isEmpty
+                        ? "Write a prompt on the right, then Save it to keep it here."
+                        : "No drafts match “\(search)”."))
+            } else {
+                List(filtered, selection: $currentID) { prompt in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Self.title(for: prompt.body)).font(.headline).lineLimit(1)
+                        Text(prompt.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    .tag(prompt.id)
+                }
+            }
+        }
+    }
+
+    // MARK: Composer
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(hasContent ? Self.title(for: draft) : "New draft")
+                    .font(.title3.bold())
+                    .lineLimit(1)
+                Spacer()
+                if isEnhancing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Enhancing with \(coordinator.selection.displayName)…")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
 
-            if template != nil {
-                Divider()
-                TextField("Title", text: $title).textFieldStyle(.roundedBorder)
-                Text("Template body — edit freely; {{fields}} become fill-ins.")
-                    .font(.caption).foregroundStyle(.secondary)
-                TextEditor(text: $bodyText)
-                    .font(.callout.monospaced())
-                    .frame(minHeight: 160)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            ZStack(alignment: .topLeading) {
+                if draft.isEmpty {
+                    Text("Describe what you want your AI coding agent to do…")
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8).padding(.leading, 6)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $draft)
+                    .font(.body)
+                    .focused($editorFocused)
+                    .scrollContentBackground(.hidden)
+            }
+            .frame(minHeight: 240)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            .accessibilityLabel("Prompt draft")
+
+            actionBar
+            footer
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 8) {
+            Button { enhance() } label: {
+                Label(preEnhance == nil ? "Enhance with AI" : "Enhance again", systemImage: "sparkles")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!hasContent || isEnhancing)
+
+            Button { copyDraft() } label: { Label("Copy", systemImage: "doc.on.doc") }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(!hasContent)
+
+            Button { saveDraft() } label: {
+                Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
+            }
+            .keyboardShortcut("s", modifiers: .command)
+            .disabled(!hasContent)
+
+            if preEnhance != nil {
+                Button { revertEnhance() } label: {
+                    Label("Undo enhance", systemImage: "arrow.uturn.backward")
+                }
             }
 
             Spacer()
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Save") { saveAndClose() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(template == nil || bodyText.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding()
-        .frame(width: 560, height: 540)
-    }
 
-    private func compose() {
-        isWorking = true; error = nil
-        Task {
-            let result = await coordinator.compose(intent: intent)
-            await MainActor.run {
-                isWorking = false
-                switch result {
-                case .success(let t, _):
-                    template = t
-                    title = t.title
-                    bodyText = t.body
-                case .failure(let f, _):
-                    error = f.message
+            if currentID != nil {
+                Button(role: .destructive) { deleteCurrent() } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
         }
     }
 
-    private func saveAndClose() {
-        guard let template else { return }
-        var prompt = template.toPrompt()
-        prompt.title = title.isEmpty ? template.title : title
-        prompt.body = bodyText
-        prompt.fields = prompt.resolvedFields()
-        onSave(prompt)
-        dismiss()
+    @ViewBuilder
+    private var footer: some View {
+        if let errorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.orange)
+        } else if let statusMessage {
+            Label(statusMessage, systemImage: "checkmark.circle.fill")
+                .font(.caption).foregroundStyle(.green)
+        } else {
+            Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Set up AI in Settings.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: Actions
+
+    private func enhance() {
+        guard hasContent, !isEnhancing else { return }
+        editorFocused = false
+        errorMessage = nil; statusMessage = nil
+        let snapshot = draft
+        let capturedID = currentID
+        isEnhancing = true
+        Task {
+            let result = await coordinator.enhance(trimmed)
+            await MainActor.run {
+                isEnhancing = false
+                // Ignore the result if the user switched drafts or edited while it ran.
+                guard currentID == capturedID, draft == snapshot else { return }
+                switch result {
+                case .success(let improved, _):
+                    preEnhance = snapshot
+                    draft = improved
+                case .failure(let f, _):
+                    errorMessage = friendly(f)
+                }
+            }
+        }
+    }
+
+    private func revertEnhance() {
+        guard let original = preEnhance else { return }
+        draft = original
+        preEnhance = nil
+    }
+
+    private func copyDraft() {
+        MacClipboard.copy(trimmed)
+        flash("Copied to clipboard")
+    }
+
+    private func saveDraft() {
+        guard hasContent else { return }
+        if let id = currentID, var existing = store.prompts.first(where: { $0.id == id }) {
+            existing.body = trimmed
+            existing.title = Self.title(for: trimmed)
+            store.update(existing)
+            flash("Draft updated")
+        } else {
+            let prompt = Prompt(title: Self.title(for: trimmed), category: .general, body: trimmed)
+            store.add(prompt)
+            suppressSelectionHandling = true
+            currentID = prompt.id
+            flash("Draft saved")
+        }
+        preEnhance = nil
+    }
+
+    private func newDraft() {
+        saveCurrentIfDirty(asID: currentID)
+        suppressSelectionHandling = true
+        currentID = nil
+        draft = ""
+        preEnhance = nil; errorMessage = nil; statusMessage = nil
+        editorFocused = true
+    }
+
+    private func deleteCurrent() {
+        guard let id = currentID, let prompt = store.prompts.first(where: { $0.id == id }) else { return }
+        store.delete(prompt)
+        suppressSelectionHandling = true
+        currentID = nil
+        draft = ""
+        preEnhance = nil
+    }
+
+    /// Loads a newly-selected draft, auto-saving the previous editor content first.
+    private func handleSelectionChange(from old: UUID?, to new: UUID?) {
+        if suppressSelectionHandling { suppressSelectionHandling = false; return }
+        saveCurrentIfDirty(asID: old)
+        preEnhance = nil; errorMessage = nil; statusMessage = nil
+        if let new, let prompt = store.prompts.first(where: { $0.id == new }) {
+            draft = prompt.body
+        } else {
+            draft = ""
+        }
+    }
+
+    /// Persists the current editor content to `id` (or as a new draft) when it
+    /// has unsaved changes — prevents silent data loss on switch/new/close.
+    private func saveCurrentIfDirty(asID id: UUID?) {
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return }
+        if let id, var existing = store.prompts.first(where: { $0.id == id }) {
+            guard existing.body != body else { return }
+            existing.body = body
+            existing.title = Self.title(for: body)
+            store.update(existing)
+        } else if id == nil {
+            let prompt = Prompt(title: Self.title(for: body), category: .general, body: body)
+            store.add(prompt)
+        }
+    }
+
+    private func flash(_ message: String) {
+        statusMessage = message
+        errorMessage = nil
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run { if statusMessage == message { statusMessage = nil } }
+        }
+    }
+
+    private func friendly(_ failure: AIFailure) -> String {
+        switch failure {
+        case .missingKey:
+            return "No API key set. Add one in Settings, or switch to On-device."
+        case .unavailable(let reason):
+            return "\(reason.message) Choose “My API key” in Settings to use a provider instead."
+        case .network, .provider, .rateLimited:
+            return failure.message + " Your draft is unchanged — try again."
+        default:
+            return failure.message
+        }
+    }
+
+    private static func title(for body: String) -> String {
+        let firstLine = body
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let base = firstLine.isEmpty ? "Untitled draft" : firstLine
+        return base.count > 60 ? String(base.prefix(60)) + "…" : base
     }
 }
-
 
 // MARK: - Notes
 
@@ -405,6 +501,8 @@ struct MacNotesPane: View {
                 HStack {
                     TextField("Search notes", text: $search).textFieldStyle(.roundedBorder)
                     Button { selected = store.newNote() } label: { Image(systemName: "square.and.pencil") }
+                        .help("New note")
+                        .accessibilityLabel("New note")
                 }
                 .padding(8)
                 Divider()
@@ -456,6 +554,8 @@ private struct MacNoteEditor: View {
                     Spacer()
                     Button { MacClipboard.copy(note.body) } label: { Label("Copy", systemImage: "doc.on.doc") }
                     Button(role: .destructive) { store.delete(note) } label: { Image(systemName: "trash") }
+                        .help("Delete note")
+                        .accessibilityLabel("Delete note")
                 }
                 TextEditor(text: $note.body)
                     .font(.body)
@@ -470,6 +570,7 @@ private struct MacNoteEditor: View {
                                 Button { item.isDone.toggle(); store.update(note) } label: {
                                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
                                 }.buttonStyle(.plain)
+                                .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
                                 TextField("Item", text: $item.text)
                                     .textFieldStyle(.plain)
                                     .strikethrough(item.isDone)
@@ -507,10 +608,11 @@ struct MacToolsSettingsPane: View {
 
     var body: some View {
         Form {
-            Section("AI engine") {
-                Picker("Engine", selection: $coordinator.selection) {
+            Section("AI") {
+                Picker("Mode", selection: $coordinator.selection) {
                     ForEach(AIEngineSelection.allCases) { Text($0.displayName).tag($0) }
                 }
+                .accessibilityLabel("AI mode")
                 Text(coordinator.selection.detail).font(.caption).foregroundStyle(.secondary)
                 if coordinator.selection == .appleOnDevice, let appleReason {
                     Label(appleReason, systemImage: "exclamationmark.triangle")
@@ -549,7 +651,7 @@ struct MacToolsSettingsPane: View {
             }
 
             Section {
-                Text("Prompts and notes are stored only on this Mac. Nothing is synced. With “My API key”, your prompts are sent to the provider you choose over HTTPS; the other engines stay fully on-device.")
+                Text("Prompts and notes are stored only on this Mac. Nothing is synced. On-device stays fully local; with “My API key”, your prompts are sent to the provider you choose over HTTPS.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

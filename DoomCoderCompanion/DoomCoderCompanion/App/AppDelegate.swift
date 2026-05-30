@@ -87,6 +87,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let slug = Self.agentSlug(from: userInfo) {
+            Task { @MainActor in AppRouter.shared.openAgent(slug: slug) }
+        }
         completionHandler()
+    }
+
+    /// Extracts the agent raw value from a CloudKit query-subscription payload:
+    /// `userInfo["ck"]["qry"]["af"]["agent"]["value"]`.
+    private nonisolated static func agentSlug(from userInfo: [AnyHashable: Any]) -> String? {
+        guard
+            let ck  = userInfo["ck"]  as? [String: Any],
+            let qry = ck["qry"]       as? [String: Any],
+            let af  = qry["af"]       as? [String: Any],
+            let fld = af["agent"]     as? [String: Any],
+            let val = fld["value"]    as? String
+        else { return nil }
+        return val
     }
 }

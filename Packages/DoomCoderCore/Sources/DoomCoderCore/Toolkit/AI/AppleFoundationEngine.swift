@@ -58,42 +58,6 @@ public struct AppleFoundationEngine: AIEngine {
         return .failure(.unavailable(.platformUnsupported), tier: tier)
     }
 
-    // MARK: Compose
-
-    public func compose(intent: String) async -> AIResult<ComposedTemplate> {
-        let trimmed = intent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .failure(.malformed, tier: tier) }
-
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
-            if let f = await probe() { return .failure(f, tier: tier) }
-            let categories = PromptCategory.allCases.map(\.rawValue).joined(separator: ", ")
-            let instructions = """
-            You build REUSABLE prompt templates for AI coding agents. Given a user's \
-            intent, produce a template whose body uses {{snake_case}} placeholders for \
-            the parts the user should fill in, plus a matching field for each placeholder. \
-            Choose a category from: \(categories). Do not solve the task.
-            """
-            do {
-                let session = LanguageModelSession(instructions: instructions)
-                let response = try await session.respond(to: trimmed, generating: GeneratedTemplate.self)
-                let gen = response.content
-                let rawFields = gen.fields.map {
-                    ComposedField(key: $0.key, label: $0.label, hint: $0.hint, multiline: $0.multiline)
-                }
-                guard let template = TemplateValidator.validate(
-                    title: gen.title, category: gen.category, body: gen.body, fields: rawFields) else {
-                    return .failure(.malformed, tier: tier)
-                }
-                return .success(template, tier: tier)
-            } catch {
-                return .failure(Self.mapError(error), tier: tier)
-            }
-        }
-        #endif
-        return .failure(.unavailable(.platformUnsupported), tier: tier)
-    }
-
     // MARK: - Error mapping
 
     #if canImport(FoundationModels)
@@ -125,33 +89,3 @@ public struct AppleFoundationEngine: AIEngine {
         return .malformed
     }
 }
-
-// MARK: - @Generable structured-output mirrors (gated)
-
-#if canImport(FoundationModels)
-@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
-@Generable
-struct GeneratedField {
-    @Guide(description: "snake_case identifier matching a {{placeholder}} in the body")
-    var key: String
-    @Guide(description: "Short human-readable label")
-    var label: String
-    @Guide(description: "One-line hint describing what to enter")
-    var hint: String
-    @Guide(description: "True if the field expects multi-line text like code")
-    var multiline: Bool
-}
-
-@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
-@Generable
-struct GeneratedTemplate {
-    @Guide(description: "Short, descriptive title for the template")
-    var title: String
-    @Guide(description: "Category keyword (e.g. refactor, tests, debug, review, explain, git, docs, scaffold, general)")
-    var category: String
-    @Guide(description: "Prompt body containing {{snake_case}} placeholders for fill-in parts")
-    var body: String
-    @Guide(description: "One entry per placeholder in the body")
-    var fields: [GeneratedField]
-}
-#endif
