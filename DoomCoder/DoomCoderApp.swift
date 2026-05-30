@@ -29,6 +29,13 @@ struct DoomCoderApp: App {
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
+
+        Window("DoomCoder Tools", id: "tools") {
+            ToolsRootView()
+                .background(WindowOpenerBridge())
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 
@@ -92,7 +99,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             // older SDK paths or stale saved window state can briefly spawn
             // a Settings/About/Configure window at launch. Close any that
             // appear before the user ever sees them.
-            let auxIDs: Set<String> = ["settings", "about", "configureAgents"]
+            let auxIDs: Set<String> = ["settings", "about", "configureAgents", "tools"]
             for win in NSApp.windows {
                 if let id = win.identifier?.rawValue, auxIDs.contains(id) {
                     win.close()
