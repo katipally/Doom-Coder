@@ -77,6 +77,7 @@ struct SettingsView: View {
         .task {
             await refreshNotifStatus()
             await probeApple()
+            await ai.loadModelsIfNeeded(for: ai.provider)
         }
     }
 
@@ -84,6 +85,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var aiSection: some View {
+        let _ = ai.revision   // subscribe so model/key changes re-render this section
         Section {
             Picker("Mode", selection: Binding(
                 get: { ai.selection },
@@ -133,7 +135,11 @@ struct SettingsView: View {
     private var remoteKeyControls: some View {
         Picker("Provider", selection: Binding(
             get: { ai.provider },
-            set: { ai.provider = $0; keyTestState = .idle }
+            set: { newProvider in
+                ai.provider = newProvider
+                keyTestState = .idle
+                Task { await ai.loadModelsIfNeeded(for: newProvider) }
+            }
         )) {
             ForEach(AIProvider.allCases) { p in
                 Text(p.displayName).tag(p)
@@ -151,10 +157,20 @@ struct SettingsView: View {
             let models = ai.discoveredModels[ai.provider] ?? []
             if !models.isEmpty {
                 Picker("Model", selection: Binding(
-                    get: { ai.selectedModel(for: ai.provider) },
+                    get: {
+                        let current = ai.selectedModel(for: ai.provider)
+                        return models.contains(current) ? current : (models.first ?? current)
+                    },
                     set: { ai.setSelectedModel($0, for: ai.provider) }
                 )) {
                     ForEach(models, id: \.self) { Text($0).tag($0) }
+                }
+            } else if keyTestState == .testing {
+                LabeledContent("Model") {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading…").foregroundStyle(.secondary)
+                    }
                 }
             } else {
                 LabeledContent("Model") {
@@ -188,12 +204,13 @@ struct SettingsView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             Button {
-                ai.setKey(aiKeyInput, for: ai.provider)
+                let entered = aiKeyInput
                 aiKeyInput = ""
-                keyTestState = .idle
+                ai.setKey(entered, for: ai.provider)
                 Haptics.success()
+                Task { await testKey() }   // auto-validate + fetch models on save
             } label: {
-                Label("Save key", systemImage: "key.fill")
+                Label("Save & test key", systemImage: "key.fill")
             }
             .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Link(destination: ai.provider.consoleURL) {

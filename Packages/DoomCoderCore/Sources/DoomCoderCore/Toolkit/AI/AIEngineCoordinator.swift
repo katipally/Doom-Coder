@@ -80,6 +80,7 @@ public final class AIEngineCoordinator {
 
     public func clearKey(for provider: AIProvider) {
         Keychain.delete(account: account(provider))
+        discoveredModels[provider] = []
         revision += 1
     }
 
@@ -102,15 +103,27 @@ public final class AIEngineCoordinator {
         case .success(let models):
             let ids = models.map(\.id)
             discoveredModels[provider] = ids
-            // Auto-pick a sensible default if the saved one isn't offered.
-            if !ids.contains(selectedModel(for: provider)), let first = ids.first {
-                setSelectedModel(first, for: provider)
+            // Keep the user's saved model if it's still offered; otherwise fall
+            // back to the recommended default, then to the first available model.
+            let current = selectedModel(for: provider)
+            if !ids.contains(current) {
+                let recommended = provider.defaultModel
+                setSelectedModel(ids.contains(recommended) ? recommended : (ids.first ?? current),
+                                 for: provider)
             }
             revision += 1
             return .success(ids)
         case .failure(let f):
             return .failure(f)
         }
+    }
+
+    /// Fetches the model list for a provider if a key is present but no models
+    /// have been discovered yet. Safe to call on view appear; no-ops otherwise.
+    @discardableResult
+    public func loadModelsIfNeeded(for provider: AIProvider) async -> Result<[String], AIFailure>? {
+        guard hasKey(for: provider), (discoveredModels[provider] ?? []).isEmpty else { return nil }
+        return await testKey(for: provider)
     }
 
     // MARK: - Availability

@@ -11,6 +11,9 @@ struct PromptsView: View {
     @State private var store = PromptStore.shared
     @State private var ai = AIEngineCoordinator.shared
 
+    enum Mode: String, Hashable { case compose, library }
+    @State private var mode: Mode = .compose
+
     @State private var draft = ""
     @State private var currentDraftID: UUID?
     @State private var preEnhance: String?
@@ -20,6 +23,8 @@ struct PromptsView: View {
     @State private var errorMessage: String?
     @State private var showNewConfirm = false
 
+    @State private var librarySearch = ""
+
     @FocusState private var editorFocused: Bool
 
     private var trimmedDraft: String {
@@ -28,31 +33,66 @@ struct PromptsView: View {
     private var hasContent: Bool { !trimmedDraft.isEmpty }
 
     var body: some View {
-        Form {
-            composerSection
-            if !store.prompts.isEmpty {
-                draftsSection
-            }
-        }
-        .navigationTitle("Prompts")
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    startNewDraft()
-                } label: {
-                    Label("New draft", systemImage: "square.and.pencil")
+        content
+            .navigationTitle("Prompts")
+            .navigationBarTitleDisplayMode(.large)
+            .safeAreaInset(edge: .top) {
+                Picker("View", selection: $mode.animation(.easeInOut(duration: 0.2))) {
+                    Text("Compose").tag(Mode.compose)
+                    Text("Library").tag(Mode.library)
                 }
-                .disabled(!hasContent && currentDraftID == nil)
-                .accessibilityLabel("New draft")
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.bar)
             }
-        }
-        .alert("New draft?", isPresented: $showNewConfirm) {
-            Button("Save & start new") { saveDraft(); clearEditor() }
-            Button("Discard", role: .destructive) { clearEditor() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your current draft has unsaved changes.")
+            .toolbar {
+                if mode == .compose {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            startNewDraft()
+                        } label: {
+                            Label("New draft", systemImage: "square.and.pencil")
+                        }
+                        .disabled(!hasContent && currentDraftID == nil)
+                        .accessibilityLabel("New draft")
+                    }
+                }
+            }
+            .alert("New draft?", isPresented: $showNewConfirm) {
+                Button("Save & start new") { saveDraft(); clearEditor() }
+                Button("Discard", role: .destructive) { clearEditor() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your current draft has unsaved changes.")
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch mode {
+        case .compose:
+            Form {
+                composerSection
+                if !store.prompts.isEmpty {
+                    draftsSection
+                }
+            }
+        case .library:
+            libraryList
+                .overlay(alignment: .bottom) {
+                    if let statusMessage {
+                        Label(statusMessage, systemImage: "checkmark.circle.fill")
+                            .font(.callout.weight(.medium))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(.regularMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder(.green.opacity(0.4)))
+                            .padding(.bottom, 12)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .accessibilityHidden(true)
+                    }
+                }
         }
     }
 
@@ -192,6 +232,113 @@ struct PromptsView: View {
                 if removingCurrent { currentDraftID = nil }
             }
         }
+    }
+
+    // MARK: - Library
+
+    private var filteredLibrary: [(category: PromptCategory, prompts: [Prompt])] {
+        let query = librarySearch.trimmingCharacters(in: .whitespaces).lowercased()
+        return PromptLibrary.grouped().compactMap { group in
+            guard !query.isEmpty else { return group }
+            let matches = group.prompts.filter { prompt in
+                prompt.title.lowercased().contains(query)
+                    || prompt.body.lowercased().contains(query)
+                    || prompt.tags.contains { $0.lowercased().contains(query) }
+            }
+            return matches.isEmpty ? nil : (group.category, matches)
+        }
+    }
+
+    @ViewBuilder
+    private var libraryList: some View {
+        List {
+            if filteredLibrary.isEmpty {
+                ContentUnavailableView.search(text: librarySearch)
+            } else {
+                ForEach(filteredLibrary, id: \.category) { group in
+                    Section {
+                        ForEach(group.prompts) { prompt in
+                            libraryRow(prompt)
+                        }
+                    } header: {
+                        Label(group.category.displayName, systemImage: group.category.symbol)
+                    }
+                }
+            }
+        }
+        .searchable(text: $librarySearch, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search prompts")
+    }
+
+    @ViewBuilder
+    private func libraryRow(_ prompt: Prompt) -> some View {
+        Button {
+            openInComposer(prompt)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(prompt.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(prompt.render(values: [:]))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    copyLibraryPrompt(prompt)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.body)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Copy “\(prompt.title)”")
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens this prompt in the composer to tailor it")
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                copyLibraryPrompt(prompt)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            .tint(.accentColor)
+        }
+        .contextMenu {
+            Button {
+                copyLibraryPrompt(prompt)
+            } label: {
+                Label("Copy prompt", systemImage: "doc.on.doc")
+            }
+            Button {
+                openInComposer(prompt)
+            } label: {
+                Label("Open in composer", systemImage: "square.and.pencil")
+            }
+        }
+    }
+
+    private func copyLibraryPrompt(_ prompt: Prompt) {
+        UIPasteboard.general.string = prompt.render(values: [:])
+        flashStatus("Copied “\(prompt.title)”")
+        Haptics.success()
+    }
+
+    /// Loads a library prompt's raw template into the composer as a new, unsaved
+    /// draft so the user can fill in the `{{placeholders}}` and enhance/copy it.
+    private func openInComposer(_ prompt: Prompt) {
+        draft = prompt.body
+        currentDraftID = nil
+        preEnhance = nil
+        errorMessage = nil
+        statusMessage = nil
+        librarySearch = ""
+        withAnimation(.easeInOut(duration: 0.2)) { mode = .compose }
+        Haptics.tap()
     }
 
     // MARK: - Actions

@@ -39,6 +39,7 @@ public enum AIUnavailableReason: Sendable, Equatable {
     case appleIntelligenceNotEnabled
     case modelNotReady
     case platformUnsupported
+    case simulatorUnsupported
     case unknown(String)
 
     public var message: String {
@@ -51,6 +52,8 @@ public enum AIUnavailableReason: Sendable, Equatable {
             return "The on-device model is still downloading. Try again shortly."
         case .platformUnsupported:
             return "On-device AI requires iOS 26 or macOS 26."
+        case .simulatorUnsupported:
+            return "On-device AI isn't available in the iOS Simulator. Run on a real device, or choose “My API key.”"
         case .unknown(let detail):
             return detail.isEmpty ? "On-device AI is unavailable." : detail
         }

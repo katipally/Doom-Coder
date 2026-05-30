@@ -45,6 +45,9 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     public var lastAppliedCommandId: String?
     /// When `lastAppliedCommandId` was applied.
     public var lastAppliedAt: Date?
+    /// App-wide master suspend gate state ("master on/off"). `nil` on older Macs
+    /// that predate remote master control — treated as ON for display.
+    public var masterEnabled: Bool?
 
     public init(macId: String,
                 name: String,
@@ -62,6 +65,7 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 elapsedSeconds: Int? = nil,
                 lastAppliedCommandId: String? = nil,
                 lastAppliedAt: Date? = nil,
+                masterEnabled: Bool? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -79,6 +83,7 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.elapsedSeconds = elapsedSeconds
         self.lastAppliedCommandId = lastAppliedCommandId
         self.lastAppliedAt = lastAppliedAt
+        self.masterEnabled = masterEnabled
         self.schemaVersion = schemaVersion
     }
 }
@@ -118,6 +123,7 @@ extension MacStatusRecord {
         if let e = elapsedSeconds { r["elapsedSeconds"] = e as CKRecordValue } else { r["elapsedSeconds"] = nil }
         if let c = lastAppliedCommandId { r["lastAppliedCommandId"] = c as CKRecordValue } else { r["lastAppliedCommandId"] = nil }
         if let t = lastAppliedAt { r["lastAppliedAt"] = t as CKRecordValue } else { r["lastAppliedAt"] = nil }
+        if let me = masterEnabled { r["masterEnabled"] = (me ? 1 : 0) as CKRecordValue } else { r["masterEnabled"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -144,6 +150,7 @@ extension MacStatusRecord {
             elapsedSeconds: r["elapsedSeconds"] as? Int,
             lastAppliedCommandId: r["lastAppliedCommandId"] as? String,
             lastAppliedAt: r["lastAppliedAt"] as? Date,
+            masterEnabled: (r["masterEnabled"] as? Int).map { $0 != 0 },
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

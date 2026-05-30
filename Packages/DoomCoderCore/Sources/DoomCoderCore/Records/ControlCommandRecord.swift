@@ -29,6 +29,10 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
         case setScreenMode
         /// value = integer hours as a string ("0" = never)
         case setSessionTimerHours
+        /// value = "true" | "false" — the app-wide master suspend gate. Applied
+        /// even while the gate is off (otherwise it could never be turned back
+        /// on remotely); all OTHER verbs are ignored while the gate is off.
+        case setMasterEnabled
     }
 
     public var commandId: String
