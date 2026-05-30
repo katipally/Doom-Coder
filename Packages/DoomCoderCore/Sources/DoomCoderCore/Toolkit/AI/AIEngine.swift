@@ -90,8 +90,8 @@ public enum AIFailure: Error, Sendable, Equatable {
         }
     }
 
-    /// True for failures the user can act on (vs. ones we silently fall back from
-    /// in automatic mode).
+    /// True for failures the user can act on (e.g. add a key, retry) vs. ones
+    /// that just need a clear message (unsupported device, safety refusal).
     public var isActionable: Bool {
         switch self {
         case .network, .provider, .rateLimited, .missingKey: return true
@@ -121,52 +121,6 @@ public enum AIResult<T: Sendable>: Sendable {
     }
 }
 
-// MARK: - Composer output (tier-agnostic, validated)
-
-/// A single fill-in field the composer produced for a template.
-public struct ComposedField: Codable, Sendable, Hashable {
-    public var key: String
-    public var label: String
-    public var hint: String
-    public var multiline: Bool
-
-    public init(key: String, label: String, hint: String = "", multiline: Bool = false) {
-        self.key = key
-        self.label = label
-        self.hint = hint
-        self.multiline = multiline
-    }
-}
-
-/// A validated, reusable prompt template emitted by the composer. `body` is
-/// guaranteed to contain only strict `{{snake_case}}` tokens, and every token has
-/// a matching entry in `fields`.
-public struct ComposedTemplate: Codable, Sendable, Hashable {
-    public var title: String
-    public var category: PromptCategory
-    public var body: String
-    public var fields: [ComposedField]
-
-    public init(title: String, category: PromptCategory, body: String, fields: [ComposedField]) {
-        self.title = title
-        self.category = category
-        self.body = body
-        self.fields = fields
-    }
-
-    /// Converts to a persistable `Prompt`.
-    public func toPrompt() -> Prompt {
-        Prompt(
-            title: title,
-            category: category,
-            body: body,
-            fields: fields.map { PromptField(key: $0.key, label: $0.label, hint: $0.hint, multiline: $0.multiline) },
-            tags: [],
-            isCurated: false
-        )
-    }
-}
-
 // MARK: - Engine protocol
 
 /// A single AI backend. Both tiers implement every capability. The app stays
@@ -180,7 +134,4 @@ public protocol AIEngine: Sendable {
 
     /// Rewrites a rough idea into a clear, structured prompt.
     func enhance(_ raw: String) async -> AIResult<String>
-
-    /// Builds a reusable template (body + fill-in fields) from a freeform intent.
-    func compose(intent: String) async -> AIResult<ComposedTemplate>
 }

@@ -21,15 +21,12 @@ struct CompanionApp: App {
         }
     }
 
-    /// Handles `doomcoder://agent/<slug>` URLs.
-    /// Navigates to AgentLogsView for the specified agent.
+    /// Handles `doomcoder://agent/<slug>` URLs by routing to the agent's logs.
     private func handleDeeplink(_ url: URL) {
         guard url.scheme?.lowercased() == "doomcoder",
               url.host?.lowercased() == "agent",
               let slug = url.pathComponents.dropFirst().first, !slug.isEmpty
         else { return }
-        // TODO: Navigate to AgentLogsView for the agent with raw value = slug
-        // For now, this is a placeholder — full navigation requires environment object routing
-        print("[CompanionApp] Deeplink to agent: \(slug)")
+        AppRouter.shared.openAgent(slug: slug)
     }
 }
