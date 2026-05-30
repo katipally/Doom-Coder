@@ -30,11 +30,37 @@ struct DoomCoderApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
 
-        Window("DoomCoder Tools", id: "tools") {
-            ToolsRootView()
+        // Floating toolkit surfaces — each its own window (above all apps,
+        // incl. full-screen), with a native traffic-light close button.
+        // Default sizes are generous so the sidebar + editor (+ optional
+        // inspector) never clip; min size tracks the actual content.
+        Window("Prompts", id: "prompts") {
+            NavigationStack { MacPromptsPane() }
+                .frame(minWidth: 720, minHeight: 520)
                 .background(WindowOpenerBridge())
+                .background(FloatingWindowConfigurator(autosaveName: "doomcoder.window.prompts"))
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1080, height: 700)
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+
+        Window("Notes", id: "notes") {
+            NavigationStack { MacNotesPane() }
+                .frame(minWidth: 700, minHeight: 480)
+                .background(WindowOpenerBridge())
+                .background(FloatingWindowConfigurator(autosaveName: "doomcoder.window.notes"))
+        }
+        .defaultSize(width: 1000, height: 660)
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+
+        Window("Settings", id: "settings") {
+            MacSettingsSurface()
+                .background(WindowOpenerBridge())
+                .background(FloatingWindowConfigurator(autosaveName: "doomcoder.window.settings"))
+        }
+        .defaultSize(width: 680, height: 600)
+        .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
     }
 }
@@ -99,7 +125,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             // older SDK paths or stale saved window state can briefly spawn
             // a Settings/About/Configure window at launch. Close any that
             // appear before the user ever sees them.
-            let auxIDs: Set<String> = ["settings", "about", "configureAgents", "tools"]
+            let auxIDs: Set<String> = ["settings", "about", "configureAgents", "prompts", "notes"]
             for win in NSApp.windows {
                 if let id = win.identifier?.rawValue, auxIDs.contains(id) {
                     win.close()

@@ -11,9 +11,6 @@ struct PromptsView: View {
     @State private var store = PromptStore.shared
     @State private var ai = AIEngineCoordinator.shared
 
-    enum Mode: String, Hashable { case compose, library }
-    @State private var mode: Mode = .compose
-
     @State private var draft = ""
     @State private var currentDraftID: UUID?
     @State private var preEnhance: String?
@@ -23,9 +20,10 @@ struct PromptsView: View {
     @State private var errorMessage: String?
     @State private var showNewConfirm = false
 
+    @State private var showLibrary = false
     @State private var librarySearch = ""
 
-    @FocusState private var editorFocused: Bool
+    @State private var editorFocused = false
 
     private var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,30 +32,30 @@ struct PromptsView: View {
 
     var body: some View {
         content
+            // Large title, consistent with Notes and Dashboard.
             .navigationTitle("Prompts")
-            .navigationBarTitleDisplayMode(.large)
-            .safeAreaInset(edge: .top) {
-                Picker("View", selection: $mode.animation(.easeInOut(duration: 0.2))) {
-                    Text("Compose").tag(Mode.compose)
-                    Text("Library").tag(Mode.library)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.bar)
-            }
             .toolbar {
-                if mode == .compose {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            startNewDraft()
-                        } label: {
-                            Label("New draft", systemImage: "square.and.pencil")
-                        }
-                        .disabled(!hasContent && currentDraftID == nil)
-                        .accessibilityLabel("New draft")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showLibrary = true
+                        Haptics.tap()
+                    } label: {
+                        Label("Library", systemImage: "books.vertical")
                     }
+                    .accessibilityLabel("Prompt library")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        startNewDraft()
+                    } label: {
+                        Label("New draft", systemImage: "square.and.pencil")
+                    }
+                    .disabled(!hasContent && currentDraftID == nil)
+                    .accessibilityLabel("New draft")
+                }
+            }
+            .sheet(isPresented: $showLibrary) {
+                librarySheet
             }
             .alert("New draft?", isPresented: $showNewConfirm) {
                 Button("Save & start new") { saveDraft(); clearEditor() }
@@ -68,32 +66,14 @@ struct PromptsView: View {
             }
     }
 
-    @ViewBuilder
     private var content: some View {
-        switch mode {
-        case .compose:
-            Form {
-                composerSection
-                if !store.prompts.isEmpty {
-                    draftsSection
-                }
+        Form {
+            composerSection
+            if !store.prompts.isEmpty {
+                draftsSection
             }
-        case .library:
-            libraryList
-                .overlay(alignment: .bottom) {
-                    if let statusMessage {
-                        Label(statusMessage, systemImage: "checkmark.circle.fill")
-                            .font(.callout.weight(.medium))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(.regularMaterial, in: Capsule())
-                            .overlay(Capsule().strokeBorder(.green.opacity(0.4)))
-                            .padding(.bottom, 12)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                            .accessibilityHidden(true)
-                    }
-                }
         }
+        .refreshable { store.reload() }
     }
 
     // MARK: - Composer
@@ -101,22 +81,16 @@ struct PromptsView: View {
     @ViewBuilder
     private var composerSection: some View {
         Section {
-            ZStack(alignment: .topLeading) {
-                if draft.isEmpty {
-                    Text("Describe what you want your AI coding agent to do…")
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-                        .padding(.leading, 5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-                TextEditor(text: $draft)
-                    .frame(minHeight: 200)
-                    .focused($editorFocused)
-                    .scrollContentBackground(.hidden)
-                    .accessibilityLabel("Prompt draft")
-            }
-            .font(.body)
+            // Fixed-height, internally-scrolling editor: a long draft (or one
+            // loaded from a saved draft) no longer expands the editor to full
+            // screen. The chevron appears only when content overflows.
+            PromptEditorBox(
+                text: $draft,
+                isFocused: $editorFocused,
+                placeholder: "Describe what you want your AI coding agent to do…"
+            )
+            .frame(height: 240)
+            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
 
             actionBar
 
@@ -134,8 +108,6 @@ struct PromptsView: View {
                     .font(.callout)
                     .transition(.opacity)
             }
-        } header: {
-            Text("Compose")
         } footer: {
             composerFooter
         }
@@ -249,25 +221,34 @@ struct PromptsView: View {
         }
     }
 
-    @ViewBuilder
-    private var libraryList: some View {
-        List {
-            if filteredLibrary.isEmpty {
-                ContentUnavailableView.search(text: librarySearch)
-            } else {
-                ForEach(filteredLibrary, id: \.category) { group in
-                    Section {
-                        ForEach(group.prompts) { prompt in
-                            libraryRow(prompt)
+    /// The curated prompt library, presented as a sheet (like the note editor).
+    /// Tapping a prompt loads it into the composer and dismisses the sheet.
+    private var librarySheet: some View {
+        NavigationStack {
+            List {
+                if filteredLibrary.isEmpty {
+                    ContentUnavailableView.search(text: librarySearch)
+                } else {
+                    ForEach(filteredLibrary, id: \.category) { group in
+                        Section {
+                            ForEach(group.prompts) { prompt in
+                                libraryRow(prompt)
+                            }
+                        } header: {
+                            Label(group.category.displayName, systemImage: group.category.symbol)
                         }
-                    } header: {
-                        Label(group.category.displayName, systemImage: group.category.symbol)
                     }
                 }
             }
+            .navigationTitle("Prompt Library")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $librarySearch, prompt: "Search prompts")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showLibrary = false }
+                }
+            }
         }
-        .searchable(text: $librarySearch, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search prompts")
     }
 
     @ViewBuilder
@@ -338,7 +319,7 @@ struct PromptsView: View {
         errorMessage = nil
         statusMessage = nil
         librarySearch = ""
-        withAnimation(.easeInOut(duration: 0.2)) { mode = .compose }
+        showLibrary = false
         Haptics.tap()
     }
 
@@ -467,5 +448,148 @@ struct PromptsView: View {
             .trimmingCharacters(in: .whitespaces) ?? ""
         let base = firstLine.isEmpty ? "Untitled draft" : firstLine
         return base.count > 60 ? String(base.prefix(60)) + "…" : base
+    }
+}
+
+// MARK: - Fixed-height prompt editor
+
+/// A fixed-height text editor that scrolls its content internally and surfaces a
+/// "scroll to bottom" affordance only when the text overflows the visible box.
+/// Backed by `UITextView` so we get reliable programmatic scrolling and a
+/// placeholder — SwiftUI's `TextEditor` exposes neither.
+private struct PromptEditorBox: View {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+
+    @State private var canScrollDown = false
+    @State private var scrollToken = 0
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ScrollableTextView(
+                text: $text,
+                isFocused: $isFocused,
+                canScrollDown: $canScrollDown,
+                scrollToBottomToken: scrollToken
+            )
+            .accessibilityLabel("Prompt draft")
+
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                    .padding(.leading, 6)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            // Only shown when there's content below the current scroll position
+            // (i.e. the user has scrolled up / isn't already at the bottom).
+            if canScrollDown {
+                Button {
+                    scrollToken &+= 1
+                    Haptics.tap()
+                } label: {
+                    Image(systemName: "arrow.down.to.line")
+                        .font(.footnote.weight(.semibold))
+                        .frame(width: 30, height: 30)
+                        .background(.regularMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.separator))
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .accessibilityLabel("Scroll to bottom of draft")
+                .transition(.opacity.combined(with: .scale))
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: canScrollDown)
+    }
+}
+
+/// `UITextView`-backed editor with two-way text + focus binding, overflow
+/// reporting, and a token-driven scroll-to-bottom.
+private struct ScrollableTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    @Binding var canScrollDown: Bool
+    var scrollToBottomToken: Int
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.delegate = context.coordinator
+        tv.font = UIFont.preferredFont(forTextStyle: .body)
+        tv.adjustsFontForContentSizeCategory = true
+        tv.backgroundColor = .clear
+        tv.textContainerInset = UIEdgeInsets(top: 8, left: 2, bottom: 8, right: 2)
+        tv.textContainer.lineFragmentPadding = 4
+        tv.alwaysBounceVertical = true
+        tv.keyboardDismissMode = .interactive
+        tv.text = text
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        if tv.text != text {
+            tv.text = text
+            context.coordinator.recomputeCanScrollDown(tv)
+        }
+
+        if isFocused, !tv.isFirstResponder {
+            DispatchQueue.main.async { tv.becomeFirstResponder() }
+        } else if !isFocused, tv.isFirstResponder {
+            DispatchQueue.main.async { tv.resignFirstResponder() }
+        }
+
+        if context.coordinator.lastScrollToken != scrollToBottomToken {
+            context.coordinator.lastScrollToken = scrollToBottomToken
+            DispatchQueue.main.async {
+                let end = NSRange(location: (tv.text as NSString).length, length: 0)
+                tv.scrollRangeToVisible(end)
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ScrollableTextView
+        var lastScrollToken: Int
+
+        init(_ parent: ScrollableTextView) {
+            self.parent = parent
+            self.lastScrollToken = parent.scrollToBottomToken
+        }
+
+        func textViewDidChange(_ tv: UITextView) {
+            parent.text = tv.text
+            recomputeCanScrollDown(tv)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard let tv = scrollView as? UITextView else { return }
+            recomputeCanScrollDown(tv)
+        }
+
+        func textViewDidBeginEditing(_ tv: UITextView) {
+            if !parent.isFocused { parent.isFocused = true }
+        }
+
+        func textViewDidEndEditing(_ tv: UITextView) {
+            if parent.isFocused { parent.isFocused = false }
+        }
+
+        /// True only when there is content BELOW the current scroll position —
+        /// i.e. the editor isn't already scrolled to the bottom. Deferred to
+        /// avoid mutating SwiftUI state mid-update.
+        func recomputeCanScrollDown(_ tv: UITextView) {
+            let distanceToBottom = tv.contentSize.height - (tv.contentOffset.y + tv.bounds.height)
+            let canScroll = distanceToBottom > 24
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if self.parent.canScrollDown != canScroll { self.parent.canScrollDown = canScroll }
+            }
+        }
     }
 }

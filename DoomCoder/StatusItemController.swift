@@ -165,7 +165,8 @@ enum WindowOpener {
         case settings
         case about
         case configureAgents
-        case tools
+        case prompts
+        case notes
     }
 
     static func open(_ target: Target) {
@@ -189,14 +190,9 @@ struct WindowOpenerBridge: View {
             .frame(width: 0, height: 0)
             .onReceive(NotificationCenter.default.publisher(for: .dcOpenWindow)) { note in
                 guard let id = note.object as? String else { return }
-                // Settings is no longer a standalone scene — re-route to the
-                // Configure window with the Settings tab pre-selected.
-                if id == "settings" {
-                    openWindow(id: "configureAgents")
-                    NotificationCenter.default.post(name: .dcSelectConfigureTab, object: "settings")
-                } else {
-                    openWindow(id: id)
-                }
+                // Every target (settings / about / configureAgents / prompts /
+                // notes) is now a real registered Window scene.
+                openWindow(id: id)
             }
     }
 }

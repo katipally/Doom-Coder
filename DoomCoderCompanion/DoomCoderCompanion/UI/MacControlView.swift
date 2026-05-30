@@ -30,6 +30,8 @@ private struct IconSegmented<Option: Hashable>: View {
     let accessibilityLabel: (Option) -> String
     let onSelect: (Option) -> Void
 
+    @Namespace private var pill
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(options, id: \.self) { opt in
@@ -41,6 +43,11 @@ private struct IconSegmented<Option: Hashable>: View {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .fill(Color(.tertiarySystemFill))
         )
+        // No container-level .animation() here. A container animation leaks
+        // upward through the parent VStack and animates conditional rows
+        // (screenRow / timerRow) appearing or disappearing — causing the
+        // entire section to overshoot. Animation is scoped tightly inside
+        // each segment label instead (pill + foreground color only).
     }
 
     @ViewBuilder
@@ -61,35 +68,41 @@ private struct IconSegmented<Option: Hashable>: View {
                 ZStack {
                     if selected {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(tint(opt).gradient)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                            .fill(tint(opt))
+                            .matchedGeometryEffect(id: "selectionPill", in: pill)
                     }
                 }
+                // Pill slides only within the segmented control itself.
+                .animation(.snappy(duration: 0.22), value: selected)
             )
-            .foregroundStyle(selected ? .white : .secondary)
+            .foregroundStyle(selected ? Color.white : Color.secondary)
+            // Foreground color crossfade scoped to the label, not the card.
+            .animation(.easeOut(duration: 0.15), value: selected)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(.snappy(duration: 0.18), value: selected)
         .accessibilityLabel(accessibilityLabel(opt))
         .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
 
-/// Per-mode accent tints (the "color tints" requested for the sleep card).
+/// Selection tints. The macOS panel uses the system accent (blue) for the
+/// active segment and conveys state by fill + label weight, not hue — so we
+/// match that here instead of the old orange/yellow/indigo gradients, which
+/// didn't read as Apple-native. "Off" stays neutral grey to signal inactive.
 private func keepAwakeTint(_ m: KeepAwakeMode) -> Color {
     switch m {
-    case .off:  return .gray
-    case .on:   return .orange
+    case .off:  return Color(.systemGray)
+    case .on:   return .accentColor
     case .auto: return .accentColor
     }
 }
 
 private func screenTint(_ s: ScreenMode) -> Color {
     switch s {
-    case .screenOn:  return .yellow
-    case .screenOff: return .indigo
+    case .screenOn:  return .accentColor
+    case .screenOff: return .accentColor
     }
 }
 
@@ -126,11 +139,16 @@ struct MacControlCard: View {
             if masterEnabled {
                 keepAwakeSection
 
+                // Conditional rows must not inherit any ambient animation from
+                // IconSegmented — use transaction to strip it so they snap in/out
+                // without the overshooting spring from the pill animation.
                 if mode != .off {
                     screenRow
+                        .transaction { $0.animation = nil }
                 }
                 if mode == .on {
                     timerRow
+                        .transaction { $0.animation = nil }
                 }
             }
 

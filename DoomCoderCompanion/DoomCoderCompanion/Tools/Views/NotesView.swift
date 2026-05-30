@@ -71,6 +71,7 @@ struct NotesView: View {
                 }
             }
         }
+        .refreshable { store.reload() }
     }
 
     private func create() {

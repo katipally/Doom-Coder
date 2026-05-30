@@ -414,22 +414,26 @@ struct PanelRootView: View {
 
     private var footer: some View {
         HStack(spacing: 0) {
-            footerItem("gearshape", label: "Settings") {
-                NSApplication.shared.activate()
-                WindowOpener.open(.settings)
+            footerItem("text.alignleft", label: "Prompts") {
+                ToolSurfaceManager.open(.prompts)
             }
-            footerItem("wrench.and.screwdriver", label: "Tools") {
-                NSApplication.shared.activate()
-                WindowOpener.open(.tools)
+            footerItem("note.text", label: "Notes") {
+                ToolSurfaceManager.open(.notes)
+            }
+            footerItem("gearshape", label: "Settings") {
+                ToolSurfaceManager.open(.settings)
             }
             footerItem("arrow.triangle.2.circlepath", label: "Updates") {
                 updaterViewModel.checkForUpdates()
             }
             .disabled(!updaterViewModel.canCheckForUpdates)
             .opacity(updaterViewModel.canCheckForUpdates ? 1 : 0.4)
-            footerItem("power", label: "Quit") {
-                sleepManager.prepareForTermination()
-                NSApplication.shared.terminate(nil)
+            // Minimize: hide the bar AND all open tool windows, remembering them
+            // so they reopen in place next time the bar is shown. Quitting the
+            // app lives in the menu-bar right-click menu (⌘Q).
+            footerItem("minus.circle", label: "Minimize") {
+                ToolSurfaceManager.hideOpenSurfaces()
+                dismiss()
             }
         }
         .padding(.horizontal, 14)

@@ -66,6 +66,10 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             if !commands.isEmpty {
                 await MainActor.run { self.applyControlCommands(commands) }
             }
+            // A successful fetch proves the Mac is reaching CloudKit right now,
+            // so re-stamp lastSeen (debounced) to keep the iOS reachability
+            // banner honest even when no commands were pending.
+            await MainActor.run { self.pusher?.touchLastSeen() }
 
         case .willSendChanges, .didSendChanges,
              .willFetchChanges, .didFetchChanges,
@@ -175,8 +179,9 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
         guard changed else { return }
         ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
-        // Publish fresh status so iOS confirms the command(s) landed.
-        pusher.publishMacStatus()
+        // Publish fresh status AND flush it immediately so iOS confirms the
+        // command(s) landed without waiting for the next safety-net send.
+        pusher.touchLastSeen(force: true)
     }
 
     /// UserDefaults keys for the app-wide master suspend gate. Shared with

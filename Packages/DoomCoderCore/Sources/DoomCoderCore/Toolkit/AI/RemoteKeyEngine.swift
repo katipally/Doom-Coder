@@ -58,7 +58,7 @@ public actor RemoteKeyEngine: AIEngine {
 
         let request: URLRequest
         switch provider {
-        case .openai:    request = openAIRequest(system: system, user: user, temperature: temperature, maxTokens: maxTokens)
+        case .openai:    request = openAIRequest(system: system, user: user, maxTokens: maxTokens)
         case .anthropic: request = anthropicRequest(system: system, user: user, temperature: temperature, maxTokens: maxTokens)
         }
 
@@ -78,7 +78,7 @@ public actor RemoteKeyEngine: AIEngine {
         }
         let text: String?
         switch provider {
-        case .openai:    text = Self.parseOpenAI(data)
+        case .openai:    text = Self.parseOpenAIResponses(data)
         case .anthropic: text = Self.parseAnthropic(data)
         }
         guard let result = text, !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -87,19 +87,26 @@ public actor RemoteKeyEngine: AIEngine {
         return .success(result)
     }
 
-    private func openAIRequest(system: String, user: String, temperature: Double, maxTokens: Int) -> URLRequest {
-        var req = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+    /// Builds an OpenAI request against the **Responses API** (`/v1/responses`).
+    /// We deliberately do NOT send `temperature` or `max_tokens`: GPT-5 / GPT-5.x
+    /// and the o-series reasoning models reject any non-default `temperature`
+    /// (HTTP 400) and reject `max_tokens` (they use `max_output_tokens`). The
+    /// Responses API + omitting sampling params works uniformly for both classic
+    /// (gpt-4o, gpt-4-turbo, …) and reasoning models, so a single code path
+    /// supports every model the user can pick. `max_output_tokens` also counts
+    /// reasoning tokens, so it must be generous or reasoning models return empty
+    /// output before producing any visible text.
+    private func openAIRequest(system: String, user: String, maxTokens: Int) -> URLRequest {
+        var req = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 30
+        req.timeoutInterval = 60
         let body: [String: Any] = [
             "model": model,
-            "temperature": temperature,
-            "messages": [
-                ["role": "system", "content": system],
-                ["role": "user", "content": user]
-            ]
+            "instructions": system,
+            "input": user,
+            "max_output_tokens": max(maxTokens, 4000)
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         return req
@@ -125,12 +132,29 @@ public actor RemoteKeyEngine: AIEngine {
 
     // MARK: - Parsing
 
-    static func parseOpenAI(_ data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
-              let content = message["content"] as? String else { return nil }
-        return content
+    /// Parses an OpenAI **Responses API** payload. Prefers the `output_text`
+    /// convenience field; falls back to concatenating text from the structured
+    /// `output[].content[]` array (type `output_text`), which is what reasoning
+    /// models return alongside their reasoning items.
+    static func parseOpenAIResponses(_ data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+
+        // 1. Convenience aggregate field (string, or array of strings in some SDKs).
+        if let text = json["output_text"] as? String, !text.isEmpty { return text }
+        if let parts = json["output_text"] as? [String] {
+            let joined = parts.joined()
+            if !joined.isEmpty { return joined }
+        }
+
+        // 2. Walk the structured output: output[] → content[] → { type: "output_text", text }.
+        guard let output = json["output"] as? [[String: Any]] else { return nil }
+        let text = output.compactMap { item -> String? in
+            guard let content = item["content"] as? [[String: Any]] else { return nil }
+            return content.compactMap { block -> String? in
+                (block["type"] as? String) == "output_text" ? block["text"] as? String : nil
+            }.joined()
+        }.joined()
+        return text.isEmpty ? nil : text
     }
 
     static func parseAnthropic(_ data: Data) -> String? {
