@@ -4,49 +4,6 @@
 import SwiftUI
 import UIKit
 
-/// A button that copies text to the clipboard and briefly confirms with a
-/// checkmark + success haptic. Works the same everywhere copy is offered.
-struct CopyButton: View {
-    let text: String
-    var title: String = "Copy"
-    var prominent: Bool = false
-
-    @State private var copied = false
-
-    private func copy() {
-        UIPasteboard.general.string = text
-        Haptics.success()
-        withAnimation(.snappy) { copied = true }
-        Task {
-            try? await Task.sleep(for: .seconds(1.6))
-            withAnimation(.snappy) { copied = false }
-        }
-    }
-
-    private var label: some View {
-        Label(copied ? "Copied" : title,
-              systemImage: copied ? "checkmark" : "doc.on.doc")
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: prominent ? .infinity : nil)
-            .padding(.vertical, prominent ? 4 : 0)
-    }
-
-    var body: some View {
-        Group {
-            if prominent {
-                Button(action: copy) { label }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-            } else {
-                Button(action: copy) { label }
-                    .buttonStyle(.bordered)
-            }
-        }
-        .disabled(text.isEmpty)
-        .accessibilityLabel(copied ? "Copied to clipboard" : "\(title) to clipboard")
-    }
-}
-
 /// A simple empty-state used inside Tools lists. Never a dead end.
 struct ToolEmptyState: View {
     let symbol: String
