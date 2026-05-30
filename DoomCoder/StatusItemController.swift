@@ -165,6 +165,7 @@ enum WindowOpener {
         case settings
         case about
         case configureAgents
+        case tools
     }
 
     static func open(_ target: Target) {
