@@ -3,17 +3,13 @@
 // templates and the CLI cheat sheets. All offline.
 
 import Foundation
+import DoomCoderCore
 
 enum BundledContent {
 
     /// Curated starter prompts seeded on first launch.
     static func starterPrompts() -> [Prompt] {
         decode([Prompt].self, resource: "starter_prompts") ?? []
-    }
-
-    /// Curated CLI cheat sheets (read-only reference).
-    static func cheatSheets() -> [CheatSheet] {
-        decode([CheatSheet].self, resource: "cheatsheets") ?? []
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, resource: String) -> T? {

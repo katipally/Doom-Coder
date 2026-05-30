@@ -3,6 +3,7 @@
 // view auto-generates fill-in fields for them. Includes one-tap Enhance.
 
 import SwiftUI
+import DoomCoderCore
 
 struct PromptEditorView: View {
     let existing: Prompt?

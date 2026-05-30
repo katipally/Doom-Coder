@@ -1,8 +1,11 @@
 // NotesView.swift — DoomCoder Companion (Tools)
-// A freeform scratchpad: jot ideas or paste agent output. Create/edit/delete,
-// autosave, search. Fully on-device.
+// Rich on-device notes: freeform body + inline checklist + a local reminder +
+// pin + search. Autosaves. "Turn into a prompt" hands a note to the Composer-
+// backed prompt library. Fully on-device; reminders use local notifications and
+// only ask permission the first time one is set.
 
 import SwiftUI
+import DoomCoderCore
 
 struct NotesView: View {
     @State private var store = NotesStore.shared
@@ -17,7 +20,7 @@ struct NotesView: View {
                 ToolEmptyState(
                     symbol: "note.text",
                     title: "No Notes",
-                    message: "Capture ideas, snippets, or anything your agent gives you.",
+                    message: "Capture ideas, checklists, or anything your agent gives you — with reminders when you need them.",
                     actionTitle: "New Note"
                 ) { create() }
             } else {
@@ -46,32 +49,25 @@ struct NotesView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(visible) { note in
-                    Button { openNote = note } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(note.title)
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            HStack(spacing: 6) {
-                                Text(note.updatedAt, style: .date)
-                                if !note.preview.isEmpty {
-                                    Text("·")
-                                    Text(note.preview).lineLimit(1)
-                                }
+                    Button { openNote = note } label: { NoteRow(note: note) }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                store.togglePin(note)
+                                Haptics.selection()
+                            } label: {
+                                Label(note.isPinned ? "Unpin" : "Pin",
+                                      systemImage: note.isPinned ? "pin.slash" : "pin")
                             }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .tint(.orange)
                         }
-                        .padding(.vertical, 2)
-                    }
-                    .swipeActions {
-                        Button(role: .destructive) {
-                            store.delete(note)
-                            Haptics.warning()
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                store.delete(note)
+                                Haptics.warning()
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
-                    }
                 }
             }
         }
@@ -84,44 +80,243 @@ struct NotesView: View {
     }
 }
 
+// MARK: - Row
+
+private struct NoteRow: View {
+    let note: Note
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                if note.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Pinned")
+                }
+                Text(note.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            HStack(spacing: 6) {
+                Text(note.updatedAt, style: .date)
+                if !note.preview.isEmpty {
+                    Text("·")
+                    Text(note.preview).lineLimit(1)
+                }
+                if let reminder = note.reminder, reminder.isEnabled {
+                    Text("·")
+                    Label(reminder.date.formatted(date: .abbreviated, time: .shortened),
+                          systemImage: "bell.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(reminder.date > Date() ? .blue : .secondary)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 // MARK: - Editor (autosave)
 
 private struct NoteEditorView: View {
     let note: Note
     @Environment(\.dismiss) private var dismiss
     @State private var store = NotesStore.shared
+
     @State private var text: String
-    @FocusState private var focused: Bool
+    @State private var checklist: [NoteChecklistItem]
+    @State private var isPinned: Bool
+    @State private var reminderDate: Date
+    @State private var hasReminder: Bool
+    @State private var showReminderDenied = false
+    @State private var didTurnIntoPrompt = false
+    @FocusState private var bodyFocused: Bool
 
     init(note: Note) {
         self.note = note
         _text = State(initialValue: note.body)
+        _checklist = State(initialValue: note.checklist)
+        _isPinned = State(initialValue: note.isPinned)
+        _hasReminder = State(initialValue: note.reminder?.isEnabled ?? false)
+        _reminderDate = State(initialValue: note.reminder?.date ?? Self.defaultReminderDate())
     }
 
     var body: some View {
         NavigationStack {
-            TextEditor(text: $text)
-                .focused($focused)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .navigationTitle("Note")
-                .navigationBarTitleDisplayMode(.inline)
-                .onChange(of: text) { _, newValue in
-                    var updated = note
-                    updated.body = newValue
-                    store.update(updated)
+            Form {
+                Section {
+                    TextEditor(text: $text)
+                        .frame(minHeight: 140)
+                        .focused($bodyFocused)
+                        .onChange(of: text) { _, _ in save() }
+                } header: {
+                    Text("Note")
                 }
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }.fontWeight(.semibold)
-                    }
-                    ToolbarItem(placement: .topBarLeading) {
-                        if !text.isEmpty {
-                            CopyButton(text: text)
+
+                checklistSection
+                reminderSection
+            }
+            .navigationTitle("Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.fontWeight(.semibold)
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            isPinned.toggle()
+                            store.togglePin(note)
+                            Haptics.selection()
+                        } label: {
+                            Label(isPinned ? "Unpin" : "Pin",
+                                  systemImage: isPinned ? "pin.slash" : "pin")
                         }
+                        Button { turnIntoPrompt() } label: {
+                            Label("Turn into a prompt", systemImage: "text.alignleft")
+                        }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if !text.isEmpty {
+                            Button {
+                                UIPasteboard.general.string = text
+                                Haptics.success()
+                            } label: {
+                                Label("Copy note", systemImage: "doc.on.doc")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
-                .onAppear { focused = true }
+            }
+            .onAppear { if text.isEmpty && checklist.isEmpty { bodyFocused = true } }
+            .alert("Reminders are turned off", isPresented: $showReminderDenied) {
+                Button("Open Settings") { openSystemSettings() }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Enable notifications for DoomCoder in Settings to get note reminders.")
+            }
         }
+    }
+
+    // MARK: Checklist
+
+    @ViewBuilder
+    private var checklistSection: some View {
+        Section("Checklist") {
+            ForEach($checklist) { $item in
+                HStack(spacing: 10) {
+                    Button {
+                        item.isDone.toggle()
+                        save()
+                        Haptics.selection()
+                    } label: {
+                        Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(item.isDone ? .green : .secondary)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
+
+                    TextField("Item", text: $item.text)
+                        .strikethrough(item.isDone, color: .secondary)
+                        .foregroundStyle(item.isDone ? .secondary : .primary)
+                        .onChange(of: item.text) { _, _ in save() }
+                }
+            }
+            .onDelete { offsets in
+                checklist.remove(atOffsets: offsets)
+                save()
+            }
+
+            Button {
+                checklist.append(NoteChecklistItem())
+                save()
+            } label: {
+                Label("Add item", systemImage: "plus.circle")
+            }
+        }
+    }
+
+    // MARK: Reminder
+
+    @ViewBuilder
+    private var reminderSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { hasReminder },
+                set: { on in
+                    hasReminder = on
+                    if on { Task { await scheduleReminder() } }
+                    else { store.clearReminder(for: note); Haptics.tap() }
+                }
+            )) {
+                Label("Remind me", systemImage: "bell")
+            }
+
+            if hasReminder {
+                DatePicker("When", selection: $reminderDate,
+                           in: Date()...,
+                           displayedComponents: [.date, .hourAndMinute])
+                    .onChange(of: reminderDate) { _, _ in Task { await scheduleReminder() } }
+            }
+        } footer: {
+            if hasReminder {
+                Text("A local notification will fire at the chosen time. Reminders stay on this device.")
+            } else {
+                Text("Optional. Get a local notification at a time you choose.")
+            }
+        }
+    }
+
+    private func scheduleReminder() async {
+        let result = await store.setReminder(reminderDate, for: note)
+        switch result {
+        case .scheduled:
+            Haptics.success()
+        case .permissionDenied:
+            hasReminder = false
+            showReminderDenied = true
+            Haptics.warning()
+        case .dateInPast:
+            hasReminder = false
+            Haptics.warning()
+        case .failed:
+            hasReminder = false
+            Haptics.warning()
+        }
+    }
+
+    // MARK: Save / actions
+
+    private func save() {
+        var updated = note
+        updated.body = text
+        updated.checklist = checklist
+        updated.isPinned = isPinned
+        store.update(updated)
+    }
+
+    private func turnIntoPrompt() {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return }
+        let title = note.title
+        let prompt = Prompt(title: title.isEmpty ? "Note" : title, body: body)
+        PromptStore.shared.add(prompt)
+        didTurnIntoPrompt = true
+        Haptics.success()
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private static func defaultReminderDate() -> Date {
+        Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
     }
 }

@@ -1,12 +1,12 @@
 // EnhanceView.swift — DoomCoder Companion (Tools)
-// Turns a rough idea into a well-structured prompt. Two modes:
-//   • Offline checklist (default) — deterministic local scaffold, no network/key.
-//   • Smart (BYO key)            — uses the user's OWN OpenAI/Anthropic key,
-//                                  device → provider over HTTPS, falling back to
-//                                  the offline scaffold on any failure.
-// Returns the improved text to the caller via `onUse`.
+// Turns a rough idea into a well-structured prompt using the shared 3-tier
+// AIEngine (on-device Apple Intelligence → your API key → built-in offline).
+// The engine and fallback policy are owned by AIEngineCoordinator, so this view
+// just asks it to enhance and surfaces which tier answered. Returns the improved
+// text to the caller via `onUse`.
 
 import SwiftUI
+import DoomCoderCore
 
 struct EnhanceView: View {
     /// Seed text (e.g. the prompt body being edited, or empty for a new idea).
@@ -15,19 +15,17 @@ struct EnhanceView: View {
     let onUse: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var keySettings = AIKeySettings.shared
+    @State private var ai = AIEngineCoordinator.shared
 
     @State private var idea: String
     @State private var result: String = ""
     @State private var isWorking = false
     @State private var noticeText: String?
-    @State private var useSmart: Bool
 
     init(initialText: String = "", onUse: @escaping (String) -> Void) {
         self.initialText = initialText
         self.onUse = onUse
         _idea = State(initialValue: initialText)
-        _useSmart = State(initialValue: AIKeySettings.shared.hasKeyForCurrentProvider)
     }
 
     var body: some View {
@@ -44,20 +42,12 @@ struct EnhanceView: View {
                 }
 
                 Section {
-                    Toggle(isOn: $useSmart) {
-                        Label("Smart enhance", systemImage: "sparkles")
-                    }
-                    .disabled(!keySettings.hasKeyForCurrentProvider)
-
-                    if keySettings.hasKeyForCurrentProvider {
-                        Text("Uses your \(keySettings.provider.displayName) key. Your idea is sent only to \(keySettings.provider.displayName).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Add an API key in Settings to enable Smart enhance. Until then, the offline checklist is used — no internet required.")
-                            .font(.caption)
+                    LabeledContent("AI engine") {
+                        Text(ai.selection.displayName)
                             .foregroundStyle(.secondary)
                     }
+                } footer: {
+                    Text(ai.selection.detail)
                 }
 
                 Section {
@@ -88,10 +78,9 @@ struct EnhanceView: View {
 
                 if !result.isEmpty {
                     Section("Improved prompt") {
-                        Text(result)
+                        TextEditor(text: $result)
                             .font(.callout)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(minHeight: 160)
                         CopyButton(text: result)
                         Button {
                             Haptics.tap()
@@ -122,26 +111,15 @@ struct EnhanceView: View {
         noticeText = nil
         defer { isWorking = false }
 
-        if useSmart, keySettings.hasKeyForCurrentProvider,
-           let apiKey = keySettings.key(for: keySettings.provider) {
-            do {
-                let improved = try await AIEnhanceService.enhance(
-                    raw, provider: keySettings.provider, apiKey: apiKey)
-                result = improved
-                noticeText = "Enhanced with \(keySettings.provider.displayName)."
-                Haptics.success()
-                return
-            } catch {
-                // Graceful fallback: never leave the user empty-handed.
-                result = OfflineEnhancer.enhance(raw)
-                noticeText = "Smart enhance failed (\(error.localizedDescription)) — used the offline checklist instead."
-                Haptics.warning()
-                return
-            }
+        let outcome = await ai.enhance(raw)
+        switch outcome {
+        case .success(let improved, let tier):
+            result = improved
+            noticeText = "Enhanced with \(tier.displayName)."
+            Haptics.success()
+        case .failure(let failure, _):
+            noticeText = failure.message
+            Haptics.warning()
         }
-
-        result = OfflineEnhancer.enhance(raw)
-        noticeText = "Structured with the offline checklist."
-        Haptics.success()
     }
 }
