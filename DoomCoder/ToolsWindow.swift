@@ -238,7 +238,7 @@ private enum MacClipboard {
 // keep the data, so reopening from the floating bar restores the prior state.
 
 enum ToolSurface: String, CaseIterable {
-    case prompts, notes, settings
+    case prompts, notes
     /// Matches the SwiftUI `Window(id:)` scene identifiers in DoomCoderApp.
     var windowID: String { rawValue }
 }
@@ -276,7 +276,6 @@ enum ToolSurfaceManager {
         switch surface {
         case .prompts:  WindowOpener.open(.prompts)
         case .notes:    WindowOpener.open(.notes)
-        case .settings: WindowOpener.open(.settings)
         }
     }
 
@@ -302,23 +301,6 @@ enum ToolSurfaceManager {
         for surface in toRestore { open(surface) }
     }
 }
-
-// MARK: - Settings surface (General + AI), shown as a floating window
-
-/// The Mac Settings window: native tabbed layout pairing General preferences
-/// with full AI configuration (on-device / API key), at parity with iOS.
-struct MacSettingsSurface: View {
-    var body: some View {
-        TabView {
-            ConfigureSettingsPane(sleepManager: SleepManager.shared)
-                .tabItem { Label("General", systemImage: "gear") }
-            MacToolsSettingsPane()
-                .tabItem { Label("AI", systemImage: "sparkles") }
-        }
-        .frame(minWidth: 640, minHeight: 580)
-    }
-}
-
 
 // MARK: - Prompts (Compose | Library, toolbar-driven, inspector)
 
