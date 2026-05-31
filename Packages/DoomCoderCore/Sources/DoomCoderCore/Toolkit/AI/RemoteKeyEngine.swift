@@ -25,23 +25,161 @@ public actor RemoteKeyEngine: AIEngine {
 
     // MARK: Capabilities
 
+    /// Shared system prompt for the BYO-key engine. Emphatic that the input is a
+    /// request to REWRITE, never a question to answer — matching the on-device
+    /// engine so both tiers behave identically.
+    static let systemPrompt = """
+    You are a prompt engineer for AI coding agents (Claude Code, Codex, Copilot \
+    CLI, etc.). Your ONLY job is to rewrite the user's text into one clear, \
+    well-structured PROMPT they can paste into a coding agent. The user's text is \
+    ALWAYS a rough request to be rewritten — NEVER a question to answer or a task \
+    to perform. Do not solve it, do not write code, do not explain. Preserve \
+    intent; briefly state context, the concrete task, and the expected output. \
+    Keep it tight — no filler, no preamble, no commentary, no code fences. When \
+    the conversation already contains a refined prompt and a new instruction, \
+    apply that instruction to the existing prompt and return the full updated \
+    prompt.
+    """
+
     public func enhance(_ raw: String) async -> AIResult<String> {
         let idea = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !idea.isEmpty else { return .failure(.malformed, tier: tier) }
-        let system = """
-        You are a prompt engineer for AI coding agents (Claude Code, Codex, \
-        Copilot CLI, etc.). Rewrite the user's rough request into one clear, \
-        well-structured prompt that preserves their intent. Briefly state \
-        context, the concrete task, and the expected output. Keep it tight — no \
-        filler. Do not answer or solve the request; return only the improved \
-        prompt text, with no preamble, commentary, or code fences.
-        """
-        let result = await complete(system: system, user: idea, temperature: 0.4, maxTokens: 1200)
+        let result = await complete(system: Self.systemPrompt, user: idea, temperature: 0.4, maxTokens: 1200)
         switch result {
         case .failure(let f): return .failure(f, tier: tier)
         case .success(let text):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? .failure(.malformed, tier: tier) : .success(trimmed, tier: tier)
+        }
+    }
+
+    // MARK: Stream (SSE)
+
+    /// Streams a refined prompt over Server-Sent Events. `nonisolated` so it can
+    /// satisfy the synchronous protocol requirement; it reads only the engine's
+    /// immutable `let` configuration, so no actor hop is needed.
+    public nonisolated func stream(transcript: [AIChatTurn]) -> AsyncThrowingStream<String, Error> {
+        let provider = self.provider
+        let model = self.model
+        let apiKey = self.apiKey
+        let messages = transcript.map { ChatTurnPayload(role: $0.role == .assistant ? "assistant" : "user", content: $0.text) }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                guard !apiKey.isEmpty else {
+                    continuation.finish(throwing: AIFailure.missingKey)
+                    return
+                }
+                guard messages.contains(where: { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+                    continuation.finish(throwing: AIFailure.malformed)
+                    return
+                }
+                do {
+                    let request = Self.streamRequest(provider: provider, model: model, apiKey: apiKey,
+                                                     system: Self.systemPrompt, messages: messages)
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse else {
+                        continuation.finish(throwing: AIFailure.network("Invalid response"))
+                        return
+                    }
+                    if http.statusCode == 429 {
+                        continuation.finish(throwing: AIFailure.rateLimited)
+                        return
+                    }
+                    guard (200...299).contains(http.statusCode) else {
+                        // Drain the (small) error body for a useful message.
+                        var data = Data()
+                        for try await byte in bytes { data.append(byte) }
+                        continuation.finish(throwing: AIFailure.provider(http.statusCode, Self.providerErrorMessage(data)))
+                        return
+                    }
+                    var accumulated = ""
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { break }
+                        guard let delta = Self.parseSSELine(line, provider: provider) else { continue }
+                        if delta.isEmpty { continue }
+                        accumulated += delta
+                        continuation.yield(accumulated)
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: AIFailure.cancelled)
+                } catch {
+                    continuation.finish(throwing: AIFailure.network(error.localizedDescription))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    struct ChatTurnPayload: Sendable {
+        let role: String
+        let content: String
+    }
+
+    /// Builds a streaming (`stream: true`) request with a multi-turn message
+    /// array for either provider.
+    nonisolated static func streamRequest(provider: AIProvider, model: String, apiKey: String,
+                                          system: String, messages: [ChatTurnPayload]) -> URLRequest {
+        switch provider {
+        case .openai:
+            var req = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            req.timeoutInterval = 120
+            let input = messages.map { ["role": $0.role, "content": $0.content] }
+            let body: [String: Any] = [
+                "model": model,
+                "instructions": system,
+                "input": input,
+                "max_output_tokens": 4000,
+                "stream": true
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            return req
+        case .anthropic:
+            var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+            req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            req.timeoutInterval = 120
+            let msgs = messages.map { ["role": $0.role, "content": $0.content] }
+            let body: [String: Any] = [
+                "model": model,
+                "max_tokens": 1200,
+                "temperature": 0.4,
+                "system": system,
+                "messages": msgs,
+                "stream": true
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            return req
+        }
+    }
+
+    /// Extracts the incremental text delta from a single SSE line, or nil for
+    /// lines that carry no text (event headers, pings, `[DONE]`, etc.).
+    nonisolated static func parseSSELine(_ line: String, provider: AIProvider) -> String? {
+        guard line.hasPrefix("data:") else { return nil }
+        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        guard !payload.isEmpty, payload != "[DONE]" else { return nil }
+        guard let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else { return nil }
+        switch provider {
+        case .openai:
+            // Responses API: incremental text arrives as `response.output_text.delta`.
+            if type == "response.output_text.delta" { return json["delta"] as? String }
+            return nil
+        case .anthropic:
+            // Messages API: text arrives as `content_block_delta` → `text_delta`.
+            if type == "content_block_delta",
+               let delta = json["delta"] as? [String: Any],
+               (delta["type"] as? String) == "text_delta" {
+                return delta["text"] as? String
+            }
+            return nil
         }
     }
 
