@@ -28,37 +28,65 @@ private enum ToolsPaths {
 
 @MainActor
 @Observable
-final class MacPromptStore {
-    static let shared = MacPromptStore()
-    private let file = "prompts.json"
+final class MacConversationStore {
+    static let shared = MacConversationStore()
+    private let file = "conversations.json"
+    /// Old draft file from the pre-chat build. Removed on first launch (clean
+    /// slate — no migration, matching iOS).
+    private let legacyDraftFile = "prompts.json"
 
-    private(set) var prompts: [Prompt] = []
+    private(set) var conversations: [Conversation] = []
     private(set) var loadError: String?
+    /// Text handed off from Notes' "To Prompt". `MacPromptsPane` consumes it on
+    /// appear: opens a fresh chat pre-filled with this text (no auto-send).
+    var pendingSeed: String?
 
-    private init() { load() }
+    private init() {
+        if let url = ToolsPaths.fileURL(legacyDraftFile) { try? FileManager.default.removeItem(at: url) }
+        load()
+    }
 
     func load() {
         guard let url = ToolsPaths.fileURL(file), let data = try? Data(contentsOf: url) else { return }
-        do { prompts = try JSONDecoder().decode([Prompt].self, from: data) }
+        do { conversations = try JSONDecoder().decode([Conversation].self, from: data).filter { !$0.isEffectivelyEmpty } }
         catch { loadError = "Couldn't read saved prompts." }
     }
 
-    func save() {
+    var byRecent: [Conversation] { conversations.sorted { $0.updatedAt > $1.updatedAt } }
+
+    func conversation(_ id: UUID) -> Conversation? { conversations.first { $0.id == id } }
+
+    /// Inserts or updates a conversation, stamping `updatedAt`, and persists.
+    /// Empty conversations stay in memory (active session) but never hit disk.
+    func save(_ conversation: Conversation) {
+        var updated = conversation
+        updated.updatedAt = Date()
+        if let i = conversations.firstIndex(where: { $0.id == updated.id }) {
+            conversations[i] = updated
+        } else {
+            conversations.append(updated)
+        }
+        persist()
+    }
+
+    func rename(_ id: UUID, to title: String) {
+        guard let i = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[i].customTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversations[i].updatedAt = Date()
+        persist()
+    }
+
+    func delete(_ id: UUID) { conversations.removeAll { $0.id == id }; persist() }
+    func deleteAll() { conversations.removeAll(); persist() }
+
+    private func persist() {
         guard let url = ToolsPaths.fileURL(file) else { loadError = "No writable location."; return }
         do {
-            let data = try JSONEncoder().encode(prompts)
+            let data = try JSONEncoder().encode(conversations.filter { !$0.isEffectivelyEmpty })
             try data.write(to: url, options: .atomic)
             loadError = nil
         } catch { loadError = "Couldn't save prompts." }
     }
-
-    func add(_ prompt: Prompt) { prompts.insert(prompt, at: 0); save() }
-    func update(_ prompt: Prompt) {
-        if let i = prompts.firstIndex(where: { $0.id == prompt.id }) {
-            var p = prompt; p.updatedAt = Date(); prompts[i] = p; save()
-        }
-    }
-    func delete(_ prompt: Prompt) { prompts.removeAll { $0.id == prompt.id }; save() }
 }
 
 @MainActor
@@ -309,359 +337,699 @@ enum ToolSurfaceManager {
 
 // MARK: - Prompts (Compose | Library, toolbar-driven, inspector)
 
-/// macOS 26 prompt workspace. A segmented Compose | Library control switches
-/// between a toolbar-driven draft editor (with a saved-drafts sidebar and an
-/// inspector for AI status + metadata) and the shared curated prompt library.
-/// The store is the source of truth; the editor owns only transient state, so
-/// there are no stale-snapshot bugs. Writing and copying never require AI.
+/// macOS 26 prompt workspace, redesigned as a refine transcript that mirrors the
+/// iOS Companion: a history sidebar of saved conversations, a transcript where the
+/// user's rough requests appear as trailing glass bubbles and the AI streams back
+/// a refined prompt rendered plain with a Copy button, and a bottom refine input.
+/// Conversations auto-save locally and reopen to continue. Writing and copying
+/// never require AI.
 struct MacPromptsPane: View {
-    @State private var store = MacPromptStore.shared
+    @State private var store = MacConversationStore.shared
     @State private var coordinator = AIEngineCoordinator.shared
-    @State private var showLibrary = false
 
-    // Compose state.
+    /// The transcript currently on screen (live source of truth while open).
+    @State private var active = Conversation()
+    @State private var selectedID: UUID?
+
+    @State private var input = ""
+    @State private var isGenerating = false
+    @State private var generationTask: Task<Void, Never>?
+    /// IDs of the in-flight exchange, so Stop can discard it and restore input.
+    @State private var inflightUserID: UUID?
+    @State private var inflightAssistantID: UUID?
+    /// Identifies the current generation so a stale task that unwinds late can't
+    /// clobber `isGenerating` or message state for a newer one.
+    @State private var generationID: UUID?
+
     @State private var search = ""
-    @State private var currentID: UUID?
-    @State private var draft = ""
-    @State private var preEnhance: String?
-    @State private var isEnhancing = false
-    @State private var enhanceTask: Task<Void, Never>?
-    @State private var errorMessage: String?
-    @State private var statusMessage: String?
-    @State private var suppressSelectionHandling = false
+    @State private var showLibrary = false
+    @State private var libSearch = ""
+    @State private var renameTarget: Conversation?
+    @State private var renameText = ""
+    @State private var pendingEditID: UUID?
 
-    // Library state.
-    @State private var librarySearch = ""
+    @FocusState private var inputFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @FocusState private var editorFocused: Bool
-
-    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var hasContent: Bool { !trimmed.isEmpty }
-
-    private var sortedDrafts: [Prompt] { store.prompts.sorted { $0.updatedAt > $1.updatedAt } }
-    private var filteredDrafts: [Prompt] {
-        let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return sortedDrafts }
-        return sortedDrafts.filter { $0.title.lowercased().contains(q) || $0.body.lowercased().contains(q) }
-    }
+    private var trimmedInput: String { input.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSend: Bool { !trimmedInput.isEmpty && !isGenerating }
 
     var body: some View {
         NavigationSplitView {
-            historySidebar
-                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
+            sidebar
         } detail: {
-            composer
+            detail
         }
-        .navigationTitle("Prompts")
         .sheet(isPresented: $showLibrary) { librarySheet }
-        .onChange(of: currentID) { old, new in handleSelectionChange(from: old, to: new) }
-        .onDisappear {
-            enhanceTask?.cancel()
-            saveCurrentIfDirty(asID: currentID)
-        }
-    }
-
-    // MARK: Library sheet
-
-    /// The curated library, presented as a panel over the composer. Picking a
-    /// prompt loads it into the editor and dismisses — mirrors the iOS flow.
-    private var librarySheet: some View {
-        NavigationStack {
-            MacPromptLibraryView(search: $librarySearch, onOpen: openInComposer)
-                .navigationTitle("Prompt Library")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showLibrary = false }
+        .alert("Rename conversation", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Title", text: $renameText)
+            Button("Save") {
+                if let target = renameTarget {
+                    store.rename(target.id, to: renameText)
+                    if active.id == target.id {
+                        active.customTitle = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                 }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) { renameTarget = nil }
         }
-        .frame(minWidth: 560, minHeight: 520)
+        .alert("Discard later messages?", isPresented: Binding(
+            get: { pendingEditID != nil },
+            set: { if !$0 { pendingEditID = nil } }
+        )) {
+            Button("Edit & discard", role: .destructive) {
+                if let id = pendingEditID { performEdit(id) }
+                pendingEditID = nil
+            }
+            Button("Cancel", role: .cancel) { pendingEditID = nil }
+        } message: {
+            Text("Editing this message removes the messages that came after it.")
+        }
+        .onAppear(perform: consumePendingSeed)
+        .onChange(of: store.pendingSeed) { _, _ in consumePendingSeed() }
     }
 
-    // MARK: History sidebar (saved drafts)
+    // MARK: - Sidebar (history)
 
-    private var historySidebar: some View {
-        Group {
-            if filteredDrafts.isEmpty {
-                ContentUnavailableView(
-                    search.isEmpty ? "No saved drafts" : "No matches",
-                    systemImage: "tray",
-                    description: Text(search.isEmpty
-                        ? "Write a prompt, then Save to keep it here."
-                        : "No drafts match “\(search)”."))
-            } else {
-                List(selection: $currentID) {
-                    ForEach(filteredDrafts) { prompt in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(Self.title(for: prompt.body)).font(.headline).lineLimit(1)
-                            Text(prompt.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        .tag(prompt.id)
-                        .contextMenu {
-                            Button(role: .destructive) { delete(prompt) } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-            }
-        }
-        .searchable(text: $search, placement: .sidebar, prompt: "Search drafts")
-        // Primary actions live as proper buttons (not a cramped toolbar): a
-        // pinned bottom bar, matching the friendly iOS layout.
-        .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 8) {
-                Button { newDraft() } label: {
-                    Label("New", systemImage: "square.and.pencil")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-
-                Button { showLibrary = true } label: {
-                    Label("Library", systemImage: "books.vertical")
-                }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
-
-                Spacer()
-            }
-            .controlSize(.large)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.bar)
+    private var visibleConversations: [Conversation] {
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return store.byRecent }
+        return store.byRecent.filter {
+            $0.displayTitle.lowercased().contains(q) || $0.preview.lowercased().contains(q)
         }
     }
 
-    // MARK: Composer (editor + action buttons, iOS-style)
-
-    private var composer: some View {
+    private var sidebar: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                if draft.isEmpty {
-                    Text("Describe what you want your AI coding agent to do…")
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 14).padding(.leading, 10)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+            Group {
+                if store.byRecent.isEmpty {
+                    ContentUnavailableView(
+                        "No history yet",
+                        systemImage: "clock.arrow.circlepath",
+                        description: Text("Your refined prompts save here automatically.")
+                    )
+                } else if visibleConversations.isEmpty {
+                    ContentUnavailableView.search(text: search)
+                } else {
+                    List(selection: $selectedID) {
+                        ForEach(visibleConversations) { conversation in
+                            historyRow(conversation)
+                                .tag(conversation.id)
+                                .contextMenu {
+                                    Button {
+                                        renameText = conversation.displayTitle
+                                        renameTarget = conversation
+                                    } label: { Label("Rename", systemImage: "pencil") }
+                                    Button(role: .destructive) {
+                                        deleteConversation(conversation.id)
+                                    } label: { Label("Delete", systemImage: "trash") }
+                                }
+                        }
+                    }
+                    .listStyle(.sidebar)
                 }
-                TextEditor(text: $draft)
-                    .font(.body)
-                    .focused($editorFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .accessibilityLabel("Prompt draft")
+            .frame(maxHeight: .infinity)
 
             Divider()
-            actionBar
+            Button {
+                libSearch = ""
+                showLibrary = true
+            } label: {
+                Label("Prompt Library", systemImage: "books.vertical")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.background)
+        .frame(minWidth: 240)
+        .searchable(text: $search, placement: .sidebar, prompt: "Search history")
+        .navigationTitle("Prompts")
+        .toolbar {
+            ToolbarItem {
+                Button { newChat() } label: { Label("New chat", systemImage: "square.and.pencil") }
+                    .disabled(active.messages.isEmpty && !isGenerating)
+                    .help("New chat")
+            }
+        }
+        .onChange(of: selectedID) { _, newValue in
+            guard let id = newValue, id != active.id,
+                  let conversation = store.conversation(id) else { return }
+            open(conversation)
+        }
     }
 
-    /// Big, labeled action buttons in the body — the friendly iOS layout rather
-    /// than icon buttons crammed into the window toolbar.
-    private var actionBar: some View {
-        VStack(spacing: 10) {
-            Button { enhance() } label: {
-                Label(isEnhancing ? "Enhancing…" : (preEnhance == nil ? "Enhance with AI" : "Enhance again"),
-                      systemImage: "sparkles")
-                    .frame(maxWidth: .infinity)
+    private func historyRow(_ conversation: Conversation) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(conversation.displayTitle)
+                .font(.headline)
+                .lineLimit(1)
+            if !conversation.preview.isEmpty {
+                Text(conversation.preview)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!hasContent || isEnhancing)
+            Text(conversation.updatedAt, format: .relative(presentation: .named))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
+    }
 
-            HStack(spacing: 10) {
-                Button { copyDraft() } label: {
-                    Label("Copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+    // MARK: - Detail (transcript + input)
+
+    private var detail: some View {
+        VStack(spacing: 0) {
+            transcript
+            inputBar
+        }
+        .frame(minWidth: 420)
+    }
+
+    private var transcript: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                if active.messages.isEmpty {
+                    emptyState
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                } else {
+                    LazyVStack(spacing: 16) {
+                        ForEach(active.messages) { message in
+                            MacMessageView(
+                                message: message,
+                                onCopy: { copy(message) },
+                                onRetry: { retry(message.id) },
+                                onEdit: { requestEdit(message.id) }
+                            )
+                            .id(message.id)
+                        }
+                        Color.clear.frame(height: 1).id(bottomAnchor)
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
                 }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-                .disabled(!hasContent)
+            }
+            .onChange(of: active.messages.count) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: streamingSignature) { _, _ in scrollToBottom(proxy) }
+        }
+    }
 
-                Button { saveDraft() } label: {
-                    Label(currentID == nil ? "Save" : "Update", systemImage: "tray.and.arrow.down")
-                        .frame(maxWidth: .infinity)
-                }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!hasContent)
+    private var streamingSignature: Int {
+        guard let id = inflightAssistantID,
+              let msg = active.messages.first(where: { $0.id == id }) else { return 0 }
+        return msg.text.count
+    }
 
-                if preEnhance != nil {
-                    Button { revertEnhance() } label: {
-                        Label("Undo", systemImage: "arrow.uturn.backward").frame(maxWidth: .infinity)
+    private var bottomAnchor: String { "transcript-bottom" }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        guard !active.messages.isEmpty else { return }
+        if reduceMotion {
+            proxy.scrollTo(bottomAnchor, anchor: .bottom)
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomAnchor, anchor: .bottom) }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(.tint)
+            VStack(spacing: 6) {
+                Text("Refine a prompt")
+                    .font(.title2.weight(.semibold))
+                Text("Describe what you want your AI coding agent to do. I'll rewrite it into a clear, structured prompt you can copy.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: 420)
+
+            if !quickStarts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Try one")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(quickStarts) { prompt in
+                        Button {
+                            input = prompt.body
+                            inputFocused = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: prompt.category.symbol)
+                                    .font(.footnote)
+                                    .foregroundStyle(.tint)
+                                Text(prompt.title)
+                                    .font(.subheadline)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
+                .frame(maxWidth: 420)
             }
-            .controlSize(.large)
-
-            footerLine
         }
-        .padding(12)
-        .background(.bar)
+        .padding(32)
     }
 
-    @ViewBuilder
-    private var footerLine: some View {
-        HStack(spacing: 6) {
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-            } else if let statusMessage {
-                Label(statusMessage, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
-                Text("Enhance rewrites your draft using \(coordinator.selection.displayName). Writing and copying never require AI — set up AI in Settings.")
-                    .foregroundStyle(.secondary)
+    private var quickStarts: [Prompt] {
+        PromptLibrary.grouped().prefix(4).compactMap { $0.prompts.first }
+    }
+
+    // MARK: - Input bar
+
+    private var inputBar: some View {
+        VStack(spacing: 8) {
+            if showSetupBanner { setupBanner }
+            // iMessage-style capsule: button lives inside the glass container.
+            HStack(alignment: .bottom, spacing: 0) {
+                TextField("Describe your prompt…", text: $input, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .focused($inputFocused)
+                    .padding(.leading, 14)
+                    .padding(.vertical, 10)
+                    .padding(.trailing, 4)
+
+                Group {
+                    if isGenerating {
+                        Button { stop() } label: {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 28, height: 28)
+                                .background(.red.gradient, in: .circle)
+                        }
+                        .help("Stop generating")
+                    } else {
+                        Button { send() } label: {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 28, height: 28)
+                                .background {
+                                    Circle().fill(canSend
+                                        ? AnyShapeStyle(Color.accentColor.gradient)
+                                        : AnyShapeStyle(Color.secondary.opacity(0.25)))
+                                }
+                        }
+                        .disabled(!canSend)
+                        .help("Refine prompt")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 6)
+                .padding(.bottom, 6)
             }
-            Spacer(minLength: 0)
+            .glassEffect(.regular, in: .capsule)
         }
-        .font(.caption)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
-    // MARK: Library bridge
-
-    private func openInComposer(_ prompt: Prompt) {
-        saveCurrentIfDirty(asID: currentID)
-        suppressSelectionHandling = true
-        currentID = nil
-        draft = prompt.body
-        preEnhance = nil; errorMessage = nil; statusMessage = nil
-        showLibrary = false
-        editorFocused = true
+    private var showSetupBanner: Bool {
+        coordinator.selection == .remoteKey && !coordinator.hasKeyForCurrentProvider
     }
 
-    // MARK: Actions
+    private var setupBanner: some View {
+        Button {
+            WindowOpener.openSettings()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "key.fill").font(.footnote)
+                Text("Add an API key in Settings, or switch to On-device.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
 
-    private func enhance() {
-        guard hasContent, !isEnhancing else { return }
-        editorFocused = false
-        errorMessage = nil; statusMessage = nil
-        let snapshot = draft
-        let capturedID = currentID
-        isEnhancing = true
-        enhanceTask?.cancel()
-        enhanceTask = Task {
-            let result = await coordinator.enhance(trimmed)
-            await MainActor.run {
-                isEnhancing = false
-                guard !Task.isCancelled, currentID == capturedID, draft == snapshot else { return }
-                switch result {
-                case .success(let improved, _):
-                    preEnhance = snapshot
-                    draft = improved
-                case .failure(let f, _):
-                    errorMessage = friendly(f)
+    // MARK: - Library sheet
+
+    private var librarySheet: some View {
+        NavigationStack {
+            MacPromptLibraryView(search: $libSearch) { prompt in
+                input = prompt.body
+                showLibrary = false
+                inputFocused = true
+            }
+            .navigationTitle("Prompt Library")
+            .frame(minWidth: 460, minHeight: 520)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showLibrary = false }
                 }
             }
         }
     }
 
-    private func revertEnhance() {
-        guard let original = preEnhance else { return }
-        draft = original
-        preEnhance = nil
+    // MARK: - Generation
+
+    private func send() {
+        let text = trimmedInput
+        guard !text.isEmpty, !isGenerating else { return }
+        inputFocused = false
+        let userMsg = ChatMessage(role: .user, text: text)
+        let assistantMsg = ChatMessage(role: .assistant, tier: coordinator.activeTier, status: .streaming)
+        active.messages.append(userMsg)
+        active.messages.append(assistantMsg)
+        inflightUserID = userMsg.id
+        inflightAssistantID = assistantMsg.id
+        input = ""
+        isGenerating = true
+        persistActive()
+        if selectedID != active.id { selectedID = active.id }
+        let convID = active.id
+        let assistantID = assistantMsg.id
+        let token = UUID()
+        generationID = token
+        generationTask = Task { await runGeneration(conversationID: convID, assistantID: assistantID, token: token) }
     }
 
-    private func copyDraft() {
-        MacClipboard.copy(trimmed)
-        flash("Copied to clipboard")
+    @MainActor
+    private func runGeneration(conversationID: UUID, assistantID: UUID, token: UUID) async {
+        defer { if generationID == token { isGenerating = false; generationID = nil } }
+        let transcript = active.engineTranscript()
+        func isCurrent() -> Bool { generationID == token && active.id == conversationID }
+        do {
+            for try await chunk in coordinator.stream(transcript: transcript) {
+                if Task.isCancelled { return }
+                guard isCurrent() else { return }
+                updateMessage(assistantID) { $0.text = chunk; $0.status = .streaming }
+            }
+            if Task.isCancelled { return }
+            guard isCurrent() else { return }
+            updateMessage(assistantID) { m in
+                let t = m.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if t.isEmpty {
+                    m.status = .failed
+                    m.errorText = "The AI returned an empty response. Try again."
+                } else {
+                    m.text = t
+                    m.status = .complete
+                }
+            }
+            clearInflight()
+            persistActive()
+        } catch let failure as AIFailure {
+            if case .cancelled = failure { return }
+            guard isCurrent() else { return }
+            updateMessage(assistantID) { m in
+                m.status = .failed
+                m.errorText = friendly(failure)
+            }
+            clearInflight()
+            persistActive()
+        } catch is CancellationError {
+            return
+        } catch {
+            guard isCurrent() else { return }
+            updateMessage(assistantID) { m in
+                m.status = .failed
+                m.errorText = error.localizedDescription
+            }
+            clearInflight()
+            persistActive()
+        }
     }
 
-    private func saveDraft() {
-        guard hasContent else { return }
-        if let id = currentID, var existing = store.prompts.first(where: { $0.id == id }) {
-            existing.body = trimmed
-            existing.title = Self.title(for: trimmed)
-            store.update(existing)
-            flash("Draft updated")
+    private func stop() {
+        generationTask?.cancel()
+        generationTask = nil
+        generationID = nil
+        isGenerating = false
+        if let aID = inflightAssistantID {
+            active.messages.removeAll { $0.id == aID }
+        }
+        if let uID = inflightUserID,
+           let restored = active.messages.first(where: { $0.id == uID })?.text {
+            active.messages.removeAll { $0.id == uID }
+            input = restored
+        }
+        clearInflight()
+        persistActive()
+        inputFocused = true
+    }
+
+    private func retry(_ assistantID: UUID) {
+        guard !isGenerating else { return }
+        guard let idx = active.messages.firstIndex(where: { $0.id == assistantID }),
+              active.messages[idx].role == .assistant else { return }
+        active.messages.remove(at: idx)
+        let assistantMsg = ChatMessage(role: .assistant, tier: coordinator.activeTier, status: .streaming)
+        active.messages.append(assistantMsg)
+        inflightUserID = nil
+        inflightAssistantID = assistantMsg.id
+        isGenerating = true
+        persistActive()
+        let convID = active.id
+        let newID = assistantMsg.id
+        let token = UUID()
+        generationID = token
+        generationTask = Task { await runGeneration(conversationID: convID, assistantID: newID, token: token) }
+    }
+
+    // MARK: - Edit & resend
+
+    private func requestEdit(_ userID: UUID) {
+        guard !isGenerating else { return }
+        guard let idx = active.messages.firstIndex(where: { $0.id == userID }) else { return }
+        let laterUserExists = active.messages[(idx + 1)...].contains { $0.role == .user }
+        if laterUserExists {
+            pendingEditID = userID
         } else {
-            let prompt = Prompt(title: Self.title(for: trimmed), category: .general, body: trimmed)
-            store.add(prompt)
-            suppressSelectionHandling = true
-            currentID = prompt.id
-            flash("Draft saved")
-        }
-        preEnhance = nil
-    }
-
-    private func newDraft() {
-        saveCurrentIfDirty(asID: currentID)
-        suppressSelectionHandling = true
-        currentID = nil
-        draft = ""
-        preEnhance = nil; errorMessage = nil; statusMessage = nil
-        editorFocused = true
-    }
-
-    private func delete(_ prompt: Prompt) {
-        let wasCurrent = prompt.id == currentID
-        store.delete(prompt)
-        if wasCurrent {
-            suppressSelectionHandling = true
-            currentID = nil
-            draft = ""
-            preEnhance = nil
+            performEdit(userID)
         }
     }
 
-    private func handleSelectionChange(from old: UUID?, to new: UUID?) {
-        if suppressSelectionHandling { suppressSelectionHandling = false; return }
-        saveCurrentIfDirty(asID: old)
-        preEnhance = nil; errorMessage = nil; statusMessage = nil
-        if let new, let prompt = store.prompts.first(where: { $0.id == new }) {
-            draft = prompt.body
-        } else {
-            draft = ""
+    private func performEdit(_ userID: UUID) {
+        guard let idx = active.messages.firstIndex(where: { $0.id == userID }) else { return }
+        let text = active.messages[idx].text
+        active.messages.removeSubrange(idx...)
+        input = text
+        clearInflight()
+        persistActive()
+        inputFocused = true
+    }
+
+    // MARK: - Conversation lifecycle
+
+    private func newChat() {
+        cancelInFlight()
+        saveActiveIfNeeded()
+        active = Conversation()
+        selectedID = nil
+        input = ""
+        inputFocused = true
+    }
+
+    private func open(_ conversation: Conversation) {
+        cancelInFlight()
+        saveActiveIfNeeded()
+        active = conversation
+        selectedID = conversation.id
+        input = ""
+        inputFocused = false
+    }
+
+    private func deleteConversation(_ id: UUID) {
+        store.delete(id)
+        if active.id == id {
+            cancelInFlight()
+            active = Conversation()
+            selectedID = nil
+            input = ""
         }
     }
 
-    /// Persists current editor content when it has unsaved changes — prevents
-    /// silent data loss on switch/new/close.
-    private func saveCurrentIfDirty(asID id: UUID?) {
-        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return }
-        if let id, var existing = store.prompts.first(where: { $0.id == id }) {
-            guard existing.body != body else { return }
-            existing.body = body
-            existing.title = Self.title(for: body)
-            store.update(existing)
-        } else if id == nil {
-            let prompt = Prompt(title: Self.title(for: body), category: .general, body: body)
-            store.add(prompt)
-        }
+    private func consumePendingSeed() {
+        guard let seed = store.pendingSeed else { return }
+        store.pendingSeed = nil
+        cancelInFlight()
+        saveActiveIfNeeded()
+        active = Conversation()
+        selectedID = nil
+        input = seed
+        inputFocused = true
     }
 
-    private func flash(_ message: String) {
-        statusMessage = message
-        errorMessage = nil
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            await MainActor.run { if statusMessage == message { statusMessage = nil } }
+    // MARK: - Helpers
+
+    private func updateMessage(_ id: UUID, _ transform: (inout ChatMessage) -> Void) {
+        guard let idx = active.messages.firstIndex(where: { $0.id == id }) else { return }
+        transform(&active.messages[idx])
+    }
+
+    private func persistActive() {
+        guard !active.isEffectivelyEmpty else { return }
+        store.save(active)
+    }
+
+    private func saveActiveIfNeeded() {
+        guard !active.isEffectivelyEmpty else { return }
+        store.save(active)
+    }
+
+    private func cancelInFlight() {
+        generationTask?.cancel()
+        generationTask = nil
+        generationID = nil
+        isGenerating = false
+        // Normalize a placeholder that was mid-stream so the saved transcript stays
+        // retryable rather than frozen at "Refining…" with no live task.
+        if let aID = inflightAssistantID {
+            updateMessage(aID) { m in
+                if m.status == .streaming {
+                    m.status = .failed
+                    m.errorText = "Generation was interrupted. Tap Retry to continue."
+                }
+            }
         }
+        clearInflight()
+    }
+
+    private func clearInflight() {
+        inflightUserID = nil
+        inflightAssistantID = nil
+    }
+
+    private func copy(_ message: ChatMessage) {
+        MacClipboard.copy(message.trimmedText)
     }
 
     private func friendly(_ failure: AIFailure) -> String {
         switch failure {
         case .missingKey:
-            return "No API key set. Add one in Settings, or switch to On-device."
+            return "No API key set. Add one in Settings → AI, or switch to On-device."
         case .unavailable(let reason):
-            return "\(reason.message) Choose “My API key” in Settings to use a provider instead."
-        case .network, .provider, .rateLimited:
-            return failure.message + " Your draft is unchanged — try again."
+            return reason.message
         default:
             return failure.message
         }
     }
+}
 
-    private static func title(for body: String) -> String {
-        let firstLine = body
-            .split(whereSeparator: \.isNewline)
-            .first
-            .map(String.init)?
-            .trimmingCharacters(in: .whitespaces) ?? ""
-        let base = firstLine.isEmpty ? "Untitled draft" : firstLine
-        return base.count > 60 ? String(base.prefix(60)) + "…" : base
+// MARK: - Mac message view
+
+/// Renders one transcript message: user requests as trailing glass bubbles, the
+/// AI's refined prompt as plain leading text under a "Refined prompt" header with
+/// a Copy action, and failures inline with Retry.
+private struct MacMessageView: View {
+    let message: ChatMessage
+    let onCopy: () -> Void
+    let onRetry: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        switch message.role {
+        case .user: userBubble
+        case .assistant: assistantContent
+        }
+    }
+
+    private var userBubble: some View {
+        HStack {
+            Spacer(minLength: 60)
+            Text(message.text)
+                .font(.body)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .glassEffect(.regular.tint(.accentColor.opacity(0.18)), in: .rect(cornerRadius: 18))
+                .contextMenu {
+                    Button { onEdit() } label: { Label("Edit & resend", systemImage: "pencil") }
+                    Button { MacClipboard.copy(message.text) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private var assistantContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch message.status {
+            case .streaming:
+                if message.trimmedText.isEmpty {
+                    refiningHeader
+                } else {
+                    header("Refined prompt")
+                    Text(message.text).font(.body).textSelection(.enabled)
+                }
+            case .complete:
+                header("Refined prompt")
+                Text(message.text).font(.body).textSelection(.enabled)
+                Button { onCopy() } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.subheadline.weight(.medium))
+                }
+                .buttonStyle(.glass)
+                .clipShape(.capsule)
+                .padding(.top, 2)
+            case .failed, .cancelled:
+                failureView
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var refiningHeader: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Refining…").font(.subheadline).foregroundStyle(.secondary)
+        }
+    }
+
+    private func header(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles").font(.caption).foregroundStyle(.tint)
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            if let tier = message.tier {
+                Text("· \(tier.shortName)").font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var failureView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(message.errorText ?? "Something went wrong.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            Button { onRetry() } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+                    .font(.subheadline.weight(.medium))
+            }
+            .buttonStyle(.glass)
+            .clipShape(.capsule)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 14))
     }
 }
 
@@ -788,6 +1156,12 @@ struct MacNotesPane: View {
             noteDetail
         }
         .navigationTitle("Notes")
+        .toolbar {
+            ToolbarItem {
+                Button { create() } label: { Label("New Note", systemImage: "square.and.pencil") }
+                    .help("New note")
+            }
+        }
         .onDisappear { store.pruneEmpty() }
     }
 
@@ -901,8 +1275,8 @@ struct MacNotesPane: View {
     private func turnIntoPrompt(_ note: Note) {
         let body = note.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
-        let title = note.title
-        MacPromptStore.shared.add(Prompt(title: title.isEmpty ? "Note" : title, category: .general, body: body))
+        MacConversationStore.shared.pendingSeed = body
+        WindowOpener.open(.prompts)
     }
 }
 
@@ -1015,7 +1389,7 @@ private struct MacNoteEditor: View {
             TextEditor(text: $body_)
                 .font(.body).focused($focus, equals: .body)
                 .scrollContentBackground(.hidden).padding(4)
-                .frame(minHeight: 200)
+                .frame(minHeight: 120, maxHeight: 240)
                 .onChange(of: body_) { _, _ in persist() }
         }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
