@@ -454,28 +454,22 @@ struct MacPromptsPane: View {
                 }
             }
             .frame(maxHeight: .infinity)
-
-            Divider()
-            Button {
-                libSearch = ""
-                showLibrary = true
-            } label: {
-                Label("Prompt Library", systemImage: "books.vertical")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
         }
         .frame(minWidth: 240)
         .searchable(text: $search, placement: .sidebar, prompt: "Search history")
         .navigationTitle("Prompts")
         .toolbar {
             ToolbarItem {
+                Button { libSearch = ""; showLibrary = true } label: {
+                    Label("Library", systemImage: "books.vertical")
+                }
+                .help("Prompt library")
+            }
+            ToolbarItem {
                 Button { newChat() } label: { Label("New chat", systemImage: "square.and.pencil") }
                     .disabled(active.messages.isEmpty && !isGenerating)
                     .help("New chat")
+                    .keyboardShortcut("n", modifiers: .command)
             }
         }
         .onChange(of: selectedID) { _, newValue in
@@ -625,8 +619,7 @@ struct MacPromptsPane: View {
                     .padding(.vertical, 10)
                     .padding(.trailing, 4)
 
-                // Trailing action — only visible when needed; fixed frame prevents
-                // the capsule from resizing when transitioning between states.
+                // Trailing action — fixed frame keeps the container stable.
                 Group {
                     if isGenerating {
                         Button { stop() } label: {
@@ -656,7 +649,9 @@ struct MacPromptsPane: View {
                 .padding(.trailing, 6)
                 .padding(.bottom, 6)
             }
-            .glassEffect(.regular, in: .capsule)
+            // Fixed corner radius — stays a consistent rounded rectangle as the
+            // field grows, never distorting into a more circular capsule shape.
+            .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -697,7 +692,7 @@ struct MacPromptsPane: View {
                 inputFocused = true
             }
             .navigationTitle("Prompt Library")
-            .frame(minWidth: 460, minHeight: 520)
+            .frame(minWidth: 460, idealHeight: 580, maxHeight: 680)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showLibrary = false }

@@ -202,6 +202,14 @@ private struct NoteEditorView: View {
                     }
                     .accessibilityLabel("More options")
                 }
+                // Keyboard dismiss — appears in the native iOS keyboard accessory bar.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button { focusedField = nil } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                    }
+                    .accessibilityLabel("Dismiss keyboard")
+                }
             }
             .onAppear { if text.isEmpty && checklist.isEmpty { focusedField = .body } }
             .alert("Reminders are turned off", isPresented: $showReminderDenied) {
