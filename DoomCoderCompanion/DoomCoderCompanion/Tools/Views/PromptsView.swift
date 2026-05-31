@@ -45,6 +45,19 @@ struct PromptsView: View {
             .navigationTitle("Prompts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .toolbar {
+                // Keyboard dismiss — shows automatically whenever the keyboard opens,
+                // in the native iOS keyboard accessory bar above the keys.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button {
+                        inputFocused = false
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                    }
+                    .accessibilityLabel("Dismiss keyboard")
+                }
+            }
             .safeAreaInset(edge: .bottom) { inputBar }
             .sheet(isPresented: $showHistory) { historySheet }
             .sheet(isPresented: $showLibrary) { librarySheet }
@@ -227,31 +240,15 @@ struct PromptsView: View {
                 setupBanner
             }
             HStack(alignment: .bottom, spacing: 0) {
-                // Keyboard dismiss (always in layout, opacity-driven — no shift).
-                Button { inputFocused = false } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-                .opacity((inputFocused && !isGenerating) ? 1 : 0)
-                .animation(.easeInOut(duration: 0.15), value: inputFocused)
-                .padding(.leading, 4)
-                .padding(.bottom, 2)
-                .accessibilityLabel("Dismiss keyboard")
-                .accessibilityHidden(!inputFocused)
-
                 TextField("Describe your prompt…", text: $input, axis: .vertical)
                     .lineLimit(1...4)
                     .focused($inputFocused)
-                    .padding(.leading, 4)
+                    .padding(.leading, 14)
                     .padding(.trailing, 4)
                     .padding(.vertical, 10)
                     .accessibilityLabel("Message")
 
-                // Trailing action — only appears when needed; fixed frame prevents
-                // the capsule from resizing when it appears/disappears.
+                // Trailing action — fixed frame keeps the container stable.
                 Group {
                     if isGenerating {
                         Button {
@@ -284,7 +281,9 @@ struct PromptsView: View {
                 .padding(.trailing, 6)
                 .padding(.bottom, 6)
             }
-            .glassEffect(.regular, in: .capsule)
+            // Fixed corner radius so the shape stays a consistent rounded rectangle
+            // as the field expands — never becomes more circular like a capsule would.
+            .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
