@@ -411,7 +411,7 @@ struct SettingsView: View {
                 }
             }
 
-            Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/PRIVACY.md")!) {
+            Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
                 Label("Privacy Policy", systemImage: "hand.raised")
             }
         }

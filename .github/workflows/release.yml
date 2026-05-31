@@ -538,7 +538,7 @@ jobs:
             Existing users receive automatic updates via the built-in Sparkle updater.
 
             ---
-            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/CHANGELOG.md)
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/docs/CHANGELOG.md)
 
       - name: Clean up keychain
         if: always()
