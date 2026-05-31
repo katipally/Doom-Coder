@@ -66,7 +66,7 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Delete prompts & notes", role: .destructive) {
-                PromptStore.shared.deleteAll()
+                ConversationStore.shared.deleteAll()
                 NotesStore.shared.deleteAll()
                 Haptics.success()
             }
@@ -410,26 +410,33 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/PRIVACY.md")!) {
+                Label("Privacy Policy", systemImage: "hand.raised")
+            }
         }
     }
 
     // MARK: - Test push
 
+    @ViewBuilder
     private var testSection: some View {
-        Section {
-            Button {
-                Task {
-                    await sync.sendTestNotification()
-                    testSent = true
-                    try? await Task.sleep(for: .seconds(3))
-                    testSent = false
+        if macStore.primary != nil {
+            Section {
+                Button {
+                    Task {
+                        await sync.sendTestNotification()
+                        testSent = true
+                        try? await Task.sleep(for: .seconds(3))
+                        testSent = false
+                    }
+                } label: {
+                    Label(testSent ? "Sent ✓" : "Send Test Push", systemImage: "bell.badge")
                 }
-            } label: {
-                Label(testSent ? "Sent ✓" : "Send Test Push", systemImage: "bell.badge")
+                .disabled(testSent)
+            } footer: {
+                Text("Sends a test notification through CloudKit to your connected Mac.")
             }
-            .disabled(macStore.primary == nil || testSent)
-        } footer: {
-            Text("Sends a test notification through CloudKit. Requires a connected Mac.")
         }
     }
 
