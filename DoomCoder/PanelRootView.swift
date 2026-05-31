@@ -110,7 +110,7 @@ struct PanelRootView: View {
             Spacer(minLength: 4)
             Button("Fix") {
                 NSApplication.shared.activate()
-                WindowOpener.open(.settings)
+                WindowOpener.openSettings()
             }
             .buttonStyle(.plain)
             .font(.caption.weight(.semibold))
@@ -421,7 +421,7 @@ struct PanelRootView: View {
                 ToolSurfaceManager.open(.notes)
             }
             footerItem("gearshape", label: "Settings") {
-                ToolSurfaceManager.open(.settings)
+                WindowOpener.openSettings()
             }
             footerItem("arrow.triangle.2.circlepath", label: "Updates") {
                 updaterViewModel.checkForUpdates()
