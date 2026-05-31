@@ -29,7 +29,7 @@ only when you've explicitly decided to cut the release.
    `DoomCoder/Info.plist`. `release.yml` also stamps the tag-derived
    version into the plist at build time, but committing the bump keeps
    local dev builds in sync with what shipped.
-2. Update `CHANGELOG.md`.
+2. Update `docs/CHANGELOG.md`.
 3. `git tag v2.5.0 && git push origin v2.5.0`.
 4. `release.yml` (`runs-on: macos-26`) does the rest:
    - Builds + notarizes the `.app` with the existing Developer ID cert.
@@ -86,7 +86,7 @@ builds with the same marketing version are typically auto-approved).
 
 1. Bump `MARKETING_VERSION` in `DoomCoderCompanion/project.yml` and run
    `cd DoomCoderCompanion && xcodegen generate`.
-2. Update `CHANGELOG.md` (the same section that documents the matching
+2. Update `docs/CHANGELOG.md` (the same section that documents the matching
    Mac release).
 3. `git tag ios-v2.4.0 && git push origin ios-v2.4.0`.
 4. `ios-testflight.yml` runs on `macos-26`:
@@ -154,7 +154,7 @@ it. The key ID must match.)
 
 ## Pre-flight checklist (per release)
 
-- [ ] `CHANGELOG.md` updated and dated.
+- [ ] `docs/CHANGELOG.md` updated and dated.
 - [ ] `MARKETING_VERSION` bumped in `DoomCoder/Info.plist` and
       `DoomCoderCompanion/project.yml`. Companion project regenerated
       with `xcodegen generate`.
@@ -199,7 +199,7 @@ In the app record → **App Store** tab:
 - **Category**: Developer Tools / Productivity
 - **Content rights**: No third-party content
 - **Age rating**: questionnaire (defaults yield 4+)
-- **Privacy policy URL**: link to `PRIVACY.md` raw URL on GitHub
+- **Privacy policy URL**: link to `docs/privacy.md` on GitHub (`https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`)
 - **Support URL**: `https://github.com/katipally/Doom-Coder`
 - **Marketing URL**: optional
 
@@ -295,11 +295,14 @@ Connect. The build appears under **TestFlight** in ~10-20 min.
 
 Review usually takes 24-48 hours. Common rejections to pre-empt:
 
-- Missing privacy policy URL.
+- Missing privacy policy URL. Ours is at `https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`.
 - Demo account credentials required if the app has a login. DoomCoder
-  Companion does not — call this out in the **Notes for Reviewer**
-  field: _"App requires iCloud sign-in plus a running Mac with
-  DoomCoder installed. No demo account needed."_
+  Companion does not. In the **Notes for Reviewer** field state: "The
+  Prompts and Notes tabs work fully without any Mac connection or API
+  key. The Dashboard tab is optional and clearly labeled as requiring
+  the Mac app. Apple Intelligence is used for Enhance on supported
+  devices; if unavailable the app shows clear guidance and all other
+  features remain fully usable. No demo account is needed."
 - Background modes not justified. Our `Info.plist` only enables
   `remote-notification`, which CloudKit subscriptions legitimately
   require.

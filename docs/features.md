@@ -225,27 +225,29 @@ On-device requires a supported Mac with Apple Intelligence enabled; otherwise th
 
 ---
 
-## Prompts & Notes
+## Prompts and Notes
 
-A lightweight toolbox window. Both panes focus the editor on open so a first-time user can start typing immediately — no guide needed.
+A lightweight toolbox window. Both panes focus the editor on open so a first-time user can start typing immediately.
 
-### Prompts
+### Mac Prompts
 
-- **Compose** — a full-height editor with **Enhance with AI**, **Copy**, and **Save/Update**. Enhance rewrites your draft using the configured engine; **Undo** restores the pre-Enhance text. Writing and copying never require AI.
-- **Library** — a curated collection of high-quality development prompts; open one into the composer or copy it.
-- Saved drafts live in the sidebar with search.
+The Prompts pane is a chat-style workspace. Type or paste a prompt in the input bar and press send. The AI rewrites it into a clear, structured version and streams the result directly into the conversation view. Each session is saved automatically.
 
-### Notes
+- **Library button** -- opens a curated collection of ready-made prompts grouped by category. Open any entry into the composer or copy it to the clipboard.
+- **History button** -- shows saved conversations. Open a previous session to continue it or start fresh with the New Chat button.
+- **Enhance with AI** -- uses the engine configured in the AI sidebar (on-device Apple Intelligence or your own API key). Writing, copying, and browsing the library never require AI.
 
-On-device notes with title, body, tasks, reminders, and pinning — all first-class, all local to this Mac.
+### Mac Notes
+
+On-device notes with title, body, tasks, reminders, and pinning, all local to this Mac.
 
 | Feature | Description |
 |---|---|
-| **Title** | An explicit title field at the top of the editor. Legacy notes fall back to their first line. |
+| **Title** | An explicit title field at the top of the editor. |
 | **Body** | Freeform note text. |
-| **Tasks** | An inline checklist — add, check off, and remove to-dos right inside the note. |
-| **Reminder** | A **Remind me** toggle with a date/time picker schedules a local notification (stays on this Mac). Permission is requested only when you first set one. |
-| **Pin / Copy / To Prompt / Delete** | Actions in the editor's bottom bar. Pinned notes sort to the top. |
+| **Tasks** | An inline checklist -- add, check off, and remove to-dos right inside the note. |
+| **Reminder** | A Remind me toggle with a date/time picker schedules a local notification. Permission is requested only when you first set one. |
+| **Pin / Copy / To Prompt / Delete** | Actions in the editor bottom bar. Pinned notes sort to the top. |
 
 Search matches titles, body, and task text.
 
@@ -269,21 +271,31 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 
 ---
 
-## iPhone & iPad companion
+## iPhone and iPad companion
 
-**DoomCoder Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** — no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
+**DoomCoder Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** -- no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
 
 ### Works with zero setup (no Mac, no key)
-- **Prompts** — a *Compose | Library* tab. Compose lets you draft a prompt and copy it; the **Library** is a curated collection of high-quality daily-development prompts (write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more) that you can copy or open in the composer.
-- **Notes** — on-device notes with pinning, inline checklists, search, **reminders** (local notifications), and "Turn into prompt".
-- **Dashboard** — three stacked sections that mirror the Mac panel: a **DoomCoder** master on/off toggle, a **Keep Awake** sleep-control section (mode, screen, and session timer), and an **Agents** list. Before a Mac is paired the controls explain that a connected Mac is required; the standalone Prompts and Notes tabs always work.
-- **Settings** — choose the AI engine (On-device Apple Intelligence or your own API key), manage notifications, and pair/unpair a Mac. The **Connection** section shows the paired Mac's name, last-seen time, and a live status indicator.
+
+**Prompts tab** -- a chat-style prompt workspace. Type a prompt and send it; the AI rewrites it into a clear, structured version and streams the reply into the conversation view. Each conversation is saved automatically.
+
+- **History button** (toolbar) -- opens the list of saved conversations. Tap any entry to resume it, or use the New Chat button to start fresh.
+- **Library button** (toolbar) -- opens the curated prompt library: write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more. Tap any entry to copy it or open it in the chat. The library works with no AI and no Mac.
+- **Browse prompt library button** -- shown on the empty state when no conversation is open. Opens the library directly so new users can explore without needing to configure anything.
+
+**Notes tab** -- on-device notes with pinning, inline checklists, search, reminders (local notifications), and a "Turn into prompt" action.
+
+**Settings tab** -- choose the AI engine (on-device Apple Intelligence or your own API key), manage notifications, and pair or unpair a Mac.
 
 ### Optional AI (Enhance)
-Prompt **Enhance** is a graceful bonus that uses either Apple's on-device model or your own provider key (BYOK). On-device AI is unavailable in the iOS Simulator and on unsupported devices, in which case the app shows clear guidance and the rest of the app keeps working.
+
+Prompt Enhance is a bonus that uses either Apple on-device model or your own provider key (BYOK). If on-device AI is not available (unsupported device, Apple Intelligence disabled), the app shows clear guidance with a link to Settings, and everything else keeps working.
 
 ### Optional Mac connection (mirroring)
-When you sign in to the **same iCloud account** on your Mac and iPhone and enable iPhone / iPad in Configure → Notification Channels, the companion mirrors every Mac notification in 1–5 seconds via your private iCloud container (CloudKit) — no third-party server, no API keys, no QR codes. With a Mac paired you also get the live agent list, per-agent notification history, a 7-day session log, and remote keep-awake / master on-off controls.
+
+Sign into the same iCloud account on your Mac and iPhone, then enable iPhone / iPad in Configure > Notification Channels. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes.
+
+With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, a 7-day session log, and remote keep-awake and master on/off controls.
 
 ---
 
@@ -328,4 +340,4 @@ Agent fires hook
 
 ### Privacy
 
-DoomCoder collects no analytics, sends no data to any server, and has no telemetry. All data stays on your Mac and in your private iCloud container. See [PRIVACY.md](PRIVACY.md) for details.
+DoomCoder collects no analytics, sends no data to any server, and has no telemetry. All data stays on your Mac and in your private iCloud container. See [privacy.md](privacy.md) for the full policy.
