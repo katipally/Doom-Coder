@@ -347,23 +347,59 @@ struct MacControlView: View {
 
     private var isWaiting: Bool { waitingCommandId != nil || desiredMaster != nil }
 
+    // Renders directly as List sections (DoomCoder master + Keep Awake), mirroring
+    // the macOS floating panel layout. The Mac device-info header lives in
+    // Settings ▸ Connection — the dashboard stays focused on controls + status.
     var body: some View {
         Group {
             if let mac = macStore.primary {
-                let offline = Date().timeIntervalSince(mac.lastSeen) >= offlineThreshold
-                MacControlCard(
-                    macName: mac.name,
-                    lastSeen: mac.lastSeen,
-                    isDemo: false,
-                    isOffline: offline,
-                    masterEnabled: masterEnabled,
-                    mode: mode,
-                    screen: screen,
-                    timerHours: timerHours,
-                    awakeActive: mac.sleepActive,
-                    activeAgentCount: mac.activeAgentCount ?? 0,
-                    waiting: isWaiting,
-                    onChangeMaster: { on in
+                masterSection(mac)
+                keepAwakeSection(mac)
+            }
+        }
+        .onAppear {
+            // Don't clobber an optimistic selection that's still awaiting a Mac
+            // ack — the section can re-appear (list virtualization) mid-flight.
+            if let mac = macStore.primary, waitingCommandId == nil, desiredMaster == nil {
+                syncFromMac(mac)
+            }
+        }
+        .onChange(of: macStore.primary) { _, newMac in
+            if let newMac { reconcile(newMac) }
+        }
+    }
+
+    // MARK: - Master section (DoomCoder on/off)
+
+    @ViewBuilder
+    private func masterSection(_ mac: MacStatusRecord) -> some View {
+        Section {
+            // Reachability warning rides above the master row so it never leaves
+            // an empty section when the Mac is fresh.
+            MacReachabilityBanner()
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            HStack(spacing: 12) {
+                Image("logo-square")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .opacity(masterEnabled ? 1.0 : 0.5)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DoomCoder").font(.body.weight(.semibold))
+                    Text(masterSubtitle(mac))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.interpolate)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { masterEnabled },
+                    set: { on in
                         Haptics.selection()
                         masterEnabled = on
                         desiredMaster = on
@@ -371,28 +407,135 @@ struct MacControlView: View {
                         // submit can never leave the UI stuck in "waiting".
                         startMasterTimeout()
                         sendMaster(on)
-                    },
-                    onChangeMode: { newMode in
-                        Haptics.selection()
-                        mode = newMode
-                        send(.setKeepAwakeMode, value: newMode.rawValue)
-                    },
-                    onChangeScreen: { newScreen in
-                        Haptics.selection()
-                        screen = newScreen
-                        send(.setScreenMode, value: newScreen.rawValue)
-                    },
-                    onChangeTimer: { hours in
+                    }
+                ))
+                .labelsHidden()
+                .accessibilityLabel("DoomCoder on your Mac")
+                .accessibilityValue(masterEnabled ? "On" : "Off")
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func masterSubtitle(_ mac: MacStatusRecord) -> String {
+        if !masterEnabled { return "Suspended — nothing is active" }
+        let n = mac.activeAgentCount ?? 0
+        if mac.sleepActive, n > 0 { return "Awake · \(n) agent\(n == 1 ? "" : "s") working" }
+        if mac.sleepActive { return "Active · Mac awake" }
+        return "Ready"
+    }
+
+    // MARK: - Keep Awake section (Off / On / Auto)
+
+    @ViewBuilder
+    private func keepAwakeSection(_ mac: MacStatusRecord) -> some View {
+        let offline = Date().timeIntervalSince(mac.lastSeen) >= offlineThreshold
+        Section {
+            IconSegmented(
+                options: KeepAwakeMode.allCases,
+                selection: mode,
+                title: { $0.displayName },
+                symbol: { $0.symbol },
+                tint: keepAwakeTint,
+                accessibilityLabel: { "\($0.displayName) keep awake" },
+                onSelect: { newMode in
+                    Haptics.selection()
+                    mode = newMode
+                    send(.setKeepAwakeMode, value: newMode.rawValue)
+                }
+            )
+            .listRowSeparator(.hidden)
+
+            if mode != .off {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("While awake").font(.subheadline.weight(.semibold))
+                    IconSegmented(
+                        options: ScreenMode.allCases,
+                        selection: screen,
+                        title: { $0.displayName },
+                        symbol: { $0.symbol },
+                        tint: screenTint,
+                        accessibilityLabel: { $0.displayName },
+                        onSelect: { newScreen in
+                            Haptics.selection()
+                            screen = newScreen
+                            send(.setScreenMode, value: newScreen.rawValue)
+                        }
+                    )
+                }
+                .listRowSeparator(.hidden)
+            }
+
+            if mode == .on {
+                Picker("Auto-off after", selection: Binding(
+                    get: { timerHours },
+                    set: { hours in
                         Haptics.selection()
                         timerHours = hours
                         send(.setSessionTimerHours, value: String(hours))
                     }
-                )
-                .onAppear { syncFromMac(mac) }
-                .onChange(of: mac) { _, newMac in
-                    reconcile(newMac)
+                )) {
+                    ForEach(timerChoices, id: \.self) { h in
+                        Text(timerLabel(h)).tag(h)
+                    }
                 }
+                .pickerStyle(.menu)
+                .accessibilityLabel("Auto-off timer")
             }
+
+            statusRow(mac, offline: offline)
+        } header: {
+            Text("Keep Awake")
+        }
+        .disabled(!masterEnabled)
+        .opacity(masterEnabled ? 1.0 : 0.5)
+        .animation(.snappy(duration: 0.2), value: mode)
+    }
+
+    @ViewBuilder
+    private func statusRow(_ mac: MacStatusRecord, offline: Bool) -> some View {
+        HStack(spacing: 8) {
+            if isWaiting {
+                ProgressView().controlSize(.small)
+                Text("Sent — waiting for your Mac to check in")
+            } else if offline {
+                Image(systemName: "wifi.exclamationmark")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text("Mac unreachable — changes apply when it reconnects")
+            } else {
+                Image(systemName: statusSymbol(mac))
+                    .foregroundStyle(mac.sleepActive ? .green : .secondary)
+                    .accessibilityHidden(true)
+                Text(statusText(mac))
+            }
+            Spacer()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func statusSymbol(_ mac: MacStatusRecord) -> String {
+        switch mode {
+        case .off:  return "powersleep"
+        case .on:   return mac.sleepActive ? "cup.and.saucer.fill" : "hourglass"
+        case .auto: return mac.sleepActive ? "sparkles" : "powersleep"
+        }
+    }
+
+    private func statusText(_ mac: MacStatusRecord) -> String {
+        switch mode {
+        case .off:
+            return "Your Mac sleeps normally"
+        case .on:
+            return mac.sleepActive ? "Awake" : "Starting…"
+        case .auto:
+            if mac.sleepActive {
+                let n = mac.activeAgentCount ?? 0
+                return "Awake · \(n) agent\(n == 1 ? "" : "s") working"
+            }
+            return "Idle · sleeps when agents finish"
         }
     }
 

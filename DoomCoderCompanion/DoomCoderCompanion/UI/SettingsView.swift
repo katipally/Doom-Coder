@@ -288,6 +288,15 @@ struct SettingsView: View {
                     Text(mac.lastSeen, style: .relative)
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Status") {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(connectionStatusColor(mac))
+                            .frame(width: 8, height: 8)
+                        Text(connectionStatusLabel(mac)).foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
                 Button {
                     Haptics.tap()
                     showConnect = true
@@ -317,6 +326,20 @@ struct SettingsView: View {
                 Text("Connect to the DoomCoder Mac app to see live agent status and control keep-awake remotely. The app is fully usable without a Mac.")
             }
         }
+    }
+
+    private func connectionStatusColor(_ mac: MacStatusRecord) -> Color {
+        if Date().timeIntervalSince(mac.lastSeen) >= 600 { return .red }
+        return mac.sleepActive ? .green : Color.secondary.opacity(0.4)
+    }
+
+    private func connectionStatusLabel(_ mac: MacStatusRecord) -> String {
+        if Date().timeIntervalSince(mac.lastSeen) >= 600 { return "Unreachable" }
+        if mac.sleepActive {
+            let n = mac.activeAgentCount ?? 0
+            return n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s")" : "Awake"
+        }
+        return (mac.masterEnabled ?? true) ? "Idle" : "Suspended"
     }
 
     private func disconnectCurrentMac() {

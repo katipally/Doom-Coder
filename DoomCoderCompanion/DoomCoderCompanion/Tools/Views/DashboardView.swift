@@ -35,16 +35,7 @@ struct DashboardView: View {
 
     private var connected: some View {
         List {
-            Section {
-                MacReachabilityBanner()
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                MacControlView()
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
+            MacControlView()
 
             agentsSection
         }
