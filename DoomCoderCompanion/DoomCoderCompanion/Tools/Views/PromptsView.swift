@@ -226,16 +226,32 @@ struct PromptsView: View {
             if showSetupBanner {
                 setupBanner
             }
-            // iMessage-style capsule: button lives inside the glass container.
             HStack(alignment: .bottom, spacing: 0) {
+                // Keyboard dismiss (always in layout, opacity-driven — no shift).
+                Button { inputFocused = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .opacity((inputFocused && !isGenerating) ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: inputFocused)
+                .padding(.leading, 4)
+                .padding(.bottom, 2)
+                .accessibilityLabel("Dismiss keyboard")
+                .accessibilityHidden(!inputFocused)
+
                 TextField("Describe your prompt…", text: $input, axis: .vertical)
                     .lineLimit(1...4)
                     .focused($inputFocused)
-                    .padding(.leading, 14)
-                    .padding(.vertical, 10)
+                    .padding(.leading, 4)
                     .padding(.trailing, 4)
+                    .padding(.vertical, 10)
                     .accessibilityLabel("Message")
 
+                // Trailing action — only appears when needed; fixed frame prevents
+                // the capsule from resizing when it appears/disappears.
                 Group {
                     if isGenerating {
                         Button {
@@ -249,20 +265,19 @@ struct PromptsView: View {
                                 .background(.red.gradient, in: .circle)
                         }
                         .accessibilityLabel("Stop generating")
-                    } else {
+                    } else if canSend {
                         Button { send() } label: {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 14, weight: .semibold))
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
                                 .background {
-                                    Circle().fill(canSend
-                                        ? AnyShapeStyle(Color.accentColor.gradient)
-                                        : AnyShapeStyle(Color(uiColor: .systemFill)))
+                                    Circle().fill(AnyShapeStyle(Color.accentColor.gradient))
                                 }
                         }
-                        .disabled(!canSend)
                         .accessibilityLabel("Refine prompt")
+                    } else {
+                        Color.clear.frame(width: 30, height: 30)
                     }
                 }
                 .buttonStyle(.plain)
