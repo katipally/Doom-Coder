@@ -212,6 +212,43 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 **Reveal Logs** — opens `~/Library/Logs/DoomCoder/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
 
+### AI tab (sidebar)
+
+A dedicated sidebar section (not a sub-tab) for the engine that powers prompt **Enhance**.
+
+| Setting | Description |
+|---|---|
+| **Engine** | **On-device** (Apple Intelligence, fully local) or **My API key** (BYOK provider). |
+| **Provider / API key / Model** | When using your own key, pick a provider, paste the key (**Save & test key** validates it and fetches available models), and choose a model. |
+
+On-device requires a supported Mac with Apple Intelligence enabled; otherwise the pane explains why it's unavailable. Prompts and notes are stored only on this Mac — nothing is synced. On-device stays fully local; with a provider key, prompt text is sent to the chosen provider over HTTPS only when you tap Enhance.
+
+---
+
+## Prompts & Notes
+
+A lightweight toolbox window. Both panes focus the editor on open so a first-time user can start typing immediately — no guide needed.
+
+### Prompts
+
+- **Compose** — a full-height editor with **Enhance with AI**, **Copy**, and **Save/Update**. Enhance rewrites your draft using the configured engine; **Undo** restores the pre-Enhance text. Writing and copying never require AI.
+- **Library** — a curated collection of high-quality development prompts; open one into the composer or copy it.
+- Saved drafts live in the sidebar with search.
+
+### Notes
+
+On-device notes with title, body, tasks, reminders, and pinning — all first-class, all local to this Mac.
+
+| Feature | Description |
+|---|---|
+| **Title** | An explicit title field at the top of the editor. Legacy notes fall back to their first line. |
+| **Body** | Freeform note text. |
+| **Tasks** | An inline checklist — add, check off, and remove to-dos right inside the note. |
+| **Reminder** | A **Remind me** toggle with a date/time picker schedules a local notification (stays on this Mac). Permission is requested only when you first set one. |
+| **Pin / Copy / To Prompt / Delete** | Actions in the editor's bottom bar. Pinned notes sort to the top. |
+
+Search matches titles, body, and task text.
+
 ---
 
 ## Track Agents window
@@ -239,8 +276,8 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 ### Works with zero setup (no Mac, no key)
 - **Prompts** — a *Compose | Library* tab. Compose lets you draft a prompt and copy it; the **Library** is a curated collection of high-quality daily-development prompts (write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more) that you can copy or open in the composer.
 - **Notes** — on-device notes with pinning, inline checklists, search, **reminders** (local notifications), and "Turn into prompt".
-- **Dashboard** — shows the standalone experience and, once a Mac is paired, the live agent list and Mac controls.
-- **Settings** — choose the AI engine (On-device Apple Intelligence or your own API key), manage notifications, and pair/unpair a Mac.
+- **Dashboard** — three stacked sections that mirror the Mac panel: a **DoomCoder** master on/off toggle, a **Keep Awake** sleep-control section (mode, screen, and session timer), and an **Agents** list. Before a Mac is paired the controls explain that a connected Mac is required; the standalone Prompts and Notes tabs always work.
+- **Settings** — choose the AI engine (On-device Apple Intelligence or your own API key), manage notifications, and pair/unpair a Mac. The **Connection** section shows the paired Mac's name, last-seen time, and a live status indicator.
 
 ### Optional AI (Enhance)
 Prompt **Enhance** is a graceful bonus that uses either Apple's on-device model or your own provider key (BYOK). On-device AI is unavailable in the iOS Simulator and on unsupported devices, in which case the app shows clear guidance and the rest of the app keeps working.
