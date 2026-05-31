@@ -43,7 +43,7 @@ targets:
       path: DoomCoderCompanion/Resources/Info.plist
       properties:
         CFBundleName: DoomCoder Companion
-        CFBundleDisplayName: DoomCoder
+        CFBundleDisplayName: DoomCoder Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
