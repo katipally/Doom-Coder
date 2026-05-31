@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.6.1] - 2026-05-31
+
+### Fixed -- iOS App Store compliance
+
+- **Privacy Policy link** added to Settings > About so reviewers and users can reach the policy directly from the app. Required for any app using CloudKit or third-party AI providers (Guideline 5.1.1).
+- **On-device AI availability check** -- PromptsView now probes Apple Intelligence status on launch and whenever the AI mode changes. If Apple Intelligence is unavailable (unsupported device, disabled in Settings), the setup banner appears immediately with an actionable message instead of letting a send attempt fail silently.
+- **Setup banner covers both AI modes** -- the existing banner only showed when a remote API key was missing. It now also shows when on-device AI is unavailable, with mode-specific text and icon.
+- **Browse prompt library button** added to the Prompts empty state. The library works with zero AI and zero Mac setup, giving reviewers and new users clear standalone value from their first interaction.
+- **Test Push section hidden when no Mac is paired** -- the "Send Test Push" button was always visible but disabled without a connected Mac, making the app look incomplete. It now only appears once a Mac has been paired.
+- **Display name updated to "DoomCoder Companion"** -- the iOS home screen icon previously read "DoomCoder" (same as the Mac app). It now reads "DoomCoder Companion" to clearly identify the companion app.
+
+### Changed -- Documentation
+
+- Consolidated all documentation into `docs/`. `CHANGELOG.md`, `RELEASING.md`, and `PRIVACY.md` moved from the repo root; `docs/README.md` index added.
+- `docs/privacy.md` rewritten as a single, comprehensive 10-section policy (merged and expanded from two previous versions).
+- `README.md` updated: iOS Prompts section rewritten to reflect the chat-style UI; `xcodeproj` reference corrected to `xcworkspace`; Privacy link added.
+- `docs/features.md` updated: iOS Prompts section rewritten for chat interface; Mac Prompts section updated; Privacy link fixed.
+- `docs/RELEASING.md` updated: all `CHANGELOG.md` and `PRIVACY.md` paths corrected to `docs/`; reviewer notes updated to reflect standalone app (no longer says "requires Mac installed").
+
+---
+
 ## [2.6.0] - 2026-05-30
 
 This release makes the iOS companion a **genuinely standalone app** that is fully usable on first launch with zero setup — no Mac connection and no API key required — directly addressing App Review Guideline 4.2.3(i). It also brings a major Mac Tools redesign, on-device AI honesty, and a broad bug/UX/accessibility pass.
