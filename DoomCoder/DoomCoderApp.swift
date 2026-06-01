@@ -71,7 +71,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
         // Re-apply curated notification defaults for users upgrading from
         // v4.0 (some of whom had legacy "notify every tool call" prefs).
-        ChannelStore.migratePrefsIfNeeded()
+        AgentNotificationStore.migrateIfNeeded()
+
+        // Drop legacy per-agent channel overrides — channels are now a single
+        // global mac + iPhone setting that applies to every agent.
+        ChannelStore.migrateClearPerAgentOverridesIfNeeded()
 
         // Start the iCloud push pipeline (writes NotificationLog / MacStatus
         // / AgentConfig / AgentIcon CKRecords that the iOS companion app

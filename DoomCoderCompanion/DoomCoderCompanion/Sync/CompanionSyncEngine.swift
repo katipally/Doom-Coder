@@ -57,6 +57,7 @@ final class CompanionSyncEngine: NSObject {
     func start() {
         Task { await setupSyncEngine() }
         startForegroundPolling()
+        startHeartbeat()
 
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
@@ -72,6 +73,7 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in
                 self?.persistEngineStateNow()
                 self?.stopForegroundPolling()
+                self?.stopHeartbeat()
             }
         }
         
@@ -83,10 +85,12 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.startForegroundPolling()
+                self.startHeartbeat()
                 if self.syncEngine == nil {
                     await self.setupSyncEngine()
                 } else {
                     await self.fetchChanges()
+                    await self.publishCompanionStatus()
                 }
             }
         }
@@ -251,6 +255,7 @@ final class CompanionSyncEngine: NSObject {
 
         do {
             try await engine.fetchChanges()
+            await publishCompanionStatus()
         } catch {
             SyncTelemetry.shared.record(.engineError, side: .ios,
                                         detail: "initial fetchChanges: \(error.localizedDescription)")
@@ -408,7 +413,90 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
-    // MARK: - Emergency reset
+    // MARK: - Presence heartbeat (iOS → Mac)
+
+    /// Periodic heartbeat that publishes this device's presence so the Mac's
+    /// Configure ▸ Connections tab can show real connected/unreachable status,
+    /// symmetric to how the companion shows the Mac's status.
+    @ObservationIgnored private var _heartbeatTimer: Timer?
+    /// Stay comfortably inside the Mac's 600 s "connected" threshold.
+    private let heartbeatInterval: TimeInterval = 240
+
+    private func startHeartbeat() {
+        stopHeartbeat()
+        let t = Timer(timeInterval: heartbeatInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.publishCompanionStatus() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        _heartbeatTimer = t
+    }
+
+    private func stopHeartbeat() {
+        _heartbeatTimer?.invalidate()
+        _heartbeatTimer = nil
+    }
+
+    /// Re-entrancy guard so overlapping triggers (timer + foreground + setup)
+    /// don't race on the same cached server record.
+    @ObservationIgnored private var isPublishingPresence = false
+
+    /// Writes a `CompanionStatusRecord` describing this device. Uses a direct
+    /// `CKModifyRecordsOperation` (like `sendControlCommand`) rather than the
+    /// sync engine, since the companion is a read-only sync peer
+    /// (`nextRecordZoneChangeBatch` returns nil). The cached server record is
+    /// reused so the change tag is preserved (avoids CKError 14/2004). On a
+    /// tag conflict the server record is cached and a single retry is scheduled,
+    /// so a wiped cache (e.g. after env migration) self-heals.
+    func publishCompanionStatus(allowRetry: Bool = true) async {
+        guard accountAvailable, !isPublishingPresence else { return }
+        isPublishingPresence = true
+        let ok = await performPresenceSave()
+        isPublishingPresence = false
+        if !ok && allowRetry {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                await self?.publishCompanionStatus(allowRetry: false)
+            }
+        }
+    }
+
+    private func performPresenceSave() async -> Bool {
+        let device = UIDevice.current
+        let status = CompanionStatusRecord(
+            deviceId: Self.issuerDeviceId,
+            name: device.name,
+            model: device.model,
+            systemVersion: "\(device.systemName) \(device.systemVersion)",
+            appVersion: Self.clientVersion
+        )
+        let base = serverRecords.record(forName: status.recordID.recordName)
+        let op = CKModifyRecordsOperation(recordsToSave: [status.toCKRecord(base: base)],
+                                          recordIDsToDelete: nil)
+        op.qualityOfService = .utility
+        op.savePolicy = .allKeys
+        SyncTelemetry.shared.record(.localEdit, side: .ios,
+                                    recordType: CompanionStatusRecord.recordType,
+                                    detail: "presence heartbeat")
+        op.perRecordSaveBlock = { [weak self] _, result in
+            switch result {
+            case .success(let saved):
+                Task { @MainActor [weak self] in self?.serverRecords.store(saved) }
+            case .failure(let error):
+                // Cache the server's record so the retry rebuilds on the
+                // correct change tag instead of looping on 14/2004.
+                if let server = (error as? CKError)?.serverRecord {
+                    Task { @MainActor [weak self] in self?.serverRecords.store(server) }
+                }
+            }
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            op.modifyRecordsResultBlock = { result in
+                if case .success = result { cont.resume(returning: true) }
+                else { cont.resume(returning: false) }
+            }
+            db.add(op)
+        }
+    }
 
     func resetLocalSyncState() async {
         print("[CompanionSyncEngine] resetLocalSyncState: starting")
@@ -509,6 +597,14 @@ final class CompanionSyncEngine: NSObject {
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) {
                     NotificationLogStore.shared.append(r)
+                }
+
+            case CompanionStatusRecord.recordType:
+                // Our own heartbeat fetched back — cache its server record so
+                // the next publish carries the correct change tag even after a
+                // local cache wipe (env migration / reinstall).
+                if record.recordID.recordName == "CompanionStatus-\(Self.issuerDeviceId)" {
+                    self.serverRecords.store(record)
                 }
                 
             case "AgentConfig":

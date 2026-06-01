@@ -17,6 +17,13 @@ enum NormalizedEventPhase: String, Codable, Sendable {
     case subagentEnd
     case error
     case other
+    // Opt-in coverage phases (default OFF in the gate). MUST stay byte-identical
+    // to the Core enum (Packages/DoomCoderCore/.../NormalizedEventPhase.swift)
+    // because CloudKit serializes the rawValue String.
+    case fileEdit
+    case compaction
+    case thinking
+    case housekeeping
 }
 
 /// Normalized event produced by per-agent normalizers. Contains all the
@@ -107,19 +114,19 @@ struct ClaudeEventNormalizer: AgentEventNormalizer {
         "StopFailure":           .error,
         "SubagentStart":         .subagentStart,
         "SubagentStop":          .subagentEnd,
-        "TaskCreated":           .other,
-        "TaskCompleted":         .other,
-        "TeammateIdle":          .other,
-        "PreCompact":            .other,
-        "PostCompact":           .other,
-        "FileChanged":           .other,
-        "CwdChanged":            .other,
-        "ConfigChange":          .other,
-        "InstructionsLoaded":    .other,
+        "TaskCreated":           .housekeeping,
+        "TaskCompleted":         .housekeeping,
+        "TeammateIdle":          .housekeeping,
+        "PreCompact":            .compaction,
+        "PostCompact":           .compaction,
+        "FileChanged":           .fileEdit,
+        "CwdChanged":            .housekeeping,
+        "ConfigChange":          .housekeeping,
+        "InstructionsLoaded":    .housekeeping,
         "Elicitation":           .permissionNeeded,
         "ElicitationResult":     .other,
-        "WorktreeCreate":        .other,
-        "WorktreeRemove":        .other,
+        "WorktreeCreate":        .housekeeping,
+        "WorktreeRemove":        .housekeeping,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -192,16 +199,16 @@ struct CursorEventNormalizer: AgentEventNormalizer {
         "afterShellExecution":    .toolEnd,
         "beforeMCPExecution":     .permissionNeeded,
         "afterMCPExecution":      .toolEnd,
-        "afterFileEdit":          .other,
+        "afterFileEdit":          .fileEdit,
         "beforeReadFile":         .other,
         "beforeSubmitPrompt":     .userPrompt,
-        "preCompact":             .other,
+        "preCompact":             .compaction,
         "stop":                   .sessionEnd,
         "afterAgentResponse":     .agentResponse,
-        "afterAgentThought":      .other,
+        "afterAgentThought":      .thinking,
         "beforeTabFileRead":      .other,
-        "afterTabFileEdit":       .other,
-        "workspaceOpen":          .other,
+        "afterTabFileEdit":       .fileEdit,
+        "workspaceOpen":          .housekeeping,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -281,7 +288,7 @@ struct VSCodeEventNormalizer: AgentEventNormalizer {
         "Stop":               .sessionEnd,
         "SubagentStart":      .subagentStart,
         "SubagentStop":       .subagentEnd,
-        "PreCompact":         .other,
+        "PreCompact":         .compaction,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -330,7 +337,7 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
         "subagentStart":        .subagentStart,
         "subagentStop":         .subagentEnd,
         "errorOccurred":        .error,
-        "preCompact":           .other,
+        "preCompact":           .compaction,
         "permissionRequest":    .permissionNeeded,
         // `notification` is dispatched by notification_type in normalize().
         "notification":         .other,
@@ -467,7 +474,7 @@ struct WindsurfEventNormalizer: AgentEventNormalizer {
         "pre_user_prompt":                         .userPrompt,
         "post_cascade_response":                   .agentResponse,
         "post_cascade_response_with_transcript":   .agentResponse,
-        "post_setup_worktree":                     .other,
+        "post_setup_worktree":                     .housekeeping,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
@@ -532,8 +539,8 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
         "PostToolUse":        .toolEnd,
         "PermissionRequest":  .permissionNeeded,
         "Stop":               .sessionEnd,
-        "PreCompact":         .other,
-        "PostCompact":        .other,
+        "PreCompact":         .compaction,
+        "PostCompact":        .compaction,
     ]
 
     func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {

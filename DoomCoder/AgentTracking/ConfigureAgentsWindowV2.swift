@@ -6,13 +6,14 @@ import UserNotifications
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels, logs, settings, ai }
+    enum Tab: Hashable { case agents, channels, logs, settings }
     /// Set by `WindowOpener.openSettings()` before the window is created so a
     /// cold-opened Configure window lands on the right tab (the
     /// `.dcSelectConfigureTab` notification only reaches an already-live view).
     @MainActor static var pendingTab: Tab?
     @State private var tab: Tab = .agents
     @State private var selected: TrackedAgent? = .claude
+    @State private var advancedExpanded = false
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
     @State private var statusMessage: String = ""
     @State private var statusIsError: Bool = false
@@ -30,8 +31,6 @@ struct ConfigureAgentsViewV2: View {
     @State private var hookWarnings: [TrackedAgent: String] = [:]
     // Permission status
     @State private var permStatus: String = "…"
-    // Notification event preferences
-    @State private var notifPrefs = ChannelStore.loadPrefs()
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private static let companionAppStoreURL = "https://apps.apple.com/app/doomcoder-companion/id6772514212"
@@ -41,24 +40,25 @@ struct ConfigureAgentsViewV2: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            switch tab {
-            case .agents:
-                if let agent = selected {
-                    agentDetail(agent)
-                        .id(agent)
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                } else {
-                    ContentUnavailableView("Select an agent", systemImage: "sidebar.left")
+            Group {
+                switch tab {
+                case .agents:
+                    if let agent = selected {
+                        agentDetail(agent)
+                            .id(agent)
+                            .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    } else {
+                        ContentUnavailableView("Select an agent", systemImage: "sidebar.left")
+                    }
+                case .channels:
+                    channelsDetail
+                case .logs:
+                    LogsView()
+                case .settings:
+                    ConfigureSettingsPane(sleepManager: SleepManager.shared)
                 }
-            case .channels:
-                channelsDetail
-            case .logs:
-                LogsView()
-            case .settings:
-                ConfigureSettingsPane(sleepManager: SleepManager.shared)
-            case .ai:
-                MacToolsSettingsPane()
             }
+            .navigationTitle(detailTitle)
         }
         .frame(minWidth: 820, minHeight: 580)
         .onAppear {
@@ -88,7 +88,7 @@ struct ConfigureAgentsViewV2: View {
             withAnimation(DCAnim.fade) {
                 switch id {
                 case "settings":  tab = .settings; selected = nil
-                case "ai":        tab = .ai;       selected = nil
+                case "ai":        tab = .settings; selected = nil
                 case "channels":  tab = .channels; selected = nil
                 case "logs":      tab = .logs;     selected = nil
                 case "agents":    tab = .agents
@@ -138,7 +138,7 @@ struct ConfigureAgentsViewV2: View {
                         selected = nil
                     }
                 } label: {
-                    Label("Notification Channels", systemImage: "bell.badge")
+                    Label("Connections", systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -167,29 +167,26 @@ struct ConfigureAgentsViewV2: View {
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .settings ? Color.accentColor.opacity(0.15) : Color.clear)
                 .animation(DCAnim.fade, value: tab == .settings)
-
-                Button {
-                    withAnimation(DCAnim.fade) {
-                        tab = .ai
-                        selected = nil
-                    }
-                } label: {
-                    Label("AI", systemImage: "sparkles")
-                }
-                .buttonStyle(.plain)
-                .listRowBackground(tab == .ai ? Color.accentColor.opacity(0.15) : Color.clear)
-                .animation(DCAnim.fade, value: tab == .ai)
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Configure")
     }
 
+    /// Titlebar text that follows the current selection.
+    private var detailTitle: String {
+        switch tab {
+        case .agents:   return selected?.displayName ?? "Agents"
+        case .channels: return "Connections"
+        case .logs:     return "Logs"
+        case .settings: return "Settings"
+        }
+    }
+
     @ViewBuilder
     private func agentRow(_ agent: TrackedAgent) -> some View {
         let d = detections[agent]
         let isInst = installedCache[agent] ?? false
-        let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
         let hasWarning = hookWarnings[agent] != nil
         HStack(spacing: 8) {
             AgentIconView(agent: agent, size: 24)
@@ -206,14 +203,7 @@ struct ConfigureAgentsViewV2: View {
                     .foregroundStyle(.yellow)
                     .font(.caption)
                     .accessibilityHidden(true)
-            } else if isInst {
-                // Health dot: green if events in last hour, grey otherwise
-                HelpTip("Green = at least one hook event received in the last hour. Grey = no recent activity (agent may be idle or not running).")
-                Circle()
-                    .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-            } else if d?.installed == true {
+            } else if d?.installed == true && !isInst {
                 // Agent detected but hooks not installed: nudge
                 Text("Set up →")
                     .font(.caption2)
@@ -244,296 +234,275 @@ struct ConfigureAgentsViewV2: View {
                     }
                 }
 
-                // Detection
-                GroupBox {
-                    HStack {
-                        let d = detections[agent]
-                        if d?.installed == true {
-                            Label("Detected \(d?.version ?? "")", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            if let detail = d?.details {
-                                Text("(\(detail))").font(.caption).foregroundStyle(.tertiary)
-                            }
-                        } else {
-                            Label("Not detected", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            if agent == .copilotCLI {
-                                Text("Install anyway — detection is optional")
-                                    .font(.caption).foregroundStyle(.tertiary)
-                            }
-                        }
-                        Spacer()
-                        Button("Re-scan") { detectAll() }
-                    }
-                } label: {
-                    Label("Detection", systemImage: "magnifyingglass")
-                }
+                // ① Setup — install / uninstall hooks for this agent.
+                hooksSetupSection(agent)
 
-                // Capabilities — what notifications this agent can emit.
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("These notifications will be delivered to your Mac (and mirrored to the iPhone companion if installed).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.bottom, 2)
-                        ForEach(AgentCapabilityCatalog.capabilities(for: agent)) { cap in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Image(systemName: cap.symbolName)
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 16)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(cap.title)
-                                        .font(.callout.weight(.medium))
-                                    Text(cap.detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Label("What you'll be notified about", systemImage: "bell.badge")
-                }
-
-                // Health Monitoring
-                if installedCache[agent] == true {
-                    GroupBox {
-                        let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
-                        let todayCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 86400)
-                        let lastEv = EventStore.shared.lastEvent(agent: agent.rawValue)
-                        HStack(spacing: 16) {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
-                                    .frame(width: 10, height: 10)
-                                    .animation(DCAnim.smooth, value: eventCount > 0)
-                                    .accessibilityHidden(true)
-                                Text(eventCount > 0 ? "Active" : "Quiet")
-                                    .font(.callout.weight(.medium))
-                                    .foregroundStyle(eventCount > 0 ? .primary : .secondary)
-                                    .contentTransition(.identity)
-                            }
-                            Text("\(todayCount) today")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            if let last = lastEv {
-                                Text("Last: \(timeAgo(Date(timeIntervalSince1970: last.ts)))")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                        }
-                    } label: {
-                        Label("Health", systemImage: "heart.text.square")
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                // Hook Validation Warning — shows the concrete drift diff
-                // (missing events / stale helper paths / failing folders)
-                // rather than a blanket external-modification banner.
-                if let warning = hookWarnings[agent] {
-                    GroupBox {
-                        HStack(alignment: .top) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.yellow)
-                                .accessibilityHidden(true)
-                            Text(warning)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer()
-                            Button("Repair") {
-                                repairDriftedHooks(agent: agent)
-                            }
-                        }
-                    } label: {
-                        Label("Hook Warning", systemImage: "exclamationmark.shield")
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                // Prerequisites (dynamic checks)
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(dynamicPrereqs(for: agent), id: \.label) { prereq in
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: prereq.met ? "checkmark.circle.fill" : "xmark.circle")
-                                    .foregroundStyle(prereq.met ? .green : .red)
-                                    .font(.caption)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(prereq.label).font(.callout)
-                                    if !prereq.met, let fix = prereq.fix {
-                                        Text(fix)
-                                            .font(.caption2)
-                                            .foregroundStyle(.orange)
-                                    }
-                                }
-                            }
-                        }
-                        HStack {
-                            Spacer()
-                            Button("Recheck") { detectAll() }
-                                .controlSize(.small)
-                        }
-                    }
-                } label: {
-                    Label("Prerequisites", systemImage: "list.bullet.clipboard")
-                }
-
-                // Install / Uninstall
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Config: \(configPathHint(agent))")
-                            .font(.callout).foregroundStyle(.secondary)
-
-                        // VS Code variants checkbox group — lets users opt
-                        // in/out of patching settings.json per host (Stable,
-                        // Insiders, VSCodium, Cursor, Windsurf).
-                        if agent == .vscode {
-                            vscodeVariantsPicker
-                        }
-
-                        HStack(spacing: 12) {
-                            let isInst = installedCache[agent] ?? false
-                            Button(isInst ? "Reinstall" : "Install") {
-                                    withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
-                                    let r = AgentInstallerV2.install(agent)
-                                    let msg = resultMessage(r, verb: "Install")
-                                    let isErr: Bool
-                                    if case .failure = r { isErr = true } else { isErr = false }
-                                    withAnimation(DCAnim.smooth) {
-                                        statusMessage = msg
-                                        statusIsError = isErr
-                                        isInstalling = false
-                                    }
-                                    Task { await detectAllAsync() }
-                                }
-                                .disabled(isInstalling)
-                                if isInst {
-                                    Button("Uninstall", role: .destructive) {
-                                        withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
-                                        let r = AgentInstallerV2.uninstall(agent)
-                                        let msg = resultMessage(r, verb: "Uninstall")
-                                        let isErr: Bool
-                                        if case .failure = r { isErr = true } else { isErr = false }
-                                        withAnimation(DCAnim.smooth) {
-                                            statusMessage = msg
-                                            statusIsError = isErr
-                                            isInstalling = false
-                                        }
-                                        Task { await detectAllAsync() }
-                                    }
-                                    .disabled(isInstalling)
-                                }
-                                if isInstalling {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .transition(.opacity)
-                                }
-
-                            Spacer()
-
-                            Button {
-                                DeepLink.revealInFinder(agent)
-                            } label: {
-                                Label("Reveal file", systemImage: "folder")
-                            }
-
-                            Button {
-                                DeepLink.openInIDE(agent)
-                            } label: {
-                                Label("Open in IDE", systemImage: "arrow.up.forward.app")
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Hooks", systemImage: "link")
-                }
-
-                // Verify — single inline Connection Doctor (replaces the
-                // old Test Helper / Run Demo / Watch Live trio).
-                ConnectionDoctorSection(agent: agent)
-
-                // Live Events
-                liveEventsSection(agent)
-
-                // Channel overrides
-                GroupBox {
-                    let hasOverride = ChannelStore.hasOverride(for: agent)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Toggle("Use custom channels (override global)", isOn: Binding(
-                                get: { hasOverride },
-                                set: { on in
-                                    if on {
-                                        ChannelStore.setPerAgent(agent, config: channelConfig.global)
-                                    } else {
-                                        ChannelStore.clearOverride(for: agent)
-                                    }
-                                    channelConfig = ChannelStore.load()
-                                }
-                            ))
-                            HelpTip("By default this agent uses the global channel settings from the Notification Channels tab. Enable this to set macOS and iPhone channels independently for just this agent.")
-                        }
-
-                        if hasOverride {
-                            let override = channelConfig.perAgent[agent.rawValue] ?? channelConfig.global
-                            Toggle("macOS Notification", isOn: Binding(
-                                get: { override.macNotification },
-                                set: { v in
-                                    var c = override; c.macNotification = v
-                                    ChannelStore.setPerAgent(agent, config: c)
-                                    channelConfig = ChannelStore.load()
-                                    if v { NotificationDispatcher.shared.requestPermission() }
-                                }
-                            ))
-                            Toggle("iPhone / iPad", isOn: Binding(
-                                get: { override.cloudkit },
-                                set: { v in
-                                    var c = override; c.cloudkit = v
-                                    ChannelStore.setPerAgent(agent, config: c)
-                                    channelConfig = ChannelStore.load()
-                                }
-                            ))
-                        } else {
-                            Text("Using global channel settings.")
-                                .font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                } label: {
-                    Label("Channel Overrides", systemImage: "bell.badge")
-                }
+                // ② Notify — editable per-agent notification card (NotifyAboutCard.swift).
+                NotifyAboutCard(agent: agent)
 
                 // Status
                 if !statusMessage.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: statusIsError ? "xmark.circle.fill" : "checkmark.circle.fill")
-                            .foregroundStyle(statusIsError ? .red : .green)
-                            .accessibilityHidden(true)
-                        Text(statusMessage)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                        Spacer()
-                        if statusIsError, let agent = selected {
-                            Button("Show Config") {
-                                let path = AgentInstallerV2.configPath(for: agent)
-                                NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
-                            }
-                            .buttonStyle(.borderless)
-                            .font(.callout)
-                        }
-                    }
-                    .padding(.top, 4)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    statusBanner
                 }
+
+                // ③ Advanced — diagnostics tucked away so the default view stays clean.
+                advancedSection(agent)
             }
             .padding(20)
         }
+    }
+
+    // MARK: - Advanced (card-style collapsible)
+
+    @ViewBuilder
+    private func advancedSection(_ agent: TrackedAgent) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(DCAnim.smooth) { advancedExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "wrench.adjustable")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Advanced")
+                                .font(.body.weight(.semibold))
+                            Text("Diagnostics, prerequisites & logs")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(advancedExpanded ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if advancedExpanded {
+                    VStack(alignment: .leading, spacing: 16) {
+                        detectionSection(agent)
+                        if installedCache[agent] == true { healthSection(agent) }
+                        if let warning = hookWarnings[agent] { hookWarningSection(agent, warning: warning) }
+                        prerequisitesSection(agent)
+                        ConnectionDoctorSection(agent: agent)
+                        liveEventsSection(agent)
+                    }
+                    .padding(.top, 14)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    // MARK: - Agent detail sections
+
+    @ViewBuilder
+    private func detectionSection(_ agent: TrackedAgent) -> some View {
+        GroupBox {
+            HStack {
+                let d = detections[agent]
+                if d?.installed == true {
+                    Label("Detected \(d?.version ?? "")", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    if let detail = d?.details {
+                        Text("(\(detail))").font(.caption).foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Label("Not detected", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    if agent == .copilotCLI {
+                        Text("Install anyway — detection is optional")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer()
+                Button("Re-scan") { detectAll() }
+            }
+        } label: {
+            Label("Detection", systemImage: "magnifyingglass")
+        }
+    }
+
+    @ViewBuilder
+    private func healthSection(_ agent: TrackedAgent) -> some View {
+        GroupBox {
+            let eventCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 3600)
+            let todayCount = EventStore.shared.recentCount(agent: agent.rawValue, seconds: 86400)
+            let lastEv = EventStore.shared.lastEvent(agent: agent.rawValue)
+            HStack(spacing: 16) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(eventCount > 0 ? Color.green : Color.secondary.opacity(0.3))
+                        .frame(width: 10, height: 10)
+                        .animation(DCAnim.smooth, value: eventCount > 0)
+                        .accessibilityHidden(true)
+                    Text(eventCount > 0 ? "Active" : "Quiet")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(eventCount > 0 ? .primary : .secondary)
+                        .contentTransition(.identity)
+                }
+                Text("\(todayCount) today")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let last = lastEv {
+                    Text("Last: \(timeAgo(Date(timeIntervalSince1970: last.ts)))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+            }
+        } label: {
+            Label("Health", systemImage: "heart.text.square")
+        }
+    }
+
+    @ViewBuilder
+    private func hookWarningSection(_ agent: TrackedAgent, warning: String) -> some View {
+        GroupBox {
+            HStack(alignment: .top) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .accessibilityHidden(true)
+                Text(warning)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Repair") {
+                    repairDriftedHooks(agent: agent)
+                }
+            }
+        } label: {
+            Label("Hook Warning", systemImage: "exclamationmark.shield")
+        }
+    }
+
+    @ViewBuilder
+    private func prerequisitesSection(_ agent: TrackedAgent) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(dynamicPrereqs(for: agent), id: \.label) { prereq in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: prereq.met ? "checkmark.circle.fill" : "xmark.circle")
+                            .foregroundStyle(prereq.met ? .green : .red)
+                            .font(.caption)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(prereq.label).font(.callout)
+                            if !prereq.met, let fix = prereq.fix {
+                                Text(fix)
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Recheck") { detectAll() }
+                        .controlSize(.small)
+                }
+            }
+        } label: {
+            Label("Prerequisites", systemImage: "list.bullet.clipboard")
+        }
+    }
+
+    @ViewBuilder
+    private func hooksSetupSection(_ agent: TrackedAgent) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Config: \(configPathHint(agent))")
+                    .font(.callout).foregroundStyle(.secondary)
+
+                if agent == .vscode {
+                    vscodeVariantsPicker
+                }
+
+                HStack(spacing: 12) {
+                    let isInst = installedCache[agent] ?? false
+                    Button(isInst ? "Reinstall" : "Install") {
+                        withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
+                        let r = AgentInstallerV2.install(agent)
+                        let msg = resultMessage(r, verb: "Install")
+                        let isErr: Bool
+                        if case .failure = r { isErr = true } else { isErr = false }
+                        withAnimation(DCAnim.smooth) {
+                            statusMessage = msg
+                            statusIsError = isErr
+                            isInstalling = false
+                        }
+                        Task { await detectAllAsync() }
+                    }
+                    .disabled(isInstalling)
+                    if isInst {
+                        Button("Uninstall", role: .destructive) {
+                            withAnimation(DCAnim.smooth) { isInstalling = true; statusMessage = "" }
+                            let r = AgentInstallerV2.uninstall(agent)
+                            let msg = resultMessage(r, verb: "Uninstall")
+                            let isErr: Bool
+                            if case .failure = r { isErr = true } else { isErr = false }
+                            withAnimation(DCAnim.smooth) {
+                                statusMessage = msg
+                                statusIsError = isErr
+                                isInstalling = false
+                            }
+                            Task { await detectAllAsync() }
+                        }
+                        .disabled(isInstalling)
+                    }
+                    if isInstalling {
+                        ProgressView()
+                            .controlSize(.small)
+                            .transition(.opacity)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        DeepLink.revealInFinder(agent)
+                    } label: {
+                        Label("Reveal file", systemImage: "folder")
+                    }
+
+                    Button {
+                        DeepLink.openInIDE(agent)
+                    } label: {
+                        Label("Open in IDE", systemImage: "arrow.up.forward.app")
+                    }
+                }
+            }
+        } label: {
+            Label("Setup", systemImage: "link")
+        }
+    }
+
+    @ViewBuilder
+    private var statusBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: statusIsError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(statusIsError ? .red : .green)
+                .accessibilityHidden(true)
+            Text(statusMessage)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+            Spacer()
+            if statusIsError, let agent = selected {
+                Button("Show Config") {
+                    let path = AgentInstallerV2.configPath(for: agent)
+                    NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+                }
+                .buttonStyle(.borderless)
+                .font(.callout)
+            }
+        }
+        .padding(.top, 4)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - VS Code variants picker
@@ -581,9 +550,11 @@ struct ConfigureAgentsViewV2: View {
     private var channelsDetail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Notification Channels").font(.title.bold())
-                Text("Global defaults applied to all agents unless overridden.")
+                Text("Connections").font(.title.bold())
+                Text("Where alerts get delivered, and the devices connected to this Mac.")
                     .foregroundStyle(.secondary)
+
+                connectedDevicesSection
 
                 // Permission Status
                 GroupBox {
@@ -681,64 +652,9 @@ struct ConfigureAgentsViewV2: View {
                             HelpTip("Must show green for iPhone mirroring to work. If it stays grey, make sure you're signed in to iCloud in System Settings and that iCloud Drive is enabled.")
                             Spacer()
                         }
-
-                        Divider()
-
-                        Text("Don't have the app yet?")
-                            .font(.subheadline.weight(.medium))
-
-                        HStack(spacing: 10) {
-                            Button {
-                                if let url = URL(string: Self.companionAppStoreURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Label("Get on the App Store", systemImage: "arrow.down.app.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-
-                            Button {
-                                if let url = URL(string: Self.companionHelpURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Text("How it works")
-                            }
-                            .buttonStyle(.link)
-                            .controlSize(.small)
-                        }
-
-                        Text("Sign in to the same iCloud account on your Mac and iPhone. That's it.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } label: {
                     Label("iPhone / iPad", systemImage: "iphone.gen3")
-                }
-
-                // Notification event preferences
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        notifPrefToggle("Session completed", $notifPrefs.sessionEnd,
-                            tip: "Notifies when an agent finishes its task successfully. On by default.")
-                        notifPrefToggle("Errors", $notifPrefs.error,
-                            tip: "Notifies on tool errors, permission errors, or aborted runs. On by default.")
-                        notifPrefToggle("Permission requests", $notifPrefs.permissionNeeded,
-                            tip: "Notifies when an agent is waiting for you to approve a tool call (e.g. Claude elicitations). On by default.")
-                        notifPrefToggle("Agent responses", $notifPrefs.agentResponse,
-                            tip: "Notifies each time the agent sends a reply. Verbose — off by default.")
-                        Divider()
-                        notifPrefToggle("Session started", $notifPrefs.sessionStart,
-                            tip: "Notifies at the very beginning of a new agent session. Verbose — off by default.")
-                        notifPrefToggle("Sub-agent activity", $notifPrefs.subagentStart,
-                            tip: "Notifies when the agent spawns sub-agents or parallel tasks. Off by default.")
-                        notifPrefToggle("Tool usage", $notifPrefs.toolUse,
-                            tip: "Notifies on every file read/write/run tool call. Very verbose — off by default.")
-                    }
-                } label: {
-                    Label("Notify me when…", systemImage: "bell.badge")
                 }
 
                 // Test result
@@ -756,7 +672,92 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
-    // MARK: - Live Events
+    // MARK: - Connected devices (companion presence)
+
+    @ViewBuilder
+    private var connectedDevicesSection: some View {
+        // Periodic tick so "Connected" ages out to "Last seen X ago" while the
+        // window stays open, even with no new heartbeat to trigger a re-render.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let store = CompanionStatusStore.shared
+            let devices = store.devices
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    if devices.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "iphone.slash")
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                            Text("No iPhone or iPad connected yet")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 10) {
+                            Button {
+                                if let url = URL(string: Self.companionAppStoreURL) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Label("Set up iPhone or iPad", systemImage: "arrow.down.app.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+
+                            Button {
+                                if let url = URL(string: Self.companionHelpURL) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Text("How it works")
+                            }
+                            .buttonStyle(.link)
+                            .controlSize(.small)
+                        }
+                    } else {
+                        ForEach(devices, id: \.deviceId) { device in
+                            let connected = context.date.timeIntervalSince(device.lastSeen) < CompanionStatusStore.connectedThreshold
+                            HStack(spacing: 10) {
+                                Image(systemName: connected ? "circle.fill" : "circle")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(connected ? Color.green : .secondary)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(device.name.isEmpty ? "iPhone or iPad" : device.name)
+                                        .font(.callout.weight(.medium))
+                                    if !device.systemVersion.isEmpty {
+                                        Text(device.systemVersion)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                Spacer()
+                                Text(connected ? "Connected" : "Last seen \(Self.relativeTime(device.lastSeen, now: context.date))")
+                                    .font(.caption)
+                                    .foregroundStyle(connected ? Color.green : .secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Label("Connected Devices", systemImage: "iphone.gen3")
+            }
+        }
+    }
+
+    /// Compact "5m ago" / "2h ago" / "3d ago" relative timestamp.
+    private static func relativeTime(_ date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
+        if seconds < 86_400 { return "\(Int(seconds / 3600))h ago" }
+        return "\(Int(seconds / 86_400))d ago"
+    }
 
     @ViewBuilder
     private func liveEventsSection(_ agent: TrackedAgent) -> some View {
@@ -1008,23 +1009,6 @@ struct ConfigureAgentsViewV2: View {
         case .copilotCLI: return "~/.copilot/hooks/doomcoder.json"
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         case .codexCLI:   return "~/.codex/hooks.json"
-        }
-    }
-
-    private func notifPrefToggle(_ label: String, _ binding: Binding<Bool>, tip: String? = nil) -> some View {
-        HStack(spacing: 6) {
-            Toggle(label, isOn: Binding(
-                get: { binding.wrappedValue },
-                set: { v in
-                    binding.wrappedValue = v
-                    ChannelStore.savePrefs(notifPrefs)
-                }
-            ))
-            .toggleStyle(.checkbox)
-            .font(.callout)
-            if let tip {
-                HelpTip(tip)
-            }
         }
     }
 

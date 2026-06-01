@@ -5,6 +5,7 @@
 import Foundation
 import CloudKit
 import OSLog
+import Observation
 import DoomCoderCore
 
 final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked Sendable {
@@ -61,6 +62,9 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 if record.recordType == ControlCommandRecord.recordType,
                    let cmd = ControlCommandRecord(record) {
                     commands.append(cmd)
+                } else if record.recordType == CompanionStatusRecord.recordType,
+                          let status = CompanionStatusRecord(record) {
+                    await MainActor.run { CompanionStatusStore.shared.upsert(status) }
                 }
             }
             if !commands.isEmpty {
@@ -208,5 +212,68 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     private func persistState(_ state: CKSyncEngine.State.Serialization) {
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: stateKey)
+    }
+}
+
+// MARK: - Companion presence store
+
+/// Mac-side store of companion-device presence. The iOS/iPadOS companion writes
+/// a `CompanionStatusRecord` heartbeat; this Mac fetches it via the push
+/// pipeline's `CKSyncEngine` and upserts here so Configure ▸ Connections can
+/// show real connected/unreachable status per device — symmetric to how the
+/// companion shows the Mac's status.
+@MainActor
+@Observable
+final class CompanionStatusStore {
+
+    static let shared = CompanionStatusStore()
+
+    /// Devices keyed by stable `deviceId`.
+    private(set) var byDevice: [String: CompanionStatusRecord] = [:]
+
+    /// All known devices, most-recently-seen first.
+    var devices: [CompanionStatusRecord] {
+        byDevice.values.sorted { $0.lastSeen > $1.lastSeen }
+    }
+
+    /// True when at least one device has checked in within the freshness window.
+    var hasConnectedDevice: Bool {
+        let now = Date()
+        return byDevice.values.contains { now.timeIntervalSince($0.lastSeen) < Self.connectedThreshold }
+    }
+
+    /// Mirrors the companion's 600 s reachability rule so both sides agree.
+    static let connectedThreshold: TimeInterval = 600
+
+    private static let persistKey = "doomcoder.companion.statusSnapshot"
+
+    private init() {
+        load()
+    }
+
+    func upsert(_ record: CompanionStatusRecord) {
+        // Keep the freshest heartbeat if records arrive out of order.
+        if let existing = byDevice[record.deviceId], existing.lastSeen > record.lastSeen { return }
+        byDevice[record.deviceId] = record
+        persist()
+    }
+
+    func clear() {
+        byDevice.removeAll()
+        persist()
+    }
+
+    private func persist() {
+        let snapshot = Array(byDevice.values)
+        if let data = try? JSONEncoder().encode(snapshot) {
+            UserDefaults.standard.set(data, forKey: Self.persistKey)
+        }
+    }
+
+    private func load() {
+        guard let data = UserDefaults.standard.data(forKey: Self.persistKey),
+              let snapshot = try? JSONDecoder().decode([CompanionStatusRecord].self, from: data)
+        else { return }
+        for record in snapshot { byDevice[record.deviceId] = record }
     }
 }
