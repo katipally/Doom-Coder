@@ -117,8 +117,8 @@ struct WhatsNewSheet: View {
                        body: "All four agent hook schemas are now correct — Claude, Cursor, VS Code Copilot, and Copilot CLI all fire reliably.")
             featureRow(icon: "arrow.triangle.2.circlepath", title: "Auto-migration",
                        body: "Broken v1.8.5 configs are detected and rewritten automatically with a backup.")
-            featureRow(icon: "bell.badge", title: "Channel controls",
-                       body: "Global channel defaults + per-agent overrides, with a test button for each channel.")
+            featureRow(icon: "bell.badge", title: "Smarter notifications",
+                       body: "Pick exactly what each agent alerts you about, and no more auto-accept spam — permission alerts wait for proof a tool was really blocked.")
             featureRow(icon: "play.rectangle", title: "Demo sessions",
                        body: "Run a synthetic agent lifecycle to verify notifications without launching a real agent.")
 

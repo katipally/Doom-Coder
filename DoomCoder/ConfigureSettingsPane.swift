@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import DoomCoderCore
 
 /// Settings pane embedded as the 4th tab of the Configure window. Replaces
 /// the standalone `SettingsView` window scene. Every control here backs a
@@ -11,6 +12,10 @@ struct ConfigureSettingsPane: View {
     }()
     @State private var redact: Bool = {
         UserDefaults.standard.object(forKey: "doomcoder.agents.redact") as? Bool ?? true
+    }()
+    @State private var deferTenths: Int = {
+        let raw = UserDefaults.standard.object(forKey: "doomcoder.approval.deferSeconds") as? Double ?? 0.8
+        return Int((min(max(raw, 0.5), 3.0) * 10).rounded())
     }()
 
     var body: some View {
@@ -86,6 +91,24 @@ struct ConfigureSettingsPane: View {
                         Text("How long the badge shows \"completed\" or \"failed\" before reverting to \"idle\".")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        Divider()
+
+                        Stepper(value: $deferTenths, in: 5...30, step: 1) {
+                            HStack {
+                                Text("Approval debounce window")
+                                HelpTip("Some agents (Copilot CLI, Cursor, Windsurf) emit a permission hook before their own allowlist decides to auto-approve. DoomCoder waits this long for proof the tool actually ran before alerting you, eliminating auto-accept spam. Genuine blocks still notify after the window. Live status in the menu/Island is unaffected and always instant.")
+                                Spacer()
+                                Text(String(format: "%.1fs", Double(deferTenths) / 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .onChange(of: deferTenths) { _, new in
+                            UserDefaults.standard.set(Double(new) / 10, forKey: "doomcoder.approval.deferSeconds")
+                        }
+                        Text("Only affects the alert for auto-accepting agents — live status stays instant.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
@@ -101,13 +124,13 @@ struct ConfigureSettingsPane: View {
                                 }
                             HelpTip("Hides agent prompt and response content in the local event log and Logs view. Event type, timing, and status are still recorded. Enabled by default for privacy.")
                         }
-                        Divider()
-                        companionBanner
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
-                    Label("Notifications & Privacy", systemImage: "bell.badge")
+                    Label("Privacy", systemImage: "hand.raised")
                 }
+
+                AISettingsSection()
 
                 GroupBox {
                     Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
@@ -121,64 +144,157 @@ struct ConfigureSettingsPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
 
-    @ViewBuilder
-    private var companionBanner: some View {
-        let isReady = CloudKitPusher.shared.isReady
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "iphone.gen3")
-                .font(.system(size: 26))
-                .foregroundStyle(isReady ? Color.accentColor : .secondary)
-                .frame(width: 36)
-                .accessibilityHidden(true)
+// MARK: - AI section (merged from the former standalone AI tab)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text("DoomCoder for iPhone & iPad")
-                        .font(.body.weight(.semibold))
-                    Spacer()
-                    Image(systemName: isReady ? "checkmark.icloud.fill" : "icloud.slash")
-                        .foregroundStyle(isReady ? .green : .secondary)
-                        .accessibilityHidden(true)
-                    Text(isReady ? "iCloud connected" : "Connecting…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+/// AI engine configuration rendered as a GroupBox so it sits inline with the
+/// other Settings sections. Owns its own state + availability probe.
+struct AISettingsSection: View {
+    @State private var coordinator = AIEngineCoordinator.shared
+    @State private var keyInput = ""
+    @State private var keyTestState: KeyTestState = .idle
+    @State private var appleReason: String?
+
+    private enum KeyTestState: Equatable {
+        case idle, testing, ok(Int), failed(String)
+    }
+
+    var body: some View {
+        let _ = coordinator.revision   // re-render on key/model changes
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Mode", selection: $coordinator.selection) {
+                    ForEach(AIEngineSelection.allCases) { Text($0.displayName).tag($0) }
                 }
-                Text("Mirror every agent notification, see installed-agent status, and read session logs from your phone. Notifications are delivered through your private iCloud — no servers, no tokens, no QR codes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .accessibilityLabel("AI mode")
+                Text(coordinator.selection.detail)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if coordinator.selection == .appleOnDevice, let appleReason {
+                    Label(appleReason, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if coordinator.selection == .remoteKey {
+                    Divider()
+                    Picker("Provider", selection: Binding(
+                        get: { coordinator.provider },
+                        set: { newProvider in
+                            coordinator.provider = newProvider
+                            keyTestState = .idle
+                            Task { await coordinator.loadModelsIfNeeded(for: newProvider) }
+                        }
+                    )) {
+                        ForEach(AIProvider.allCases) { Text($0.displayName).tag($0) }
+                    }
+
+                    if coordinator.hasKey(for: coordinator.provider) {
+                        savedKeyControls
+                    } else {
+                        SecureField(coordinator.provider.keyHint, text: $keyInput)
+                        Button {
+                            let entered = keyInput
+                            keyInput = ""
+                            coordinator.setKey(entered, for: coordinator.provider)
+                            Task { await testKey() }
+                        } label: {
+                            Label("Save & test key", systemImage: "key.fill")
+                        }
+                        .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    Link("Get a key", destination: coordinator.provider.consoleURL).font(.caption)
+                    statusLine
+                }
+
+                Divider()
+                Text("Prompts and notes are stored only on this Mac. Nothing is synced. On-device stays fully local; with “My API key”, your prompts are sent to the provider you choose over HTTPS.")
+                    .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 10) {
-                    Button {
-                        if let url = URL(string: Self.companionAppStoreURL) {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        Label("Get on the App Store", systemImage: "arrow.down.app.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-
-                    Button {
-                        if let url = URL(string: Self.companionHelpURL) {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        Text("How it works")
-                    }
-                    .buttonStyle(.link)
-                    .controlSize(.small)
-                }
-                Text("Sign in to the same iCloud account on your Mac and your iPhone. The agent list and notifications appear automatically.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Label("AI", systemImage: "sparkles")
+        }
+        .task {
+            appleReason = (await coordinator.appleAvailability())?.message
+            if coordinator.selection == .remoteKey {
+                await coordinator.loadModelsIfNeeded(for: coordinator.provider)
             }
         }
     }
 
-    private static let companionAppStoreURL =
-        "https://apps.apple.com/app/doomcoder-companion/id6772514212"
-    private static let companionHelpURL =
-        "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
+    @ViewBuilder
+    private var savedKeyControls: some View {
+        LabeledContent("API key") {
+            Label("Saved", systemImage: "checkmark.circle.fill")
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.green)
+        }
+
+        let models = coordinator.discoveredModels[coordinator.provider] ?? []
+        if !models.isEmpty {
+            Picker("Model", selection: Binding(
+                get: {
+                    let current = coordinator.selectedModel(for: coordinator.provider)
+                    return models.contains(current) ? current : (models.first ?? current)
+                },
+                set: { coordinator.setSelectedModel($0, for: coordinator.provider) }
+            )) {
+                ForEach(models, id: \.self) { Text($0).tag($0) }
+            }
+        } else if keyTestState == .testing {
+            LabeledContent("Model") {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading…").foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            LabeledContent("Model") {
+                Text(coordinator.selectedModel(for: coordinator.provider)).foregroundStyle(.secondary)
+            }
+        }
+
+        HStack {
+            Button { Task { await testKey() } } label: {
+                Label("Test again", systemImage: "checkmark.shield")
+            }
+            .disabled(keyTestState == .testing)
+            Button(role: .destructive) {
+                coordinator.clearKey(for: coordinator.provider)
+                keyTestState = .idle
+            } label: {
+                Label("Remove key", systemImage: "key.slash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        switch keyTestState {
+        case .testing:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Testing…") }
+                .font(.caption).foregroundStyle(.secondary)
+        case .ok(let n):
+            Label("Key works — \(n) model\(n == 1 ? "" : "s") available", systemImage: "checkmark.circle.fill")
+                .font(.caption).foregroundStyle(.green)
+        case .failed(let msg):
+            Label(msg, systemImage: "xmark.circle.fill")
+                .font(.caption).foregroundStyle(.red)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    private func testKey() async {
+        keyTestState = .testing
+        let result = await coordinator.testKey(for: coordinator.provider)
+        switch result {
+        case .success(let ids): keyTestState = .ok(ids.count)
+        case .failure(let f):   keyTestState = .failed(f.message)
+        }
+    }
 }

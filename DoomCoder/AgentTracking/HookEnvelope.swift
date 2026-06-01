@@ -52,18 +52,8 @@ struct TimelineEvent: Identifiable, Sendable {
     }
 }
 
-// MARK: - Notification policy
-
-/// Determines whether an event should trigger a push notification.
-/// Uses user-configurable NotificationPrefs stored in ChannelStore.
-/// Falls back to normalized event phase for consistent cross-agent behavior.
-enum NotificationPolicy {
-    /// Check using normalized event phase (preferred path).
-    static func isNotifiable(phase: NormalizedEventPhase) -> Bool {
-        let prefs = ChannelStore.loadPrefs()
-        return prefs.shouldNotify(phase: phase.rawValue)
-    }
-}
+// Notification gating now lives in `AgentNotificationPrefs.shouldNotify`
+// (per-agent), evaluated at dispatch time in `AgentTrackingManager.ingest`.
 
 // MARK: - Notification names
 
@@ -100,4 +90,29 @@ enum TrackedAgent: String, CaseIterable, Sendable {
         case .claude, .copilotCLI, .codexCLI: return false
         }
     }
+
+    /// How trustworthy this agent's permission hook is as a "the agent is truly
+    /// blocked, waiting on you" signal.
+    ///
+    /// - `.reliable`: the hook fires ONLY when the agent is genuinely blocked
+    ///   (Claude, VS Code Copilot, Codex). The alert fires immediately — no
+    ///   added latency.
+    /// - `.preDecision`: the hook fires BEFORE the agent's own allow-list /
+    ///   auto-approve decision runs (Copilot CLI, Cursor, Windsurf), so it
+    ///   spams permission events for actions that never actually block. These
+    ///   go through `ApprovalArbiter`, which defers the alert briefly and
+    ///   cancels it if the action turns out to have run on its own.
+    var permissionHookReliability: PermissionHookReliability {
+        switch self {
+        case .claude, .vscode, .codexCLI: return .reliable
+        case .copilotCLI, .cursor, .windsurf: return .preDecision
+        }
+    }
+}
+
+/// Reliability classification for an agent's permission hook. See
+/// `TrackedAgent.permissionHookReliability`.
+enum PermissionHookReliability: Sendable {
+    case reliable
+    case preDecision
 }

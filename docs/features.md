@@ -74,16 +74,17 @@ Shows whether the agent app/CLI is installed and its detected version. Click **R
 
 #### What you'll be notified about
 
-Lists the notification events this agent can emit. Events are agent-specific:
+The card lists the notification categories this agent can emit, grouped for clarity. Tap **Edit** to turn individual categories on or off; only categories the agent actually emits are shown.
 
-| Event | Agents |
+| Group | Categories |
 |---|---|
-| Task completed | All |
-| Task failed | All |
-| Waiting for approval | Claude Code, Copilot CLI |
-| Waiting for input | VS Code Copilot, Windsurf |
-| Session started | All |
-| Tool calls | Claude Code, Copilot CLI, Codex CLI |
+| **Important** | Completed, Failed, Waiting for approval, Waiting for input |
+| **Activity** | Session started, Tool calls, Sub-agent activity, File edits, Thinking, Prompt sent |
+| **Housekeeping** | Context compaction, Background tasks |
+
+The approval/permission categories expand into a per-tool palette (shell, file edits, MCP, etc.) so you can be alerted before some tool types but not others.
+
+**Auto-accept handling.** Copilot CLI, Cursor, and Windsurf fire a permission hook *before* their own allowlist auto-approves. DoomCoder waits an **approval debounce window** (default 0.8s, adjustable 0.5-3s in the Settings tab) for proof the tool ran before alerting, so auto-approved actions never spam you. Live status stays instant; only the alert is deferred. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately.
 
 #### Health
 
@@ -126,15 +127,15 @@ Sends a synthetic test event through the full hook pipeline and waits for DoomCo
 
 Real-time stream of hook events received from this agent. Events auto-scroll to the bottom. Click an event to expand the JSON payload. Click **Clear** to reset the stream.
 
-#### Channel Overrides
-
-By default, each agent uses the global channel settings. Enable **Use custom channels** to set macOS and iPhone channels independently for just this agent — for example, send Claude Code completions to your iPhone but skip VS Code Copilot.
-
 ---
 
-### Notification Channels tab
+### Connections tab
 
-Global defaults applied to all agents (unless overridden per-agent).
+Where notifications get delivered, and the devices connected to this Mac. One global **mac + iPhone** channel setting applied to all agents. (Per-agent channel overrides were removed; per-agent control now lives in the "What you'll be notified about" categories card.)
+
+#### Connected Devices
+
+Real, symmetric presence for your companion devices — mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the DoomCoder Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
 
 #### Permission Status
 
@@ -212,16 +213,16 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 **Reveal Logs** — opens `~/Library/Logs/DoomCoder/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
 
-### AI tab (sidebar)
+#### AI
 
-A dedicated sidebar section (not a sub-tab) for the engine that powers prompt **Enhance**.
+The engine that powers prompt **Enhance**, now a section within Settings (no separate sidebar tab).
 
 | Setting | Description |
 |---|---|
 | **Engine** | **On-device** (Apple Intelligence, fully local) or **My API key** (BYOK provider). |
 | **Provider / API key / Model** | When using your own key, pick a provider, paste the key (**Save & test key** validates it and fetches available models), and choose a model. |
 
-On-device requires a supported Mac with Apple Intelligence enabled; otherwise the pane explains why it's unavailable. Prompts and notes are stored only on this Mac — nothing is synced. On-device stays fully local; with a provider key, prompt text is sent to the chosen provider over HTTPS only when you tap Enhance.
+On-device requires a supported Mac with Apple Intelligence enabled; otherwise the section explains why it's unavailable. Prompts and notes are stored only on this Mac — nothing is synced. On-device stays fully local; with a provider key, prompt text is sent to the chosen provider over HTTPS only when you tap Enhance.
 
 ---
 
@@ -235,7 +236,7 @@ The Prompts pane is a chat-style workspace. Type or paste a prompt in the input 
 
 - **Library button** -- opens a curated collection of ready-made prompts grouped by category. Open any entry into the composer or copy it to the clipboard.
 - **History button** -- shows saved conversations. Open a previous session to continue it or start fresh with the New Chat button.
-- **Enhance with AI** -- uses the engine configured in the AI sidebar (on-device Apple Intelligence or your own API key). Writing, copying, and browsing the library never require AI.
+- **Enhance with AI** -- uses the engine configured in Settings ▸ AI (on-device Apple Intelligence or your own API key). Writing, copying, and browsing the library never require AI.
 
 ### Mac Notes
 
@@ -293,7 +294,7 @@ Prompt Enhance is a bonus that uses either Apple on-device model or your own pro
 
 ### Optional Mac connection (mirroring)
 
-Sign into the same iCloud account on your Mac and iPhone, then enable iPhone / iPad in Configure > Notification Channels. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes.
+Sign into the same iCloud account on your Mac and iPhone, then enable iPhone / iPad in Configure > Connections. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes.
 
 With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, a 7-day session log, and remote keep-awake and master on/off controls.
 
