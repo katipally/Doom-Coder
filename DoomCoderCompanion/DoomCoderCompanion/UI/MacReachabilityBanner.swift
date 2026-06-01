@@ -20,7 +20,9 @@ struct MacReachabilityBanner: View {
     @State private var now = Date()
 
     /// Threshold after which we surface a warning. Mac heartbeats every 60s.
-    private let staleAfter: TimeInterval = 180
+    /// 5 minutes = 4 missed heartbeats before showing stale — avoids false
+    /// alarms from routine CloudKit push delays.
+    private let staleAfter: TimeInterval = 300
 
     private let timer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
@@ -40,7 +42,7 @@ struct MacReachabilityBanner: View {
 
     private func staleness(for mac: MacStatusRecord) -> Level? {
         let age = now.timeIntervalSince(mac.lastSeen)
-        if age >= 600 { return .offline }
+        if age >= 900 { return .offline }
         if age >= staleAfter { return .stale }
         return nil
     }
@@ -53,7 +55,7 @@ struct MacReachabilityBanner: View {
         let symbol = (level == .offline) ? "wifi.exclamationmark" : "exclamationmark.triangle.fill"
         let title = (level == .offline) ? "\(mac.name) not reachable" : "\(mac.name) may be out of date"
         let detail = (level == .offline)
-            ? "We haven't heard from your Mac in over 10 minutes. Open DoomCoder on your Mac, or check your network and iCloud sign-in. New data and notifications won't arrive until it reconnects."
+            ? "We haven't heard from your Mac in over 15 minutes. Open DoomCoder on your Mac, or check your network and iCloud sign-in. New data and notifications won't arrive until it reconnects."
             : "Last sync was \(relativeAge(mac.lastSeen)). The status below may not reflect what's happening on your Mac right now."
 
         HStack(alignment: .top, spacing: 12) {

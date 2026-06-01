@@ -91,6 +91,9 @@ final class CloudKitPusher {
             Task { @MainActor in
                 self?.kickEngine()
                 self?.fetchNow()
+                // Publish fresh status immediately so iOS sees the Mac is awake
+                // rather than waiting up to 60 seconds for the next heartbeat.
+                self?.publishMacStatus()
             }
         }
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -115,20 +118,38 @@ final class CloudKitPusher {
             }
         }
 
-        // Safety-net 30s flush + fetch (so iOS ControlCommands land within 30s
-        // even if no push arrives).
-        safetyTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        // Safety-net flush + fetch — the reliable backstop for iOS→Mac commands
+        // when silent push is throttled or undelivered.
+        //
+        // MUST be scheduled in `.common` run-loop modes. `Timer.scheduledTimer`
+        // installs the timer in `.default` mode only, which is SUSPENDED while
+        // the menu-bar panel/menus are open (the run loop switches to event
+        // tracking). That stalled the only reliable fetch trigger exactly when
+        // the user has the panel open watching for an update — the source of the
+        // "iOS commands take forever to land while the Mac is visible" bug.
+        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.kickEngine()
                 self?.fetchNow()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        safetyTimer = timer
     }
 
-    private func kickEngine() {
+    func kickEngine() {
         // Sends any pending state changes the engine has queued.
+        // Called by the delegate (via a new Task) after applying a ControlCommand
+        // so the MacStatus ack reaches iOS in <1s instead of up to 15s.
+        //
+        // MUST use Task.detached, NOT Task {}: CKSyncEngine guards re-entrancy
+        // with a task-local marker set while a delegate callback runs. A plain
+        // `Task {}` inherits task-local values, so when this is reached on a
+        // path that originates inside a delegate callback the inherited marker
+        // makes sendChanges() crash ("Cannot await a call into CKSyncEngine
+        // from within a delegate callback"). Detaching escapes that scope.
         guard let engine else { return }
-        Task { try? await engine.sendChanges() }
+        Task.detached { try? await engine.sendChanges() }
     }
 
     private var lastTouchAt: Date = .distantPast
@@ -220,15 +241,36 @@ final class CloudKitPusher {
         self.didSetup = true
         self.isReady = true
 
-        // Ensure the iOS-facing subscription on this database (so iOS users
-        // who haven't run their app yet aren't blocked — but in practice the
-        // iOS app registers its own subscriptions).
-        // We don't register iOS-side subscriptions from Mac.
-
         logger.notice("ckpusher: ready (macId=\(self.macId, privacy: .public), zone=\(CloudKitConstants.zoneName, privacy: .public))")
         NotificationCenter.default.post(name: .cloudKitPusherReady, object: nil)
+
         // Pull any ControlCommand records written by iOS before we launched.
+        // Called BEFORE zone subscription so the initial fetch is never delayed
+        // by a slow CloudKit subscription response.
         fetchNow()
+
+        // Subscribe to zone changes so iOS ControlCommands trigger a silent
+        // APNs push to this Mac — reducing worst-case latency from 15s to <3s.
+        // Fire-and-forget: a slow or failing subscription never blocks the fetch.
+        Task { await self.ensureZoneSubscription() }
+    }
+
+    private func ensureZoneSubscription() async {
+        let subID = "mac-zone-push-v1"
+        let sub = CKRecordZoneSubscription(zoneID: zoneID, subscriptionID: subID)
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true   // silent push — no visible alert or badge
+        sub.notificationInfo = info
+        do {
+            try await database.save(sub)
+            logger.notice("ckpusher: zone subscription saved (id=\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            logger.notice("ckpusher: zone subscription already exists (\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .permissionFailure {
+            logger.error("ckpusher: zone subscription permission failure — check aps-environment entitlement")
+        } catch {
+            logger.error("ckpusher: zone subscription failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func ensureZone() async -> Bool {
@@ -273,6 +315,21 @@ final class CloudKitPusher {
         guard let engine else { return }
         let sm = SleepManager.shared
         let ud = UserDefaults.standard
+
+        // Encode per-agent status lines for iOS expandable detail view.
+        // Explicit if-else (not ternary + closure) for Swift 6 concurrency clarity.
+        var agentJSON: String? = nil
+        if sm.keepAwakeMode == .auto {
+            let lines: [[String: Any]] = sm.autoStatusLines.map { l in
+                ["name": l.agentDisplayName, "raw": l.agentRaw, "key": l.id,
+                 "state": l.state, "type": l.agentType,
+                 "idleSecs": l.idleSecs, "pidAlive": l.pidAlive]
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: lines) {
+                agentJSON = String(data: data, encoding: .utf8)
+            }
+        }
+
         let rec = MacStatusRecord(
             macId: macId,
             name: macName,
@@ -287,7 +344,9 @@ final class CloudKitPusher {
             elapsedSeconds: sm.elapsedSeconds,
             lastAppliedCommandId: ud.string(forKey: Self.lastAppliedCommandIdKey),
             lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
-            masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true
+            masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true,
+            agentStatusJSON: agentJSON,
+            autoGraceEndsAt: sm.autoGraceEndsAt
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
@@ -301,8 +360,11 @@ final class CloudKitPusher {
     /// Pull zone changes now. Used to pick up iOS-written ControlCommand
     /// records promptly (launch, foreground, wake, and the safety timer).
     func fetchNow() {
+        // Task.detached (not Task {}): see kickEngine() — a plain Task inherits
+        // the CKSyncEngine delegate-callback task-local marker and would crash
+        // if fetchNow() is ever reached from a delegate-originated context.
         guard let engine else { return }
-        Task { try? await engine.fetchChanges() }
+        Task.detached { try? await engine.fetchChanges() }
     }
 
     /// Publish the list of tracked agents on this Mac plus installed-state
@@ -346,6 +408,18 @@ final class CloudKitPusher {
     func deleteNotificationLogs(recordIDs: [CKRecord.ID]) {
         guard let engine else { return }
         engine.state.add(pendingRecordZoneChanges: recordIDs.map { .deleteRecord($0) })
+    }
+
+    /// Deletes a companion device's `CompanionStatusRecord` from CloudKit (used
+    /// by "Forget device"). The record lives in this Mac's private DB zone, so
+    /// the sync engine can remove it; a still-alive device simply re-registers.
+    func deleteCompanionStatus(deviceId: String) {
+        guard let engine else { return }
+        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
+                                   ownerName: CKCurrentUserDefaultName)
+        let id = CKRecord.ID(recordName: "CompanionStatus-\(deviceId)", zoneID: zone)
+        engine.state.add(pendingRecordZoneChanges: [.deleteRecord(id)])
+        kickEngine()
     }
 
     // MARK: - In-flight payloads (read by delegate)

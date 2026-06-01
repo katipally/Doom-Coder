@@ -26,6 +26,13 @@ final class CloudKitPusherLifecycle {
     private var didPublishConfig = false
     private var didUploadIcons = false
 
+    // Leading+trailing throttle for change-driven status publishing.
+    private var _lastChangePublishAt: Date = .distantPast
+    private var _pendingChangePublish: Task<Void, Never>?
+    /// Minimum spacing between change-driven publishes. Coalesces bursts of hook
+    /// events while keeping the first change in any burst near-instant.
+    private let changePublishMinInterval: TimeInterval = 2.0
+
     private init() {}
 
     func start() {
@@ -48,25 +55,44 @@ final class CloudKitPusherLifecycle {
             Task { @MainActor in self?.publishAgentConfig() }
         }
 
+        // CHANGE-DRIVEN publishing (push, not poll). Any agent session state
+        // change (`.doomcoderNewEvent` — hook ingest, sweep, PID-exit finalize)
+        // or app open/close (`.doomcoderProcessStateChanged`) republishes the
+        // per-agent status + MacStatus so iOS mirrors the Mac within ~1s instead
+        // of waiting up to a full 60s heartbeat. Routed through a leading+trailing
+        // throttle so bursty hook traffic can't spam CloudKit writes.
+        nc.addObserver(forName: .doomcoderNewEvent, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.requestStatusPublish() }
+        }
+        nc.addObserver(forName: .doomcoderProcessStateChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.requestStatusPublish() }
+        }
+
         // Keep-awake state changed (local toggle, hotkey, Auto transition, or a
         // remote command) → publish a fresh MacStatus so iOS mirrors it.
         nc.addObserver(forName: .sleepManagerStateChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.publishMacStatus() }
         }
 
-        // Heartbeat
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // Heartbeat — scheduled in `.common` modes so Mac→iOS status keeps
+        // flowing even while the menu-bar panel is open (a `.default`-mode timer
+        // would pause during event tracking and stale-out the iOS mirror).
+        let hb = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.publishMacStatus()
                 // Refresh AgentConfig too so per-agent statuses on iOS stay current.
                 self?.publishAgentConfig()
             }
         }
+        RunLoop.main.add(hb, forMode: .common)
+        heartbeatTimer = hb
 
         // Hourly reaper
-        reaperTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+        let reaper = Timer(timeInterval: 3600, repeats: true) { [weak self] _ in
             Task { await self?.reapOldNotificationLogs() }
         }
+        RunLoop.main.add(reaper, forMode: .common)
+        reaperTimer = reaper
         // Also run reaper once 5 min after launch (so a fresh app catches up
         // without waiting an hour).
         Task { @MainActor in
@@ -76,6 +102,40 @@ final class CloudKitPusherLifecycle {
     }
 
     // MARK: - Publishing
+
+    /// Coalesced, change-driven status publish. Publishes immediately on the
+    /// leading edge of a burst (snappy), then at most once per
+    /// `changePublishMinInterval`, always emitting the final state on the
+    /// trailing edge so iOS converges on the latest status.
+    private func requestStatusPublish() {
+        guard CloudKitPusher.shared.isReady else { return }
+        let now = Date()
+        let sinceLast = now.timeIntervalSince(_lastChangePublishAt)
+        if sinceLast >= changePublishMinInterval {
+            _pendingChangePublish?.cancel()
+            _pendingChangePublish = nil
+            performStatusPublish()
+        } else if _pendingChangePublish == nil {
+            let wait = changePublishMinInterval - sinceLast
+            _pendingChangePublish = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(wait))
+                guard let self, !Task.isCancelled else { return }
+                self._pendingChangePublish = nil
+                self.performStatusPublish()
+            }
+        }
+        // else: a trailing publish is already scheduled and will capture the
+        // newest state when it fires.
+    }
+
+    private func performStatusPublish() {
+        _lastChangePublishAt = Date()
+        publishAgentConfig()
+        publishMacStatus()
+        // Flush the queued zone changes now so iOS sees them in ~1s instead of
+        // waiting for CKSyncEngine's automatic-sync cadence or the safety timer.
+        CloudKitPusher.shared.kickEngine()
+    }
 
     private func publishAll() {
         publishAgentConfig()
@@ -93,15 +153,7 @@ final class CloudKitPusherLifecycle {
         let manager = AgentTrackingManager.shared
         var statuses: [TrackedAgent: String] = [:]
         for agent in TrackedAgent.allCases {
-            let state: AgentSessionState
-            if let live = manager.liveSessions.first(where: { $0.agent == agent }) {
-                state = live.displayState
-            } else if manager.processMonitor.isAppRunning[agent] == true {
-                state = agent.isIDEAgent ? .open : .running
-            } else {
-                state = .notRunning
-            }
-            statuses[agent] = state.humanReadable
+            statuses[agent] = manager.effectiveState(for: agent).humanReadable
         }
         CloudKitPusher.shared.publishAgentConfig(
             agents: enabledAgents,

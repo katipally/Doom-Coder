@@ -111,6 +111,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         center.delegate = self
         NotificationDispatcher.shared.requestPermission()
 
+        // Register for remote notifications so CloudKit zone pushes trigger
+        // an immediate fetchNow() instead of waiting for the 15s safety-net poll.
+        // Requires aps-environment entitlement. No-op if already registered.
+        NSApplication.shared.registerForRemoteNotifications()
+
         // Check for v1.8.5 → v1.9.0 migration (UI-driven in Configure window).
         _ = MigrationManager.checkNeeded()
 
@@ -170,6 +175,27 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // Bring the panel forward on tap.
         await MainActor.run {
             FloatingPanelController.shared.show()
+        }
+    }
+
+    // MARK: - Remote Notifications (APNs / CloudKit silent push)
+
+    /// Called when Mac successfully registers with APNs.
+    func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        print("[DoomCoder] APNs device token registered (\(String(hex.prefix(8)))…)")
+    }
+
+    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[DoomCoder] APNs registration failed: \(error.localizedDescription)")
+    }
+
+    /// CloudKit sends a silent content-available push when zone changes land.
+    /// Trigger an immediate fetch so iOS commands apply in <3s instead of up to 15s.
+    func application(_ application: NSApplication,
+                     didReceiveRemoteNotification userInfo: [String: Any]) {
+        Task { @MainActor in
+            CloudKitPusher.shared.fetchNow()
         }
     }
 

@@ -5,9 +5,15 @@
 
 import UIKit
 import UserNotifications
+import BackgroundTasks
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    /// Best-effort periodic background refresh so the companion picks up Mac
+    /// changes even when no silent push is delivered (iOS throttles those). The
+    /// system decides the cadence; this is opportunistic, not a fixed timer.
+    static let refreshTaskId = "com.doomcoder.app.companion.refresh"
 
     func application(
         _ application: UIApplication,
@@ -18,6 +24,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // One-shot v3 cleanup of legacy App Group keys / files.
         AppGroupCache.runV3MigrationOnce()
         AppGroupCache.enforceSchemaVersion()
+
+        // Register the background-refresh handler before launch completes. Run
+        // it on the main queue so we can hop onto the main actor safely (BGTask
+        // is not Sendable, so it must not cross actor/thread boundaries).
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.refreshTaskId, using: .main
+        ) { task in
+            MainActor.assumeIsolated {
+                (UIApplication.shared.delegate as? AppDelegate)?
+                    .handleAppRefresh(task as! BGAppRefreshTask)
+            }
+        }
 
         // Sync engine start
         Task { @MainActor in
@@ -40,7 +58,46 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
 
+        // (Re)schedule background refresh whenever we leave the foreground.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in self.scheduleAppRefresh() }
+        }
+        scheduleAppRefresh()
+
         return true
+    }
+
+    // MARK: - Background refresh
+
+    /// Submits the next opportunistic refresh request (no-op if one is queued).
+    func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
+        // Earliest, not exact — iOS coalesces these on its own schedule.
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("[AppDelegate] BGAppRefresh submit failed: \(error)")
+        }
+    }
+
+    /// Runs a single fetch + presence publish within the system's time budget,
+    /// always chaining the next request so the cadence keeps going.
+    private func handleAppRefresh(_ task: BGAppRefreshTask) {
+        scheduleAppRefresh()
+        let work = Task { @MainActor in
+            await CompanionSyncEngine.shared.fetchChanges()
+            guard !Task.isCancelled else { task.setTaskCompleted(success: false); return }
+            await CompanionSyncEngine.shared.publishCompanionStatus()
+            task.setTaskCompleted(success: !Task.isCancelled)
+        }
+        // Only cancel here; the work task owns calling setTaskCompleted so it is
+        // never invoked twice or off the main actor.
+        task.expirationHandler = { work.cancel() }
     }
 
     // MARK: - Remote notifications

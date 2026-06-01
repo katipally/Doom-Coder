@@ -146,6 +146,8 @@ struct AgentRow: View {
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(agent.displayName)\(status.map { ", \($0)" } ?? "")\(isInstalled ? "" : ", not installed")")
     }
 
     private func statusColor(for status: String) -> Color {
