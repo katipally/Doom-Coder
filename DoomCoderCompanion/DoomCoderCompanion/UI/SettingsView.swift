@@ -145,6 +145,7 @@ struct SettingsView: View {
                 Text(p.displayName).tag(p)
             }
         }
+        .accessibilityLabel("AI provider")
 
         if ai.hasKeyForCurrentProvider {
             LabeledContent("API key") {
@@ -165,6 +166,7 @@ struct SettingsView: View {
                 )) {
                     ForEach(models, id: \.self) { Text($0).tag($0) }
                 }
+                .accessibilityLabel("AI model")
             } else if keyTestState == .testing {
                 LabeledContent("Model") {
                     HStack(spacing: 6) {
@@ -329,12 +331,12 @@ struct SettingsView: View {
     }
 
     private func connectionStatusColor(_ mac: MacStatusRecord) -> Color {
-        if Date().timeIntervalSince(mac.lastSeen) >= 600 { return .red }
+        if Date().timeIntervalSince(mac.lastSeen) >= 900 { return .red }
         return mac.sleepActive ? .green : Color.secondary.opacity(0.4)
     }
 
     private func connectionStatusLabel(_ mac: MacStatusRecord) -> String {
-        if Date().timeIntervalSince(mac.lastSeen) >= 600 { return "Unreachable" }
+        if Date().timeIntervalSince(mac.lastSeen) >= 900 { return "Unreachable" }
         if mac.sleepActive {
             let n = mac.activeAgentCount ?? 0
             return n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s")" : "Awake"
@@ -364,12 +366,14 @@ struct SettingsView: View {
                 }
             case .notDetermined:
                 Button {
+                    Haptics.tap()
                     Task { await requestNotifications() }
                 } label: {
                     Label("Enable Notifications", systemImage: "bell.badge")
                 }
             default:
                 Button {
+                    Haptics.tap()
                     openSystemSettings()
                 } label: {
                     Label("Turn on in Settings", systemImage: "bell.slash")

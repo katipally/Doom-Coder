@@ -38,6 +38,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.doomcoder.app.companion.refresh</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

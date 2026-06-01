@@ -70,6 +70,14 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             if !commands.isEmpty {
                 await MainActor.run { self.applyControlCommands(commands) }
             }
+            // Honor server-side deletions (e.g. a device forgotten from another
+            // Mac) so a removed CompanionStatus record doesn't linger locally.
+            for deletion in fetched.deletions {
+                guard deletion.recordType == CompanionStatusRecord.recordType else { continue }
+                let name = deletion.recordID.recordName
+                let deviceId = String(name.dropFirst("CompanionStatus-".count))
+                await MainActor.run { CompanionStatusStore.shared.remove(deviceId: deviceId) }
+            }
             // A successful fetch proves the Mac is reaching CloudKit right now,
             // so re-stamp lastSeen (debounced) to keep the iOS reachability
             // banner honest even when no commands were pending.
@@ -183,9 +191,16 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
         guard changed else { return }
         ud.set(Date(), forKey: CloudKitPusher.lastAppliedAtKey)
-        // Publish fresh status AND flush it immediately so iOS confirms the
-        // command(s) landed without waiting for the next safety-net send.
+        // Queue a fresh MacStatus with the ack fields.
         pusher.touchLastSeen(force: true)
+        // Flush the queued record immediately via a new Task — must NOT be
+        // an inline await (calling sendChanges() re-entrantly from a delegate
+        // callback is a CloudKit misuse). The brief delay lets the engine
+        // finish processing the current fetch before we trigger a send.
+        Task { @MainActor [weak pusher] in
+            try? await Task.sleep(for: .milliseconds(300))
+            pusher?.kickEngine()
+        }
     }
 
     /// UserDefaults keys for the app-wide master suspend gate. Shared with
@@ -260,6 +275,14 @@ final class CompanionStatusStore {
 
     func clear() {
         byDevice.removeAll()
+        persist()
+    }
+
+    /// Drops a single device locally (used by "Forget device" after the CloudKit
+    /// record delete is queued). A still-alive device re-registers on its next
+    /// heartbeat, which is the correct, self-healing behavior.
+    func remove(deviceId: String) {
+        byDevice.removeValue(forKey: deviceId)
         persist()
     }
 

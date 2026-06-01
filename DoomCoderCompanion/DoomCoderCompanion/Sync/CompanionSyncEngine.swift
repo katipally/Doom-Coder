@@ -359,14 +359,32 @@ final class CompanionSyncEngine: NSObject {
 
     // MARK: - Remote control (iOS → Mac)
 
-    /// Stable per-install identifier used as the command issuer. Lets the Mac
-    /// (and future multi-device setups) attribute a command to this device.
+    /// Stable per-DEVICE identifier used as the command issuer and the key for
+    /// this device's `CompanionStatusRecord` (recordName "CompanionStatus-<id>").
+    ///
+    /// Persisted in the Keychain so it survives app reinstalls and dev rebuilds —
+    /// the old app-group UserDefaults store was wiped on every reinstall, minting
+    /// a NEW id each time and registering the same phone as many ghost devices.
+    ///
+    /// Resolution order (first hit wins, then cached to Keychain):
+    ///   1. Existing Keychain value.
+    ///   2. Legacy UserDefaults value (migrated in, so this install keeps its id).
+    ///   3. `identifierForVendor` (stable per device+vendor), else a fresh UUID.
+    static let deviceIdService = "com.doomcoder.app.companion.identity"
+    static let deviceIdAccount = "doomcoder.companion.deviceId"
+
     static var issuerDeviceId: String {
-        let key = "doomcoder.companion.deviceId"
-        if let existing = AppGroupCache.defaults.string(forKey: key) { return existing }
-        let new = UUID().uuidString
-        AppGroupCache.defaults.set(new, forKey: key)
-        return new
+        if let kc = Keychain.get(account: deviceIdAccount, service: deviceIdService),
+           !kc.isEmpty {
+            return kc
+        }
+        let legacyKey = "doomcoder.companion.deviceId"
+        let resolved = AppGroupCache.defaults.string(forKey: legacyKey)
+            ?? UIDevice.current.identifierForVendor?.uuidString
+            ?? UUID().uuidString
+        Keychain.set(resolved, account: deviceIdAccount, service: deviceIdService)
+        AppGroupCache.defaults.set(resolved, forKey: legacyKey)
+        return resolved
     }
 
     private static var clientVersion: String {
@@ -436,8 +454,7 @@ final class CompanionSyncEngine: NSObject {
         _heartbeatTimer = nil
     }
 
-    /// Re-entrancy guard so overlapping triggers (timer + foreground + setup)
-    /// don't race on the same cached server record.
+    /// Re-entrancy guard: only one presence save is in-flight at a time.
     @ObservationIgnored private var isPublishingPresence = false
 
     /// Writes a `CompanionStatusRecord` describing this device. Uses a direct
@@ -447,17 +464,22 @@ final class CompanionSyncEngine: NSObject {
     /// reused so the change tag is preserved (avoids CKError 14/2004). On a
     /// tag conflict the server record is cached and a single retry is scheduled,
     /// so a wiped cache (e.g. after env migration) self-heals.
+    ///
+    /// The retry is now inline (not a spawned Task) so the re-entrancy guard
+    /// remains held during the retry window — eliminating the race where two
+    /// concurrent failure-paths each spawned their own 3-second retry Task.
     func publishCompanionStatus(allowRetry: Bool = true) async {
         guard accountAvailable, !isPublishingPresence else { return }
         isPublishingPresence = true
         let ok = await performPresenceSave()
-        isPublishingPresence = false
         if !ok && allowRetry {
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(3))
-                await self?.publishCompanionStatus(allowRetry: false)
+            // Single inline retry after 5 s — flag stays set, no concurrent saves.
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled {
+                _ = await performPresenceSave()
             }
         }
+        isPublishingPresence = false
     }
 
     private func performPresenceSave() async -> Bool {

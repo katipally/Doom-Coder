@@ -142,11 +142,9 @@ struct MacControlCard: View {
                 // Conditional rows must not inherit any ambient animation from
                 // IconSegmented — use transaction to strip it so they snap in/out
                 // without the overshooting spring from the pill animation.
-                if mode != .off {
+                if mode == .on {
                     screenRow
                         .transaction { $0.animation = nil }
-                }
-                if mode == .on {
                     timerRow
                         .transaction { $0.animation = nil }
                 }
@@ -334,6 +332,8 @@ struct MacControlView: View {
     // Sleep/screen/timer commands reconcile by command-id ack.
     @State private var waitingCommandId: String?
     @State private var waitTimeout: Task<Void, Never>?
+    // Set when the wait timeout fires without Mac ack — cleared on retry or success.
+    @State private var showTimeoutError = false
 
     // Master reconciles by VALUE (separate tracker) — the desired master state is
     // confirmed when the Mac publishes masterEnabled == desiredMaster, or acks the
@@ -341,11 +341,17 @@ struct MacControlView: View {
     @State private var desiredMaster: Bool?
     @State private var waitingMasterCommandId: String?
     @State private var masterTimeout: Task<Void, Never>?
+    /// Active fetch loop that runs only while a command/master ack is pending,
+    /// so the Mac's reply is pulled in within seconds instead of waiting for an
+    /// opportunistic silent push or the 30 s foreground poll.
+    @State private var ackPoll: Task<Void, Never>?
 
-    /// Matches the .offline threshold in MacReachabilityBanner (10 minutes).
-    private let offlineThreshold: TimeInterval = 600
+    /// Matches the .offline threshold in MacReachabilityBanner (15 minutes).
+    private let offlineThreshold: TimeInterval = 900
 
     private var isWaiting: Bool { waitingCommandId != nil || desiredMaster != nil }
+
+    @State private var agentDetailExpanded: Bool = false
 
     // Renders directly as List sections (DoomCoder master + Keep Awake), mirroring
     // the macOS floating panel layout. The Mac device-info header lives in
@@ -366,6 +372,10 @@ struct MacControlView: View {
         }
         .onChange(of: macStore.primary) { _, newMac in
             if let newMac { reconcile(newMac) }
+        }
+        .onDisappear {
+            ackPoll?.cancel()
+            ackPoll = nil
         }
     }
 
@@ -446,7 +456,7 @@ struct MacControlView: View {
             )
             .listRowSeparator(.hidden)
 
-            if mode != .off {
+            if mode == .on {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("While awake").font(.subheadline.weight(.semibold))
                     IconSegmented(
@@ -494,26 +504,81 @@ struct MacControlView: View {
 
     @ViewBuilder
     private func statusRow(_ mac: MacStatusRecord, offline: Bool) -> some View {
-        HStack(spacing: 8) {
-            if isWaiting {
+        if isWaiting {
+            HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Sent — waiting for your Mac to check in")
-            } else if offline {
-                Image(systemName: "wifi.exclamationmark")
+                Spacer()
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        } else if showTimeoutError {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
+                Text("Mac didn't respond")
+                Spacer()
+                Button("Retry") {
+                    showTimeoutError = false
+                    Haptics.tap()
+                    send(.setKeepAwakeMode, value: mode.rawValue)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Retry sending command to Mac")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        } else if offline {
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange).accessibilityHidden(true)
                 Text("Mac unreachable — changes apply when it reconnects")
-            } else {
+                Spacer()
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        } else if mode == .auto, mac.sleepActive, let n = mac.activeAgentCount, n > 0 {
+            // Auto mode with active agents: expandable detail
+            DisclosureGroup(isExpanded: $agentDetailExpanded) {
+                if let lines = decodeAgentLines(mac.agentStatusJSON) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(lines) { line in
+                            agentDetailRow(line)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").foregroundStyle(.green).accessibilityHidden(true)
+                    Text("\(n) agent\(n == 1 ? "" : "s") working")
+                    Spacer()
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        } else if mode == .auto, !mac.sleepActive, let graceEnd = mac.autoGraceEndsAt, graceEnd > Date() {
+            // Grace period countdown
+            HStack(spacing: 6) {
+                Image(systemName: "timer").accessibilityHidden(true)
+                Text("Grace · releasing in ")
+                Text(timerInterval: Date.now...graceEnd, countsDown: true)
+                    .monospacedDigit()
+                Spacer()
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        } else {
+            HStack(spacing: 8) {
                 Image(systemName: statusSymbol(mac))
                     .foregroundStyle(mac.sleepActive ? .green : .secondary)
                     .accessibilityHidden(true)
                 Text(statusText(mac))
+                Spacer()
             }
-            Spacer()
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
     }
 
     private func statusSymbol(_ mac: MacStatusRecord) -> String {
@@ -526,16 +591,61 @@ struct MacControlView: View {
 
     private func statusText(_ mac: MacStatusRecord) -> String {
         switch mode {
-        case .off:
-            return "Your Mac sleeps normally"
-        case .on:
-            return mac.sleepActive ? "Awake" : "Starting…"
-        case .auto:
-            if mac.sleepActive {
-                let n = mac.activeAgentCount ?? 0
-                return "Awake · \(n) agent\(n == 1 ? "" : "s") working"
-            }
-            return "Idle · sleeps when agents finish"
+        case .off:  return "Your Mac sleeps normally"
+        case .on:   return mac.sleepActive ? "Awake" : "Starting…"
+        case .auto: return mac.sleepActive ? "Awake · agents working" : "Idle · sleeps when agents finish"
+        }
+    }
+
+    // MARK: - Agent detail helpers (Auto mode expandable)
+
+    private struct AgentLine: Decodable, Identifiable {
+        var id: String { key.isEmpty ? raw : key }  // unique session key from Mac
+        let name: String
+        let raw: String
+        let key: String     // session key = "agent::sessionId" — unique per session
+        let state: String
+        let type: String
+        let idleSecs: Int
+        let pidAlive: Bool
+
+        // Backward compat: key defaults to raw if not present (older Mac clients)
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name     = try c.decode(String.self, forKey: .name)
+            raw      = try c.decode(String.self, forKey: .raw)
+            key      = (try? c.decode(String.self, forKey: .key)) ?? raw
+            state    = try c.decode(String.self, forKey: .state)
+            type     = try c.decode(String.self, forKey: .type)
+            idleSecs = try c.decode(Int.self,    forKey: .idleSecs)
+            pidAlive = try c.decode(Bool.self,   forKey: .pidAlive)
+        }
+        enum CodingKeys: String, CodingKey {
+            case name, raw, key, state, type, idleSecs, pidAlive
+        }
+    }
+
+    private func decodeAgentLines(_ json: String?) -> [AgentLine]? {
+        guard let json, let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode([AgentLine].self, from: data)
+    }
+
+    private func agentDetailRow(_ line: AgentLine) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(line.state == "running" ? Color.green
+                      : line.state.hasPrefix("idle") ? Color.secondary.opacity(0.4)
+                      : Color.orange)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(line.name).font(.caption.weight(.medium))
+            Spacer()
+            Text(line.state).font(.caption).foregroundStyle(.secondary)
+            Text(line.type)
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Color.secondary.opacity(0.12), in: Capsule())
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -575,17 +685,20 @@ struct MacControlView: View {
     }
 
     private func send(_ verb: ControlCommandRecord.Verb, value: String) {
+        showTimeoutError = false
         Task {
             if let cid = await CompanionSyncEngine.shared.sendControlCommand(verb: verb, value: value) {
                 waitingCommandId = cid
                 startWaitTimeout()
             } else {
                 Haptics.warning()
+                showTimeoutError = true
             }
         }
     }
 
     private func sendMaster(_ on: Bool) {
+        showTimeoutError = false
         Task {
             if let cid = await CompanionSyncEngine.shared.sendControlCommand(
                 verb: .setMasterEnabled, value: on ? "true" : "false") {
@@ -594,36 +707,69 @@ struct MacControlView: View {
             } else {
                 Haptics.warning()
                 clearMasterWaiting()
+                showTimeoutError = true
             }
         }
     }
 
     private func startWaitTimeout() {
+        startAckPoll()
         waitTimeout?.cancel()
         waitTimeout = Task {
             try? await Task.sleep(for: .seconds(30))
-            if !Task.isCancelled { clearWaiting() }
+            guard !Task.isCancelled else { return }
+            showTimeoutError = true
+            clearWaiting(fromTimeout: true)
         }
     }
 
-    private func clearWaiting() {
+    private func clearWaiting(fromTimeout: Bool = false) {
         waitTimeout?.cancel()
         waitTimeout = nil
         waitingCommandId = nil
+        if !fromTimeout { showTimeoutError = false }
+        stopAckPollIfIdle()
     }
 
     private func startMasterTimeout() {
+        startAckPoll()
         masterTimeout?.cancel()
         masterTimeout = Task {
             try? await Task.sleep(for: .seconds(30))
-            if !Task.isCancelled { clearMasterWaiting() }
+            guard !Task.isCancelled else { return }
+            showTimeoutError = true
+            clearMasterWaiting(fromTimeout: true)
         }
     }
 
-    private func clearMasterWaiting() {
+    private func clearMasterWaiting(fromTimeout: Bool = false) {
         masterTimeout?.cancel()
         masterTimeout = nil
         desiredMaster = nil
         waitingMasterCommandId = nil
+        if !fromTimeout { showTimeoutError = false }
+        stopAckPollIfIdle()
+    }
+
+    /// Polls CloudKit every 2.5 s while any command ack is pending. `fetchChanges`
+    /// is single-flight (guarded by `fetchInProgress`), so overlapping ticks are
+    /// safe. Each fetch runs `reconcile`, which clears the waiting state as soon
+    /// as the Mac's ack/value-match lands. Self-terminates when nothing pends.
+    private func startAckPoll() {
+        guard ackPoll == nil else { return }
+        ackPoll = Task {
+            while !Task.isCancelled,
+                  waitingCommandId != nil || waitingMasterCommandId != nil {
+                await CompanionSyncEngine.shared.fetchChanges()
+                try? await Task.sleep(for: .milliseconds(2500))
+            }
+        }
+    }
+
+    private func stopAckPollIfIdle() {
+        if waitingCommandId == nil && waitingMasterCommandId == nil {
+            ackPoll?.cancel()
+            ackPoll = nil
+        }
     }
 }

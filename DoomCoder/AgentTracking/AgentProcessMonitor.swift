@@ -55,9 +55,12 @@ final class AgentProcessMonitor {
                          name: NSWorkspace.didTerminateApplicationNotification, object: nil)
 
         // 4. 30-second timer for CLI scanning (NSWorkspace notifications don't cover plain processes).
-        cliScanTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        //    `.common` modes so CLI liveness keeps updating while the panel is open.
+        let scan = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.scanCLIs() }
         }
+        RunLoop.main.add(scan, forMode: .common)
+        cliScanTimer = scan
     }
 
     deinit {

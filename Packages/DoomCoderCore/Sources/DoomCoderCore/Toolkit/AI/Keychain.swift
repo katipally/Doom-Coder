@@ -11,6 +11,22 @@ public enum Keychain {
     private static let service = "com.doomcoder.app.companion.aikey"
 
     public static func set(_ value: String, account: String) {
+        set(value, account: account, service: service)
+    }
+
+    public static func get(account: String) -> String? {
+        get(account: account, service: service)
+    }
+
+    public static func delete(account: String) {
+        delete(account: account, service: service)
+    }
+
+    // MARK: - Service-scoped API
+    // Lets callers store unrelated secrets under their own service so they can
+    // never be deleted/migrated by accident (e.g. the per-device identity).
+
+    public static func set(_ value: String, account: String, service: String) {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -24,7 +40,7 @@ public enum Keychain {
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    public static func get(account: String) -> String? {
+    public static func get(account: String, service: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -39,7 +55,7 @@ public enum Keychain {
         return value
     }
 
-    public static func delete(account: String) {
+    public static func delete(account: String, service: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

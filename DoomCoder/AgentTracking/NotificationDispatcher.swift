@@ -114,10 +114,11 @@ final class NotificationDispatcher {
         }
         lastDispatchAt[key] = Date()
 
-        // Prune stale entries to prevent unbounded dictionary growth across long sessions.
-        if lastDispatchAt.count > 100 {
-            let staleThreshold = dedupeWindow * 8
-            lastDispatchAt = lastDispatchAt.filter { Date().timeIntervalSince($0.value) < staleThreshold }
+        // Time-based LRU: drop entries older than 24h on every dispatch.
+        // Prevents unbounded growth in 24/7 deployments regardless of volume.
+        let cutoff: TimeInterval = 86_400
+        if lastDispatchAt.count > 50 {
+            lastDispatchAt = lastDispatchAt.filter { Date().timeIntervalSince($0.value) < cutoff }
         }
         let channels = ChannelStore.effectiveChannels(for: ev.agent)
         let ts = Date().timeIntervalSince1970

@@ -3,6 +3,7 @@ import IOKit.pwr_mgt
 import CoreGraphics
 import AppKit
 import ServiceManagement
+import UserNotifications
 import DoomCoderCore
 
 // MARK: - Types
@@ -37,6 +38,10 @@ final class SleepManager {
     private(set) var isScreenOff = false
     private(set) var screenOffCountdown: Int? = nil
     private(set) var hasAccessibilityPermission: Bool = false
+    /// Non-nil while the Auto-mode grace period is ticking. Views can use
+    /// `Text(timerInterval: Date.now...autoGraceEndsAt!, countsDown: true)`
+    /// for a live countdown without a separate Timer.
+    private(set) var autoGraceEndsAt: Date? = nil
 
     // MARK: - Persisted settings
 
@@ -241,6 +246,11 @@ final class SleepManager {
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
         notifyStateChanged()
+        // Notify user when Auto mode takes sleep control.
+        if keepAwakeMode == .auto {
+            let names = autoStatusLines.map(\.agentDisplayName)
+            SleepStateNotifier.shared.notifyTookControl(agentNames: names)
+        }
     }
 
     private func releaseAssertion() {
@@ -266,47 +276,112 @@ final class SleepManager {
 
     // MARK: - Auto mode
 
-    /// Tracked-agent states that count as "working" for Auto mode. Idle / open /
-    /// not-running / completed / failed do NOT keep the Mac awake.
+    /// Per-agent status line for the expandable detail view (Mac panel + iOS card).
+    struct AutoAgentLine: Identifiable, Sendable {
+        /// Unique per session (agent::sessionId) — avoids ForEach ID collisions
+        /// when the same agent has multiple concurrent sessions.
+        let id: String                 // = sessionKey ("claude::abc123")
+        let agentDisplayName: String   // e.g. "Claude Code", "Cursor"
+        let agentRaw: String           // TrackedAgent.rawValue
+        let state: String              // "running" | "idle Xm" | "waiting approval" | "waiting input"
+        let agentType: String          // "CLI" | "IDE"
+        let idleSecs: Int
+        let pidAlive: Bool
+    }
+
+    // MARK: - Auto mode configuration
+
+    /// States that count as "live work" beyond the fresh-hook window.
     private static let autoLiveStates: Set<AgentSessionState> = [.running, .waitingInput, .waitingApproval]
-    private let autoGraceSeconds: Int = 300            // 5-min grace before releasing
-    /// IDE agents (Cursor/VS Code/Windsurf) report a throwaway shell pid, so we
-    /// can't trust PID liveness for them — fall back to hook recency. A live
-    /// IDE session with no hook activity for this long is treated as idle.
-    private let autoIdleWindowSeconds: TimeInterval = 1800 // 30 min
+    /// 5-min grace period after the last active session drops out.
+    private let autoGraceSeconds: Int = 300
+    /// PRIMARY signal window. A hook received within this window means the agent
+    /// is doing something *right now* — keep the Mac awake regardless of the
+    /// parsed state. This is the "hooks are the source of truth" rule.
+    private let freshHookWindowSeconds: TimeInterval = 120
+    /// IDE hook-recency window — IDE agents use throwaway pids, so recency is the
+    /// only signal. 10 min allows quiet "thinking" pauses without false idle.
+    private let autoIdleWindowSeconds: TimeInterval = 600
+    /// CLI hook-recency cap — no hooks for 30 min means the user is likely away;
+    /// release rather than keep the Mac awake indefinitely.
+    private let cliIdleWindowSeconds: TimeInterval = 1800
+
+    // MARK: - Auto mode state
 
     @ObservationIgnored nonisolated(unsafe) private var _autoEvalTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var _autoGraceTask: Task<Void, Never>?
-    /// Bumped on every start/stopAutoEval so a stale withObservationTracking
-    /// callback from a previous Auto session never re-arms the observer.
     @ObservationIgnored private var _autoObservationGeneration: Int = 0
 
-    /// Number of tracked agents currently considered "working" for Auto mode.
+    // MARK: - Active session computation (single source of truth)
+
+    /// All sessions currently considered "active" for Auto mode.
     ///
-    /// Uses every signal we capture and picks the trustworthy one per agent type:
-    ///   • Agents the user switched OFF in Agent Tracking are always excluded —
-    ///     their hooks may still arrive, but the user opted out, so they must not
-    ///     hold the Mac awake. With no other working agents macOS resumes normal
-    ///     sleep behaviour.
-    ///   • CLI agents (Claude / Copilot CLI / Codex) spawn dc-hook directly, so
-    ///     their pid is the live agent process — trust PID liveness with NO time
-    ///     limit (a quiet long-running task stays "working" until the process
-    ///     exits; PIDWatcher also flips the session to completed on exit).
-    ///   • IDE agents (Cursor / VS Code / Windsurf) report a throwaway shell pid,
-    ///     so PID liveness is meaningless — fall back to hook recency (active if a
-    ///     hook arrived within `autoIdleWindowSeconds`).
-    var activeAgentCount: Int {
+    /// This is the SINGLE source of truth for "is an agent running?". Both the
+    /// sleep-prevention assertion (`evaluateAuto`) and every piece of status UI
+    /// (`activeAgentCount`, `autoStatusLines`) derive from it, so the decision
+    /// can never disagree with what the user sees.
+    ///
+    /// Hooks are authoritative. We measure recency with `lastHookReceivedAt`
+    /// (local receipt time) rather than the hook's own timestamp, so remote
+    /// clock skew can never wedge the decision.
+    ///
+    ///  • Terminal sessions (a sessionEnd / fatal-error hook arrived) are never
+    ///    active — the hooks already told us the agent stopped.
+    ///  • PRIMARY: a hook received in the last `freshHookWindowSeconds` ⇒ the
+    ///    agent is working now ⇒ keep the Mac awake, whatever the parsed state.
+    ///  • SECONDARY (agent status): beyond the fresh window we require an
+    ///    explicitly live state. `.open` (IDE merely launched, no task) must not
+    ///    hold sleep; `.running`/`.waitingInput`/`.waitingApproval` do, as long
+    ///    as hooks are still recent (10 min IDE / 30 min CLI).
+    var autoActiveSessions: [AgentTrackingManager.Session] {
         let now = Date.now
-        return AgentTrackingManager.shared.sessions.values.filter { session in
-            guard TrackingStore.isEnabled(session.agent) else { return false }
-            guard Self.autoLiveStates.contains(session.displayState) else { return false }
-            if session.agent.isIDEAgent || session.pid <= 0 {
-                // No reliable pid — trust recent hook activity.
-                return now.timeIntervalSince(session.updatedAt) < autoIdleWindowSeconds
+        return AgentTrackingManager.shared.sessions.values.filter { s in
+            guard s.isLive else { return false }
+
+            // CLI liveness gate: a dead process is never active, even if a hook
+            // landed seconds ago — the final hooks fire as the agent exits. This
+            // kills false positives instantly (before the tracking sweep runs),
+            // so Auto mode never holds the Mac awake for an agent that has quit.
+            // IDE agents report throwaway shell pids, so we can't gate on them.
+            if !s.agent.isIDEAgent, s.pid > 0, !PIDLiveness.isAlive(s.pid) { return false }
+
+            let hookAge = now.timeIntervalSince(s.lastHookReceivedAt)
+
+            // PRIMARY — hooks are the source of truth.
+            if hookAge < freshHookWindowSeconds { return true }
+
+            // SECONDARY — agent status gates stale sessions.
+            guard Self.autoLiveStates.contains(s.displayState) else { return false }
+            let window = s.agent.isIDEAgent ? autoIdleWindowSeconds : cliIdleWindowSeconds
+            return hookAge < window
+        }
+    }
+
+    var activeAgentCount: Int { autoActiveSessions.count }
+
+    /// Per-agent detail lines for the expandable UI panel.
+    var autoStatusLines: [AutoAgentLine] {
+        let now = Date.now
+        return autoActiveSessions.map { s in
+            let idle = max(0, Int(now.timeIntervalSince(s.lastHookReceivedAt)))
+            let stateStr: String
+            switch s.displayState {
+            case .waitingApproval: stateStr = "waiting approval"
+            case .waitingInput:    stateStr = "waiting input"
+            case .open:            stateStr = "starting…"
+            default:               stateStr = idle < 60 ? "running" : "idle \(idle / 60)m"
             }
-            // CLI agent with a known pid — trust liveness, no time limit.
-            return PIDLiveness.isAlive(session.pid)
-        }.count
+            return AutoAgentLine(
+                id: s.id,
+                agentDisplayName: s.agent.displayName,
+                agentRaw: s.agent.rawValue,
+                state: stateStr,
+                agentType: s.agent.isIDEAgent ? "IDE" : "CLI",
+                idleSecs: idle,
+                pidAlive: s.pid > 0 && PIDLiveness.isAlive(s.pid)
+            )
+        }
+        .sorted { $0.idleSecs < $1.idleSecs }
     }
 
     /// Seconds the assertion has been held (0 when inactive). Published to iOS.
@@ -321,7 +396,7 @@ final class SleepManager {
         _autoEvalTimer?.invalidate()
         // Backstop poll: re-evaluates so the stale-TTL and grace expiry are
         // honoured even when `sessions` doesn't mutate.
-        let t = Timer(timeInterval: 20, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.evaluateAuto() }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -352,15 +427,32 @@ final class SleepManager {
 
     private func evaluateAuto() {
         guard keepAwakeMode == .auto else { return }
-        if activeAgentCount > 0 {
+        let active = autoActiveSessions
+
+        if !active.isEmpty {
+            // Agents are working — hold assertion, cancel any pending grace.
             cancelAutoGrace()
             if !isActive { acquireAssertion() }
+
         } else if isActive, _autoGraceTask == nil {
+            // No active sessions. Staleness is already handled silently inside
+            // `autoActiveSessions` (a hook-stale agent simply drops out of the
+            // active set), so reaching here always means "agents finished".
+            // There is exactly ONE timer the user ever sees: the grace countdown.
+            autoGraceEndsAt = Date().addingTimeInterval(TimeInterval(autoGraceSeconds))
+            // Push the "now counting down to sleep" transition to iOS right away
+            // instead of waiting for the next 60s heartbeat.
+            notifyStateChanged()
             _autoGraceTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 try? await Task.sleep(for: .seconds(self.autoGraceSeconds))
                 guard !Task.isCancelled, self.keepAwakeMode == .auto else { return }
-                if self.activeAgentCount == 0, self.isActive { self.releaseAssertion() }
+                self.autoGraceEndsAt = nil
+                // Re-check: a new agent may have started during grace.
+                if self.autoActiveSessions.isEmpty, self.isActive {
+                    self.releaseAssertion()
+                    SleepStateNotifier.shared.notifyReleasedControl()
+                }
                 self._autoGraceTask = nil
             }
         }
@@ -369,6 +461,13 @@ final class SleepManager {
     private func cancelAutoGrace() {
         _autoGraceTask?.cancel()
         _autoGraceTask = nil
+        // Only broadcast when we actually clear a live countdown, so resuming
+        // work (grace → "agents working") mirrors to iOS without heartbeat spam
+        // on the common no-op path.
+        if autoGraceEndsAt != nil {
+            autoGraceEndsAt = nil
+            notifyStateChanged()
+        }
     }
 
     // MARK: - State-change broadcast (CloudKit publish + UI)
@@ -456,6 +555,7 @@ final class SleepManager {
     // Fades the display to black over 0.8s, then sleeps it via pmset.
     // Uses CGAcquireDisplayFadeReservation / CGDisplayFade (public CoreGraphics API, macOS 10.0+).
     private func executeScreenOff() async {
+        // Remove any stale wake observer from a previous cycle.
         if let obs = _screenWakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(obs)
             _screenWakeObserver = nil
@@ -478,18 +578,10 @@ final class SleepManager {
             return
         }
 
-        isScreenOff = true
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-        task.arguments = ["displaysleepnow"]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError  = FileHandle.nullDevice
-        try? task.run()
-
-        if fadeAcquired { CGReleaseDisplayFadeReservation(token) }
-
-        // Watch for display wake from any user input
+        // Install the wake observer BEFORE issuing pmset so we never miss the
+        // screensDidWake notification in the window between pmset completing and
+        // the observer being installed. The guard on `isScreenOff` in the
+        // callback is a no-op if it fires prematurely (before pmset succeeds).
         _screenWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
             object: nil,
@@ -504,6 +596,42 @@ final class SleepManager {
                 self.isScreenOff = false
                 self.startRearmMonitoring()
             }
+        }
+
+        // Run pmset and only mark isScreenOff = true on success. On failure,
+        // tear down the observer and leave the display in its current state.
+        let pmset = Process()
+        pmset.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        pmset.arguments = ["displaysleepnow"]
+        pmset.standardOutput = FileHandle.nullDevice
+        pmset.standardError  = FileHandle.nullDevice
+
+        let pmsetSucceeded: Bool = await withCheckedContinuation { cont in
+            pmset.terminationHandler = { p in cont.resume(returning: p.terminationStatus == 0) }
+            do {
+                try pmset.run()
+            } catch {
+                cont.resume(returning: false)
+            }
+        }
+
+        if fadeAcquired { CGReleaseDisplayFadeReservation(token) }
+
+        if pmsetSucceeded {
+            isScreenOff = true
+        } else {
+            // pmset failed — remove the observer we just installed and notify.
+            if let obs = _screenWakeObserver {
+                NSWorkspace.shared.notificationCenter.removeObserver(obs)
+                _screenWakeObserver = nil
+            }
+            // Post a local notification so the user knows screen-sleep failed.
+            let content = UNMutableNotificationContent()
+            content.title = "Screen Sleep Failed"
+            content.body = "Could not sleep the display. Check System Settings › Energy Saver."
+            let req = UNNotificationRequest(identifier: "doomcoder.screenOffFailed",
+                                            content: content, trigger: nil)
+            Task { try? await UNUserNotificationCenter.current().add(req) }
         }
     }
 

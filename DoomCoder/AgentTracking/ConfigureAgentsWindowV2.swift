@@ -739,6 +739,23 @@ struct ConfigureAgentsViewV2: View {
                                 Text(connected ? "Connected" : "Last seen \(Self.relativeTime(device.lastSeen, now: context.date))")
                                     .font(.caption)
                                     .foregroundStyle(connected ? Color.green : .secondary)
+                                if !connected {
+                                    Button {
+                                        forgetDevice(device.deviceId)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Forget this device")
+                                    .accessibilityLabel("Forget \(device.name.isEmpty ? "device" : device.name)")
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .contextMenu {
+                                Button("Forget Device", systemImage: "trash") {
+                                    forgetDevice(device.deviceId)
+                                }
                             }
                         }
                     }
@@ -748,6 +765,14 @@ struct ConfigureAgentsViewV2: View {
                 Label("Connected Devices", systemImage: "iphone.gen3")
             }
         }
+    }
+
+    /// Removes a device from the local list and queues a CloudKit delete of its
+    /// presence record. Stable device IDs mean a live device just re-registers;
+    /// stale ghosts (old reinstalls) stay gone.
+    private func forgetDevice(_ deviceId: String) {
+        CompanionStatusStore.shared.remove(deviceId: deviceId)
+        CloudKitPusher.shared.deleteCompanionStatus(deviceId: deviceId)
     }
 
     /// Compact "5m ago" / "2h ago" / "3d ago" relative timestamp.

@@ -33,6 +33,10 @@ final class AgentTrackingManager {
     /// when a new terminal event re-schedules.
     private var revertTokens: [String: Int] = [:]
 
+    /// Per-session token for the 120-second `awaitingPermission` safety-net.
+    /// Bumped (by removal) when the permission is cleared by a follow-up event.
+    private var permissionTimeoutTokens: [String: Int] = [:]
+
     /// Process monitor for IDE open/close and CLI running detection.
     let processMonitor = AgentProcessMonitor.shared
 
@@ -50,7 +54,16 @@ final class AgentTrackingManager {
         var lastTool: String?
         var cwd: String
         var startedAt: Date
+        /// Timestamp carried by the hook event itself. Cross-process and
+        /// clock-skewed — fine for display/history ordering, but NOT a reliable
+        /// "is the agent alive right now" signal.
         var updatedAt: Date
+        /// Local wall-clock time when this Mac actually *received* the most
+        /// recent hook for the session. This is the authoritative "hooks are
+        /// firing" signal for Auto-mode sleep decisions: it is immune to remote
+        /// clock skew and can never be in the future. Defaults to distantPast
+        /// until the first hook lands.
+        var lastHookReceivedAt: Date = .distantPast
         /// Last reported OS process id for this session. Meaningful only for
         /// CLI agents (they spawn dc-hook directly); IDE agents report a
         /// throwaway shell pid, so liveness must not be inferred from it.
@@ -61,6 +74,7 @@ final class AgentTrackingManager {
         var activeToolCount: Int = 0
         var errorCount: Int = 0
         var subagentCount: Int = 0
+        var permissionCount: Int = 0
 
         // Flags
         var awaitingPermission: Bool = false
@@ -108,6 +122,7 @@ final class AgentTrackingManager {
                 errorCount += 1
             case .permissionNeeded:
                 awaitingPermission = true
+                permissionCount += 1
             case .sessionEnd:
                 hasEnded = true
             case .error:
@@ -133,6 +148,28 @@ final class AgentTrackingManager {
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
+    /// Single source of truth for an agent's effective display state, used by
+    /// the panel UI (TrackAgentsView/TrackAccordion) AND the Mac→iOS publisher
+    /// so both always agree.
+    ///
+    /// Rules:
+    ///   • A live tracked session → its `displayState` (hook-driven truth).
+    ///   • No session, but an IDE app is running → `.open` (present, not working).
+    ///   • No session for a CLI agent → `.notRunning`. CLI presence is detected
+    ///     by matching a process named "claude"/"codex"/"copilot", which cannot
+    ///     distinguish an idle REPL or a name-collision from real work — so we
+    ///     must NOT report `.running` without an active hook session. This is
+    ///     what eliminates the "Claude Code · running" false positive.
+    func effectiveState(for agent: TrackedAgent) -> AgentSessionState {
+        if let live = liveSessions.first(where: { $0.agent == agent }) {
+            return live.displayState
+        }
+        if agent.isIDEAgent, processMonitor.isAppRunning[agent] == true {
+            return .open
+        }
+        return .notRunning
+    }
+
     /// Monotonic counter stamped on every ingested event. Used by
     /// `ApprovalArbiter` for "arrived after the permission request" reasoning
     /// (hook timestamps are cross-process and skewed, so they can't be trusted
@@ -140,10 +177,14 @@ final class AgentTrackingManager {
     private var ingestSeq: Int = 0
 
     private init() {
-        // Periodic eviction sweep: drop sessions whose updatedAt is older than evictionDelay.
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // Periodic eviction sweep + liveness reconciliation. Scheduled in
+        // `.common` modes so stale IDE sessions revert and dead CLI sessions
+        // finalize even while the menu panel is open. 20s bounds how long a
+        // PIDWatcher-missed exit can show a ghost "running" badge.
+        let sweep = Timer(timeInterval: 20, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.sweepEvictedSessions() }
         }
+        RunLoop.main.add(sweep, forMode: .common)
     }
 
     // MARK: - Session lifecycle helpers
@@ -156,7 +197,10 @@ final class AgentTrackingManager {
         s.hasEnded = true
         s.updatedAt = Date()
         sessions[sessionKey] = s
-        // Process is gone — drop any deferred approval alert for it.
+        // Process is gone — drop any deferred approval alert and pending
+        // permission-timeout token so a killed approval-waiting session can't
+        // later fire stale "stuck" logic.
+        permissionTimeoutTokens.removeValue(forKey: sessionKey)
         ApprovalArbiter.shared.clear(sessionKey: sessionKey)
         NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
         scheduleTerminalRevert(sessionKey: sessionKey)
@@ -165,18 +209,54 @@ final class AgentTrackingManager {
     private func sweepEvictedSessions() {
         var changed = false
         let now = Date()
-        for key in sessions.keys {
+        // Matches SleepManager.autoIdleWindowSeconds — IDE hooks older than this
+        // are treated as idle. Keep in sync if that constant changes.
+        let ideIdleWindow: TimeInterval = 600
+        // Grace before finalizing a live CLI session that never reported a pid:
+        // gives a freshly-started session time to emit its first pid-bearing hook.
+        let noPidGrace: TimeInterval = 90
+        for key in Array(sessions.keys) {
             guard let s = sessions[key] else { continue }
-            guard now.timeIntervalSince(s.updatedAt) > evictionDelay else { continue }
-            // Never evict a live CLI session whose process is still alive: a
-            // long-running CLI agent can run quietly (no hook events) for well
-            // over evictionDelay. Evicting it would drop activeAgentCount and
-            // let the Mac sleep mid-task. PIDWatcher flips it terminal on exit.
-            if s.isLive, !s.agent.isIDEAgent, s.pid > 0, PIDLiveness.isAlive(s.pid) {
+
+            // IDE agent stuck in a live state with stale hooks: soft-revert it so
+            // the UI transitions to idle instead of showing a ghost "running" badge.
+            if s.isLive, s.agent.isIDEAgent,
+               now.timeIntervalSince(s.updatedAt) > ideIdleWindow {
+                scheduleTerminalRevert(sessionKey: key)
+                changed = true
                 continue
             }
+
+            // CLI liveness safety-net (authoritative for "is it running?").
+            // PIDWatcher should already finalize on exit, but it can miss when a
+            // hook arrived without a pid, or the process was force-killed before
+            // the watcher registered. Reconcile here so a dead agent never lingers
+            // as a false-positive "running" badge for up to evictionDelay.
+            if s.isLive, !s.agent.isIDEAgent {
+                if s.pid > 0, !PIDLiveness.isAlive(s.pid) {
+                    finalizeOnPIDExit(sessionKey: key)
+                    changed = true
+                    continue
+                }
+                // No pid ever captured: fall back to the process monitor. Only
+                // finalize once past the grace window and the monitor confirms no
+                // matching CLI process is running (avoids cutting a real task).
+                if s.pid == 0,
+                   now.timeIntervalSince(s.lastHookReceivedAt) > noPidGrace,
+                   processMonitor.isAppRunning[s.agent] != true {
+                    finalizeOnPIDExit(sessionKey: key)
+                    changed = true
+                    continue
+                }
+                // Process still alive: never evict — a long-running CLI agent can
+                // run quietly (no hook events) for well over evictionDelay.
+                if s.pid > 0, PIDLiveness.isAlive(s.pid) { continue }
+            }
+
+            guard now.timeIntervalSince(s.updatedAt) > evictionDelay else { continue }
             sessions.removeValue(forKey: key)
             revertTokens.removeValue(forKey: key)
+            permissionTimeoutTokens.removeValue(forKey: key)
             ApprovalArbiter.shared.clear(sessionKey: key)
             changed = true
         }
@@ -190,17 +270,74 @@ final class AgentTrackingManager {
         let nextToken = (revertTokens[sessionKey] ?? 0) + 1
         revertTokens[sessionKey] = nextToken
         let delay = autoRevertSeconds
-        Task { [sessionKey, nextToken] in
+
+        // Snapshot the session now for history persistence (before reset).
+        let snapshot = sessions[sessionKey]
+
+        Task { [sessionKey, nextToken, snapshot] in
             try? await Task.sleep(for: .seconds(delay))
             await MainActor.run {
                 guard self.revertTokens[sessionKey] == nextToken else { return }
                 guard var s = self.sessions[sessionKey] else { return }
                 guard s.hasEnded || s.hasFailed else { return }
+
+                // Persist session summary before resetting flags.
+                if let snap = snapshot {
+                    let outcome = snap.hasFailed ? "failed" : (snap.hasEnded ? "completed" : "reverted")
+                    EventStore.shared.insertSessionHistory(
+                        sessionKey: sessionKey,
+                        agent: snap.agent.rawValue,
+                        startedAt: snap.startedAt,
+                        endedAt: snap.updatedAt,
+                        outcome: outcome,
+                        toolCount: snap.toolCallCount,
+                        permissionCount: snap.permissionCount,
+                        subagentCount: snap.subagentCount
+                    )
+                }
+
                 s.hasEnded = false
                 s.hasFailed = false
                 s.lastPhase = .sessionStart
                 self.sessions[sessionKey] = s
                 NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
+            }
+        }
+    }
+
+    /// Safety-net: if a permission request fires but no subsequent tool/prompt
+    /// event arrives within 120 s, auto-clear `awaitingPermission`. This handles
+    /// the case where the user approves in the agent app but the follow-up hook
+    /// is dropped (network hiccup, app crash, mismatched event format).
+    private func schedulePermissionTimeout(sessionKey: String) {
+        let nextToken = (permissionTimeoutTokens[sessionKey] ?? 0) + 1
+        permissionTimeoutTokens[sessionKey] = nextToken
+
+        // 120s: auto-clear the awaitingPermission flag (keeps Auto mode honest).
+        Task { [sessionKey, nextToken] in
+            try? await Task.sleep(for: .seconds(120))
+            await MainActor.run {
+                guard self.permissionTimeoutTokens[sessionKey] == nextToken else { return }
+                guard var s = self.sessions[sessionKey], s.awaitingPermission else { return }
+                s.awaitingPermission = false
+                self.sessions[sessionKey] = s
+                self.permissionTimeoutTokens.removeValue(forKey: sessionKey)
+                NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
+                self.logger.info("permission timeout: auto-cleared awaitingPermission for \(sessionKey, privacy: .public)")
+            }
+        }
+
+        // 30-min: notify the user that an agent has been stuck waiting for approval.
+        // The token guard means this fires only if the session is still present and
+        // the permission was never re-raised (e.g. user came back and approved).
+        let agentName = sessions[sessionKey]?.agent.displayName ?? "Agent"
+        Task { [sessionKey, nextToken, agentName] in
+            try? await Task.sleep(for: .seconds(1800))
+            await MainActor.run {
+                // Only notify if token hasn't been invalidated (session still active).
+                guard self.permissionTimeoutTokens[sessionKey] == nextToken
+                   || self.sessions[sessionKey] != nil else { return }
+                SleepStateNotifier.shared.notifyAgentStuck(agentName: agentName)
             }
         }
     }
@@ -235,7 +372,10 @@ final class AgentTrackingManager {
             startedAt: normalized.timestamp,
             updatedAt: normalized.timestamp
         )
+        let hadPermission = s.awaitingPermission
         s.apply(normalized)
+        // Receipt-time stamp: the real "a hook just fired" signal for Auto mode.
+        s.lastHookReceivedAt = Date()
         // Track the latest reported pid (CLI agents only — used by Auto mode
         // liveness checks). Keep the last known pid if this event lacks one.
         if env.pid > 0 { s.pid = pid_t(env.pid) }
@@ -246,6 +386,14 @@ final class AgentTrackingManager {
         // mutation (prior approach risked NSHostingView constraint loops when
         // hosted under MenuBarExtra(.window)).
         sessions[sessionKey] = s
+
+        // Permission flag lifecycle: start a 120s safety-net when a permission
+        // request arrives; invalidate the token as soon as work resumes.
+        if !hadPermission && s.awaitingPermission {
+            schedulePermissionTimeout(sessionKey: sessionKey)
+        } else if hadPermission && !s.awaitingPermission {
+            permissionTimeoutTokens.removeValue(forKey: sessionKey)
+        }
 
         // Persist to SQLite (with raw JSON payload for Logs detail view)
         let payloadString: String?
