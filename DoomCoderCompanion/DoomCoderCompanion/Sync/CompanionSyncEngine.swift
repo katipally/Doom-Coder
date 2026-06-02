@@ -41,6 +41,12 @@ final class CompanionSyncEngine: NSObject {
     @ObservationIgnored private var _foregroundPollTimer: Timer?
     private let foregroundPollInterval: TimeInterval = 30
 
+    /// 2-minute watchdog: if Mac's lastSeen grows stale while iOS is foregrounded,
+    /// self-heals by triggering a fresh CloudKit fetch. Catches the case where
+    /// setupSyncEngine() failed at launch and the engine was never initialised.
+    @ObservationIgnored private var _macWatchdogTimer: Timer?
+    private let macWatchdogInterval: TimeInterval = 120
+
     /// Persistent server-record cache so MacStatus updates carry recordChangeTag
     private let serverRecords = ServerRecordCache(
         defaults: AppGroupCache.defaults,
@@ -66,14 +72,17 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in await self?.setupSyncEngine() }
         }
         
-        // Flush CKSyncEngine state to disk when iOS suspends us; stop polling.
+        // When iOS backgrounds us: persist state and do a final sync. Keep timers
+        // alive — they continue firing for any background time iOS grants (silent
+        // pushes get ~30s, BGAppRefreshTask gets ~30s). We request an explicit
+        // background task slot so the final fetch can actually complete.
         NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.persistEngineStateNow()
-                self?.stopForegroundPolling()
-                self?.stopHeartbeat()
+                guard let self else { return }
+                self.persistEngineStateNow()
+                self.beginBackgroundSync()
             }
         }
         
@@ -87,6 +96,9 @@ final class CompanionSyncEngine: NSObject {
                 self.startForegroundPolling()
                 self.startHeartbeat()
                 if self.syncEngine == nil {
+                    // Reset any stale in-progress guard from a background hang
+                    // so the fresh setup attempt is not silently skipped.
+                    self.setupInProgress = false
                     await self.setupSyncEngine()
                 } else {
                     await self.fetchChanges()
@@ -104,11 +116,57 @@ final class CompanionSyncEngine: NSObject {
         }
         RunLoop.main.add(t, forMode: .common)
         _foregroundPollTimer = t
+        startMacWatchdog()
     }
 
     private func stopForegroundPolling() {
         _foregroundPollTimer?.invalidate()
         _foregroundPollTimer = nil
+        stopMacWatchdog()
+    }
+
+    /// Requests a UIBackgroundTask slot and performs a final fetch+publish before
+    /// iOS suspends the app. Uses a class holder to avoid the mutation-after-capture
+    /// Swift concurrency warning with UIBackgroundTaskIdentifier.
+    private func beginBackgroundSync() {
+        final class TaskHolder: @unchecked Sendable {
+            var id: UIBackgroundTaskIdentifier = .invalid
+        }
+        let holder = TaskHolder()
+        holder.id = UIApplication.shared.beginBackgroundTask(withName: "DoomCoder.sync") {
+            UIApplication.shared.endBackgroundTask(holder.id)
+        }
+        Task { @MainActor [weak self] in
+            await self?.fetchChanges()
+            await self?.publishCompanionStatus()
+            UIApplication.shared.endBackgroundTask(holder.id)
+        }
+    }
+
+    private func startMacWatchdog() {
+        _macWatchdogTimer?.invalidate()
+        let t = Timer(timeInterval: macWatchdogInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.healMacConnectionIfStale() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        _macWatchdogTimer = t
+    }
+
+    private func stopMacWatchdog() {
+        _macWatchdogTimer?.invalidate()
+        _macWatchdogTimer = nil
+    }
+
+    private func healMacConnectionIfStale() async {
+        guard let mac = MacStatusStore.shared.primary else { return }
+        let age = -mac.lastSeen.timeIntervalSinceNow
+        guard age > 180 else { return }  // < 3 min = fresh enough, do nothing
+        if age > 600 {
+            // Very stale (>10 min): wipe sync token and do a full re-fetch
+            await forceFetchAll()
+        } else {
+            await fetchChanges()
+        }
     }
 
     func persistEngineStateNow() {
