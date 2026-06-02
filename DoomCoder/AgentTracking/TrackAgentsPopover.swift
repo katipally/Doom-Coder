@@ -72,7 +72,6 @@ struct TrackAgentsView: View {
 
     @ViewBuilder
     private func row(_ agent: TrackedAgent) -> some View {
-        let live = manager.liveSessions.first { $0.agent == agent }
         let isInstalled = installed[agent] ?? false
         let isOn = enabled[agent] ?? true
         let state = manager.effectiveState(for: agent)
@@ -98,7 +97,7 @@ struct TrackAgentsView: View {
                         .frame(width: 7, height: 7)
                         .symbolEffect(.pulse, isActive: state == .running)
                         .accessibilityHidden(true)
-                    Text(subtitle(agent: agent, live: live))
+                    Text(subtitle(agent: agent))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
@@ -144,17 +143,10 @@ struct TrackAgentsView: View {
 
     // MARK: - Helpers
 
-    private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live {
-            let state = live.displayState
-            if state == .completed || state == .open {
-                let elapsed = Int(Date().timeIntervalSince(live.updatedAt))
-                let ago = elapsed < 60 ? "just now"
-                        : elapsed < 3600 ? "\(elapsed / 60)m ago"
-                        : "\(elapsed / 3600)h ago"
-                return state == .completed ? "Completed · \(ago)" : "Idle · \(ago)"
-            }
-            return live.status
+    private func subtitle(agent: TrackedAgent) -> String {
+        if let t = AgentTrackingManager.shared.lastHookByAgent[agent],
+           t.timeIntervalSinceNow > -600 {
+            return "running"
         }
         let monitor = AgentTrackingManager.shared.processMonitor
         if agent.isIDEAgent, monitor.isAppRunning[agent] == true {
@@ -232,7 +224,6 @@ struct TrackAccordion: View {
 
     @ViewBuilder
     private func compactRow(_ agent: TrackedAgent) -> some View {
-        let live = manager.liveSessions.first { $0.agent == agent }
         let state = manager.effectiveState(for: agent)
         HStack(alignment: .center, spacing: 10) {
             AgentIconView(agent: agent, size: 20)
@@ -243,7 +234,7 @@ struct TrackAccordion: View {
                     Circle().fill(stateColor(state)).frame(width: 6, height: 6)
                         .symbolEffect(.pulse, isActive: state == .running)
                         .accessibilityHidden(true)
-                    Text(subtitle(agent: agent, live: live))
+                    Text(subtitle(agent: agent))
                         .font(.caption2).foregroundStyle(.secondary)
                         .contentTransition(.interpolate)
                 }
@@ -278,17 +269,10 @@ struct TrackAccordion: View {
         .transition(.opacity.combined(with: .offset(y: -8)))
     }
 
-    private func subtitle(agent: TrackedAgent, live: AgentTrackingManager.Session?) -> String {
-        if let live {
-            let state = live.displayState
-            if state == .completed || state == .open {
-                let elapsed = Int(Date().timeIntervalSince(live.updatedAt))
-                let ago = elapsed < 60 ? "just now"
-                        : elapsed < 3600 ? "\(elapsed / 60)m ago"
-                        : "\(elapsed / 3600)h ago"
-                return state == .completed ? "Completed · \(ago)" : "Idle · \(ago)"
-            }
-            return live.status
+    private func subtitle(agent: TrackedAgent) -> String {
+        if let t = AgentTrackingManager.shared.lastHookByAgent[agent],
+           t.timeIntervalSinceNow > -600 {
+            return "running"
         }
         let monitor = AgentTrackingManager.shared.processMonitor
         if agent.isIDEAgent, monitor.isAppRunning[agent] == true {

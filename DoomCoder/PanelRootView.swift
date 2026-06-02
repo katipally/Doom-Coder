@@ -202,15 +202,12 @@ struct PanelRootView: View {
 
     private var masterSubtitle: String {
         if !masterEnabled { return "Suspended — nothing is active" }
-        if sleepManager.isActive, !tracking.liveSessions.isEmpty {
-            let n = tracking.liveSessions.count
-            return "Awake · \(n) agent\(n == 1 ? "" : "s") live"
+        let n = tracking.hookFreshAgents.count
+        if sleepManager.isActive, n > 0 {
+            return "Awake · \(n) agent\(n == 1 ? "" : "s") working"
         }
         if sleepManager.isActive { return "Active · Mac awake" }
-        if !tracking.liveSessions.isEmpty {
-            let n = tracking.liveSessions.count
-            return "\(n) agent\(n == 1 ? "" : "s") live"
-        }
+        if n > 0 { return "\(n) agent\(n == 1 ? "" : "s") working" }
         return "Ready"
     }
 
@@ -310,13 +307,9 @@ struct PanelRootView: View {
                     .disclosureGroupStyle(PillDisclosureStyle())
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else if let graceEnd = sleepManager.autoGraceEndsAt, graceEnd > Date() {
-                // Agents finished: the single visible countdown before sleeping.
-                gracePill(endsAt: graceEnd)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
-                statusPill(icon: "powersleep",
-                           text: "Idle · sleeps when agents finish",
+                statusPill(icon: "moon",
+                           text: "Delegated · macOS controls sleep",
                            tint: .secondary)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
@@ -391,8 +384,7 @@ struct PanelRootView: View {
         case .auto:
             let n = sleepManager.activeAgentCount
             if n > 0 { return "Auto · \(n) agent\(n == 1 ? "" : "s") working" }
-            if sleepManager.autoGraceEndsAt != nil { return "Auto · releasing soon" }
-            return "Auto · sleeps when idle"
+            return "Auto · macOS controls sleep"
         }
     }
 
@@ -403,20 +395,20 @@ struct PanelRootView: View {
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
                     iconChip(system: "antenna.radiowaves.left.and.right",
-                             active: !tracking.liveSessions.isEmpty,
+                             active: !tracking.hookFreshAgents.isEmpty,
                              activeTint: .green)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Agent Tracking")
                             .font(.system(size: 13, weight: .medium))
-                        Text(tracking.liveSessions.isEmpty
-                             ? "No sessions running"
-                             : "Listening for events")
+                        Text(tracking.hookFreshAgents.isEmpty
+                             ? "Ready to track"
+                             : "Listening for hooks")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if !tracking.liveSessions.isEmpty {
-                        Text("\(tracking.liveSessions.count)")
+                    if !tracking.hookFreshAgents.isEmpty {
+                        Text("\(tracking.hookFreshAgents.count)")
                             .font(.caption2.weight(.semibold).monospacedDigit())
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
@@ -540,25 +532,6 @@ struct PanelRootView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tint.opacity(0.12), in: Capsule())
-    }
-
-    /// Grace-period pill with a live SwiftUI countdown — updates every second
-    /// without a separate Timer because Text(timerInterval:) drives itself.
-    /// This is the ONE countdown the user ever sees in Auto mode.
-    private func gracePill(endsAt: Date) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "powersleep").font(.caption2)
-                .accessibilityHidden(true)
-            Text("Mac sleeps in ")
-                .font(.caption2)
-            Text(timerInterval: Date.now...endsAt, countsDown: true)
-                .font(.caption2.monospacedDigit())
-        }
-        .foregroundStyle(Color.secondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.12), in: Capsule())
     }
 
     @ViewBuilder

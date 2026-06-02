@@ -593,7 +593,7 @@ struct MacControlView: View {
         switch mode {
         case .off:  return "Your Mac sleeps normally"
         case .on:   return mac.sleepActive ? "Awake" : "Starting…"
-        case .auto: return mac.sleepActive ? "Awake · agents working" : "Idle · sleeps when agents finish"
+        case .auto: return mac.sleepActive ? "Awake · agents working" : "Delegated · macOS controls sleep"
         }
     }
 

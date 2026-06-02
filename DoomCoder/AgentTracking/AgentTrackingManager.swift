@@ -148,6 +148,18 @@ final class AgentTrackingManager {
     private(set) var sessions: [String: Session] = [:]
     var liveSessions: [Session] { sessions.values.filter(\.isLive).sorted { $0.updatedAt > $1.updatedAt } }
 
+    /// Local wall-clock timestamp of the most recent hook per agent — the
+    /// auto-sleep truth source. Immune to remote clock skew.
+    private(set) var lastHookByAgent: [TrackedAgent: Date] = [:]
+    /// Most recent hook from ANY agent — single signal for the global 10-min timer.
+    private(set) var lastAnyHookAt: Date = .distantPast
+
+    /// Unique agent types with a hook received in the last 10 minutes.
+    var hookFreshAgents: [TrackedAgent] {
+        let cutoff = Date().addingTimeInterval(-600)
+        return lastHookByAgent.compactMap { agent, t in t > cutoff ? agent : nil }
+    }
+
     /// Single source of truth for an agent's effective display state, used by
     /// the panel UI (TrackAgentsView/TrackAccordion) AND the Mac→iOS publisher
     /// so both always agree.
@@ -209,8 +221,8 @@ final class AgentTrackingManager {
     private func sweepEvictedSessions() {
         var changed = false
         let now = Date()
-        // Matches SleepManager.autoIdleWindowSeconds — IDE hooks older than this
-        // are treated as idle. Keep in sync if that constant changes.
+        // Matches the 10-min hook window used by SleepManager — IDE hooks older
+        // than this are treated as idle.
         let ideIdleWindow: TimeInterval = 600
         // Grace before finalizing a live CLI session that never reported a pid:
         // gives a freshly-started session time to emit its first pid-bearing hook.
@@ -375,7 +387,10 @@ final class AgentTrackingManager {
         let hadPermission = s.awaitingPermission
         s.apply(normalized)
         // Receipt-time stamp: the real "a hook just fired" signal for Auto mode.
-        s.lastHookReceivedAt = Date()
+        let hookReceivedAt = Date()
+        s.lastHookReceivedAt = hookReceivedAt
+        lastHookByAgent[normalized.agent] = hookReceivedAt
+        lastAnyHookAt = hookReceivedAt
         // Track the latest reported pid (CLI agents only — used by Auto mode
         // liveness checks). Keep the last known pid if this event lacks one.
         if env.pid > 0 { s.pid = pid_t(env.pid) }
