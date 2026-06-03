@@ -66,8 +66,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let button = statusItem?.button else { return }
         // Icon tracks the master toggle (DoomCoder on/off), not the sleep
         // assertion. When master is OFF the app is fully idle — bolt.slash.
+        // When master is on AND a snooze is active, swap to moon.zzz.fill so
+        // the user can spot the override at a glance in the menu bar.
         let master = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
-        let name = master ? "bolt.fill" : "bolt.slash.fill"
+        let snoozed = SleepManager.shared.isSnoozed
+        let name: String
+        if !master { name = "bolt.slash.fill" }
+        else if snoozed { name = "moon.zzz.fill" }
+        else { name = "bolt.fill" }
         let img = NSImage(systemSymbolName: name, accessibilityDescription: "DoomCoder")
         img?.isTemplate = true
         button.image = img
@@ -75,9 +81,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let liveCount = AgentTrackingManager.shared.hookFreshAgents.count
         button.title = liveCount > 0 ? " \(liveCount)" : ""
         // VoiceOver label: "DoomCoder — 2 agents active" or "DoomCoder — idle"
-        let countLabel = liveCount > 0
-            ? "\(liveCount) agent\(liveCount == 1 ? "" : "s") active"
-            : (master ? "idle" : "suspended")
+        let countLabel: String
+        if snoozed {
+            countLabel = "snoozed"
+        } else if liveCount > 0 {
+            countLabel = "\(liveCount) agent\(liveCount == 1 ? "" : "s") active"
+        } else {
+            countLabel = master ? "idle" : "suspended"
+        }
         button.toolTip = "DoomCoder — \(countLabel)"
         button.setAccessibilityLabel("DoomCoder — \(countLabel)")
         // Gently dim the icon when master is off so it's distinguishable at a glance.

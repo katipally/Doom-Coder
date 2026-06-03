@@ -33,6 +33,10 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
         /// even while the gate is off (otherwise it could never be turned back
         /// on remotely); all OTHER verbs are ignored while the gate is off.
         case setMasterEnabled
+        /// value = "15m" | "1h" | "indefinite" | "" (empty = cancel snooze).
+        /// v2.6 — Auto-mode snooze override. The Mac applies by switching
+        /// to Auto mode (if not already) and setting the snooze timer.
+        case setSnooze
     }
 
     public var commandId: String

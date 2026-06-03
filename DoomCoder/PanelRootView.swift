@@ -70,11 +70,13 @@ struct PanelRootView: View {
         .frame(width: panelWidth)
         .fixedSize(horizontal: true, vertical: true)
         .background(PanelBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
         )
+        // Tahoe uses a soft, large-radius shadow for floating surfaces.
+        .shadow(color: Color.black.opacity(0.22), radius: 22, x: 0, y: 8)
         .scaleEffect(appeared ? 1.0 : 0.97)
         .opacity(appeared ? 1 : 0)
         .onAppear {
@@ -266,7 +268,8 @@ struct PanelRootView: View {
                     .transition(.opacity)
 
                 case .auto:
-                    EmptyView()
+                    snoozeRow
+                        .transition(.opacity)
                 }
 
                 keepAwakeStatus
@@ -285,34 +288,8 @@ struct PanelRootView: View {
             statusPill(icon: "display", text: "Display off — move mouse to wake", tint: .orange)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else if sleepManager.keepAwakeMode == .auto {
-            let n = sleepManager.activeAgentCount
-            if n > 0 {
-                // Agents are working: show only the count + expandable per-agent
-                // detail. No countdown while work is happening — staleness is
-                // handled silently and the only timer the user ever sees is the
-                // grace countdown below, once everything has finished.
-                VStack(alignment: .leading, spacing: 4) {
-                    DisclosureGroup(isExpanded: $agentDetailExpanded) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(sleepManager.autoStatusLines) { line in
-                                agentStatusRow(line)
-                            }
-                        }
-                        .padding(.top, 4)
-                    } label: {
-                        statusPill(icon: "sparkles",
-                                   text: "\(n) agent\(n == 1 ? "" : "s") working",
-                                   tint: .accentColor)
-                    }
-                    .disclosureGroupStyle(PillDisclosureStyle())
-                }
+            autoStatusBlock
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else {
-                statusPill(icon: "moon",
-                           text: "Delegated · macOS controls sleep",
-                           tint: .secondary)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            }
         } else if let remaining = sleepManager.sessionTimerRemainingText {
             statusPill(icon: "timer", text: remaining, tint: .secondary)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -371,7 +348,9 @@ struct PanelRootView: View {
         switch sleepManager.keepAwakeMode {
         case .off:  return "powersleep"
         case .on:   return "cup.and.saucer.fill"
-        case .auto: return "sparkles"
+        case .auto:
+            // While snoozed, show the zzz moon. Otherwise, the regular sparkles.
+            return sleepManager.isSnoozed ? "moon.zzz.fill" : "sparkles"
         }
     }
 
@@ -382,10 +361,183 @@ struct PanelRootView: View {
         case .on:
             return sleepManager.mode == .screenOff ? "On · display sleeps" : "On · display stays lit"
         case .auto:
-            let n = sleepManager.activeAgentCount
-            if n > 0 { return "Auto · \(n) agent\(n == 1 ? "" : "s") working" }
-            return "Auto · macOS controls sleep"
+            if let s = sleepManager.snoozeDuration {
+                return "Auto · snoozed \(s == .indefinite ? "until you turn it off" : "for \(s.displayName)")"
+            }
+            switch sleepManager.dominantAutoSignal {
+            case .snoozed:    return "Auto · snoozed"
+            case .agents:     return "Auto · \(sleepManager.activeAgentCount) agent\(sleepManager.activeAgentCount == 1 ? "" : "s") working"
+            case .userActive: return "Auto · you're active"
+            case .idle:       return "Auto · macOS controls sleep"
+            }
         }
+    }
+
+    // MARK: - Auto status block (dominant-signal display)
+    //
+    // A single status line reflecting the dominant signal keeping the Mac
+    // awake, plus an expandable per-agent list when agents are working.
+    // Liquid Glass: uses .regularMaterial + 16pt squircle background with
+    // a 1px hairline border for the Tahoe aesthetic.
+
+    @ViewBuilder
+    private var autoStatusBlock: some View {
+        let sig = sleepManager.dominantAutoSignal
+        VStack(alignment: .leading, spacing: 6) {
+            switch sig {
+            case .snoozed:
+                if let s = sleepManager.snoozeDuration {
+                    let text = s == .indefinite
+                        ? "Snoozed · until you turn it off"
+                        : "Snoozed · \(s.displayName) remaining"
+                    statusPill(icon: "moon.zzz.fill", text: text, tint: .orange)
+                }
+            case .agents:
+                let n = sleepManager.activeAgentCount
+                VStack(alignment: .leading, spacing: 4) {
+                    DisclosureGroup(isExpanded: $agentDetailExpanded) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(sleepManager.autoStatusLines) { line in
+                                agentStatusRow(line)
+                            }
+                        }
+                        .padding(.top, 4)
+                    } label: {
+                        statusPill(icon: "sparkles",
+                                   text: "\(n) agent\(n == 1 ? "" : "s") working",
+                                   tint: .accentColor)
+                    }
+                    .disclosureGroupStyle(PillDisclosureStyle())
+                }
+            case .userActive:
+                statusPill(icon: "hand.tap.fill",
+                           text: "You're active · Mac stays awake",
+                           tint: .accentColor)
+            case .idle:
+                statusPill(icon: "moon",
+                           text: "Delegated · macOS controls sleep",
+                           tint: .secondary)
+            }
+        }
+    }
+
+    // MARK: - Snooze row (lives in the Auto mode section, under the segmented control)
+    //
+    // A compact pill menu that offers "15 min" / "1 hour" / "Until I turn it off".
+    // While snoozed, it shows a countdown badge. Tapping the pill when snoozed
+    // opens the same menu with a "Cancel snooze" destructive option.
+
+    @ViewBuilder
+    private var snoozeRow: some View {
+        HStack(spacing: 6) {
+            sectionLabel("SNOOZE", help: "Override Auto and hold the Mac awake for a fixed time, even after you stop typing and your agents finish. Caffeine-style. The Mac releases control when the timer ends (or you cancel).")
+            Spacer()
+            snoozeMenu
+        }
+    }
+
+    private var snoozeMenu: some View {
+        Menu {
+            if sleepManager.isSnoozed {
+                Section("Snooze active") {
+                    if let s = sleepManager.snoozeDuration {
+                        Text(s.displayName + (s == .indefinite ? "" : " remaining"))
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        withAnimation(DCAnim.smooth) { sleepManager.cancelSnooze() }
+                    } label: {
+                        Label("Cancel snooze", systemImage: "xmark.circle.fill")
+                    }
+                }
+            } else {
+                Section("Hold the Mac awake for") {
+                    Button {
+                        withAnimation(DCAnim.smooth) { sleepManager.snooze(.fifteenMinutes) }
+                    } label: {
+                        Label("15 minutes", systemImage: "15.circle")
+                    }
+                    Button {
+                        withAnimation(DCAnim.smooth) { sleepManager.snooze(.oneHour) }
+                    } label: {
+                        Label("1 hour", systemImage: "clock")
+                    }
+                    Button {
+                        withAnimation(DCAnim.smooth) { sleepManager.snooze(.indefinite) }
+                    } label: {
+                        Label("Until I turn it off", systemImage: "infinity")
+                    }
+                }
+            }
+        } label: {
+            snoozePillLabel
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Snooze")
+        .accessibilityValue(snoozeAccessibilityValue)
+    }
+
+    @ViewBuilder
+    private var snoozePillLabel: some View {
+        if let s = sleepManager.snoozeDuration {
+            // Active state: pill with a clock icon + countdown.
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
+                Text(snoozeActiveLabel(s))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .contentTransition(.numericText())
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.orange.opacity(0.18))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.35), lineWidth: 0.5)
+            )
+        } else {
+            // Inactive state: "Snooze…" with a chevron, matching the
+            // auto-off menu visual style.
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz")
+                    .font(.caption2)
+                    .accessibilityHidden(true)
+                Text("Snooze")
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+        }
+    }
+
+    private func snoozeActiveLabel(_ s: SnoozeDuration) -> String {
+        if s == .indefinite { return "Snoozed" }
+        guard let until = sleepManager.snoozeUntil else { return "Snoozed" }
+        let remaining = max(0, Int(until.timeIntervalSinceNow))
+        let h = remaining / 3600
+        let m = (remaining % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
+    }
+
+    private var snoozeAccessibilityValue: String {
+        guard let s = sleepManager.snoozeDuration else { return "Off" }
+        return "Snoozed — \(snoozeActiveLabel(s)) remaining"
     }
 
     // MARK: - Agents card
@@ -487,11 +639,13 @@ struct PanelRootView: View {
     @ViewBuilder
     private func iconChip(system: String, active: Bool, activeTint: Color = .accentColor) -> some View {
         ZStack {
-            Circle()
-                .fill(active ? activeTint.opacity(0.2) : Color.white.opacity(0.05))
-                .frame(width: 30, height: 30)
+            // Tahoe: squircles (16% of width) over circles, with a soft
+            // inner highlight that gives the glass a "lit from inside" look.
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(active ? activeTint.opacity(0.22) : Color.white.opacity(0.06))
+                .frame(width: 32, height: 32)
             Image(systemName: system)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(active ? activeTint : .secondary)
                 .contentTransition(.symbolEffect(.replace))
                 .accessibilityHidden(true)
@@ -528,10 +682,19 @@ struct PanelRootView: View {
             Text(text).font(.caption2)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.12), in: Capsule())
+        // Tahoe: 12pt squircle replaces the old capsule for status pills —
+        // less round, more "card" feel, matches the segmented control rhythm.
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(tint.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 0.5)
+        )
     }
 
     @ViewBuilder
@@ -746,8 +909,17 @@ private struct InnerCard<Content: View>: View {
     var body: some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.045))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    // Tahoe Liquid Glass: thin system material on dark UI
+                    // gives a subtle frosted look that lets the desktop bleed
+                    // through without hurting text legibility.
+                    .fill(.thinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    // 1px hairline border is the Tahoe convention for
+                    // defining glass surfaces without heavy shadows.
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
             )
     }
 }
