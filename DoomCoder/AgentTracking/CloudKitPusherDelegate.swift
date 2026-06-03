@@ -178,6 +178,15 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             case .setSessionTimerHours:
                 guard let raw = Int(cmd.value) else { continue }
                 sm.sessionTimerHours = max(0, min(raw, 24))   // clamp to a sane range
+            case .setSnooze:
+                // v2.6 — Auto-mode snooze override. Empty value = cancel.
+                if cmd.value.isEmpty {
+                    sm.cancelSnooze()
+                } else if let d = SnoozeDuration(rawValue: cmd.value) {
+                    sm.snooze(d)
+                } else {
+                    continue
+                }
             case .setMasterEnabled, .none:
                 continue
             }

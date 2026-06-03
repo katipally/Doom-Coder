@@ -321,11 +321,14 @@ final class AgentTrackingManager {
     /// event arrives within 120 s, auto-clear `awaitingPermission`. This handles
     /// the case where the user approves in the agent app but the follow-up hook
     /// is dropped (network hiccup, app crash, mismatched event format).
+    /// (v2.6: the prior 30-min "agent is stuck" notification was removed — it
+    /// was a noisy false positive, since a long lull doesn't necessarily mean
+    /// the user is away. Auto mode's keyboard/mouse signal handles that case
+    /// better, and the agent's own UI surfaces the pending approval.)
     private func schedulePermissionTimeout(sessionKey: String) {
         let nextToken = (permissionTimeoutTokens[sessionKey] ?? 0) + 1
         permissionTimeoutTokens[sessionKey] = nextToken
 
-        // 120s: auto-clear the awaitingPermission flag (keeps Auto mode honest).
         Task { [sessionKey, nextToken] in
             try? await Task.sleep(for: .seconds(120))
             await MainActor.run {
@@ -336,20 +339,6 @@ final class AgentTrackingManager {
                 self.permissionTimeoutTokens.removeValue(forKey: sessionKey)
                 NotificationCenter.default.post(name: .doomcoderNewEvent, object: nil)
                 self.logger.info("permission timeout: auto-cleared awaitingPermission for \(sessionKey, privacy: .public)")
-            }
-        }
-
-        // 30-min: notify the user that an agent has been stuck waiting for approval.
-        // The token guard means this fires only if the session is still present and
-        // the permission was never re-raised (e.g. user came back and approved).
-        let agentName = sessions[sessionKey]?.agent.displayName ?? "Agent"
-        Task { [sessionKey, nextToken, agentName] in
-            try? await Task.sleep(for: .seconds(1800))
-            await MainActor.run {
-                // Only notify if token hasn't been invalidated (session still active).
-                guard self.permissionTimeoutTokens[sessionKey] == nextToken
-                   || self.sessions[sessionKey] != nil else { return }
-                SleepStateNotifier.shared.notifyAgentStuck(agentName: agentName)
             }
         }
     }

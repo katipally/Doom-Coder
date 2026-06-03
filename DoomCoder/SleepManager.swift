@@ -39,6 +39,21 @@ final class SleepManager {
     private(set) var screenOffCountdown: Int? = nil
     private(set) var hasAccessibilityPermission: Bool = false
 
+    /// True when the most recent keyboard/mouse/trackpad event was within
+    /// the silence window. Auto mode treats this as a "user is still here"
+    /// signal alongside agent hooks.
+    private(set) var isUserActive: Bool = false
+
+    /// While non-nil in Auto mode, the sleep assertion is held until this
+    /// time regardless of agent or user activity. `nil` = no snooze.
+    /// Snooze is also persisted across launches while Auto is selected
+    /// (so an "indefinite" snooze survives a reboot — Caffeine behavior).
+    private(set) var snoozeUntil: Date? = nil
+
+    /// Active snooze duration. When `.indefinite`, `snoozeUntil` is `nil`
+    /// (sentinel: the snooze is conceptually unbounded).
+    private(set) var snoozeDuration: SnoozeDuration? = nil
+
     // MARK: - Persisted settings
 
     /// Single source of truth for the keep-awake intent. `.off` / `.on` map to
@@ -166,6 +181,27 @@ final class SleepManager {
         startThermalMonitoring()
         updateThermalState()
         hasAccessibilityPermission = AXIsProcessTrustedWithOptions(nil)
+        // Restore persisted snooze state. Two keys:
+        //   • "doomcoder.snoozeDuration" — the duration enum raw value
+        //   • "doomcoder.snoozeUntil"    — the absolute end timestamp
+        // We persist the absolute timestamp so a relaunch after the snooze
+        // was partially elapsed (e.g. user quit 30 min into a 1h snooze)
+        // resumes the remaining time, not a fresh full duration. If only
+        // the duration is present (legacy data), we fall back to a fresh
+        // full duration from now.
+        if let raw = UserDefaults.standard.string(forKey: "doomcoder.snoozeDuration"),
+           let d = SnoozeDuration(rawValue: raw) {
+            self.snoozeDuration = d
+            if let until = UserDefaults.standard.object(forKey: "doomcoder.snoozeUntil") as? Date,
+               until > Date() {
+                self.snoozeUntil = until
+            } else if d == .indefinite {
+                self.snoozeUntil = nil
+            } else {
+                // Legacy / no persisted timestamp → fresh full duration.
+                self.snoozeUntil = d.seconds.map { Date().addingTimeInterval($0) }
+            }
+        }
         // Apply the persisted intent. `.on` re-acquires the assertion on launch
         // (explicit user intent). `.auto` does NOT acquire without fresh agent
         // evidence (crash-safety — never restore a stale assertion).
@@ -187,13 +223,6 @@ final class SleepManager {
     // Owned by GlobalHotkey (Carbon RegisterEventHotKey). No AX permission
     // required. This class no longer installs a duplicate NSEvent monitor.
 
-    private func setupGlobalHotkey() {
-        if let existing = _hotkeyMonitor {
-            NSEvent.removeMonitor(existing)
-            _hotkeyMonitor = nil
-        }
-    }
-
     // MARK: - Enable / Disable / Toggle (public intent)
     //
     // These now drive `keepAwakeMode` so the panel master toggle, the global
@@ -203,6 +232,49 @@ final class SleepManager {
     func enable()  { keepAwakeMode = .on }
     func disable() { keepAwakeMode = .off }
     func toggle()  { keepAwakeMode = (keepAwakeMode == .off) ? .on : .off }
+
+    // MARK: - Snooze (Auto mode only — Caffeine-style override)
+    //
+    // Snooze holds the sleep assertion for the chosen duration regardless
+    // of agent or user-activity signals. It is only meaningful in Auto mode.
+    // Calling snooze() from any other mode switches to Auto and starts the
+    // snooze (intuitive — the user clearly wants the Mac held awake).
+
+    func snooze(_ duration: SnoozeDuration) {
+        // Always switch to Auto so the snooze is observed by evaluateAuto().
+        // If the user was in On/Off, switching to Auto is the only way the
+        // snooze can release at the right time.
+        if keepAwakeMode != .auto { keepAwakeMode = .auto }
+        snoozeDuration = duration
+        snoozeUntil = duration.seconds.map { Date().addingTimeInterval($0) }
+        UserDefaults.standard.set(duration.rawValue, forKey: "doomcoder.snoozeDuration")
+        // Persist the absolute end timestamp so a relaunch (or the periodic
+        // refreshAutoInputs expiry check) can resume the snooze at the right
+        // moment without resetting to a fresh full duration.
+        if let until = snoozeUntil {
+            UserDefaults.standard.set(until, forKey: "doomcoder.snoozeUntil")
+        } else {
+            // Indefinite — no end timestamp to persist.
+            UserDefaults.standard.removeObject(forKey: "doomcoder.snoozeUntil")
+        }
+        evaluateAuto()
+        notifyStateChanged()
+    }
+
+    func cancelSnooze() {
+        snoozeDuration = nil
+        snoozeUntil = nil
+        UserDefaults.standard.removeObject(forKey: "doomcoder.snoozeDuration")
+        UserDefaults.standard.removeObject(forKey: "doomcoder.snoozeUntil")
+        // Force a re-evaluation so we release immediately if both signals
+        // are already stale.
+        evaluateAuto()
+        notifyStateChanged()
+    }
+
+    /// True while a snooze override is in effect. Includes indefinite
+    /// snoozes (`snoozeUntil == nil` but `snoozeDuration == .indefinite`).
+    var isSnoozed: Bool { snoozeDuration != nil }
 
     /// Releases the IOPM assertion without changing the persisted keep-awake
     /// intent. Use on app termination so On/Auto are restored on next launch.
@@ -216,9 +288,13 @@ final class SleepManager {
         switch keepAwakeMode {
         case .off:
             stopAutoEval()
+            // Leaving Auto: cancel any in-flight snooze so it doesn't
+            // resurrect on the next Auto entry.
+            if snoozeDuration != nil { cancelSnooze() }
             if isActive { releaseAssertion() }
         case .on:
             stopAutoEval()
+            if snoozeDuration != nil { cancelSnooze() }
             if !isActive { acquireAssertion() }
         case .auto:
             startAutoEval()
@@ -242,10 +318,18 @@ final class SleepManager {
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
         notifyStateChanged()
-        // Notify user when Auto mode takes sleep control.
+        // Notify user when Auto mode takes sleep control. The copy reflects
+        // WHY the Mac is held (agents / user activity / snooze) so the user
+        // can tell at a glance.
         if keepAwakeMode == .auto {
-            let names = autoStatusLines.map(\.agentDisplayName)
-            SleepStateNotifier.shared.notifyTookControl(agentNames: names)
+            let reason: SleepStateNotifier.TakeReason
+            if isSnoozed {
+                reason = .snoozed
+            } else {
+                let names = autoStatusLines.map(\.agentDisplayName)
+                reason = names.isEmpty ? .userActive : .agents(names)
+            }
+            SleepStateNotifier.shared.notifyTookControl(reason: reason)
         }
     }
 
@@ -291,9 +375,56 @@ final class SleepManager {
     /// After this window of silence, release the assertion and delegate to macOS.
     private let hookWindowSeconds: TimeInterval = 600
 
-    /// True while DoomCoder should hold the sleep assertion in Auto mode.
-    var isHookFresh: Bool {
+    /// Any keyboard / mouse / trackpad event within this window means the
+    /// user is at their Mac — keep awake. Same window as agent hooks so the
+    /// user can mentally treat "agent OR me" as one freshness rule.
+    private let userActivityWindowSeconds: TimeInterval = 600
+
+    /// True while any tracked agent hook has fired recently. Renamed from
+    /// `isHookFresh` in v2.6 to disambiguate from the keyboard/mouse signal.
+    var isAgentHookFresh: Bool {
         AgentTrackingManager.shared.lastAnyHookAt.timeIntervalSinceNow > -hookWindowSeconds
+    }
+
+    /// True while the most recent keyboard/mouse event was within the
+    /// silence window. Computed via `CGEventSource.secondsSinceLastEventType`
+    /// which queries the system's last-input timestamp directly — no
+    /// Accessibility permission required.
+    var isUserActivityFresh: Bool {
+        let events: [CGEventType] = [
+            .keyDown, .leftMouseDown, .rightMouseDown, .mouseMoved, .scrollWheel
+        ]
+        let minSeconds = events
+            .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
+            .min() ?? .infinity
+        return minSeconds < userActivityWindowSeconds
+    }
+
+    /// True while Auto should hold the assertion: either signal is fresh,
+    /// OR a snooze override is in effect.
+    var shouldHoldAuto: Bool {
+        isSnoozed || isAgentHookFresh || isUserActivityFresh
+    }
+
+    /// The dominant freshness signal for UI display. Pick the most-recently
+    /// active signal. Used by the panel + iOS card to show a single
+    /// human-readable status line.
+    enum AutoSignal: String, Sendable {
+        case agents     = "agents"        // some agent hook within window
+        case userActive = "user_active"   // keyboard/mouse within window
+        case snoozed    = "snoozed"       // snooze override active
+        case idle       = "idle"          // both signals stale
+    }
+
+    /// Dominant signal for UI. Snooze always wins; otherwise the most
+    /// informative non-stale signal wins. Agents > user-active > idle, so
+    /// when both fire (user is typing AND an agent is working) the panel
+    /// surfaces the agent count — the more concrete fact.
+    var dominantAutoSignal: AutoSignal {
+        if isSnoozed { return .snoozed }
+        if isAgentHookFresh { return .agents }
+        if isUserActivityFresh { return .userActive }
+        return .idle
     }
 
     // MARK: - Auto mode state
@@ -337,11 +468,35 @@ final class SleepManager {
         _autoEvalTimer?.invalidate()
         // Backstop poll: ensures the 10-min TTL expiry is honoured even when
         // no new hooks arrive (the observation only fires when hooks land).
+        // Also refreshes the user-activity signal and snooze countdown so the
+        // UI can transition between "agents working" / "you're active" /
+        // "snoozed" / "macOS controls sleep" smoothly.
         let t = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.evaluateAuto() }
+            MainActor.assumeIsolated {
+                self?.refreshAutoInputs()
+                self?.evaluateAuto()
+            }
         }
         RunLoop.main.add(t, forMode: .common)
         _autoEvalTimer = t
+    }
+
+    /// Refreshes inputs that `evaluateAuto` consumes: user activity,
+    /// dominant signal, and snooze expiry. Pure read; no side effects.
+    private func refreshAutoInputs() {
+        let userFresh = isUserActivityFresh
+        if isUserActive != userFresh {
+            isUserActive = userFresh
+        }
+        // Expire an ended snooze: the next evaluateAuto will release if
+        // signals are also stale. We also clear the persisted snooze so a
+        // restart doesn't try to re-arm a finished snooze.
+        if let until = snoozeUntil, Date() >= until {
+            snoozeUntil = nil
+            snoozeDuration = nil
+            UserDefaults.standard.removeObject(forKey: "doomcoder.snoozeDuration")
+            UserDefaults.standard.removeObject(forKey: "doomcoder.snoozeUntil")
+        }
     }
 
     private func stopAutoEval() {
@@ -367,7 +522,10 @@ final class SleepManager {
 
     private func evaluateAuto() {
         guard keepAwakeMode == .auto else { return }
-        if isHookFresh {
+        // Refresh cheap-to-compute inputs first (user activity, snooze
+        // expiry) so the rest of the decision uses the latest snapshot.
+        refreshAutoInputs()
+        if shouldHoldAuto {
             if !isActive { acquireAssertion() }
         } else {
             if isActive {

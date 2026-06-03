@@ -346,7 +346,14 @@ final class CloudKitPusher {
             lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
             masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true,
             agentStatusJSON: agentJSON,
-            autoGraceEndsAt: nil
+            autoGraceEndsAt: nil,
+            // v2.6 — auto-mode redesign fields. Always populated for iOS to
+            // mirror the Mac's compact status pill.
+            autoSignal: sm.keepAwakeMode == .auto ? sm.dominantAutoSignal.rawValue : nil,
+            isUserActive: sm.keepAwakeMode == .auto ? sm.isUserActive : nil,
+            isSnoozed: sm.isSnoozed,
+            snoozeUntil: sm.snoozeUntil,
+            snoozeDuration: sm.snoozeDuration?.rawValue
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec

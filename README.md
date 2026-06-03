@@ -36,7 +36,7 @@ No accounts, no servers, no telemetry. Notifications travel through your own pri
 |---|---|
 | **Off** | macOS manages sleep normally. DoomCoder is running but holds no assertion. |
 | **On** | Always holds the sleep assertion. Sub-option: **Screen On** (display stays lit) or **Screen Off** (display dims; CPU stays awake). |
-| **Auto** | Holds the assertion only while at least one tracked agent is actively working, then releases it after a 5-minute grace period. Respects per-agent tracking toggles. |
+| **Auto** | Caffeine-style smart mode. Holds the sleep assertion while **either** a tracked agent is actively working **or** you are at the keyboard/mouse. Releases 10 minutes after both signals go silent. Also supports **Snooze** (15 min / 1 hour / until you turn it off) for cases where you want to override Auto temporarily. Respects per-agent tracking toggles. |
 
 Switch modes from the menu bar panel. **Option Space** opens the panel.
 
@@ -53,7 +53,17 @@ Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it runnin
 
 ### Screen Off re-arm
 
-When using Screen Off mode, the display wakes when you move the mouse. DoomCoder will put it back to sleep automatically after a configurable idle interval (default: **5 minutes**). Adjust in **Configure > Settings > Screen Off**.
+When using Screen Off mode, the display wakes when you move the mouse. DoomCoder will put it back to sleep automatically after a configurable idle interval (default: **10 minutes**). Adjust in **Configure > Settings > Screen Off**.
+
+### Auto mode snooze (v2.6+)
+
+When Auto is the active mode, a **Snooze** pill appears below the Off/On/Auto segmented control. Tap it to override Auto and hold the Mac awake for:
+
+- **15 minutes** — a quick coffee break
+- **1 hour** — a meeting or phone call
+- **Until I turn it off** — indefinite, like Caffeine
+
+While snoozed, the panel shows a countdown badge and the menu-bar icon swaps to a `moon.zzz.fill`. Cancel the snooze any time from the same menu or from the iOS companion. The iOS companion mirrors the snooze state with a live countdown banner.
 
 ---
 
