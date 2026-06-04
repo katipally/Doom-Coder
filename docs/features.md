@@ -131,11 +131,7 @@ Real-time stream of hook events received from this agent. Events auto-scroll to 
 
 ### Connections tab
 
-Where notifications get delivered, and the devices connected to this Mac. One global **mac + iPhone** channel setting applied to all agents. (Per-agent channel overrides were removed; per-agent control now lives in the "What you'll be notified about" categories card.)
-
-#### Connected Devices
-
-Real, symmetric presence for your companion devices — mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the DoomCoder Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
+Where notifications get delivered. One global **mac + iPhone** channel setting applied to all agents. (Per-agent channel overrides were removed; per-agent control now lives in the "What you'll be notified about" categories card.)
 
 #### Permission Status
 
@@ -286,7 +282,7 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 
 **Notes tab** -- on-device notes with pinning, inline checklists, search, reminders (local notifications), and a "Turn into prompt" action.
 
-**Settings tab** -- choose the AI engine (on-device Apple Intelligence or your own API key), manage notifications, and pair or unpair a Mac.
+**Settings tab** -- choose the AI engine (on-device Apple Intelligence or your own API key), manage notifications, and review sync diagnostics.
 
 ### Optional AI (Enhance)
 
@@ -294,9 +290,9 @@ Prompt Enhance is a bonus that uses either Apple on-device model or your own pro
 
 ### Optional Mac connection (mirroring)
 
-Sign into the same iCloud account on your Mac and iPhone, then enable iPhone / iPad in Configure > Connections. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes.
+Sign into the same iCloud account on your Mac and iPhone. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes. The iOS app is read-only and does not send any commands to the Mac.
 
-With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, a 7-day session log, and remote keep-awake and master on/off controls.
+With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, and a 7-day session log.
 
 ---
 

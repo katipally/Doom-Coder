@@ -1,8 +1,6 @@
 // SettingsView.swift — DoomCoder Companion
-// Read-only settings: connection, notifications, about, test push, diagnostics.
-// Sync is consolidated to a single "Force Sync Now" here (pull-to-refresh on the
-// Agents list does the lightweight incremental refresh). Notifications can be
-// enabled here as a fallback to the connect flow — they are always optional.
+// Read-only settings. Connection / pairing has been removed: data simply
+// appears once the Mac publishes. Notifications, AI, and diagnostics remain.
 
 import SwiftUI
 import CloudKit
@@ -16,8 +14,6 @@ struct SettingsView: View {
     @State private var isForceSyncing = false
     @State private var forceSyncDone = false
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
-    @State private var showConnect = false
-    @State private var showDisconnectConfirm = false
     @State private var aiKeyInput = ""
     @State private var ai = AIEngineCoordinator.shared
     @State private var keyTestState: KeyTestState = .idle
@@ -31,7 +27,6 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            connectionSection
             aiSection
             manageDataSection
             notificationsSection
@@ -44,21 +39,6 @@ struct SettingsView: View {
         .refreshable {
             await CompanionSyncEngine.shared.fetchChanges()
             await refreshNotifStatus()
-        }
-        .sheet(isPresented: $showConnect) {
-            ConnectFlowView(onFinished: {})
-        }
-        .confirmationDialog(
-            "Disconnect from this Mac?",
-            isPresented: $showDisconnectConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect", role: .destructive) {
-                disconnectCurrentMac()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCoder Mac app are not affected. You can reconnect any time.")
         }
         .confirmationDialog(
             "Clear all tool data?",
@@ -278,79 +258,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Connection
-
-    private var connectionSection: some View {
-        Section {
-            if let mac = macStore.primary {
-                LabeledContent("Connected to") {
-                    Text(mac.name).foregroundStyle(.secondary)
-                }
-                LabeledContent("Last seen") {
-                    Text(mac.lastSeen, style: .relative)
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Status") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(connectionStatusColor(mac))
-                            .frame(width: 8, height: 8)
-                        Text(connectionStatusLabel(mac)).foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-                Button {
-                    Haptics.tap()
-                    showConnect = true
-                } label: {
-                    Label("Switch Mac", systemImage: "arrow.triangle.2.circlepath")
-                }
-                Button(role: .destructive) {
-                    Haptics.tap()
-                    showDisconnectConfirm = true
-                } label: {
-                    Label("Disconnect", systemImage: "link.badge.minus")
-                }
-            } else {
-                Button {
-                    Haptics.tap()
-                    showConnect = true
-                } label: {
-                    Label("Connect your Mac", systemImage: "link")
-                }
-            }
-        } header: {
-            Text("Connection")
-        } footer: {
-            if macStore.primary != nil {
-                Text("Disconnect if you want to switch iCloud accounts or pair a different Mac. Your data stays in iCloud and the Mac app keeps running.")
-            } else {
-                Text("Connect to the DoomCoder Mac app to see live agent status and control keep-awake remotely. The app is fully usable without a Mac.")
-            }
-        }
-    }
-
-    private func connectionStatusColor(_ mac: MacStatusRecord) -> Color {
-        if Date().timeIntervalSince(mac.lastSeen) >= 900 { return .red }
-        return mac.sleepActive ? .green : Color.secondary.opacity(0.4)
-    }
-
-    private func connectionStatusLabel(_ mac: MacStatusRecord) -> String {
-        if Date().timeIntervalSince(mac.lastSeen) >= 900 { return "Unreachable" }
-        if mac.sleepActive {
-            let n = mac.activeAgentCount ?? 0
-            return n > 0 ? "Awake · \(n) agent\(n == 1 ? "" : "s")" : "Awake"
-        }
-        return (mac.masterEnabled ?? true) ? "Idle" : "Suspended"
-    }
-
-    private func disconnectCurrentMac() {
-        MacStatusStore.shared.clear()
-        AgentListStore.shared.clear()
-        NotificationLogStore.shared.clear()
-        Haptics.success()
-    }
-
     // MARK: - Notifications
 
     @ViewBuilder
@@ -394,27 +301,6 @@ struct SettingsView: View {
             LabeledContent("Build") {
                 Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—")
             }
-            LabeledContent("iCloud sync") {
-                if let ts = sync.lastSyncAt {
-                    Text(ts, style: .relative).foregroundStyle(.secondary)
-                } else {
-                    Text("Never").foregroundStyle(.secondary)
-                }
-            }
-
-            if !macStore.byMacId.isEmpty {
-                ForEach(Array(macStore.byMacId.values), id: \.macId) { mac in
-                    LabeledContent(mac.name) {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(mac.version).font(.caption)
-                            Text(relativeTime(mac.lastSeen))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-
             Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
                 Label("Privacy Policy", systemImage: "hand.raised")
             }
@@ -497,18 +383,5 @@ struct SettingsView: View {
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
-    }
-
-    private func relativeTime(_ date: Date) -> String {
-        let interval = Date().timeIntervalSince(date)
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            return "\(Int(interval / 60))m ago"
-        } else if interval < 86400 {
-            return "\(Int(interval / 3600))h ago"
-        } else {
-            return "\(Int(interval / 86400))d ago"
-        }
     }
 }

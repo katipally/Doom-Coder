@@ -63,7 +63,6 @@ final class CompanionSyncEngine: NSObject {
     func start() {
         Task { await setupSyncEngine() }
         startForegroundPolling()
-        startHeartbeat()
 
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
@@ -71,7 +70,7 @@ final class CompanionSyncEngine: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in await self?.setupSyncEngine() }
         }
-        
+
         // When iOS backgrounds us: persist state and do a final sync. Keep timers
         // alive — they continue firing for any background time iOS grants (silent
         // pushes get ~30s, BGAppRefreshTask gets ~30s). We request an explicit
@@ -85,7 +84,7 @@ final class CompanionSyncEngine: NSObject {
                 self.beginBackgroundSync()
             }
         }
-        
+
         // Fetch changes when app becomes active; re-attempt full setup if engine
         // never initialized (handles transient accountStatus failure at launch).
         NotificationCenter.default.addObserver(
@@ -94,7 +93,6 @@ final class CompanionSyncEngine: NSObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.startForegroundPolling()
-                self.startHeartbeat()
                 if self.syncEngine == nil {
                     // Reset any stale in-progress guard from a background hang
                     // so the fresh setup attempt is not silently skipped.
@@ -102,7 +100,6 @@ final class CompanionSyncEngine: NSObject {
                     await self.setupSyncEngine()
                 } else {
                     await self.fetchChanges()
-                    await self.publishCompanionStatus()
                 }
             }
         }
@@ -125,7 +122,7 @@ final class CompanionSyncEngine: NSObject {
         stopMacWatchdog()
     }
 
-    /// Requests a UIBackgroundTask slot and performs a final fetch+publish before
+    /// Requests a UIBackgroundTask slot and performs a final fetch before
     /// iOS suspends the app. Uses a class holder to avoid the mutation-after-capture
     /// Swift concurrency warning with UIBackgroundTaskIdentifier.
     private func beginBackgroundSync() {
@@ -138,7 +135,6 @@ final class CompanionSyncEngine: NSObject {
         }
         Task { @MainActor [weak self] in
             await self?.fetchChanges()
-            await self?.publishCompanionStatus()
             UIApplication.shared.endBackgroundTask(holder.id)
         }
     }
@@ -301,7 +297,7 @@ final class CompanionSyncEngine: NSObject {
 
         let engine = CKSyncEngine(config)
         syncEngine = engine
-        
+
         // Re-assert the zone in the engine's database state
         engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone.zoneID))])
 
@@ -313,7 +309,6 @@ final class CompanionSyncEngine: NSObject {
 
         do {
             try await engine.fetchChanges()
-            await publishCompanionStatus()
         } catch {
             SyncTelemetry.shared.record(.engineError, side: .ios,
                                         detail: "initial fetchChanges: \(error.localizedDescription)")
@@ -379,7 +374,7 @@ final class CompanionSyncEngine: NSObject {
             print("[CompanionSyncEngine] sendTestNotification: no primary Mac found")
             return
         }
-        
+
         let testRecord = NotificationLogRecord(
             notifId: UUID().uuidString,
             sessionKey: "test-\(UUID().uuidString)",
@@ -394,13 +389,13 @@ final class CompanionSyncEngine: NSObject {
             success: true,
             ts: Date()
         )
-        
+
         let ckRecord = testRecord.toCKRecord()
-        
+
         let op = CKModifyRecordsOperation(recordsToSave: [ckRecord], recordIDsToDelete: nil)
         op.qualityOfService = .userInitiated
         op.savePolicy = .allKeys
-        
+
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             op.modifyRecordsResultBlock = { result in
                 switch result {
@@ -415,184 +410,21 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
-    // MARK: - Remote control (iOS → Mac)
-
-    /// Stable per-DEVICE identifier used as the command issuer and the key for
-    /// this device's `CompanionStatusRecord` (recordName "CompanionStatus-<id>").
-    ///
-    /// Persisted in the Keychain so it survives app reinstalls and dev rebuilds —
-    /// the old app-group UserDefaults store was wiped on every reinstall, minting
-    /// a NEW id each time and registering the same phone as many ghost devices.
-    ///
-    /// Resolution order (first hit wins, then cached to Keychain):
-    ///   1. Existing Keychain value.
-    ///   2. Legacy UserDefaults value (migrated in, so this install keeps its id).
-    ///   3. `identifierForVendor` (stable per device+vendor), else a fresh UUID.
-    static let deviceIdService = "com.doomcoder.app.companion.identity"
-    static let deviceIdAccount = "doomcoder.companion.deviceId"
-
-    static var issuerDeviceId: String {
-        if let kc = Keychain.get(account: deviceIdAccount, service: deviceIdService),
-           !kc.isEmpty {
-            return kc
-        }
-        let legacyKey = "doomcoder.companion.deviceId"
-        let resolved = AppGroupCache.defaults.string(forKey: legacyKey)
-            ?? UIDevice.current.identifierForVendor?.uuidString
-            ?? UUID().uuidString
-        Keychain.set(resolved, account: deviceIdAccount, service: deviceIdService)
-        AppGroupCache.defaults.set(resolved, forKey: legacyKey)
-        return resolved
-    }
-
-    private static var clientVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-    }
-
-    /// Writes a `ControlCommandRecord` targeting the primary Mac. The Mac applies
-    /// it on its next fetch (launch / foreground / wake / push) and acks via
-    /// `MacStatusRecord.lastAppliedCommandId`. Returns the `commandId` on a
-    /// successful CloudKit write (so the caller can reconcile the ack), or nil
-    /// on failure. A successful write does NOT mean the Mac has applied it yet.
-    @discardableResult
-    func sendControlCommand(verb: ControlCommandRecord.Verb, value: String) async -> String? {
-        guard let primary = MacStatusStore.shared.primary else {
-            print("[CompanionSyncEngine] sendControlCommand: no primary Mac")
-            return nil
-        }
-        let command = ControlCommandRecord(
-            targetMacId: primary.macId,
-            issuerDeviceId: Self.issuerDeviceId,
-            verb: verb,
-            value: value,
-            clientVersion: Self.clientVersion
-        )
-        let op = CKModifyRecordsOperation(recordsToSave: [command.toCKRecord()],
-                                          recordIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        op.savePolicy = .allKeys
-        SyncTelemetry.shared.record(.localEdit, side: .ios,
-                                    recordType: ControlCommandRecord.recordType,
-                                    detail: "\(verb.rawValue)=\(value)")
-        return await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
-            op.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    print("[CompanionSyncEngine] control command sent: \(verb.rawValue)=\(value)")
-                    cont.resume(returning: command.commandId)
-                case .failure(let error):
-                    print("[CompanionSyncEngine] control command failed: \(error)")
-                    cont.resume(returning: nil)
-                }
-            }
-            db.add(op)
-        }
-    }
-
-    // MARK: - Presence heartbeat (iOS → Mac)
-
-    /// Periodic heartbeat that publishes this device's presence so the Mac's
-    /// Configure ▸ Connections tab can show real connected/unreachable status,
-    /// symmetric to how the companion shows the Mac's status.
-    @ObservationIgnored private var _heartbeatTimer: Timer?
-    /// Stay comfortably inside the Mac's 600 s "connected" threshold.
-    private let heartbeatInterval: TimeInterval = 240
-
-    private func startHeartbeat() {
-        stopHeartbeat()
-        let t = Timer(timeInterval: heartbeatInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.publishCompanionStatus() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        _heartbeatTimer = t
-    }
-
-    private func stopHeartbeat() {
-        _heartbeatTimer?.invalidate()
-        _heartbeatTimer = nil
-    }
-
-    /// Re-entrancy guard: only one presence save is in-flight at a time.
-    @ObservationIgnored private var isPublishingPresence = false
-
-    /// Writes a `CompanionStatusRecord` describing this device. Uses a direct
-    /// `CKModifyRecordsOperation` (like `sendControlCommand`) rather than the
-    /// sync engine, since the companion is a read-only sync peer
-    /// (`nextRecordZoneChangeBatch` returns nil). The cached server record is
-    /// reused so the change tag is preserved (avoids CKError 14/2004). On a
-    /// tag conflict the server record is cached and a single retry is scheduled,
-    /// so a wiped cache (e.g. after env migration) self-heals.
-    ///
-    /// The retry is now inline (not a spawned Task) so the re-entrancy guard
-    /// remains held during the retry window — eliminating the race where two
-    /// concurrent failure-paths each spawned their own 3-second retry Task.
-    func publishCompanionStatus(allowRetry: Bool = true) async {
-        guard accountAvailable, !isPublishingPresence else { return }
-        isPublishingPresence = true
-        let ok = await performPresenceSave()
-        if !ok && allowRetry {
-            // Single inline retry after 5 s — flag stays set, no concurrent saves.
-            try? await Task.sleep(for: .seconds(5))
-            if !Task.isCancelled {
-                _ = await performPresenceSave()
-            }
-        }
-        isPublishingPresence = false
-    }
-
-    private func performPresenceSave() async -> Bool {
-        let device = UIDevice.current
-        let status = CompanionStatusRecord(
-            deviceId: Self.issuerDeviceId,
-            name: device.name,
-            model: device.model,
-            systemVersion: "\(device.systemName) \(device.systemVersion)",
-            appVersion: Self.clientVersion
-        )
-        let base = serverRecords.record(forName: status.recordID.recordName)
-        let op = CKModifyRecordsOperation(recordsToSave: [status.toCKRecord(base: base)],
-                                          recordIDsToDelete: nil)
-        op.qualityOfService = .utility
-        op.savePolicy = .allKeys
-        SyncTelemetry.shared.record(.localEdit, side: .ios,
-                                    recordType: CompanionStatusRecord.recordType,
-                                    detail: "presence heartbeat")
-        op.perRecordSaveBlock = { [weak self] _, result in
-            switch result {
-            case .success(let saved):
-                Task { @MainActor [weak self] in self?.serverRecords.store(saved) }
-            case .failure(let error):
-                // Cache the server's record so the retry rebuilds on the
-                // correct change tag instead of looping on 14/2004.
-                if let server = (error as? CKError)?.serverRecord {
-                    Task { @MainActor [weak self] in self?.serverRecords.store(server) }
-                }
-            }
-        }
-        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            op.modifyRecordsResultBlock = { result in
-                if case .success = result { cont.resume(returning: true) }
-                else { cont.resume(returning: false) }
-            }
-            db.add(op)
-        }
-    }
-
     func resetLocalSyncState() async {
         print("[CompanionSyncEngine] resetLocalSyncState: starting")
         SyncTelemetry.shared.record(.engineError, side: .ios,
                                     detail: "user-initiated local sync reset")
-        
+
         syncEngine = nil
         subscriptionsReady = false
         zoneReady = false
         firstFetchCompleted = false
-        
+
         sharedDefaults.removeObject(forKey: Self.engineStateKey)
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
         sharedDefaults.synchronize()
-        
+
         await setupSyncEngine()
         print("[CompanionSyncEngine] resetLocalSyncState: done")
     }
@@ -610,7 +442,7 @@ final class CompanionSyncEngine: NSObject {
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true
         sub.notificationInfo = info
-        
+
         do {
             try await db.save(sub)
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
@@ -635,7 +467,7 @@ final class CompanionSyncEngine: NSObject {
             options: [.firesOnRecordCreation]
         )
         sub.zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName)
-        
+
         let info = CKSubscription.NotificationInfo()
         // For iOS to display a banner (not silent push), the NotificationInfo
         // must include user-visible alert content. Map the CKRecord's "title"
@@ -652,7 +484,7 @@ final class CompanionSyncEngine: NSObject {
         info.shouldSendMutableContent = true
         info.desiredKeys = ["agent", "title", "body", "sessionKey", "phase"]
         sub.notificationInfo = info
-        
+
         do {
             try await db.save(sub)
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
@@ -673,20 +505,12 @@ final class CompanionSyncEngine: NSObject {
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
                 }
-                
+
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) {
                     NotificationLogStore.shared.append(r)
                 }
 
-            case CompanionStatusRecord.recordType:
-                // Our own heartbeat fetched back — cache its server record so
-                // the next publish carries the correct change tag even after a
-                // local cache wipe (env migration / reinstall).
-                if record.recordID.recordName == "CompanionStatus-\(Self.issuerDeviceId)" {
-                    self.serverRecords.store(record)
-                }
-                
             case "AgentConfig":
                 // Custom record type: { macId, agents, installedAgents, statuses, updatedAt, schemaVersion }
                 guard let r = AgentConfigRecord(record) else { return }
@@ -706,20 +530,20 @@ final class CompanionSyncEngine: NSObject {
                     statuses: statusMap,
                     macId: r.macId
                 )
-                
+
             case CloudKitConstants.RecordType.agentIcon:
                 guard let agentStr = record["agent"] as? String,
                       let asset = record["pngAsset"] as? CKAsset,
                       let fileURL = asset.fileURL,
                       let data = try? Data(contentsOf: fileURL)
                 else { return }
-                
+
                 let slug = TrackedAgent(rawValue: agentStr)?.iconSlug ?? agentStr
                 AppGroupCache.writeIcon(slug: slug, data: data)
                 if let url = AppGroupCache.iconURL(slug: slug) {
                     LocalStore.shared.upsertAgentIcon(slug: slug, fileURL: url)
                 }
-                
+
             default:
                 break
             }
@@ -806,7 +630,9 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        // Read-only companion: no pending changes
+        // Read-only companion: only Send Test notification writes happen
+        // via a direct CKModifyRecordsOperation (see sendTestNotification),
+        // not through the sync engine. So no pending changes here.
         return nil
     }
 }

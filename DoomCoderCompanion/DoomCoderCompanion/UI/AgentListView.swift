@@ -1,5 +1,6 @@
 // AgentListView.swift — DoomCoder Companion
-// Main view showing configured agents (read-only, matches Mac TrackAgentsPopover)
+// Read-only agent list. Shown from the Dashboard tab's NavigationStack root
+// (no longer embedded above a Mac control card; the control surface is gone).
 
 import SwiftUI
 import DoomCoderCore
@@ -8,17 +9,9 @@ struct AgentListView: View {
     @State private var agentStore = AgentListStore.shared
     @State private var macStore = MacStatusStore.shared
     @State private var engine = CompanionSyncEngine.shared
-    
+
     var body: some View {
         List {
-            if macStore.primary != nil {
-                Section {
-                    MacReachabilityBanner()
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-            }
             if agentStore.agents.isEmpty {
                 if engine.firstFetchCompleted {
                     EmptyStateView()
@@ -32,8 +25,6 @@ struct AgentListView: View {
                     .padding(.vertical, 40)
                 }
             } else {
-                // Only show agents that are BOTH configured (installed) AND have toggle ON.
-                // If installedAgents is empty we haven't loaded yet — show all toggle-ON agents.
                 let visibleAgents: [TrackedAgent] = agentStore.installedAgents.isEmpty
                     ? agentStore.agents
                     : agentStore.agents.filter { agentStore.installedAgents.contains($0) }
@@ -74,7 +65,7 @@ struct AgentListView: View {
         }
         .navigationTitle("Agents")
     }
-    
+
     private func relativeTime(_ date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
         if interval < 60 {
@@ -166,22 +157,19 @@ struct AgentRow: View {
 struct AgentIcon: View {
     let agent: TrackedAgent
     let size: CGFloat
-    
+
     var body: some View {
         Group {
-            // Try bundled imageset first
             if let _ = UIImage(named: agent.bundledAssetName) {
                 Image(agent.bundledAssetName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else if let url = AppGroupCache.iconURL(slug: agent.iconSlug),
                       let uiImage = UIImage(contentsOfFile: url.path) {
-                // Try AppGroupCache (NSE-shared icon)
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
-                // SF Symbol fallback
                 Image(systemName: "chevron.left.forwardslash.chevron.right")
                     .font(.system(size: size * 0.5))
                     .foregroundStyle(.secondary)

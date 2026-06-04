@@ -9,10 +9,8 @@
 /* Begin PBXBuildFile section */
 		0F1D20AD22DF41A54B9332A6 /* NoteReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06502C320EF789295E113F9F /* NoteReminderScheduler.swift */; };
 		13080AA8AC50EB8EC7B7CE3F /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4038EC43DC5D6E9E65F27D /* DoomCoderCore */; };
-		1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */; };
 		21194123A25BC048EAA1FEF6 /* PromptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8522051EBB94D0FAC89D4D85 /* PromptStore.swift */; };
 		2203CEAF31C04E97C2F12EA6 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DEE8563E810CC992559FA8 /* Haptics.swift */; };
-		2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */; };
 		3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A67B01FA77C05717991E37 /* RootTabView.swift */; };
 		4AEDC090C422B825D22DAB9A /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C9DB6533B760A3ED679723 /* ConversationStore.swift */; };
 		4B93311EB1D4E57AD4EFFAE4 /* JSONFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED5A3BFB2B112F342D7F244 /* JSONFileStore.swift */; };
@@ -34,7 +32,6 @@
 		AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */; };
 		B87084239BB62CDDF5387361 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED52275E7367F2AB4E383199 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BEAD612E3C4A8403349E54D1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */; };
-		BFC889543E4CBE92A36E2B75 /* MacControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B9DE90A2213084C9D99462 /* MacControlView.swift */; };
 		BFFC28F060F2A7CCC2B4A6AC /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53232581AADB8C337671BB09 /* EmptyStateView.swift */; };
 		C454F8A9D858B87680B15C02 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = C8C6B66E763641B3CB2A309A /* DoomCoderCore */; };
 		C82290D0589BA1DAF39B2912 /* SyncDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */; };
@@ -75,7 +72,6 @@
 		06502C320EF789295E113F9F /* NoteReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteReminderScheduler.swift; sourceTree = "<group>"; };
 		0ACADDDFB3E8168E10965A22 /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		12088E8E80C4EE1E3F689855 /* CompanionSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSyncEngine.swift; sourceTree = "<group>"; };
-		15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReachabilityBanner.swift; sourceTree = "<group>"; };
 		16A67B01FA77C05717991E37 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
 		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -99,11 +95,9 @@
 		AD9392DB3081F0376202563D /* AgentLogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogsView.swift; sourceTree = "<group>"; };
 		B4CCC40290EB871ECB7D9D14 /* DoomCoderCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DoomCoderCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1FD10F71AB58F8526779A2D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		C5B9DE90A2213084C9D99462 /* MacControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacControlView.swift; sourceTree = "<group>"; };
 		D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D5438EF22279E9DB76674AE2 /* AgentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentListView.swift; sourceTree = "<group>"; };
 		D8DEE8563E810CC992559FA8 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
-		DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectFlowView.swift; sourceTree = "<group>"; };
 		E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsView.swift; sourceTree = "<group>"; };
 		E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionApp.swift; sourceTree = "<group>"; };
 		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -183,12 +177,9 @@
 			children = (
 				D5438EF22279E9DB76674AE2 /* AgentListView.swift */,
 				AD9392DB3081F0376202563D /* AgentLogsView.swift */,
-				DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */,
 				989306766B1ED48EB7EF7A00 /* DemoView.swift */,
 				53232581AADB8C337671BB09 /* EmptyStateView.swift */,
 				D8DEE8563E810CC992559FA8 /* Haptics.swift */,
-				C5B9DE90A2213084C9D99462 /* MacControlView.swift */,
-				15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
 				D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */,
 				E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */,
@@ -416,7 +407,6 @@
 				55ED3C044EED519BD2F5E236 /* AppRouter.swift in Sources */,
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
-				2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */,
 				4AEDC090C422B825D22DAB9A /* ConversationStore.swift in Sources */,
 				8791789AFFA7ADEA3856FD3F /* DashboardView.swift in Sources */,
 				5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */,
@@ -424,8 +414,6 @@
 				2203CEAF31C04E97C2F12EA6 /* Haptics.swift in Sources */,
 				4B93311EB1D4E57AD4EFFAE4 /* JSONFileStore.swift in Sources */,
 				92DC98D7E394C60ED12FBDBA /* LocalStore.swift in Sources */,
-				BFC889543E4CBE92A36E2B75 /* MacControlView.swift in Sources */,
-				1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */,
 				0F1D20AD22DF41A54B9332A6 /* NoteReminderScheduler.swift in Sources */,
 				82C002BB8A77FBCC3C1F21F1 /* NotesStore.swift in Sources */,
 				7FCDC44AB94F26BDBFC10638 /* NotesView.swift in Sources */,

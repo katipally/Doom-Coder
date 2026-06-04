@@ -13,12 +13,6 @@ import DoomCoderCore
 struct DemoView: View {
     @State private var showNotificationPreview = false
 
-    // Demo Mac-control state (local only — never sends a command).
-    @State private var demoMode: KeepAwakeMode = .auto
-    @State private var demoScreen: ScreenMode = .screenOn
-    @State private var demoTimer: Int = 2
-    @State private var demoMaster: Bool = true
-
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -56,26 +50,6 @@ struct DemoView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
-
-                section(title: "Remote control", subtitle: "This is how you'll control your Mac's keep-awake state once connected.") {
-                    MacControlCard(
-                        macName: "Sample Mac",
-                        lastSeen: nil,
-                        isDemo: true,
-                        isOffline: false,
-                        masterEnabled: demoMaster,
-                        mode: demoMode,
-                        screen: demoScreen,
-                        timerHours: demoTimer,
-                        awakeActive: demoMaster && demoMode != .off,
-                        activeAgentCount: 2,
-                        waiting: false,
-                        onChangeMaster: { demoMaster = $0; Haptics.selection() },
-                        onChangeMode: { demoMode = $0; Haptics.selection() },
-                        onChangeScreen: { demoScreen = $0; Haptics.selection() },
-                        onChangeTimer: { demoTimer = $0; Haptics.selection() }
-                    )
-                }
             }
             .padding(20)
         }
@@ -98,7 +72,7 @@ struct DemoView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Preview Mode")
                     .font(.headline)
-                Text("Sample data shown below. Connect your Mac from the Home tab to see your real agents.")
+                Text("Sample data shown below. Install DoomCoder on your Mac to see your real agents on the Dashboard tab.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -135,13 +109,10 @@ struct DemoView: View {
             let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
             if granted { scheduleDemoLocalNotification() } else { showNotificationPreview = true }
         default:
-            // Permission denied — fall back to the in-app visual preview.
             showNotificationPreview = true
         }
     }
 
-    /// Schedules a real local notification with a 2-second delay so the user can
-    /// background the app and see the system banner appear on their device.
     private func scheduleDemoLocalNotification() {
         let content = UNMutableNotificationContent()
         content.title = "Claude needs approval"
@@ -240,7 +211,6 @@ struct NotificationPreviewSheet: View {
                 .font(.headline)
                 .padding(.top, 24)
 
-            // A mock of the iOS notification banner.
             HStack(alignment: .top, spacing: 12) {
                 Image("logo-square")
                     .resizable()
@@ -269,7 +239,7 @@ struct NotificationPreviewSheet: View {
             .padding(.horizontal, 20)
             .accessibilityElement(children: .combine)
 
-            Text("Real notifications arrive when an agent on your connected Mac needs you. They're optional and contain no marketing.")
+            Text("Real notifications arrive when an agent on your Mac needs you. They're optional and contain no marketing.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

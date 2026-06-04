@@ -87,14 +87,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
     }
 
-    /// Runs a single fetch + presence publish within the system's time budget,
-    /// always chaining the next request so the cadence keeps going.
+    /// Runs a single fetch within the system's time budget, always chaining
+    /// the next request so the cadence keeps going.
     private func handleAppRefresh(_ task: BGAppRefreshTask) {
         scheduleAppRefresh()
         let work = Task { @MainActor in
             await CompanionSyncEngine.shared.fetchChanges()
-            guard !Task.isCancelled else { task.setTaskCompleted(success: false); return }
-            await CompanionSyncEngine.shared.publishCompanionStatus()
             task.setTaskCompleted(success: !Task.isCancelled)
         }
         // Only cancel here; the work task owns calling setTaskCompleted so it is

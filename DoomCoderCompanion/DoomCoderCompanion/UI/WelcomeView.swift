@@ -39,7 +39,7 @@ struct WelcomeView: View {
                                detail: "Turn a rough idea into a well-structured prompt to paste into Claude Code, Codex, Copilot and more.")
                     FeatureRow(symbol: "macbook.and.iphone",
                                title: "Connect your Mac (optional)",
-                               detail: "Add the free DoomCoder Mac app to monitor live agents and keep your Mac awake from the Dashboard tab.")
+                               detail: "Add the free DoomCoder Mac app to monitor live agents and receive their notifications on the Dashboard tab.")
                 }
                 .padding(.horizontal, 4)
 

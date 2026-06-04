@@ -8,14 +8,15 @@ import DoomCoderCore
 
 // MARK: - MacStatusStore
 
-/// Holds the latest MacStatusRecord for every paired Mac.
+/// Holds the latest MacStatusRecord for every paired Mac. The "primary" is
+/// always the most recently seen Mac — there is no user-selectable pinning
+/// because the iOS app is read-only and never pairs explicitly.
 @MainActor
 @Observable
 final class MacStatusStore {
 
     static let shared = MacStatusStore()
     private init() {
-        primaryMacIdOverride = AppGroupCache.defaults.string(forKey: Self.primaryMacIdKey)
         // Warm from App Group cache so the cold-launch UI shows the last
         // known Mac instantly, before the first CloudKit fetch resolves.
         if let cached = AppGroupCache.read([String: MacStatusRecord].self,
@@ -27,29 +28,11 @@ final class MacStatusStore {
     /// App Group cache key for the full byMacId snapshot.
     static let cacheKey = "cache.macStatus.byMacId"
 
-    /// UserDefaults key (App Group) that pins a specific macId as the primary.
-    /// When unset, primary falls back to "most recently seen Mac".
-    static let primaryMacIdKey = "doomcoder.companion.primaryMacId"
-
     private(set) var byMacId: [String: MacStatusRecord] = [:]
-    private(set) var primaryMacIdOverride: String?
 
-    /// User-pinned primary Mac, if set and still visible. Otherwise the most
-    /// recently seen Mac (preserves the v2.x behaviour for single-Mac users).
+    /// Most recently seen Mac.
     var primary: MacStatusRecord? {
-        if let id = primaryMacIdOverride, let pinned = byMacId[id] {
-            return pinned
-        }
-        return byMacId.values.max(by: { $0.lastSeen < $1.lastSeen })
-    }
-
-    func setPrimary(_ macId: String?) {
-        primaryMacIdOverride = macId
-        if let id = macId {
-            AppGroupCache.defaults.set(id, forKey: Self.primaryMacIdKey)
-        } else {
-            AppGroupCache.defaults.removeObject(forKey: Self.primaryMacIdKey)
-        }
+        byMacId.values.max(by: { $0.lastSeen < $1.lastSeen })
     }
 
     func upsert(_ r: MacStatusRecord) {
@@ -60,8 +43,6 @@ final class MacStatusStore {
 
     func clear() {
         byMacId.removeAll()
-        primaryMacIdOverride = nil
-        AppGroupCache.defaults.removeObject(forKey: Self.primaryMacIdKey)
         AppGroupCache.defaults.removeObject(forKey: Self.cacheKey)
     }
 }
@@ -149,7 +130,7 @@ final class NotificationLogStore {
         AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
         LocalStore.shared.upsertNotificationLog(r)
     }
-    
+
     func fetchLogs(forAgent agent: TrackedAgent) async -> [NotificationLogRecord] {
         return await LocalStore.shared.fetchNotifications(forAgent: agent, limit: 100)
     }

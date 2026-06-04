@@ -174,8 +174,9 @@ One global **mac + iPhone** channel setting applies to every agent. (Per-agent c
 
 Pair by signing into the same iCloud account on both devices. Once paired, the **Dashboard** tab mirrors the Mac panel in real time:
 - Live agent list with status (running, waiting, idle, failed)
-- Master on/off and keep-awake controls you can change from your phone
 - 7-day notification log with full event detail
+
+The iOS app is **read-only**: it mirrors the Mac's state but does not send any commands back. Use the Mac directly to change keep-awake, master switch, or sleep settings.
 
 Notifications arrive on your iPhone within 1-5 seconds of the agent event, via your private iCloud container.
 

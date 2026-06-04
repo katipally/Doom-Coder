@@ -1,8 +1,8 @@
 import Foundation
 
-/// User-selected keep-awake intent, shared by the Mac (SleepManager) and the
-/// iOS companion (remote control). Raw values are the wire format used in
-/// `MacStatusRecord.keepAwakeMode` and `ControlCommandRecord` payloads.
+/// User-selected keep-awake intent, used by the Mac's SleepManager and
+/// published on the local panel. Raw values are the wire format used in
+/// the SleepManager UserDefaults store.
 public enum KeepAwakeMode: String, Sendable, Codable, CaseIterable {
     /// Never keep the Mac awake.
     case off
@@ -19,7 +19,7 @@ public enum KeepAwakeMode: String, Sendable, Codable, CaseIterable {
         }
     }
 
-    /// SF Symbol shared by the Mac panel and the iOS remote card.
+    /// SF Symbol shared by the Mac panel.
     public var symbol: String {
         switch self {
         case .off:  return "powersleep"
@@ -30,8 +30,8 @@ public enum KeepAwakeMode: String, Sendable, Codable, CaseIterable {
 }
 
 /// Screen behaviour while keep-awake is active. Raw values match the legacy
-/// `DoomCoderMode` strings already persisted in UserDefaults and published in
-/// `MacStatusRecord.mode`.
+/// `DoomCoderMode` strings already persisted in UserDefaults and published
+/// in `MacStatusRecord.mode`.
 public enum ScreenMode: String, Sendable, Codable, CaseIterable {
     /// Keep the display on (prevent display idle sleep).
     case screenOn
@@ -45,7 +45,7 @@ public enum ScreenMode: String, Sendable, Codable, CaseIterable {
         }
     }
 
-    /// SF Symbol shared by the Mac panel and the iOS remote card.
+    /// SF Symbol shared by the Mac panel.
     public var symbol: String {
         switch self {
         case .screenOn:  return "sun.max.fill"

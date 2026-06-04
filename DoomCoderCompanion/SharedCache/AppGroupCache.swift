@@ -69,13 +69,12 @@ enum AppGroupCache {
     private static let currentSchemaVersion = 2
 
     /// Call once on app launch (after `runV3MigrationOnce`). Idempotent.
-    /// Wipes mac-status / notification-log / paired-mac caches if the
-    /// stored schema version is older than `currentSchemaVersion`.
+    /// Wipes notification-log / paired-mac caches if the stored schema
+    /// version is older than `currentSchemaVersion`.
     static func enforceSchemaVersion() {
         let stored = defaults.integer(forKey: schemaVersionKey)
         guard stored < currentSchemaVersion else { return }
         let staleKeys = [
-            "cache.macStatus.byMacId",
             notificationLogKey,
             "doomcoder.companion.pairedMacEverSeen"
         ]

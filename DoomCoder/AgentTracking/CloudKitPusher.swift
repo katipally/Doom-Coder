@@ -83,8 +83,7 @@ final class CloudKitPusher {
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
         }
-        // Wake from sleep → flush pending writes AND fetch (pick up any
-        // ControlCommand the iOS app wrote while we were asleep).
+        // Wake from sleep → flush pending writes AND fetch.
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -104,8 +103,8 @@ final class CloudKitPusher {
                 UserDefaults.standard.synchronize()
             }
         }
-        // Foreground / activation → fetch promptly so remote commands land
-        // quickly while the user is interacting with either device.
+        // Foreground / activation → fetch promptly so any new Mac state
+        // surfaces quickly while the user is interacting with the app.
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.fetchNow() }
         }
@@ -118,15 +117,14 @@ final class CloudKitPusher {
             }
         }
 
-        // Safety-net flush + fetch — the reliable backstop for iOS→Mac commands
-        // when silent push is throttled or undelivered.
+        // Safety-net flush + fetch — the reliable backstop when silent push
+        // is throttled or undelivered.
         //
         // MUST be scheduled in `.common` run-loop modes. `Timer.scheduledTimer`
         // installs the timer in `.default` mode only, which is SUSPENDED while
         // the menu-bar panel/menus are open (the run loop switches to event
         // tracking). That stalled the only reliable fetch trigger exactly when
-        // the user has the panel open watching for an update — the source of the
-        // "iOS commands take forever to land while the Mac is visible" bug.
+        // the user has the panel open watching for an update.
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.kickEngine()
@@ -139,8 +137,6 @@ final class CloudKitPusher {
 
     func kickEngine() {
         // Sends any pending state changes the engine has queued.
-        // Called by the delegate (via a new Task) after applying a ControlCommand
-        // so the MacStatus ack reaches iOS in <1s instead of up to 15s.
         //
         // MUST use Task.detached, NOT Task {}: CKSyncEngine guards re-entrancy
         // with a task-local marker set while a delegate callback runs. A plain
@@ -244,12 +240,12 @@ final class CloudKitPusher {
         logger.notice("ckpusher: ready (macId=\(self.macId, privacy: .public), zone=\(CloudKitConstants.zoneName, privacy: .public))")
         NotificationCenter.default.post(name: .cloudKitPusherReady, object: nil)
 
-        // Pull any ControlCommand records written by iOS before we launched.
+        // Pull any records written before we launched.
         // Called BEFORE zone subscription so the initial fetch is never delayed
         // by a slow CloudKit subscription response.
         fetchNow()
 
-        // Subscribe to zone changes so iOS ControlCommands trigger a silent
+        // Subscribe to zone changes so any new record triggers a silent
         // APNs push to this Mac — reducing worst-case latency from 15s to <3s.
         // Fire-and-forget: a slow or failing subscription never blocks the fetch.
         Task { await self.ensureZoneSubscription() }
@@ -310,25 +306,10 @@ final class CloudKitPusher {
 
     /// Heartbeat / status singleton. Called every 60s + on sleep/wake + on any
     /// SleepManager state change. Reflects the LIVE keep-awake state so iOS can
-    /// mirror it and confirm remote commands via the ack fields.
+    /// see at a glance whether the Mac is awake.
     func publishMacStatus(sleepActive: Bool? = nil) {
         guard let engine else { return }
         let sm = SleepManager.shared
-        let ud = UserDefaults.standard
-
-        // Encode per-agent status lines for iOS expandable detail view.
-        // Explicit if-else (not ternary + closure) for Swift 6 concurrency clarity.
-        var agentJSON: String? = nil
-        if sm.keepAwakeMode == .auto {
-            let lines: [[String: Any]] = sm.autoStatusLines.map { l in
-                ["name": l.agentDisplayName, "raw": l.agentRaw, "key": l.id,
-                 "state": l.state, "type": l.agentType,
-                 "idleSecs": l.idleSecs, "pidAlive": l.pidAlive]
-            }
-            if let data = try? JSONSerialization.data(withJSONObject: lines) {
-                agentJSON = String(data: data, encoding: .utf8)
-            }
-        }
 
         let rec = MacStatusRecord(
             macId: macId,
@@ -337,35 +318,14 @@ final class CloudKitPusher {
             sleepActive: sleepActive ?? sm.isActive,
             mode: sm.mode.rawValue,
             lastSeen: Date(),
-            thermalState: sm.thermalStateText,
-            keepAwakeMode: sm.keepAwakeMode.rawValue,
-            activeAgentCount: sm.activeAgentCount,
-            sessionTimerHours: sm.sessionTimerHours,
-            elapsedSeconds: sm.elapsedSeconds,
-            lastAppliedCommandId: ud.string(forKey: Self.lastAppliedCommandIdKey),
-            lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
-            masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true,
-            agentStatusJSON: agentJSON,
-            autoGraceEndsAt: nil,
-            // v2.6 — auto-mode redesign fields. Always populated for iOS to
-            // mirror the Mac's compact status pill.
-            autoSignal: sm.keepAwakeMode == .auto ? sm.dominantAutoSignal.rawValue : nil,
-            isUserActive: sm.keepAwakeMode == .auto ? sm.isUserActive : nil,
-            isSnoozed: sm.isSnoozed,
-            snoozeUntil: sm.snoozeUntil,
-            snoozeDuration: sm.snoozeDuration?.rawValue
+            thermalState: sm.thermalStateText
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
     }
 
-    /// UserDefaults keys for the remote-command ack channel (written by the
-    /// delegate when a ControlCommand is applied, read here when publishing).
-    static let lastAppliedCommandIdKey = "doomcoder.ckpusher.lastAppliedCommandId"
-    static let lastAppliedAtKey        = "doomcoder.ckpusher.lastAppliedAt"
-
-    /// Pull zone changes now. Used to pick up iOS-written ControlCommand
-    /// records promptly (launch, foreground, wake, and the safety timer).
+    /// Pull zone changes now. Used to pick up any new Mac state promptly
+    /// (launch, foreground, wake, and the safety timer).
     func fetchNow() {
         // Task.detached (not Task {}): see kickEngine() — a plain Task inherits
         // the CKSyncEngine delegate-callback task-local marker and would crash
@@ -415,18 +375,6 @@ final class CloudKitPusher {
     func deleteNotificationLogs(recordIDs: [CKRecord.ID]) {
         guard let engine else { return }
         engine.state.add(pendingRecordZoneChanges: recordIDs.map { .deleteRecord($0) })
-    }
-
-    /// Deletes a companion device's `CompanionStatusRecord` from CloudKit (used
-    /// by "Forget device"). The record lives in this Mac's private DB zone, so
-    /// the sync engine can remove it; a still-alive device simply re-registers.
-    func deleteCompanionStatus(deviceId: String) {
-        guard let engine else { return }
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
-                                   ownerName: CKCurrentUserDefaultName)
-        let id = CKRecord.ID(recordName: "CompanionStatus-\(deviceId)", zoneID: zone)
-        engine.state.add(pendingRecordZoneChanges: [.deleteRecord(id)])
-        kickEngine()
     }
 
     // MARK: - In-flight payloads (read by delegate)

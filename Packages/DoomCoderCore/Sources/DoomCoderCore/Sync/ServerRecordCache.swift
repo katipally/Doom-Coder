@@ -13,7 +13,6 @@
 // STABLE recordID that gets re-saved across launches:
 //   • SettingsRecord ("Settings-singleton") — both Mac & iOS write
 //   • MacStatusRecord ("MacStatus-{macId}") — heartbeat
-//   • ControlCommandRecord ("ControlCommand-{uuid}") — Mac ack
 //
 // Event / NotificationLog / Session use unique IDs per write and are pure
 // inserts; they do NOT need this cache.

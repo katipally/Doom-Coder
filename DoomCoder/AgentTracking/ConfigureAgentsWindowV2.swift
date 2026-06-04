@@ -33,8 +33,6 @@ struct ConfigureAgentsViewV2: View {
     @State private var permStatus: String = "…"
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-    private static let companionAppStoreURL = "https://apps.apple.com/app/doomcoder-companion/id6772514212"
-    private static let companionHelpURL = "https://github.com/katipally/Doom-Coder#iphone--ipad-companion"
 
     var body: some View {
         NavigationSplitView {
@@ -551,10 +549,10 @@ struct ConfigureAgentsViewV2: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Connections").font(.title.bold())
-                Text("Where alerts get delivered, and the devices connected to this Mac.")
+                Text("Where alerts get delivered.")
                     .foregroundStyle(.secondary)
 
-                connectedDevicesSection
+                // Permission Status
 
                 // Permission Status
                 GroupBox {
@@ -672,117 +670,7 @@ struct ConfigureAgentsViewV2: View {
         }
     }
 
-    // MARK: - Connected devices (companion presence)
-
-    @ViewBuilder
-    private var connectedDevicesSection: some View {
-        // Periodic tick so "Connected" ages out to "Last seen X ago" while the
-        // window stays open, even with no new heartbeat to trigger a re-render.
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            let store = CompanionStatusStore.shared
-            let devices = store.devices
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
-                    if devices.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: "iphone.slash")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            Text("No iPhone or iPad connected yet")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 10) {
-                            Button {
-                                if let url = URL(string: Self.companionAppStoreURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Label("Set up iPhone or iPad", systemImage: "arrow.down.app.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-
-                            Button {
-                                if let url = URL(string: Self.companionHelpURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Text("How it works")
-                            }
-                            .buttonStyle(.link)
-                            .controlSize(.small)
-                        }
-                    } else {
-                        ForEach(devices, id: \.deviceId) { device in
-                            let connected = context.date.timeIntervalSince(device.lastSeen) < CompanionStatusStore.connectedThreshold
-                            HStack(spacing: 10) {
-                                Image(systemName: connected ? "circle.fill" : "circle")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(connected ? Color.green : .secondary)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(device.name.isEmpty ? "iPhone or iPad" : device.name)
-                                        .font(.callout.weight(.medium))
-                                    if !device.systemVersion.isEmpty {
-                                        Text(device.systemVersion)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                                Spacer()
-                                Text(connected ? "Connected" : "Last seen \(Self.relativeTime(device.lastSeen, now: context.date))")
-                                    .font(.caption)
-                                    .foregroundStyle(connected ? Color.green : .secondary)
-                                if !connected {
-                                    Button {
-                                        forgetDevice(device.deviceId)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Forget this device")
-                                    .accessibilityLabel("Forget \(device.name.isEmpty ? "device" : device.name)")
-                                }
-                            }
-                            .contentShape(Rectangle())
-                            .contextMenu {
-                                Button("Forget Device", systemImage: "trash") {
-                                    forgetDevice(device.deviceId)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } label: {
-                Label("Connected Devices", systemImage: "iphone.gen3")
-            }
-        }
-    }
-
-    /// Removes a device from the local list and queues a CloudKit delete of its
-    /// presence record. Stable device IDs mean a live device just re-registers;
-    /// stale ghosts (old reinstalls) stay gone.
-    private func forgetDevice(_ deviceId: String) {
-        CompanionStatusStore.shared.remove(deviceId: deviceId)
-        CloudKitPusher.shared.deleteCompanionStatus(deviceId: deviceId)
-    }
-
-    /// Compact "5m ago" / "2h ago" / "3d ago" relative timestamp.
-    private static func relativeTime(_ date: Date, now: Date = Date()) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        if seconds < 60 { return "just now" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
-        if seconds < 86_400 { return "\(Int(seconds / 3600))h ago" }
-        return "\(Int(seconds / 86_400))d ago"
-    }
+    // MARK: - Live events
 
     @ViewBuilder
     private func liveEventsSection(_ agent: TrackedAgent) -> some View {

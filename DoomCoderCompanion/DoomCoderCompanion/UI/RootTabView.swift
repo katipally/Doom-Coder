@@ -2,7 +2,8 @@
 // Four-tab structure (Prompts / Notes / Dashboard / Settings), launching on
 // Prompts. Prompts and Notes are 100% standalone — they work with no Mac, no
 // account, and no internet (App Store 4.2.3 standalone functionality).
-// Dashboard adds live Mac monitoring when connected.
+// Dashboard is a read-only mirror of the connected Mac: agent list and
+// notification log. No controls, no pairing flow.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
 import SwiftUI

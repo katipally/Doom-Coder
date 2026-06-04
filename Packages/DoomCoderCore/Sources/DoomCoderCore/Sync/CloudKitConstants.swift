@@ -14,11 +14,9 @@ public enum CloudKitConstants {
         public static let session           = "Session"
         public static let event             = "Event"
         public static let notificationLog   = "NotificationLog"
-        public static let controlCommand    = "ControlCommand"
         public static let wolProfile        = "WoLProfile"
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
-        public static let companionStatus   = "CompanionStatus"
     }
 
     /// Current schema version published to CloudKit. Bump together with field

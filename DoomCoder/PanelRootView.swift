@@ -180,15 +180,13 @@ struct PanelRootView: View {
                     get: { masterEnabled },
                     set: { on in
                         withAnimation(DCAnim.smooth) { masterEnabled = on }
-                        // Record the local-change time so a stale remote master
-                        // command (issued before this) can be ignored on apply.
-                        UserDefaults.standard.set(Date(), forKey: CloudKitPusherDelegate.masterChangedAtKey)
                         // Master is the app-wide suspend gate. Turning it OFF
                         // releases any keep-awake assertion. Turning it ON does
                         // NOT force keep-awake — the Keep Awake card's
                         // Off/On/Auto selector owns that intent.
                         if !on { sleepManager.disable() }
-                        // Publish the new master state so iOS mirrors it promptly.
+                        // Publish the new MacStatus so any open iOS Dashboard
+                        // re-renders.
                         CloudKitPusher.shared.publishMacStatus()
                     }
                 ))

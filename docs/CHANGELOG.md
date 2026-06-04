@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed -- iOS companion is read-only
+
+- The iOS companion no longer sends any commands to the Mac. Sleep control, screen mode, keep-awake mode, snooze, and the master on/off toggle have been removed from the Dashboard tab and the Settings tab. The only iOS → Mac write that remains is the test push.
+- The "Connect your Mac" pairing flow and the Connection section in Settings are gone. The Dashboard is a passive mirror: it shows the agents configured on your Mac and the recent notification log, with no controls. Data appears automatically once the Mac publishes.
+- The companion-presence heartbeat is gone. The iOS app no longer publishes a `CompanionStatus` record, and the Mac's Configure ▸ Connections tab no longer shows a Connected Devices panel.
+- Schema cleanup: `ControlCommandRecord` and `CompanionStatusRecord` have been removed. `MacStatusRecord` no longer carries the iOS-control fields (`keepAwakeMode`, `activeAgentCount`, `sessionTimerHours`, `elapsedSeconds`, `lastAppliedCommandId`, `lastAppliedAt`, `masterEnabled`, `agentStatusJSON`, `autoGraceEndsAt`, `autoSignal`, `isUserActive`, `isSnoozed`, `snoozeUntil`, `snoozeDuration`). The Mac's local keep-awake behaviour, sleep manager, and notification dispatcher are unchanged.
+
 ### Added -- Hooks & notifications overhaul
 
 - **Full hook coverage.** Previously-dropped agent events are now notifiable categories: file edits, context compaction, agent thinking, prompt sent, and background/housekeeping tasks. Each is opt-in (default off) and only shown for agents that actually emit it.
