@@ -31,6 +31,11 @@ final class CompanionSyncEngine: NSObject {
     private var zone: CKRecordZone { CKRecordZone(zoneName: CloudKitConstants.zoneName) }
 
     private var syncEngine: CKSyncEngine?
+    /// v2.7: package-internal accessor for PeerStatusPublisher (and any
+    /// future writer) that needs to enqueue record-zone changes against
+    /// the same engine the read-side uses. Avoids spinning up a second
+    /// CKSyncEngine + zone + subscription just to write heartbeats.
+    var internalSyncEngine: CKSyncEngine? { syncEngine }
     private var subscriptionsReady = false
     private var setupInProgress = false
     private var fetchInProgress = false
@@ -61,8 +66,22 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Lifecycle
 
     func start() {
+        // v2.7: engine is allowed to run whenever iCloud is available.
+        // The Connection store is auto-populated via
+        // `ensureImplicitConnection` the first time a MacStatus record
+        // arrives — the user doesn't have to do anything for the same-
+        // Apple-ID path. Explicit CKShare pairing still goes through
+        // IOSPairingCoordinator and posts its own .connectionsChanged.
         Task { await setupSyncEngine() }
         startForegroundPolling()
+        // v2.7: start writing PeerStatus heartbeats so the Mac can
+        // see this iOS device in its Connections tab. Symmetric to
+        // CloudKitPusher.publishMacStatus on the Mac side.
+        PeerStatusPublisher.shared.start()
+        // v2.8: self-heal any per-share CKSyncEngines that were
+        // registered against the wrong database (private instead of
+        // shared). Idempotent.
+        ShareSyncEngineRegistry.shared.reconcileAll()
 
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
@@ -103,6 +122,79 @@ final class CompanionSyncEngine: NSObject {
                 }
             }
         }
+    }
+
+    /// v2.7+: when a MacStatus record arrives via the engine (i.e. the
+    /// implicit-iCloud path), synthesise a Connection so the Devices
+    /// section has something to show and the Dashboard can render
+    /// agents.
+    /// v2.8: deterministic id (`implicit-<macId>`) + stable iosId
+    /// (`IosDeviceId.current`) so re-fetches and re-installs collapse
+    /// to the same row.
+    private static func ensureImplicitConnection(for status: MacStatusRecord) {
+        let store = ConnectionStore.shared
+        let id = Connection.implicitConnectionId(macId: status.macId)
+        // 1. Exact match on the deterministic id (the canonical path).
+        if let existing = store.connections.first(where: { $0.id == id }) {
+            var refreshed = existing
+            refreshed.status = .active
+            refreshed.lastSyncAt = status.lastSeen
+            refreshed.iosDeviceId = IosDeviceId.current  // back-fill the stable id
+            store.upsert(refreshed)
+            return
+        }
+        // 2. Match on macDeviceId for any pre-v2.8 row that happened
+        // to survive the wipe-on-upgrade migration (e.g. the user
+        // restored a backup). Drop and re-create with the right id.
+        if let _ = store.connections.first(where: { $0.macDeviceId == status.macId && $0.ckShareRef == nil && $0.id != id }) {
+            // Don't accumulate. Wipe ALL rows for this Mac, then re-create
+            // with the deterministic id. (One MacStatus arrival triggers
+            // exactly one row; the legacy row was a duplicate.)
+            for conn in store.connections where conn.macDeviceId == status.macId && conn.id != id {
+                store.remove(id: conn.id)
+            }
+        }
+        // 3. Fresh create with the deterministic id.
+        let conn = Connection(
+            id: id,
+            macDeviceId: status.macId,
+            iosDeviceId: IosDeviceId.current,
+            route: .iCloud,
+            status: .active,
+            createdAt: Date(),
+            lastSyncAt: status.lastSeen,
+            ckShareRef: nil
+        )
+        store.upsert(conn)
+        print("[CompanionSyncEngine] registered implicit iCloud connection for Mac \(status.macId.prefix(8))…")
+    }
+
+    /// v2.7: classify a fetched record as implicit-iCloud vs CKShare.
+    /// The base engine always reads from the user's private DB, so by
+    /// definition any record that arrives here is implicit-iCloud. The
+    /// CKShare path routes through ShareSubscription → handleFetchedZoneChanges
+    /// and does NOT call this method.
+    private static func routeForRecord(_ status: MacStatusRecord) -> Route {
+        return .iCloud
+    }
+
+    /// Stops the engine, clears local stores, and resets state so the
+    /// Dashboard shows the "Add a Mac" empty state. Safe to call
+    /// multiple times. Does NOT touch ConnectionStore itself — the
+    /// caller is responsible for the Connection lifecycle.
+    private func tearDownEngine(reason: String) async {
+        print("[CompanionSyncEngine] tearing down engine: \(reason)")
+        syncEngine = nil
+        subscriptionsReady = false
+        zoneReady = false
+        firstFetchCompleted = true  // don't spin the "Syncing with Mac…" forever
+        lastSyncAt = nil
+        // Wipe per-Mac data so the Dashboard renders the empty state
+        // immediately, even if a stale fetch landed before the gate
+        // was applied.
+        MacStatusStore.shared.clear()
+        AgentListStore.shared.clear()
+        NotificationLogStore.shared.clear()
     }
 
     /// Starts (or restarts) the foreground fetch timer. Idempotent.
@@ -201,6 +293,15 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Setup
 
     private func setupSyncEngine() async {
+        // v2.7: do not gate the engine on having an active Connection.
+        // The implicit-iCloud path is the same iCloud subscription the
+        // iOS app has always used — gating it would break users on the
+        // same Apple ID who never went through an explicit pairing UI.
+        // Instead: let the engine always run, and the
+        // `ensureImplicitConnection` helper below auto-registers a
+        // synthetic Connection the first time a MacStatus record
+        // arrives. The Dashboard then knows which Mac this iOS app
+        // is connected to without requiring the user to take action.
         guard !setupInProgress else {
             print("[CompanionSyncEngine] setupSyncEngine: re-entry guard — skipping")
             return
@@ -367,6 +468,24 @@ final class CompanionSyncEngine: NSObject {
         await fetchChanges()
     }
 
+    /// Called by ShareSubscription when a per-share CKSyncEngine delivers
+    /// records fetched from a paired Mac. v2.7 routes these through the
+    /// same record fan-out as the implicit-iCloud path.
+    func handleFetchedZoneChanges(_ event: CKSyncEngine.Event.FetchedRecordZoneChanges, from connection: Connection) async {
+        for change in event.modifications {
+            let rtype = change.record.recordType
+            SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
+            await MainActor.run {
+                self.handleFetched(change.record)
+            }
+            // Mark the connection as recently synced.
+            var updated = connection
+            updated.lastSyncAt = Date()
+            ConnectionStore.shared.upsert(updated)
+            SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
+        }
+    }
+
     // MARK: - Send Test Notification
 
     func sendTestNotification() async {
@@ -504,6 +623,17 @@ final class CompanionSyncEngine: NSObject {
                     MacStatusStore.shared.upsert(r)
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
+                    // v2.7: this is the implicit-iCloud path (same Apple ID,
+                    // no explicit CKShare). The Mac's status landed in the
+                    // user's private DB, which means the user has a
+                    // working connection to this Mac even though we never
+                    // created a CKShare. Auto-register a synthetic
+                    // Connection so the Dashboard's Devices section
+                    // shows it, the MacSwitcher works, and the
+                    // "Add a Mac" CTA doesn't keep nagging.
+                    if case .iCloud = Self.routeForRecord(r) {
+                        Self.ensureImplicitConnection(for: r)
+                    }
                 }
 
             case CloudKitConstants.RecordType.notificationLog:
@@ -612,6 +742,13 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         case .sentRecordZoneChanges(let e):
             for save in e.savedRecords {
                 SyncTelemetry.shared.record(.sent, side: .ios, recordType: save.recordType)
+                // v2.7: clear the PeerStatus cache entry so the next
+                // heartbeat builds against a fresh server-known base.
+                if save.recordType == CloudKitConstants.RecordType.peerStatus {
+                    await MainActor.run {
+                        PeerStatusPublisherCache.shared.didSave(save)
+                    }
+                }
             }
             for fail in e.failedRecordSaves {
                 let cke = fail.error
@@ -630,9 +767,19 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        // Read-only companion: only Send Test notification writes happen
-        // via a direct CKModifyRecordsOperation (see sendTestNotification),
-        // not through the sync engine. So no pending changes here.
-        return nil
+        // v2.7: the engine now also writes PeerStatus heartbeats (see
+        // PeerStatusPublisher). The pending-change set is filtered by
+        // the context's scope, then each record is materialised from
+        // the matching cache (matching the Mac pusher's pattern of
+        // building the CKRecord inside the batch closure to preserve
+        // recordChangeTag).
+        let scope = context.options.scope
+        let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !pending.isEmpty else { return nil }
+        return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+            await MainActor.run {
+                PeerStatusPublisherCache.shared.buildCKRecord(for: recordID)
+            }
+        }
     }
 }

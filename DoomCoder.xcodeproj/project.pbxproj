@@ -63,6 +63,18 @@
 		DC0000000000002000000120 /* AgentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000120 /* AgentCapabilities.swift */; };
 		DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000121 /* CopilotPermissionsReader.swift */; };
 		DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000701 /* ApprovalArbiter.swift */; };
+		DC0000000000002000002001 /* PairingCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002001 /* PairingCode.swift */; };
+		DC0000000000002000002020 /* IosDeviceProfileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002020 /* IosDeviceProfileCache.swift */; };
+		DC0000000000002000002002 /* PairingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002002 /* PairingStore.swift */; };
+		DC0000000000002000002003 /* QRImageGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002003 /* QRImageGenerator.swift */; };
+		DC0000000000002000002004 /* MacPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002004 /* MacPairingCoordinator.swift */; };
+		DC0000000000002000002005 /* ConnectionDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002005 /* ConnectionDiagnosticsView.swift */; };
+		DC0000000000002000002006 /* DeviceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002006 /* DeviceDetailView.swift */; };
+		DC0000000000002000002007 /* DeviceRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002007 /* DeviceRow.swift */; };
+		DC0000000000002000002008 /* PairSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002008 /* PairSheet.swift */; };
+		DC0000000000002000002009 /* RemoveDeviceDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002009 /* RemoveDeviceDialog.swift */; };
+		DC0000000000002000002010 /* RoutePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002010 /* RoutePicker.swift */; };
+		DC0000000000002000002011 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000002011 /* ConnectionsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -124,6 +136,18 @@
 		DC0000000000001000000120 /* AgentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCapabilities.swift; sourceTree = "<group>"; };
 		DC0000000000001000000121 /* CopilotPermissionsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotPermissionsReader.swift; sourceTree = "<group>"; };
 		DC0000000000001000000701 /* ApprovalArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalArbiter.swift; sourceTree = "<group>"; };
+		DC0000000000001000002001 /* PairingCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCode.swift; sourceTree = "<group>"; };
+		DC0000000000001000002002 /* PairingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingStore.swift; sourceTree = "<group>"; };
+		DC0000000000001000002003 /* QRImageGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRImageGenerator.swift; sourceTree = "<group>"; };
+		DC0000000000001000002004 /* MacPairingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPairingCoordinator.swift; sourceTree = "<group>"; };
+		DC0000000000001000002005 /* ConnectionDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDiagnosticsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000002006 /* DeviceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDetailView.swift; sourceTree = "<group>"; };
+		DC0000000000001000002007 /* DeviceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRow.swift; sourceTree = "<group>"; };
+		DC0000000000001000002008 /* PairSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairSheet.swift; sourceTree = "<group>"; };
+		DC0000000000001000002009 /* RemoveDeviceDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveDeviceDialog.swift; sourceTree = "<group>"; };
+		DC0000000000001000002010 /* RoutePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePicker.swift; sourceTree = "<group>"; };
+		DC0000000000001000002011 /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000002020 /* IosDeviceProfileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosDeviceProfileCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -223,8 +247,36 @@
 				DC0000000000001000000120 /* AgentCapabilities.swift */,
 				DC0000000000001000000121 /* CopilotPermissionsReader.swift */,
 				DC0000000000001000000701 /* ApprovalArbiter.swift */,
+				DC0000000000003000000005 /* Pairing */,
+				DC0000000000003000000006 /* UI/Connections */,
 			);
 			path = AgentTracking;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000005 /* Pairing */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000002001 /* PairingCode.swift */,
+				DC0000000000001000002002 /* PairingStore.swift */,
+				DC0000000000001000002003 /* QRImageGenerator.swift */,
+				DC0000000000001000002004 /* MacPairingCoordinator.swift */,
+				DC0000000000001000002020 /* IosDeviceProfileCache.swift */,
+			);
+			path = Pairing;
+			sourceTree = "<group>";
+		};
+		DC0000000000003000000006 /* Connections */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000001000002005 /* ConnectionDiagnosticsView.swift */,
+				DC0000000000001000002006 /* DeviceDetailView.swift */,
+				DC0000000000001000002007 /* DeviceRow.swift */,
+				DC0000000000001000002008 /* PairSheet.swift */,
+				DC0000000000001000002009 /* RemoveDeviceDialog.swift */,
+				DC0000000000001000002010 /* RoutePicker.swift */,
+				DC0000000000001000002011 /* ConnectionsView.swift */,
+			);
+			path = UI/Connections;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -381,6 +433,18 @@
 				DC0000000000002000000120 /* AgentCapabilities.swift in Sources */,
 				DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */,
 				DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */,
+				DC0000000000002000002001 /* PairingCode.swift in Sources */,
+				DC0000000000002000002002 /* PairingStore.swift in Sources */,
+				DC0000000000002000002003 /* QRImageGenerator.swift in Sources */,
+				DC0000000000002000002004 /* MacPairingCoordinator.swift in Sources */,
+				DC0000000000002000002020 /* IosDeviceProfileCache.swift in Sources */,
+				DC0000000000002000002005 /* ConnectionDiagnosticsView.swift in Sources */,
+				DC0000000000002000002006 /* DeviceDetailView.swift in Sources */,
+				DC0000000000002000002007 /* DeviceRow.swift in Sources */,
+				DC0000000000002000002008 /* PairSheet.swift in Sources */,
+				DC0000000000002000002009 /* RemoveDeviceDialog.swift in Sources */,
+				DC0000000000002000002010 /* RoutePicker.swift in Sources */,
+				DC0000000000002000002011 /* ConnectionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

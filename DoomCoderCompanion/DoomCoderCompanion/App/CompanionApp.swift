@@ -15,18 +15,6 @@ struct CompanionApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView()
-                .onOpenURL { url in
-                    handleDeeplink(url)
-                }
         }
-    }
-
-    /// Handles `doomcoder://agent/<slug>` URLs by routing to the agent's logs.
-    private func handleDeeplink(_ url: URL) {
-        guard url.scheme?.lowercased() == "doomcoder",
-              url.host?.lowercased() == "agent",
-              let slug = url.pathComponents.dropFirst().first, !slug.isEmpty
-        else { return }
-        AppRouter.shared.openAgent(slug: slug)
     }
 }

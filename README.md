@@ -180,6 +180,18 @@ The iOS app is **read-only**: it mirrors the Mac's state but does not send any c
 
 Notifications arrive on your iPhone within 1-5 seconds of the agent event, via your private iCloud container.
 
+### Pairing a Mac on a different Apple ID (v2.7+)
+
+If your iPhone and Mac are on different Apple IDs, you can still pair them with a one-time QR code:
+
+1. On the Mac, open **Configure ▸ Connections** and click **Add iPhone**. A QR code and a short pairing code appear.
+2. On the iPhone, open DoomCoder Companion and tap **Add a Mac** in the Dashboard tab (or use the "Add a Mac" link in the empty state). Scan the QR code.
+3. iOS shows its standard share-acceptance sheet. Accept, and the new Mac appears in the Devices section at the top of the Dashboard.
+
+You can pair several Macs from one iPhone (one per Apple ID), and one Mac can pair with several iPhones. Each Mac shows up in the Devices section on the iPhone; if you have more than one, a segmented picker lets you focus on a single Mac.
+
+Removing a Mac on the iPhone wipes that Mac's local cache (status, agents, notifications) on the iPhone only; the Mac keeps its own data and the iCloud share until you revoke it from System Settings.
+
 [Get on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
 ---

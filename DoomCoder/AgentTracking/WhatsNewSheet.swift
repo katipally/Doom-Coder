@@ -198,3 +198,56 @@ struct WhatsNewSheet230: View {
         .frame(width: 520, height: 460, alignment: .topLeading)
     }
 }
+
+// MARK: - v2.7 — Cross-Apple-ID pairing
+
+struct WhatsNewSheetV27: View {
+    static let defaultsKey = "whats_new_v2_7_0_shown"
+
+    var onDismiss: () -> Void = {}
+
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("What's new in DoomCoder 2.7", systemImage: "sparkles")
+                .font(.title2.bold())
+            Text("Pair an iPhone from a different Apple ID.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+            featureRow(
+                icon: "qrcode.viewfinder",
+                title: "Add iPhone across Apple IDs",
+                body: "Configure ▸ Connections now has an Add iPhone button that creates an iCloud share. The iPhone scans the QR and accepts; the new Mac appears in the iPhone's Dashboard."
+            )
+            featureRow(
+                icon: "macbook.and.iphone",
+                title: "Multi-Mac, multi-iPhone",
+                body: "One iPhone can show several Macs; one Mac can push to several iPhones. Each pairing is its own Connection record."
+            )
+            featureRow(
+                icon: "iphone.gen3.radiowaves.left.and.right",
+                title: "iCloud-only, no extra servers",
+                body: "Pairing still goes directly between your iCloud accounts via Apple CKShare. No relay, no third party."
+            )
+
+            Text("If you were already paired via the same Apple ID, nothing changes. The new flow only kicks in for cross-Apple-ID pairing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Button("Got it") {
+                    UserDefaults.standard.set(true, forKey: Self.defaultsKey)
+                    onDismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 460, alignment: .topLeading)
+    }
+}

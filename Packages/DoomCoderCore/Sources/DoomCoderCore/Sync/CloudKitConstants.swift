@@ -17,9 +17,23 @@ public enum CloudKitConstants {
         public static let wolProfile        = "WoLProfile"
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
+        public static let peerStatus        = "PeerStatus"
     }
 
     /// Current schema version published to CloudKit. Bump together with field
     /// additions; old clients ignore unknown fields.
-    public static let schemaVersion = 2
+    ///
+    /// History:
+    ///   1 - initial release (MacStatus, NotificationLog, AgentConfig)
+    ///   2 - added AgentIcon, WoLProfile
+    ///   3 - added Route/CKShare piggybacking. No wire-format change to
+    ///       existing records; the new schema field is consumed by clients
+    ///       that understand cross-Apple-ID pairing. Old clients continue
+    ///       to work and ignore the new field.
+    ///   4 - added PeerStatus (iOS → Mac heartbeat). Symmetric with
+    ///       MacStatus so the Mac's Connections tab knows which iOS
+    ///       devices are currently paired. Wire format unchanged for
+    ///       all pre-existing record types; old clients ignore the new
+    ///       PeerStatus records entirely.
+    public static let schemaVersion = 4
 }

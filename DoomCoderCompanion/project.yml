@@ -63,6 +63,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: DoomCoder uses the camera to scan the QR code shown by DoomCoder on a Mac when pairing a device.
         CFBundleURLTypes:
           - CFBundleURLName: com.doomcoder.app.companion
             CFBundleURLSchemes:

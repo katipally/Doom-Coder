@@ -37,9 +37,9 @@ struct WelcomeView: View {
                     FeatureRow(symbol: "sparkles",
                                title: "Better prompts, instantly",
                                detail: "Turn a rough idea into a well-structured prompt to paste into Claude Code, Codex, Copilot and more.")
-                    FeatureRow(symbol: "macbook.and.iphone",
-                               title: "Connect your Mac (optional)",
-                               detail: "Add the free DoomCoder Mac app to monitor live agents and receive their notifications on the Dashboard tab.")
+                     FeatureRow(symbol: "macbook.and.iphone",
+                                title: "Connect your Mac (optional)",
+                                detail: "Add the free DoomCoder Mac app to monitor live agents and receive their notifications on the Dashboard tab. Pairing works automatically when you share an Apple ID, or via a one-time QR code if you don't.")
                 }
                 .padding(.horizontal, 4)
 

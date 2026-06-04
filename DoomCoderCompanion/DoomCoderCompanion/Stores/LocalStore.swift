@@ -17,6 +17,8 @@ final class LocalStore: @unchecked Sendable {
         queue.sync {
             openDatabase()
             createTables()
+            runV28ConnectionMigration()
+            createUniqueIndex()
         }
     }
     
@@ -101,12 +103,68 @@ final class LocalStore: @unchecked Sendable {
             updated_at INTEGER NOT NULL
         );
         """
-        
+
+        let devicesTable = """
+        CREATE TABLE IF NOT EXISTS devices (
+            device_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            route_tag TEXT NOT NULL,
+            route_payload TEXT,
+            last_seen INTEGER,
+            capabilities TEXT,
+            created_at INTEGER NOT NULL
+        );
+        """
+
+        let connectionsTable = """
+        CREATE TABLE IF NOT EXISTS connections (
+            id TEXT PRIMARY KEY,
+            mac_device_id TEXT NOT NULL,
+            ios_device_id TEXT NOT NULL,
+            route_tag TEXT NOT NULL,
+            route_payload TEXT,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            last_sync_at INTEGER,
+            share_url TEXT,
+            share_owner TEXT,
+            share_container TEXT
+        );
+        """
+
         exec(agentsTable)
         exec(macStatusTable)
         exec(notificationsTable)
         exec(notificationsIndex)
         exec(agentIconsTable)
+        exec(devicesTable)
+        exec(connectionsTable)
+    }
+
+    /// v2.8: partial UNIQUE index on (mac_device_id, share_url).
+    /// Prevents the duplicate-Connection scenarios that the audit
+    /// found (re-pair, two-Mac-pairing, iOS-reinstall, etc.). The
+    /// partial WHERE clause is necessary because implicit-iCloud
+    /// rows have share_url = NULL and a plain UNIQUE constraint
+    /// would only allow ONE such row in the table.
+    private func createUniqueIndex() {
+        exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_conn_share ON connections (mac_device_id, share_url) WHERE share_url IS NOT NULL;")
+    }
+
+    /// v2.8: one-shot wipe of legacy connections on first launch.
+    /// The previous schema used random UUIDs for Connection.id, so
+    /// every re-pair or re-install created a new row. The v2.8
+    /// deterministic id scheme is incompatible at the row level —
+    /// cleaner to wipe once and let the new engine auto-register
+    /// fresh rows on the first MacStatus / CKShare arrival.
+    private func runV28ConnectionMigration() {
+        let key = "doomcoder.localstore.v28.wipedConnections"
+        let defaults = AppGroupCache.defaults
+        if defaults.bool(forKey: key) { return }
+        exec("DELETE FROM connections;")
+        defaults.set(true, forKey: key)
+        print("[LocalStore] v2.8: wiped legacy connections table (one-shot migration)")
     }
     
     private func exec(_ sql: String) {
@@ -399,9 +457,269 @@ final class LocalStore: @unchecked Sendable {
     }
 
     // MARK: - Helpers
-    
+
     private func getString(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
         guard let cStr = sqlite3_column_text(stmt, index) else { return nil }
         return String(cString: cStr)
+    }
+
+    // MARK: - Devices
+
+    func upsertDevice(_ d: DeviceProfile) {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            let route = d.route
+            let routePayload: String
+            if let data = try? JSONEncoder().encode(route),
+               let str = String(data: data, encoding: .utf8) {
+                routePayload = str
+            } else {
+                routePayload = ""
+            }
+            let sql = """
+            INSERT INTO devices (device_id, name, kind, route_tag, route_payload, last_seen, capabilities, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(device_id) DO UPDATE SET
+                name = excluded.name,
+                kind = excluded.kind,
+                route_tag = excluded.route_tag,
+                route_payload = excluded.route_payload,
+                last_seen = excluded.last_seen,
+                capabilities = excluded.capabilities;
+            """
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (d.id as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (d.name as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 3, (d.kind.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 4, (route.tag.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 5, (routePayload as NSString).utf8String, -1, nil)
+                if let lastSeen = d.lastSeen {
+                    sqlite3_bind_int64(stmt, 6, Int64(lastSeen.timeIntervalSince1970))
+                } else {
+                    sqlite3_bind_null(stmt, 6)
+                }
+                sqlite3_bind_text(stmt, 7, (d.capabilities.joined(separator: ",") as NSString).utf8String, -1, nil)
+                sqlite3_bind_int64(stmt, 8, Int64(d.createdAt.timeIntervalSince1970))
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+
+    func deleteDevice(id: String) {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            let sql = "DELETE FROM devices WHERE device_id = ?;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+
+    func fetchDevices() async -> [DeviceProfile] {
+        await withCheckedContinuation { cont in
+            queue.async { [weak self] in
+                guard let self, let db = self.db else {
+                    cont.resume(returning: [])
+                    return
+                }
+                var stmt: OpaquePointer?
+                let sql = "SELECT device_id, name, kind, route_tag, route_payload, last_seen, capabilities, created_at FROM devices;"
+                var results: [DeviceProfile] = []
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    while sqlite3_step(stmt) == SQLITE_ROW {
+                        guard let idStr = getString(stmt, 0),
+                              let nameStr = getString(stmt, 1),
+                              let kindStr = getString(stmt, 2),
+                              let kind = DeviceKind(rawValue: kindStr) else { continue }
+                        let routeTag = getString(stmt, 3) ?? "iCloud"
+                        let routePayload = getString(stmt, 4) ?? ""
+                        let lastSeen: Date? = sqlite3_column_type(stmt, 5) == SQLITE_NULL
+                            ? nil
+                            : Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 5)))
+                        let caps = (getString(stmt, 6) ?? "")
+                            .split(separator: ",").map(String.init).filter { !$0.isEmpty }
+                        let createdAt = Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 7)))
+                        let route: Route = {
+                            if routeTag == Route.Tag.ckShare.rawValue,
+                               let data = routePayload.data(using: .utf8),
+                               let decoded = try? JSONDecoder().decode(Route.self, from: data) {
+                                return decoded
+                            }
+                            return .iCloud
+                        }()
+                        results.append(DeviceProfile(
+                            id: idStr,
+                            name: nameStr,
+                            kind: kind,
+                            route: route,
+                            lastSeen: lastSeen,
+                            capabilities: caps,
+                            createdAt: createdAt
+                        ))
+                    }
+                }
+                sqlite3_finalize(stmt)
+                cont.resume(returning: results)
+            }
+        }
+    }
+
+    // MARK: - Connections
+
+    func upsertConnection(_ c: Connection) {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            let route = c.route
+            let routePayload: String
+            if let data = try? JSONEncoder().encode(route),
+               let str = String(data: data, encoding: .utf8) {
+                routePayload = str
+            } else {
+                routePayload = ""
+            }
+            let sql = """
+            INSERT INTO connections (id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                mac_device_id = excluded.mac_device_id,
+                ios_device_id = excluded.ios_device_id,
+                route_tag = excluded.route_tag,
+                route_payload = excluded.route_payload,
+                status = excluded.status,
+                last_sync_at = excluded.last_sync_at,
+                share_url = excluded.share_url,
+                share_owner = excluded.share_owner,
+                share_container = excluded.share_container;
+            """
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (c.id as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (c.macDeviceId as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 3, (c.iosDeviceId as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 4, (route.tag.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 5, (routePayload as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 6, (c.status.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_int64(stmt, 7, Int64(c.createdAt.timeIntervalSince1970))
+                if let last = c.lastSyncAt {
+                    sqlite3_bind_int64(stmt, 8, Int64(last.timeIntervalSince1970))
+                } else {
+                    sqlite3_bind_null(stmt, 8)
+                }
+                if let s = c.ckShareRef {
+                    sqlite3_bind_text(stmt, 9, (s.shareURLString as NSString).utf8String, -1, nil)
+                    sqlite3_bind_text(stmt, 10, (s.ownerRecordName as NSString).utf8String, -1, nil)
+                    sqlite3_bind_text(stmt, 11, (s.containerIdentifier as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 9)
+                    sqlite3_bind_null(stmt, 10)
+                    sqlite3_bind_null(stmt, 11)
+                }
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+
+    func deleteConnection(id: String) {
+        queue.async { [weak self] in
+            guard let self, let db = self.db else { return }
+            let sql = "DELETE FROM connections WHERE id = ?;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+
+    func fetchConnections() async -> [Connection] {
+        await withCheckedContinuation { cont in
+            queue.async { [weak self] in
+                guard let self, let db = self.db else {
+                    cont.resume(returning: [])
+                    return
+                }
+                var stmt: OpaquePointer?
+                let sql = "SELECT id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container FROM connections;"
+                var results: [Connection] = []
+                if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    while sqlite3_step(stmt) == SQLITE_ROW {
+                        guard let idStr = getString(stmt, 0),
+                              let macId = getString(stmt, 1),
+                              let iosId = getString(stmt, 2),
+                              let statusStr = getString(stmt, 5),
+                              let status = ConnectionStatus(rawValue: statusStr)
+                        else { continue }
+                        let routeTag = getString(stmt, 3) ?? "iCloud"
+                        let routePayload = getString(stmt, 4) ?? ""
+                        let route: Route = {
+                            if routeTag == Route.Tag.ckShare.rawValue,
+                               let data = routePayload.data(using: .utf8),
+                               let decoded = try? JSONDecoder().decode(Route.self, from: data) {
+                                return decoded
+                            }
+                            return .iCloud
+                        }()
+                        let createdAt = Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 6)))
+                        let lastSync: Date? = sqlite3_column_type(stmt, 7) == SQLITE_NULL
+                            ? nil
+                            : Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 7)))
+                        var ref: CKShareRef?
+                        if let url = getString(stmt, 8),
+                           let owner = getString(stmt, 9),
+                           let container = getString(stmt, 10) {
+                            ref = CKShareRef(shareURLString: url, ownerRecordName: owner, containerIdentifier: container)
+                        }
+                        results.append(Connection(
+                            id: idStr,
+                            macDeviceId: macId,
+                            iosDeviceId: iosId,
+                            route: route,
+                            status: status,
+                            createdAt: createdAt,
+                            lastSyncAt: lastSync,
+                            ckShareRef: ref
+                        ))
+                    }
+                }
+                sqlite3_finalize(stmt)
+                cont.resume(returning: results)
+            }
+        }
+    }
+
+    // MARK: - Clear per-Mac data on remove
+
+    /// Wipe local cache entries that belong to a specific Mac. Called when
+    /// the user removes a paired connection on iOS so the app no longer
+    /// holds that Mac's status, agents, or notifications.
+    func clearMacData(macId: String) async {
+        await withCheckedContinuation { cont in
+            queue.async { [weak self] in
+                guard let self, let db = self.db else {
+                    cont.resume()
+                    return
+                }
+                for sql in [
+                    "DELETE FROM mac_status WHERE mac_id = ?;",
+                    "DELETE FROM agents WHERE mac_id = ?;",
+                    "DELETE FROM notifications WHERE mac_id = ?;"
+                ] {
+                    var stmt: OpaquePointer?
+                    if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                        sqlite3_bind_text(stmt, 1, (macId as NSString).utf8String, -1, nil)
+                        sqlite3_step(stmt)
+                    }
+                    sqlite3_finalize(stmt)
+                }
+                cont.resume()
+            }
+        }
     }
 }

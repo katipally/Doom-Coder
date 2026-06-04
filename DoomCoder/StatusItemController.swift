@@ -122,6 +122,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         configure.target = self
         menu.addItem(configure)
 
+        // v2.7: quick "Add iPhone" entry point — jumps straight to the
+        // Connections tab of Configure so the user can scan the QR.
+        let addiPhone = NSMenuItem(title: "Add iPhone…", action: #selector(openAddiPhone), keyEquivalent: "")
+        addiPhone.target = self
+        menu.addItem(addiPhone)
+
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -153,6 +159,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func openConfigure() {
         NSApp.activate()
         WindowOpener.open(.configureAgents)
+    }
+
+    /// v2.7: jumps straight to the Connections tab so the user can scan
+    /// the QR / add a new iPhone. Routes through the same notification
+    /// path as the in-app "Add iPhone" button.
+    @objc private func openAddiPhone() {
+        ConfigureAgentsViewV2.pendingTab = .channels
+        WindowOpener.open(.configureAgents)
+        NotificationCenter.default.post(name: .dcSelectConfigureTab, object: "channels")
     }
 
     @objc private func openSettings() {

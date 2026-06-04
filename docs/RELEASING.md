@@ -176,6 +176,18 @@ it. The key ID must match.)
 - [ ] iOS build runs clean locally (`xcodebuild -scheme DoomCoderCompanion -configuration Release -destination 'generic/platform=iOS'`).
 - [ ] Both tags pushed. CI green on both workflows.
 
+### Cross-Apple-ID pairing testing checklist (v2.7+)
+
+Before shipping any release that changes the pairing flow, exercise the
+following on real TestFlight builds with two Apple IDs:
+
+- [ ] Mac signed into Apple ID A; iPhone signed into Apple ID B.
+- [ ] From the Mac, open Configure ▸ Connections, click **Add iPhone**, scan the QR from the iPhone camera. Verify the system share sheet appears and that accepting it shows the new Mac in the iPhone's Dashboard ▸ Devices.
+- [ ] Send a test notification from the Mac. Verify it arrives on the iPhone within 5 seconds and shows the Mac's name in the banner title.
+- [ ] On the iPhone, open the Devices section, tap the paired Mac, tap **Remove**. Verify the Mac disappears from the Devices section and that the iPhone's mac_status, agents, and notifications for that MacId are cleared.
+- [ ] Re-pair: the QR scan should succeed and the Mac should reappear in the Devices section.
+- [ ] With two Macs paired to one iPhone, verify the segmented picker appears and switches the dashboard between them.
+
 ---
 
 ## First-time iOS App Store setup (do once)

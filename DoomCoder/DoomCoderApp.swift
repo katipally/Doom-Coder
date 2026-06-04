@@ -84,6 +84,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         CloudKitPusher.shared.start()
         CloudKitPusherLifecycle.shared.start()
 
+        // v2.8: amortize the first CKShare-creation schema cold-start
+        // (5-25s on a never-before-shared container) by warming the
+        // database zones in a low-priority background task at launch.
+        MacPairingCoordinator.shared.prewarmContainer()
+
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
 

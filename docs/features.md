@@ -149,6 +149,10 @@ Toggle on to mirror notifications to the DoomCoder Companion iOS app via your pr
 
 Click **Test** to send a test push to your iPhone.
 
+#### Paired devices (v2.7+)
+
+The Connections tab now lists every iPhone and iPad currently paired with this Mac, with route (iCloud or iCloud Share), status (Connected / Pending / Suspended), and last-sync time. Click **Add iPhone** to start a new pairing; click any device to inspect details or remove it. Removal is local to the Mac — to fully revoke a share, use iCloud settings on the device that accepted it.
+
 [Get DoomCoder Companion on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
 #### Notify me when…
@@ -293,6 +297,19 @@ Prompt Enhance is a bonus that uses either Apple on-device model or your own pro
 Sign into the same iCloud account on your Mac and iPhone. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes. The iOS app is read-only and does not send any commands to the Mac.
 
 With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, and a 7-day session log.
+
+### Pairing across Apple IDs (v2.7+)
+
+If your iPhone and Mac are on different Apple IDs, DoomCoder uses a CloudKit share (CKShare) to bridge the two iCloud accounts. Pairing is one-time and Mac-initiated:
+
+1. On the Mac, open **Configure ▸ Connections** and click **Add iPhone**. A QR code and a short pairing code appear; both encode a doomcoder://pair URL that contains the CloudKit share URL.
+2. On the iPhone, open DoomCoder Companion and tap **Add a Mac** in the Dashboard tab (or in the empty state). The Camera opens; scan the QR code.
+3. iOS shows its standard share-acceptance sheet (Apple-provided; not customizable). Accept.
+4. The Mac now appears in the iPhone's **Devices** section at the top of the Dashboard. If you pair more than one Mac, a segmented picker lets you focus the dashboard on a single Mac.
+
+Removing a Mac on the iPhone wipes that Mac's local cache (status, agents, notifications) on the iPhone only. The Mac keeps the share record; revoke it permanently from **System Settings ▸ Apple ID ▸ iCloud ▸ Manage Private Relay / Shared with You** or by deleting the share on the Mac.
+
+Push fan-out in v2.7 is global — every active Connection receives every notification. Per-Mac filtering is on the roadmap for v2.8.
 
 ---
 

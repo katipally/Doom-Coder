@@ -447,8 +447,92 @@ final class CloudKitPusher {
     }
 }
 
+extension CloudKitPusher {
+    /// v2.7: handle an incoming PeerStatus record (iOS → Mac heartbeat).
+    /// Registers or refreshes a Connection in PairingStore so the
+    /// Connections tab shows the peer.
+    @MainActor
+    func ingestPeerStatus(_ record: CKRecord) {
+        guard let rec = PeerStatusRecord(record) else {
+            logger.error("ckpusher: failed to decode PeerStatus record \(record.recordID.recordName, privacy: .public)")
+            return
+        }
+        // Update the per-iOS-device profile cache so DeviceRow can
+        // render the user's iPhone name (e.g. "Yash's iPhone")
+        // instead of a generic "iPhone" label.
+        IosDeviceProfileCache.shared.upsert(
+            IosDeviceProfileCache.Profile(
+                iosDeviceId: rec.iosDeviceId,
+                name: rec.name,
+                model: rec.model,
+                systemName: rec.systemName,
+                appVersion: rec.appVersion,
+                lastSeen: rec.lastSeen
+            )
+        )
+
+        let nowFresh = Date().timeIntervalSince(rec.lastSeen) < 300  // 5-min staleness
+        let status: ConnectionStatus = nowFresh ? .active : .suspended
+
+        // v2.8: three-way dedup. Match on (macId, iosDeviceId) for
+        // the implicit path, but also try the deterministic ckShare
+        // id if the iOS app has already shared a shareURLString in
+        // the heartbeat. This lets the first heartbeat fill in the
+        // placeholder `iosDeviceId` that `MacPairingCoordinator`
+        // stored when the share was created — without creating a
+        // second row.
+        let idImplicit = Connection.implicitConnectionId(macId: macId)
+        let peerShareURL = rec.shareURLString
+        let existing = PairingStore.shared.connections.first { conn in
+            // Exact match: same Mac, same iOS, implicit path.
+            if conn.macDeviceId == self.macId && conn.iosDeviceId == rec.iosDeviceId && conn.ckShareRef == nil {
+                return true
+            }
+            // Fill-in match: a placeholder ckShare row created on
+            // `handleAcceptance` with a random iosDeviceId and the
+            // same shareURL that the iOS app is heartbeating with.
+            if let connShare = conn.ckShareRef?.shareURLString,
+               connShare == peerShareURL {
+                return true
+            }
+            return false
+        }
+
+        if let existing {
+            var updated = existing
+            updated.status = status
+            updated.lastSyncAt = rec.lastSeen
+            // Back-fill the stable iosId on a placeholder ckShare row.
+            if updated.iosDeviceId != rec.iosDeviceId {
+                updated.iosDeviceId = rec.iosDeviceId
+            }
+            PairingStore.shared.upsert(updated)
+        } else {
+            // Truly new — create an implicit-iCloud row.
+            let conn = Connection(
+                id: idImplicit,
+                macDeviceId: macId,
+                iosDeviceId: rec.iosDeviceId,
+                route: .iCloud,
+                status: status,
+                createdAt: Date(),
+                lastSyncAt: rec.lastSeen,
+                ckShareRef: nil
+            )
+            PairingStore.shared.upsert(conn)
+            logger.notice("ckpusher: registered new peer \(rec.iosDeviceId.prefix(8), privacy: .public)… (\(rec.name, privacy: .public))")
+        }
+    }
+}
+
 extension Notification.Name {
     /// Posted on main thread once the CKSyncEngine is constructed and the
     /// zone exists. Subscribers may begin calling publish* methods.
     static let cloudKitPusherReady = Notification.Name("doomcoder.ckpusher.ready")
+    /// v2.8: posted when a CKShare record in the Mac's zone is observed
+    /// to have changed (typically: the iPhone just accepted the share).
+    /// MacPairingCoordinator listens to this to dismiss the QR sheet
+    /// and create the Connection — replaces the 3-second polling loop
+    /// with an APNs-driven signal.
+    static let doomCoderShareAccepted = Notification.Name("doomcoder.share.accepted")
 }

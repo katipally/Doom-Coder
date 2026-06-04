@@ -61,6 +61,25 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 let record = mod.record
                 await MainActor.run { self.pusher?.serverRecords.store(record) }
             }
+            // v2.7: PeerStatus records (iOS → Mac heartbeats) update the
+            // PairingStore so the Mac's Connections tab shows the peer.
+            // Other record types still go through the same store-record
+            // path for change-tag preservation.
+            for mod in fetched.modifications {
+                guard mod.record.recordType == CloudKitConstants.RecordType.peerStatus else { continue }
+                await MainActor.run { self.pusher?.ingestPeerStatus(mod.record) }
+            }
+            // v2.8: when a CKShare record changes (e.g. the iPhone just
+            // accepted), notify the pairing coordinator so the QR sheet
+            // dismisses immediately. The coordinator does its own
+            // post-acceptance bookkeeping (creates the Connection).
+            // This replaces the previous 3-second polling loop with
+            // an APNs-driven signal.
+            for mod in fetched.modifications {
+                if mod.record is CKShare {
+                    NotificationCenter.default.post(name: .doomCoderShareAccepted, object: nil)
+                }
+            }
             // A successful fetch proves the Mac is reaching CloudKit right now,
             // so re-stamp lastSeen (debounced) to keep the iOS reachability
             // banner honest even when no commands were pending.

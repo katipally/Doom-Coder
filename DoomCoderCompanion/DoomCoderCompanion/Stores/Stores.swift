@@ -72,9 +72,13 @@ final class AgentListStore {
     /// Per-agent human-readable status (e.g. "running", "waiting for approval",
     /// "closed"). Empty means status is unknown.
     private(set) var statuses: [TrackedAgent: String] = [:]
+    /// v2.7+: per-Mac agent list. Lets the dashboard filter by MacId when
+    /// the user has more than one Mac paired (the Mac switcher).
+    private(set) var agentsByMacId: [String: [TrackedAgent]] = [:]
 
     func updateAgents(_ newAgents: [TrackedAgent], macId: String) {
         agents = newAgents.sorted { $0.displayName < $1.displayName }
+        agentsByMacId[macId] = newAgents.sorted { $0.displayName < $1.displayName }
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
     }
 
@@ -83,6 +87,7 @@ final class AgentListStore {
                      statuses newStatuses: [TrackedAgent: String],
                      macId: String) {
         agents = newAgents.sorted { $0.displayName < $1.displayName }
+        agentsByMacId[macId] = newAgents.sorted { $0.displayName < $1.displayName }
         installedAgents = Set(installed)
         statuses = newStatuses
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
@@ -94,6 +99,7 @@ final class AgentListStore {
         agents.removeAll()
         installedAgents.removeAll()
         statuses.removeAll()
+        agentsByMacId.removeAll()
     }
 }
 

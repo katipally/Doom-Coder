@@ -33,6 +33,10 @@ If you pair the iOS app with the DoomCoder Mac app, the following data is synced
 
 This data is stored in your **private CloudKit database**. It is scoped to your Apple ID and is never accessible to us or any third party. Apple's own CloudKit privacy and security guarantees apply — data is encrypted in transit and at rest.
 
+#### Cross-Apple-ID pairing (CloudKit Share, v2.7+)
+
+If you pair the iOS app with a Mac on a **different Apple ID**, DoomCoder uses Apple's CloudKit Share (CKShare) to grant the iOS app temporary access to the Mac's private DoomCoder zone. The same data listed above is replicated over this share. The share is created by the Mac and accepted (one time, via iOS's standard share-acceptance sheet) by the iPhone. Either side can revoke the share at any time from System Settings. The data still lives in the Mac's private iCloud container; the share is an access grant, not a separate data store. No third party is involved — the share goes directly between your two iCloud accounts.
+
 ---
 
 ## 3. What data we collect

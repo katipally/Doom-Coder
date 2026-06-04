@@ -8,6 +8,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added -- v2.8: Faster pairing, no duplicates, native share
+
+- **QR appears in 0.5–2 s instead of 5–30 s.** The Mac pre-warms the CloudKit database at app launch (one `allRecordZones()` call in a background task) so the schema cold-start penalty is paid at idle time instead of on the first "Add iPhone" click. The PairSheet now opens immediately with a shimmer skeleton and the QR replaces it with a spring animation when the share URL arrives.
+- **APNs-driven share-acceptance detection.** The Mac's `CloudKitPusher` delegate posts a `.doomCoderShareAccepted` notification when it observes a CKShare change, and the `MacPairingCoordinator` dismisses the QR sheet on that signal. The 3-second polling loop is now a backup (interval relaxed to 8 s).
+- **Native share sheet (AirDrop / Messages / Mail) on the Mac.** Below the QR, the PairSheet now shows a `ShareLink` button that hands the iCloud share URL to the macOS share sheet. AirDrop to a nearby iPhone is the fastest path: ~2–3 s end-to-end. QR remains as the fallback for any-device-with-a-camera.
+- **Deterministic Connection IDs — no more duplicates.** Every Connection now has a stable id derived from its natural CloudKit identity:
+  - `"share-<sha256(shareURL).prefix(22)>"` for explicit CKShare pairs (the share URL is server-issued and stable across re-accepts).
+  - `"implicit-<macId>"` for the implicit iCloud path.
+  Re-pairing the same share, re-installing the iOS app, or receiving duplicate MacStatus heartbeats all collapse to the same row instead of creating new ones.
+- **iOS wipe-on-upgrade migration.** The first launch of v2.8 wipes the legacy `connections` SQLite table once, then auto-rebuilds it from the new deterministic id scheme as the user pairs. Documented for users as "v2.8: you'll need to re-pair your iPhone once after upgrading."
+- **Partial UNIQUE index** on `(mac_device_id, share_url) WHERE share_url IS NOT NULL` prevents duplicate share-URL rows even if application code regresses.
+- **Self-healing per-share CKSyncEngines.** The iOS `ShareSyncEngineRegistry.reconcileAll()` (called on app launch) re-registers any per-share CKSyncEngines against `container.sharedCloudDatabase` (the participant's view of the share) — fixes a v2.7 bug where the engine was pointed at the wrong database and silently never received records.
+- **GC pass on ConnectionStore / PairingStore.** Connections with status `.suspended` and `lastSyncAt < now - 1 hour` are pruned on every upsert. Addresses the audit's §3.6 finding that orphan Mac-side rows accumulate when an iPhone silently disappears.
+- **Stable iOS device ID in every Connection record.** The new `IosDeviceId.current` helper (derived from `UIDevice.identifierForVendor` and persisted to the App Group) is now used in all `iosDeviceId` fields, so re-fetches collapse correctly and the Mac's `ingestPeerStatus` heartbeat match works.
+- **iOS 26 Liquid Glass aesthetic on AddMacView.** Hero card uses `.regularMaterial` with a 24pt squircle and `.symbolEffect(.bounce)`. The QR panel on macOS uses `.regularMaterial` with a 16pt squircle, matching the iOS 26 / macOS Tahoe convention.
+- **Tests:** 7 new tests in `ConnectionIdTests` for the deterministic-id constructors and the URL-length-independence property. 36/36 tests pass.
+
+### Fixed
+
+- **Per-share CKSyncEngine pointed at the wrong database.** Was `container.privateCloudDatabase`, now `container.sharedCloudDatabase` (the participant's view of an accepted share). The v2.7 implementation's per-share engine never received records — the Mac's 3-second poll masked the bug because the UI updated correctly via the implicit-iCloud engine.
+
+### Added -- v2.7: Cross-Apple-ID pairing (CKShare)
+
+- **Pair an iPhone or iPad from a different Apple ID.** The Mac's Configure ▸ Connections tab now has an "Add iPhone" button that creates an iCloud share (CKShare) for the DoomCoder zone. The iPhone scans the QR (or opens a doomcoder:// pair link) and the iOS companion accepts the share. Once accepted, the iPhone shows that Mac's agents and notifications alongside any same-Apple-ID Macs. No passwords, no Cloudflare Worker, no self-hosted relay.
+- **Multi-Mac per iPhone, multi-iPhone per Mac.** Each Connection is its own record (macId-keyed); one iPhone can show several Macs and one Mac can push to several iPhones.
+- **Devices section in the iOS Dashboard tab.** Above the agent list, a "Devices" section shows every paired Mac with its name, route (iCloud / iCloud Share), and status. Tapping a device opens its detail; an "Add a Mac" button in the section and in the Dashboard's empty state starts the QR scan flow.
+- **Per-Mac switcher on iOS.** When more than one Mac is paired, a segmented picker lets the user focus the Dashboard on a single Mac. (In v2.7 this only filters the visible list; push fan-out remains global.)
+- **New Devices module in `DoomCoderCore`.** `DeviceProfile`, `DeviceKind`, `Route` (enum extensible for future self-hosted routes), `CKShareRef`, `Connection`, `ConnectionStatus` (a small state machine), `ConnectionError` (typed user-facing errors), `DeviceID` (URL-safe 22-char base64), and a `ConnectionStatus.transitioned(to:)` helper. Unit tests added in `DeviceProfileTests`, `ConnectionStatusTests`, `CKShareRefTests`.
+- **Schema bump 2 → 3.** No wire-format change to existing records; the new schema field is consumed by clients that understand cross-Apple-ID pairing. Old clients continue to work and ignore the new field.
+
 ### Changed -- iOS companion is read-only
 
 - The iOS companion no longer sends any commands to the Mac. Sleep control, screen mode, keep-awake mode, snooze, and the master on/off toggle have been removed from the Dashboard tab and the Settings tab. The only iOS → Mac write that remains is the test push.

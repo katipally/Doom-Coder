@@ -42,5 +42,31 @@ struct RootTabView: View {
                 showWelcome = false
             }
         }
+        .onOpenURL { url in
+            handleURL(url)
+        }
+    }
+
+    /// Routes inbound `doomcoder://` URLs to the right handler. The scene
+    /// lifecycle delivers these via `.onOpenURL`; we no longer rely on the
+    /// UIApplicationDelegate `application(_:open:options:)` entry point,
+    /// which was deprecated in iOS 26.
+    private func handleURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "doomcoder" else { return }
+        switch url.host?.lowercased() {
+        case "agent":
+            // Existing route: doomcoder://agent/<slug>
+            if let slug = url.pathComponents.dropFirst().first, !slug.isEmpty {
+                AppRouter.shared.openAgent(slug: slug)
+            }
+        case "pair":
+            // v2.7+ route: doomcoder://pair?ckShareURL=...&container=...
+            Task { @MainActor in
+                await IOSPairingCoordinator.shared.handle(pairURL: url)
+                AppRouter.shared.selectedTab = .dashboard
+            }
+        default:
+            break
+        }
     }
 }
