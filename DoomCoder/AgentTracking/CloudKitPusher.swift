@@ -471,57 +471,68 @@ extension CloudKitPusher {
             )
         )
 
+        // iOS device explicitly disconnected — remove the connection immediately
+        // instead of waiting up to an hour for pruneStale to fire.
+        if rec.route == "disconnecting" {
+            let conn = PairingStore.shared.connections.first {
+                (rec.shareURLString != nil && $0.ckShareRef?.shareURLString == rec.shareURLString)
+                || $0.iosDeviceId == rec.iosDeviceId
+            }
+            if let conn {
+                PairingStore.shared.remove(connectionId: conn.id)
+            }
+            return
+        }
+
+        // Fast-path acceptance detection: when the Mac is showing the QR sheet
+        // (waitingForAcceptance), any PeerStatus from the pairing iOS device
+        // signals that the share was accepted. Posts the same notification that
+        // the CKShare-change delegate path uses, so handleAcceptance() fires in
+        // 1-3s instead of up to 3s polling + round-trip.
+        if case .waitingForAcceptance(_, let shareURL, _) = MacPairingCoordinator.shared.phase {
+            let crossAccountMatch = rec.shareURLString == shareURL.absoluteString
+            let alreadyPaired = PairingStore.shared.connections.contains { $0.iosDeviceId == rec.iosDeviceId }
+            let sameAccountCandidate = rec.shareURLString == nil && !alreadyPaired
+            if crossAccountMatch || sameAccountCandidate {
+                NotificationCenter.default.post(name: .doomCoderShareAccepted, object: nil)
+            }
+        }
+
         let nowFresh = Date().timeIntervalSince(rec.lastSeen) < 300  // 5-min staleness
         let status: ConnectionStatus = nowFresh ? .active : .suspended
 
-        // v2.8: three-way dedup. Match on (macId, iosDeviceId) for
-        // the implicit path, but also try the deterministic ckShare
-        // id if the iOS app has already shared a shareURLString in
-        // the heartbeat. This lets the first heartbeat fill in the
-        // placeholder `iosDeviceId` that `MacPairingCoordinator`
-        // stored when the share was created — without creating a
-        // second row.
-        let idImplicit = Connection.implicitConnectionId(macId: macId)
+        // v2.9: deterministic implicit id includes both macId and iosDeviceId
+        // so multiple iOS devices on the same iCloud account each get their
+        // own row instead of overwriting each other.
         let peerShareURL = rec.shareURLString
         let existing = PairingStore.shared.connections.first { conn in
-            // Exact match: same Mac, same iOS, implicit path.
-            if conn.macDeviceId == self.macId && conn.iosDeviceId == rec.iosDeviceId && conn.ckShareRef == nil {
+            // Share-URL match: placeholder ckShare row created at acceptance
+            // time carries a temp iosDeviceId — reconcile on the first heartbeat.
+            if let connShare = conn.ckShareRef?.shareURLString,
+               let peerShare = peerShareURL,
+               connShare == peerShare {
                 return true
             }
-            // Fill-in match: a placeholder ckShare row created on
-            // `handleAcceptance` with a random iosDeviceId and the
-            // same shareURL that the iOS app is heartbeating with.
-            if let connShare = conn.ckShareRef?.shareURLString,
-               connShare == peerShareURL {
+            // Exact iosDeviceId match on an already-reconciled ckShare row.
+            if conn.ckShareRef != nil && conn.iosDeviceId == rec.iosDeviceId {
                 return true
             }
             return false
         }
 
-        if let existing {
-            var updated = existing
-            updated.status = status
-            updated.lastSyncAt = rec.lastSeen
-            // Back-fill the stable iosId on a placeholder ckShare row.
-            if updated.iosDeviceId != rec.iosDeviceId {
-                updated.iosDeviceId = rec.iosDeviceId
-            }
-            PairingStore.shared.upsert(updated)
-        } else {
-            // Truly new — create an implicit-iCloud row.
-            let conn = Connection(
-                id: idImplicit,
-                macDeviceId: macId,
-                iosDeviceId: rec.iosDeviceId,
-                route: .iCloud,
-                status: status,
-                createdAt: Date(),
-                lastSyncAt: rec.lastSeen,
-                ckShareRef: nil
-            )
-            PairingStore.shared.upsert(conn)
-            logger.notice("ckpusher: registered new peer \(rec.iosDeviceId.prefix(8), privacy: .public)… (\(rec.name, privacy: .public))")
+        guard let existing else {
+            // No matching paired connection — ignore heartbeat from unpaired device.
+            return
         }
+        var updated = existing
+        updated.status = status
+        updated.lastSyncAt = rec.lastSeen
+        // Back-fill the stable iosId on a placeholder ckShare row created
+        // at acceptance time before the first heartbeat arrived.
+        if updated.iosDeviceId != rec.iosDeviceId {
+            updated.iosDeviceId = rec.iosDeviceId
+        }
+        PairingStore.shared.upsert(updated)
     }
 }
 

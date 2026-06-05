@@ -1,6 +1,7 @@
 // DevicesSection.swift — DoomCoder Companion
 // Top section in the Dashboard showing paired Macs. Above the agent list.
-// Read-only list with a "Add a Mac" button at the end.
+// Tapping a row selects that Mac (filters the agent list) AND opens
+// DeviceDetailView as a sheet where the user can inspect or disconnect.
 
 import SwiftUI
 import DoomCoderCore
@@ -9,6 +10,8 @@ struct DevicesSection: View {
     @State private var store = ConnectionStore.shared
     @Binding var selectedMacId: String?
     @State private var showingAddMac = false
+    @State private var showingDetail: Connection?
+    @State private var connectionToRemove: Connection?
 
     var body: some View {
         Section {
@@ -26,13 +29,35 @@ struct DevicesSection: View {
                 }
             } else {
                 ForEach(store.connections) { connection in
-                    DeviceRow(
-                        connection: connection,
-                        isSelected: connection.macDeviceId == selectedMacId
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
+                    Button {
                         selectedMacId = connection.macDeviceId
+                        showingDetail = connection
+                    } label: {
+                        DeviceRow(
+                            connection: connection,
+                            isSelected: connection.macDeviceId == selectedMacId
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            connectionToRemove = connection
+                        } label: {
+                            Label("Disconnect", systemImage: "minus.circle")
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            selectedMacId = connection.macDeviceId
+                            showingDetail = connection
+                        } label: {
+                            Label("View Details", systemImage: "info.circle")
+                        }
+                        Button(role: .destructive) {
+                            connectionToRemove = connection
+                        } label: {
+                            Label("Disconnect", systemImage: "minus.circle")
+                        }
                     }
                 }
                 Button {
@@ -60,6 +85,16 @@ struct DevicesSection: View {
         }
         .sheet(isPresented: $showingAddMac) {
             AddMacView()
+        }
+        .sheet(item: $showingDetail) { conn in
+            NavigationStack {
+                DeviceDetailView(connection: conn)
+            }
+        }
+        .sheet(item: $connectionToRemove) { conn in
+            RemoveConnectionDialog(connection: conn) {
+                connectionToRemove = nil
+            }
         }
     }
 }

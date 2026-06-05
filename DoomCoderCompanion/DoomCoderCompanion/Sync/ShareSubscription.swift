@@ -30,8 +30,17 @@ final class ShareSubscription: NSObject, CKSyncEngineDelegate, @unchecked Sendab
         case .accountChange:
             // No-op in v2.7; user can re-pair if needed.
             break
-        case .fetchedDatabaseChanges:
-            break
+        case .fetchedDatabaseChanges(let event):
+            // When the Mac revokes the CKShare, the zone disappears from
+            // the participant's sharedCloudDatabase. Auto-remove the local
+            // connection so the iOS UI stays consistent.
+            let revokedZoneNames = Set(event.deletions.map { $0.zoneID.zoneName })
+            if revokedZoneNames.contains(CloudKitConstants.zoneName) {
+                await MainActor.run { [self] in
+                    ConnectionStore.shared.remove(id: connection.id)
+                    ShareSyncEngineRegistry.shared.unregister(connectionId: connection.id)
+                }
+            }
         case .fetchedRecordZoneChanges(let event):
             await CompanionSyncEngine.shared.handleFetchedZoneChanges(event, from: connection)
         case .sentDatabaseChanges:

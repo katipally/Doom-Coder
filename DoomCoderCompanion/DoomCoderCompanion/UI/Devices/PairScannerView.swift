@@ -14,11 +14,20 @@ struct PairScannerView: View {
     @State private var didProcessScan = false
     @State private var permission: CameraPermission = .undetermined
 
+    private var isProcessing: Bool {
+        switch coordinator.phase {
+        case .awaitingSystemAcceptance, .accepting: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         ZStack {
             cameraLayer
-            reticle
+            if !isProcessing { reticle }
             bottomCaption
+            if isProcessing { processingOverlay }
+            if case .failed(let err) = coordinator.phase { errorOverlay(err) }
         }
         .background(Color.black.ignoresSafeArea())
         .toolbar {
@@ -26,6 +35,9 @@ struct PairScannerView: View {
                 Button("Cancel") { dismiss() }
                     .tint(.white)
             }
+        }
+        .onChange(of: coordinator.phase) { _, phase in
+            if case .active = phase { dismiss() }
         }
         .task {
             await requestPermissionIfNeeded()
@@ -48,6 +60,64 @@ struct PairScannerView: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(.white)
+        }
+    }
+
+    private var processingLabel: String {
+        if case .accepting = coordinator.phase { return "Setting up connection…" }
+        return "Verifying pairing link…"
+    }
+
+    private var processingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.65).ignoresSafeArea()
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                Text(processingLabel)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .environment(\.colorScheme, .dark)
+        }
+    }
+
+    private func errorOverlay(_ err: ConnectionError) -> some View {
+        ZStack {
+            Color.black.opacity(0.75).ignoresSafeArea()
+            VStack(spacing: 20) {
+                Image(systemName: "exclamationmark.icloud.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.orange)
+                Text(err.userMessage)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+                    .font(.callout)
+                    .padding(.horizontal, 24)
+                HStack(spacing: 12) {
+                    Button("Cancel") {
+                        coordinator.reset()
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                    .foregroundStyle(.white)
+
+                    Button {
+                        coordinator.reset()
+                        didProcessScan = false
+                    } label: {
+                        Label("Scan Again", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .environment(\.colorScheme, .dark)
         }
     }
 

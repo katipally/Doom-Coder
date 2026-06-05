@@ -15,9 +15,9 @@ struct RemoveDeviceDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Remove this iPhone?")
+            Text("Remove this device?")
                 .font(.title3.weight(.semibold))
-            Text("This Mac will stop sending notifications and status updates to the iPhone. The iPhone app will clear its local cache the next time it opens.")
+            Text("This Mac will stop sending notifications and status updates to the device. The companion app will clear its local cache the next time it opens.")
                 .foregroundStyle(.secondary)
             if let error {
                 Text(error)

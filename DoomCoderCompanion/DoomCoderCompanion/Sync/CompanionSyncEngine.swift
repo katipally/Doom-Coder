@@ -66,12 +66,9 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Lifecycle
 
     func start() {
-        // v2.7: engine is allowed to run whenever iCloud is available.
-        // The Connection store is auto-populated via
-        // `ensureImplicitConnection` the first time a MacStatus record
-        // arrives — the user doesn't have to do anything for the same-
-        // Apple-ID path. Explicit CKShare pairing still goes through
-        // IOSPairingCoordinator and posts its own .connectionsChanged.
+        // Engine runs whenever iCloud is available. Connections are only
+        // created through explicit QR pairing (IOSPairingCoordinator).
+        // MacStatus records update status on existing connections only.
         Task { await setupSyncEngine() }
         startForegroundPolling()
         // v2.7: start writing PeerStatus heartbeats so the Mac can
@@ -124,58 +121,20 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
-    /// v2.7+: when a MacStatus record arrives via the engine (i.e. the
-    /// implicit-iCloud path), synthesise a Connection so the Devices
-    /// section has something to show and the Dashboard can render
-    /// agents.
-    /// v2.8: deterministic id (`implicit-<macId>`) + stable iosId
-    /// (`IosDeviceId.current`) so re-fetches and re-installs collapse
-    /// to the same row.
-    private static func ensureImplicitConnection(for status: MacStatusRecord) {
+    /// When a MacStatus record arrives, update the status of any existing
+    /// explicitly-paired connection for that Mac. Never creates new connections
+    /// — users must go through the QR scan flow to pair.
+    private static func refreshExistingConnections(for status: MacStatusRecord) {
         let store = ConnectionStore.shared
-        let id = Connection.implicitConnectionId(macId: status.macId)
-        // 1. Exact match on the deterministic id (the canonical path).
-        if let existing = store.connections.first(where: { $0.id == id }) {
-            var refreshed = existing
-            refreshed.status = .active
-            refreshed.lastSyncAt = status.lastSeen
-            refreshed.iosDeviceId = IosDeviceId.current  // back-fill the stable id
-            store.upsert(refreshed)
-            return
+        let iosId = IosDeviceId.current
+        for conn in store.connections where conn.macDeviceId == status.macId
+                                        || (conn.macDeviceId.isEmpty && conn.iosDeviceId == iosId) {
+            var updated = conn
+            if updated.macDeviceId.isEmpty { updated.macDeviceId = status.macId }
+            updated.status = .active
+            updated.lastSyncAt = status.lastSeen
+            store.upsert(updated)
         }
-        // 2. Match on macDeviceId for any pre-v2.8 row that happened
-        // to survive the wipe-on-upgrade migration (e.g. the user
-        // restored a backup). Drop and re-create with the right id.
-        if let _ = store.connections.first(where: { $0.macDeviceId == status.macId && $0.ckShareRef == nil && $0.id != id }) {
-            // Don't accumulate. Wipe ALL rows for this Mac, then re-create
-            // with the deterministic id. (One MacStatus arrival triggers
-            // exactly one row; the legacy row was a duplicate.)
-            for conn in store.connections where conn.macDeviceId == status.macId && conn.id != id {
-                store.remove(id: conn.id)
-            }
-        }
-        // 3. Fresh create with the deterministic id.
-        let conn = Connection(
-            id: id,
-            macDeviceId: status.macId,
-            iosDeviceId: IosDeviceId.current,
-            route: .iCloud,
-            status: .active,
-            createdAt: Date(),
-            lastSyncAt: status.lastSeen,
-            ckShareRef: nil
-        )
-        store.upsert(conn)
-        print("[CompanionSyncEngine] registered implicit iCloud connection for Mac \(status.macId.prefix(8))…")
-    }
-
-    /// v2.7: classify a fetched record as implicit-iCloud vs CKShare.
-    /// The base engine always reads from the user's private DB, so by
-    /// definition any record that arrives here is implicit-iCloud. The
-    /// CKShare path routes through ShareSubscription → handleFetchedZoneChanges
-    /// and does NOT call this method.
-    private static func routeForRecord(_ status: MacStatusRecord) -> Route {
-        return .iCloud
     }
 
     /// Stops the engine, clears local stores, and resets state so the
@@ -623,17 +582,9 @@ final class CompanionSyncEngine: NSObject {
                     MacStatusStore.shared.upsert(r)
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
-                    // v2.7: this is the implicit-iCloud path (same Apple ID,
-                    // no explicit CKShare). The Mac's status landed in the
-                    // user's private DB, which means the user has a
-                    // working connection to this Mac even though we never
-                    // created a CKShare. Auto-register a synthetic
-                    // Connection so the Dashboard's Devices section
-                    // shows it, the MacSwitcher works, and the
-                    // "Add a Mac" CTA doesn't keep nagging.
-                    if case .iCloud = Self.routeForRecord(r) {
-                        Self.ensureImplicitConnection(for: r)
-                    }
+                    // Update status of any existing explicitly-paired connection
+                    // for this Mac. Never creates connections automatically.
+                    Self.refreshExistingConnections(for: r)
                 }
 
             case CloudKitConstants.RecordType.notificationLog:

@@ -23,14 +23,8 @@ struct ConfigureAgentsViewV2: View {
     @State private var installedCache: [TrackedAgent: Bool] = [:]
     // VS Code variants — which settings.json files the user wants patched.
     @State private var vscodeEnabledVariants: [String] = AgentInstallerV2.vscodeEnabledVariantPaths()
-    // Channel store
-    @State private var channelConfig = ChannelStore.load()
-    // Channel test results
-    @State private var testResult: (Bool, String)? = nil
     // Hook validation warnings (human-readable drift diff per agent)
     @State private var hookWarnings: [TrackedAgent: String] = [:]
-    // Permission status
-    @State private var permStatus: String = "…"
     // Periodic health refresh
     private let healthTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -546,147 +540,7 @@ struct ConfigureAgentsViewV2: View {
     // MARK: - Channels tab (v2.7+ : paired iOS devices via ConnectionsView)
 
     private var channelsDetail: some View {
-        // v2.7: ConnectionsView owns its own header + List. We host the
-        // legacy global iCloud + macOS toggles as a footer section so the
-        // user can still see and toggle them, but the new pairing UI is
-        // the primary entry point.
-        VStack(spacing: 0) {
-            ConnectionsView()
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Delivery Channels")
-                        .font(.title3.weight(.semibold))
-                        .padding(.top, 4)
-                    Text("Global on/off switches for the two delivery channels. These apply to every paired device.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    permissionStatusGroup
-                    macOSNotificationGroup
-                    iPhoneIPadGroup
-                    testResultBanner
-                }
-                .padding(20)
-            }
-        }
-    }
-
-    private var permissionStatusGroup: some View {
-        GroupBox {
-            HStack(spacing: 8) {
-                let disp = NotificationDispatcher.shared
-                switch disp.permissionStatus {
-                case .authorized, .provisional, .ephemeral:
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        .accessibilityHidden(true)
-                    Text("Notifications allowed").font(.callout)
-                case .denied:
-                    Image(systemName: "lock.circle.fill").foregroundStyle(.orange)
-                        .accessibilityHidden(true)
-                    Text("Enable notifications in System Settings").font(.callout)
-                    Spacer()
-                    Button {
-                        disp.openSystemSettings()
-                    } label: {
-                        Label("Open Settings", systemImage: "gear")
-                    }
-                    .controlSize(.small)
-                case .notDetermined:
-                    Image(systemName: "bell.badge.circle").foregroundStyle(.blue)
-                        .accessibilityHidden(true)
-                    Text("Grant permission to receive notifications").font(.callout)
-                    Spacer()
-                    Button("Allow Notifications") {
-                        disp.requestPermission { _ in refreshPermStatus() }
-                    }
-                    .controlSize(.small)
-                @unknown default:
-                    Text("Unknown").font(.callout)
-                }
-                Spacer()
-            }
-        } label: {
-            Label("Permission Status", systemImage: "lock.shield")
-        }
-    }
-
-    private var macOSNotificationGroup: some View {
-        GroupBox {
-            HStack {
-                Toggle("macOS Notification", isOn: Binding(
-                    get: { channelConfig.global.macNotification },
-                    set: { v in
-                        channelConfig.global.macNotification = v
-                        ChannelStore.setGlobal(channelConfig.global)
-                        if v { NotificationDispatcher.shared.requestPermission() }
-                    }
-                ))
-                Spacer()
-                Button("Test") {
-                    ChannelTester.sendTest(channel: .macNotification) { ok, msg in
-                        testResult = (ok, msg)
-                    }
-                }
-            }
-        } label: {
-            Label("macOS", systemImage: "bell.fill")
-        }
-    }
-
-    private var iPhoneIPadGroup: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Toggle("iPhone / iPad", isOn: Binding(
-                        get: { channelConfig.global.cloudkit },
-                        set: { v in
-                            channelConfig.global.cloudkit = v
-                            ChannelStore.setGlobal(channelConfig.global)
-                        }
-                    ))
-                    Spacer()
-                    Button("Test") {
-                        ChannelTester.sendTest(channel: .cloudKit) { ok, msg in
-                            testResult = (ok, msg)
-                        }
-                    }
-                }
-
-                Text("Mirror notifications to the DoomCoder companion app on your iPhone or iPad via iCloud. Use the section above to pair a new device — no manual setup is needed once a Connection is active.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack {
-                    Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
-                        .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
-                        .accessibilityHidden(true)
-                    Text(CloudKitPusher.shared.isReady
-                         ? "Connected to iCloud as \(CloudKitPusher.shared.macName)"
-                         : "Connecting to iCloud…")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    HelpTip("Must show green for iPhone mirroring to work. If it stays grey, make sure you're signed in to iCloud in System Settings and that iCloud Drive is enabled.")
-                    Spacer()
-                }
-            }
-        } label: {
-            Label("iPhone / iPad", systemImage: "iphone.gen3")
-        }
-    }
-
-    @ViewBuilder
-    private var testResultBanner: some View {
-        if let (ok, msg) = testResult {
-            HStack {
-                Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(ok ? .green : .red)
-                    .accessibilityHidden(true)
-                Text(msg).font(.callout)
-            }
-            .padding(.top, 4)
-        }
+        ConnectionsView()
     }
 
     // MARK: - Live events

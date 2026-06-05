@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 import DoomCoderCore
 
 /// Settings pane embedded as the 4th tab of the Configure window. Replaces
@@ -17,6 +18,8 @@ struct ConfigureSettingsPane: View {
         let raw = UserDefaults.standard.object(forKey: "doomcoder.approval.deferSeconds") as? Double ?? 0.8
         return Int((min(max(raw, 0.5), 3.0) * 10).rounded())
     }()
+    @State private var channelConfig = ChannelStore.load()
+    @State private var testResult: (Bool, String)? = nil
 
     var body: some View {
         ScrollView {
@@ -132,6 +135,8 @@ struct ConfigureSettingsPane: View {
 
                 AISettingsSection()
 
+                notificationsSection
+
                 GroupBox {
                     Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
                         .buttonStyle(.bordered)
@@ -143,6 +148,144 @@ struct ConfigureSettingsPane: View {
             .frame(maxWidth: 720, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task { refreshPermStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPermStatus()
+        }
+    }
+
+    // MARK: - Notifications section
+
+    private var notificationsSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 16) {
+                permissionStatusGroup
+                macOSNotificationGroup
+                iPhoneIPadGroup
+                testResultBanner
+            }
+        } label: {
+            Label("Notifications", systemImage: "bell.badge")
+        }
+    }
+
+    private var permissionStatusGroup: some View {
+        GroupBox {
+            HStack(spacing: 8) {
+                let disp = NotificationDispatcher.shared
+                switch disp.permissionStatus {
+                case .authorized, .provisional, .ephemeral:
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        .accessibilityHidden(true)
+                    Text("Notifications allowed").font(.callout)
+                case .denied:
+                    Image(systemName: "lock.circle.fill").foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text("Enable notifications in System Settings").font(.callout)
+                    Spacer()
+                    Button {
+                        disp.openSystemSettings()
+                    } label: {
+                        Label("Open Settings", systemImage: "gear")
+                    }
+                    .controlSize(.small)
+                case .notDetermined:
+                    Image(systemName: "bell.badge.circle").foregroundStyle(.blue)
+                        .accessibilityHidden(true)
+                    Text("Grant permission to receive notifications").font(.callout)
+                    Spacer()
+                    Button("Allow Notifications") {
+                        disp.requestPermission { _ in refreshPermStatus() }
+                    }
+                    .controlSize(.small)
+                @unknown default:
+                    Text("Unknown").font(.callout)
+                }
+                Spacer()
+            }
+        } label: {
+            Label("Permission Status", systemImage: "lock.shield")
+        }
+    }
+
+    private var macOSNotificationGroup: some View {
+        GroupBox {
+            HStack {
+                Toggle("macOS Notification", isOn: Binding(
+                    get: { channelConfig.global.macNotification },
+                    set: { v in
+                        channelConfig.global.macNotification = v
+                        ChannelStore.setGlobal(channelConfig.global)
+                        if v { NotificationDispatcher.shared.requestPermission() }
+                    }
+                ))
+                Spacer()
+                Button("Test") {
+                    ChannelTester.sendTest(channel: .macNotification) { ok, msg in
+                        testResult = (ok, msg)
+                    }
+                }
+            }
+        } label: {
+            Label("macOS", systemImage: "bell.fill")
+        }
+    }
+
+    private var iPhoneIPadGroup: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Toggle("iPhone / iPad", isOn: Binding(
+                        get: { channelConfig.global.cloudkit },
+                        set: { v in
+                            channelConfig.global.cloudkit = v
+                            ChannelStore.setGlobal(channelConfig.global)
+                        }
+                    ))
+                    Spacer()
+                    Button("Test") {
+                        ChannelTester.sendTest(channel: .cloudKit) { ok, msg in
+                            testResult = (ok, msg)
+                        }
+                    }
+                }
+                Text("Mirror notifications to the DoomCoder companion app on your iPhone or iPad via iCloud. Pair a device in the Connections tab — no manual setup needed once active.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
+                        .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
+                        .accessibilityHidden(true)
+                    Text(CloudKitPusher.shared.isReady
+                         ? "Connected to iCloud as \(CloudKitPusher.shared.macName)"
+                         : "Connecting to iCloud…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    HelpTip("Must show green for iPhone mirroring to work. If it stays grey, make sure you're signed in to iCloud in System Settings and that iCloud Drive is enabled.")
+                    Spacer()
+                }
+            }
+        } label: {
+            Label("iPhone / iPad", systemImage: "iphone.gen3")
+        }
+    }
+
+    @ViewBuilder
+    private var testResultBanner: some View {
+        if let (ok, msg) = testResult {
+            HStack {
+                Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(ok ? .green : .red)
+                    .accessibilityHidden(true)
+                Text(msg).font(.callout)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func refreshPermStatus() {
+        NotificationDispatcher.shared.refreshPermissionStatus()
     }
 }
 

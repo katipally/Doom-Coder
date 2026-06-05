@@ -25,7 +25,19 @@ public final class PairingStore: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.connections = Self.loadConnections(from: defaults, key: connectionsKey)
+        var loaded = Self.loadConnections(from: defaults, key: connectionsKey)
+        // v2.9: one-shot migrations —
+        //   (a) macDeviceId was DeviceIDFactory.make() (22-char base64url, random
+        //       per launch) → replace with the stable IOPlatformUUID-based macId.
+        //   (b) implicit connection id was "implicit-<macId>" (per-Mac) →
+        //       "implicit-<macId>-<iosDeviceId>" (per Mac+iOS pair).
+        // v2.9+: remove phantom implicit connections (no ckShareRef = auto-created).
+        // Only explicitly-paired CKShare connections are kept.
+        let beforeCount = loaded.count
+        loaded = loaded.filter { $0.ckShareRef != nil }
+        let needsSave = loaded.count != beforeCount
+        self.connections = loaded
+        if needsSave { Self.saveConnectionsInternal(loaded, to: defaults, key: connectionsKey) }
     }
 
     // MARK: - Connections
@@ -90,8 +102,14 @@ public final class PairingStore: ObservableObject {
     // MARK: - Persistence
 
     private func saveConnections() {
-        if let data = try? JSONEncoder().encode(connections) {
-            defaults.set(data, forKey: connectionsKey)
+        Self.saveConnectionsInternal(connections, to: defaults, key: connectionsKey)
+    }
+
+    private static func saveConnectionsInternal(
+        _ list: [Connection], to defaults: UserDefaults, key: String
+    ) {
+        if let data = try? JSONEncoder().encode(list) {
+            defaults.set(data, forKey: key)
         }
     }
 

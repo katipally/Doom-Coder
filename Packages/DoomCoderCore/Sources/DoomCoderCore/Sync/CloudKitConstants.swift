@@ -18,6 +18,9 @@ public enum CloudKitConstants {
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
         public static let peerStatus        = "PeerStatus"
+        /// Public-DB only. Temporary record keyed by 6-char pairing code.
+        /// TTL matches PairingCode.lifetime (10 min). Mac writes it, iOS reads it.
+        public static let pairingCode       = "DCPairingCode"
     }
 
     /// Current schema version published to CloudKit. Bump together with field

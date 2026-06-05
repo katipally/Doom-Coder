@@ -43,6 +43,14 @@ final class IOSPairingCoordinator {
         self.container = container
     }
 
+    // MARK: - Reset
+
+    public func reset() {
+        guard case .failed = phase else { return }
+        phase = .idle
+        lastError = nil
+    }
+
     // MARK: - URL entry points
 
     /// Called by AppDelegate when doomcoder://pair?ckShareURL=... arrives.
@@ -76,32 +84,65 @@ final class IOSPairingCoordinator {
     // MARK: - Share acceptance
 
     private func accept(shareURL: URL, containerIdentifier: String) async {
-        phase = .awaitingSystemAcceptance(
-            shareURL: shareURL,
-            containerIdentifier: containerIdentifier
-        )
+        phase = .awaitingSystemAcceptance(shareURL: shareURL, containerIdentifier: containerIdentifier)
         do {
+            // Fetch share metadata — this tells us who the owner is and whether
+            // the current user is already a participant.
             let metadata: CKShare.Metadata
             do {
                 metadata = try await container.shareMetadata(for: shareURL)
             } catch {
-                throw ConnectionError.shareAcceptanceFailed(
-                    "Couldn't look up that iCloud share. Make sure the Mac hasn't revoked it and that the QR is current."
-                )
+                throw mapCKError(error, context: .metadata)
             }
-            phase = .accepting(shareURL: shareURL, containerIdentifier: containerIdentifier)
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                container.accept(metadata) { _, error in
-                    if let error {
-                        cont.resume(throwing: error)
-                    } else {
-                        cont.resume()
+
+            let ownerRecordName = metadata.ownerIdentity.userRecordID?.recordName ?? ""
+
+            // Scenario A — Same iCloud account:
+            //   participantRole == .owner means the current user IS the owner.
+            //   CloudKit rejects .accept() for owners ("owner participant tried to
+            //   accept share"). The iPhone already has full access to the private zone
+            //   — skip .accept() and use CompanionSyncEngine (private DB) instead of
+            //   ShareSyncEngineRegistry (shared DB).
+            let isOwner = metadata.participantRole == .owner
+
+            // Scenario B — Already accepted (re-scan same QR or code re-entry):
+            //   Skip .accept() to avoid a redundant round-trip.
+            let alreadyAccepted = metadata.participantStatus == .accepted
+
+            if !isOwner && !alreadyAccepted {
+                phase = .accepting(shareURL: shareURL, containerIdentifier: containerIdentifier)
+                do {
+                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                        container.accept(metadata) { _, error in
+                            if let error { cont.resume(throwing: error) }
+                            else { cont.resume() }
+                        }
                     }
+                } catch {
+                    // Defensive recovery: if the server still rejects with
+                    // "owner tried to accept", treat as same-account silently.
+                    if let ck = error as? CKError,
+                       ck.code == .serverRejectedRequest,
+                       (ck.localizedDescription.lowercased().contains("owner") ||
+                        ck.localizedDescription.lowercased().contains("participant")) {
+                        // Fall through to persistConnection with isSameAccount = true
+                        try await persistConnection(
+                            shareURL: shareURL,
+                            containerIdentifier: containerIdentifier,
+                            ownerRecordName: ownerRecordName,
+                            isSameAccount: true
+                        )
+                        return
+                    }
+                    throw mapCKError(error, context: .accept)
                 }
             }
+
             try await persistConnection(
                 shareURL: shareURL,
-                containerIdentifier: containerIdentifier
+                containerIdentifier: containerIdentifier,
+                ownerRecordName: ownerRecordName,
+                isSameAccount: isOwner
             )
         } catch let err as ConnectionError {
             lastError = err
@@ -113,39 +154,70 @@ final class IOSPairingCoordinator {
         }
     }
 
-    private func persistConnection(shareURL: URL, containerIdentifier: String) async throws {
-        let ref = CKShareRef(
-            shareURL: shareURL,
-            ownerRecordName: "DoomCoderShare",
-            containerIdentifier: containerIdentifier
-        )
-        // v2.8: deterministic id keyed on shareURLString. Re-scanning
-        // the same QR reuses the existing row instead of creating a
-        // new one — the upsert collapses.
+    private enum AcceptContext { case metadata, accept }
+
+    private func mapCKError(_ error: Error, context: AcceptContext) -> ConnectionError {
+        guard let ck = error as? CKError else {
+            return .shareAcceptanceFailed(error.localizedDescription)
+        }
+        switch ck.code {
+        case .networkUnavailable, .networkFailure:
+            return .shareAcceptanceFailed("No internet connection. Check your network and try again.")
+        case .notAuthenticated:
+            return .iCloudUnavailable
+        case .permissionFailure:
+            return .shareAcceptanceFailed("You don't have permission to access this share.")
+        case .unknownItem:
+            return context == .metadata
+                ? .shareAcceptanceFailed("This pairing link has expired or been revoked. Ask the Mac to generate a new one.")
+                : .shareAcceptanceFailed(ck.localizedDescription)
+        case .userDeletedZone:
+            return .shareRevoked
+        case .alreadyShared:
+            return .alreadyPaired
+        case .requestRateLimited:
+            return .shareAcceptanceFailed("iCloud is rate-limiting requests. Wait a moment and try again.")
+        case .zoneBusy:
+            return .shareAcceptanceFailed("iCloud is busy. Try again in a moment.")
+        case .serviceUnavailable:
+            return .shareAcceptanceFailed("iCloud is unavailable right now. Try again later.")
+        case .serverRejectedRequest:
+            return .shareAcceptanceFailed("The server rejected this pairing request. Try scanning the QR again.")
+        default:
+            return .shareAcceptanceFailed("iCloud error \(ck.code.rawValue): \(ck.localizedDescription)")
+        }
+    }
+
+    private func persistConnection(
+        shareURL: URL,
+        containerIdentifier: String,
+        ownerRecordName: String,
+        isSameAccount: Bool
+    ) async throws {
+        // Same-account connections use the sentinel so ShareSyncEngineRegistry
+        // and PeerStatusPublisher know to use the private-DB path instead.
+        let ref: CKShareRef = isSameAccount
+            ? .sameAccount(shareURL: shareURL, containerIdentifier: containerIdentifier)
+            : CKShareRef(shareURL: shareURL, ownerRecordName: ownerRecordName, containerIdentifier: containerIdentifier)
+
+        // Deterministic id keyed on share URL — re-scanning the same QR upserts
+        // the existing row rather than creating a duplicate.
         let id = Connection.deterministicId(for: .ckShare(ref))
-        // Prefer the real Mac's stable id from MacStatusStore if
-        // available; falls back to a placeholder that the Mac will
-        // reconcile via the first PeerStatus heartbeat.
-        let macId = MacStatusStore.shared.primary?.macId ?? DeviceIDFactory.make()
-        // Pre-check at construction time: if the row already exists,
-        // refresh its status / lastSyncAt in place rather than going
-        // through the full ShareSyncEngineRegistry.register (which
-        // is itself idempotent but does extra work).
+        let macId = MacStatusStore.shared.primary?.macId ?? ""
+
         if let existing = ConnectionStore.shared.connections.first(where: { $0.id == id }) {
             var refreshed = existing
             refreshed.status = .active
             refreshed.lastSyncAt = Date()
-            // Reconcile the macId if we just learned it.
-            if macId != DeviceIDFactory.make() {
-                refreshed.macDeviceId = macId
-            }
+            if !macId.isEmpty { refreshed.macDeviceId = macId }
             ConnectionStore.shared.upsert(refreshed)
-            ShareSyncEngineRegistry.shared.register(connection: refreshed)
+            registerSyncEngine(for: refreshed, isSameAccount: isSameAccount)
             successMessage = "Paired with a Mac"
             presentSuccess = true
             phase = .active(refreshed)
             return
         }
+
         let connection = Connection(
             id: id,
             macDeviceId: macId,
@@ -156,15 +228,67 @@ final class IOSPairingCoordinator {
             ckShareRef: ref
         )
         ConnectionStore.shared.upsert(connection)
-        ShareSyncEngineRegistry.shared.register(connection: connection)
+        registerSyncEngine(for: connection, isSameAccount: isSameAccount)
         successMessage = "Paired with a Mac"
         presentSuccess = true
         phase = .active(connection)
     }
 
+    private func registerSyncEngine(for connection: Connection, isSameAccount: Bool) {
+        if isSameAccount {
+            Task { await CompanionSyncEngine.shared.fetchChanges() }
+        } else {
+            ShareSyncEngineRegistry.shared.register(connection: connection)
+        }
+        // Signal the Mac immediately so it detects acceptance within seconds.
+        PeerStatusPublisher.shared.publishNow(force: true)
+    }
+
+    // MARK: - Code-based pairing
+
+    /// Looks up a 6-char pairing code in the CloudKit public database and
+    /// accepts the share whose URL is stored there. Called when the user
+    /// types the code shown on the Mac instead of scanning the QR.
+    public func resolveCode(_ code: String) async {
+        let cleaned = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard cleaned.count == 6 else {
+            let err = ConnectionError.invalidPairingCode
+            lastError = err
+            phase = .failed(err)
+            return
+        }
+        do {
+            let recordID = CKRecord.ID(recordName: cleaned)
+            let record: CKRecord
+            do {
+                record = try await container.publicCloudDatabase.record(for: recordID)
+            } catch {
+                throw ConnectionError.invalidPairingCode
+            }
+            if let expiresAt = record["expiresAt"] as? Date, Date() > expiresAt {
+                throw ConnectionError.pairingCodeExpired
+            }
+            guard let shareURLString = record["shareURL"] as? String,
+                  let shareURL = URL(string: shareURLString) else {
+                throw ConnectionError.invalidPairingCode
+            }
+            await accept(shareURL: shareURL, containerIdentifier: CloudKitConstants.containerIdentifier)
+        } catch let err as ConnectionError {
+            lastError = err
+            phase = .failed(err)
+        } catch {
+            let err = ConnectionError.invalidPairingCode
+            lastError = err
+            phase = .failed(err)
+        }
+    }
+
     // MARK: - Removal
 
     public func remove(connection: Connection) async {
+        // Signal the Mac before local teardown so it receives an APNs push
+        // and removes the connection within seconds.
+        await PeerStatusPublisher.shared.publishDisconnect(connection: connection)
         ConnectionStore.shared.remove(id: connection.id)
         ShareSyncEngineRegistry.shared.unregister(connectionId: connection.id)
         // Wipe per-Mac local caches so the iOS app no longer holds that

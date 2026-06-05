@@ -73,12 +73,14 @@ extension PeerStatusRecord {
     /// heartbeat saves preserve `recordChangeTag` (CKError 14/2004
     /// prevention — same lesson baked into MacStatusRecord).
     public var recordID: CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        // When the iOS app doesn't yet know which Mac it's paired to
-        // (e.g. very first launch, before any MacStatus has been
-        // fetched), use a stable "unknown" slot. The Mac can still
-        // discover this peer; the Connection's macDeviceId is the
-        // Mac's own ID, not the peer's.
+        recordID(zoneOwner: CKCurrentUserDefaultName)
+    }
+
+    /// Returns a record ID in the given zone owner's DoomCoderZone.
+    /// Use `CKCurrentUserDefaultName` for the same-Apple-ID (private DB)
+    /// path; pass the Mac's user record name for the CKShare (shared DB) path.
+    public func recordID(zoneOwner: String) -> CKRecord.ID {
+        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: zoneOwner)
         let macSegment = macId ?? "unknown"
         return CKRecord.ID(recordName: "PeerStatus-\(macSegment)-\(iosDeviceId)", zoneID: zone)
     }
@@ -87,6 +89,19 @@ extension PeerStatusRecord {
 
     public func toCKRecord(base: CKRecord?) -> CKRecord {
         let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
+        fill(r)
+        return r
+    }
+
+    /// Builds a CKRecord in the given owner's zone — used for the
+    /// CKShare path where iOS writes PeerStatus into the Mac's shared zone.
+    public func toCKRecord(zoneOwner: String, base: CKRecord?) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID(zoneOwner: zoneOwner))
+        fill(r)
+        return r
+    }
+
+    private func fill(_ r: CKRecord) {
         r["iosDeviceId"]  = iosDeviceId as CKRecordValue
         r["name"]         = name as CKRecordValue
         r["model"]        = model as CKRecordValue
@@ -97,7 +112,6 @@ extension PeerStatusRecord {
         if let m = macId { r["macId"] = m as CKRecordValue } else { r["macId"] = nil }
         if let s = shareURLString { r["shareURLString"] = s as CKRecordValue } else { r["shareURLString"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
-        return r
     }
 
     public init?(_ r: CKRecord) {

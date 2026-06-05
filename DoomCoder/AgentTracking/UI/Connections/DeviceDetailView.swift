@@ -16,7 +16,7 @@ struct DeviceDetailView: View {
                 Image(systemName: "iphone.gen3")
                     .font(.largeTitle)
                 VStack(alignment: .leading) {
-                    Text("iPhone")
+                    Text(IosDeviceProfileCache.shared.name(for: connection.iosDeviceId) ?? "Device")
                         .font(.title.weight(.semibold))
                     Text(connection.route.displayName)
                         .foregroundStyle(.secondary)

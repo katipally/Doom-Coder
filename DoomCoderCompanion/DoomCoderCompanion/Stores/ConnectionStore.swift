@@ -20,21 +20,31 @@ final class ConnectionStore {
 
     private init() {
         if let cached = AppGroupCache.read([Connection].self, forKey: Self.cacheKey) {
-            connections = cached
+            connections = Self.migrateV29(cached)
         }
         Task {
-            connections = await LocalStore.shared.fetchConnections()
-            AppGroupCache.write(connections, forKey: Self.cacheKey)
-            // After a cold launch with persisted connections, nudge the
-            // sync engine so it re-attempts setup if the previous session
-            // tore it down (e.g. user removed then re-added a connection
-            // and the app was killed before another trigger fired).
-            if !connections.isEmpty {
+            let fetched = await LocalStore.shared.fetchConnections()
+            let migrated = Self.migrateV29(fetched)
+            connections = migrated
+            AppGroupCache.write(migrated, forKey: Self.cacheKey)
+            if !migrated.isEmpty {
                 NotificationCenter.default.post(
                     name: .connectionsChanged, object: nil
                 )
             }
         }
+    }
+
+    /// Migration: removes phantom auto-created implicit connections (those
+    /// without a ckShareRef) so only explicitly-paired CKShare connections remain.
+    /// Connections require explicit QR pairing — no automatic same-account wiring.
+    private static func migrateV29(_ list: [Connection]) -> [Connection] {
+        let phantoms = list.filter { $0.ckShareRef == nil }
+        let kept = list.filter { $0.ckShareRef != nil }
+        for phantom in phantoms {
+            LocalStore.shared.deleteConnection(id: phantom.id)
+        }
+        return kept
     }
 
     var active: [Connection] { connections.filter { $0.status == .active } }

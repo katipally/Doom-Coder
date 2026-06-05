@@ -1,6 +1,6 @@
 // MacPairingCoordinator.swift — DoomCoder Mac
 // Owns the Mac-side pairing flow. The flow is:
-//   1. User clicks "Add iPhone" in ConnectionsView
+//   1. User clicks "Add Device" in ConnectionsView
 //   2. Coordinator creates a CKShare on the DoomCoderZone with the Mac as
 //      owner, opts the iPhone user in, and uploads the share
 //   3. Coordinator hands the share URL + a short code to the UI (PairSheet)
@@ -12,8 +12,19 @@
 //
 // v2.8 latency: prewarm the container at app launch to amortize the
 // CloudKit schema cold-start penalty (5-25s on first-ever share
-// creation). PairSheet opens immediately on "Add iPhone" click; the
+// creation). PairSheet opens immediately on "Add Device" click; the
 // URL streams in when the modifyRecords round-trip completes.
+//
+// v2.9 fixes:
+//   • perRecordSaveBlock added — captures server-returned CKShare with
+//     populated .url (was nil before, causing the QR to spin forever)
+//   • macDeviceId reads the same stable key as CloudKitPusher so dedup
+//     in ingestPeerStatus actually matches (was random per-launch before)
+//   • share.publicPermission = .readWrite so cross-account iOS devices
+//     can write PeerStatus back into the shared zone for instant discovery
+//   • macUserRecordName stored at share-creation time so CKShareRef carries
+//     the real CloudKit user record name (needed for shared-zone writes)
+//   • revokeShare() is now a real CloudKit delete (was a no-op)
 
 import Foundation
 import CloudKit
@@ -40,26 +51,37 @@ public final class MacPairingCoordinator: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var currentShare: CKShare?
     private var pendingConnectionId: String?
+    private var macUserRecordName: String = CKCurrentUserDefaultName
     private let macDeviceId: DeviceID
     private let prewarmKey = "doomcoder.macpairing.prewarm.v1"
     private var didPrewarm: Bool
+    private var publishedCodeKey: String?   // current public-DB record name
+
+    /// Reads from the same UserDefaults key as CloudKitPusher.stableMacID()
+    /// so both coordinators agree on this Mac's identity.
+    private static func resolveMacDeviceId() -> DeviceID {
+        let key = "doomcoder.ckpusher.macId.v1"
+        if let cached = UserDefaults.standard.string(forKey: key), !cached.isEmpty {
+            return cached
+        }
+        // CloudKitPusher hasn't written the key yet (very first launch);
+        // fall through to its stable value via the shared singleton.
+        return CloudKitPusher.shared.macId
+    }
 
     public init(
-        container: CKContainer = CKContainer(identifier: CloudKitConstants.containerIdentifier),
-        macDeviceId: DeviceID = DeviceIDFactory.make()
+        container: CKContainer = CKContainer(identifier: CloudKitConstants.containerIdentifier)
     ) {
         self.container = container
-        self.macDeviceId = macDeviceId
-        self.didPrewarm = UserDefaults.standard.bool(forKey: prewarmKey)
+        self.macDeviceId = Self.resolveMacDeviceId()
+        self.didPrewarm = UserDefaults.standard.bool(forKey: "doomcoder.macpairing.prewarm.v1")
         // v2.8: also listen for the APNs-driven "share changed" signal
         // from the CloudKitPusher delegate. This is the primary path
-        // for detecting acceptance — the 3-second polling loop below
-        // is now just a fallback in case the push is throttled.
+        // for detecting acceptance — the polling loop below is just a
+        // fallback in case the push is throttled.
         NotificationCenter.default.addObserver(
             forName: .doomCoderShareAccepted, object: nil, queue: .main
         ) { [weak self] _ in
-            // The delegate posts on its own thread; bounce to the
-            // main actor explicitly. handleAcceptance is idempotent.
             MainActor.assumeIsolated {
                 self?.handleAcceptance()
             }
@@ -73,12 +95,6 @@ public final class MacPairingCoordinator: ObservableObject {
 
     // MARK: - Prewarm
 
-    /// v2.8: amortize the CloudKit schema cold-start. On the first
-    /// ever share creation in a container, the schema for the share
-    /// record type must be auto-provisioned, which adds 5-25s to the
-    /// first `modifyRecords([root, share])` round-trip. Calling
-    /// `allRecordZones()` at app launch forces the same provisioning
-    /// to happen in a non-blocking background task.
     public func prewarmContainer() {
         guard !didPrewarm else { return }
         let database = container.privateCloudDatabase
@@ -96,6 +112,12 @@ public final class MacPairingCoordinator: ObservableObject {
     public func startPairing() async {
         phase = .creatingShare
         do {
+            // Fetch the Mac's CloudKit user record name upfront so it can
+            // be stored in the CKShareRef — iOS uses it to address the
+            // shared zone when writing PeerStatus heartbeats back.
+            if let userID = try? await container.userRecordID() {
+                macUserRecordName = userID.recordName
+            }
             let (share, url) = try await createShare()
             currentShare = share
             let code = PairingStore.shared.generatePendingCode()
@@ -106,6 +128,8 @@ public final class MacPairingCoordinator: ObservableObject {
                 expiresAt: code.expiresAt
             )
             startPollingShare(shareRecordID: share.recordID, expiresAt: code.expiresAt)
+            // Publish code → shareURL to public DB so iOS can pair by typing the code.
+            await publishCode(code.code, shareURL: url)
         } catch let err as ConnectionError {
             lastError = err
             phase = .failed(err)
@@ -122,11 +146,13 @@ public final class MacPairingCoordinator: ObservableObject {
         pendingConnectionId = nil
         currentShare = nil
         PairingStore.shared.clearPendingCode()
+        deletePublishedCode()
         phase = .idle
     }
 
-    /// Remove a paired iOS device. On Mac this revokes the share and deletes
-    /// the local Connection; the iOS app wipes its own local cache separately.
+    /// Remove a paired iOS device. Revokes the share from CloudKit and
+    /// deletes the local Connection. The iOS app wipes its own local
+    /// cache separately on next launch.
     public func remove(connection: Connection) async {
         if let shareRef = connection.ckShareRef,
            let shareURL = shareRef.shareURL {
@@ -137,91 +163,146 @@ public final class MacPairingCoordinator: ObservableObject {
 
     // MARK: - Share creation
 
-    /// v2.8: detached so the modifyRecords round-trip never blocks the
-    /// main thread. Uses `CKModifyRecordsOperation` directly to set
-    /// `qualityOfService = .userInitiated` (the async `modifyRecords`
-    /// helper uses the default `.utility` QoS, which Apple explicitly
-    /// warns can be deprioritized by the system).
     private func createShare() async throws -> (CKShare, URL) {
-        let zone = CKRecordZone(zoneName: CloudKitConstants.zoneName)
+        // All records must live in DoomCoderZone, not the default zone.
+        let zoneID = CKRecordZone.ID(
+            zoneName: CloudKitConstants.zoneName,
+            ownerName: CKCurrentUserDefaultName
+        )
+        let zone = CKRecordZone(zoneID: zoneID)
         do {
             try await container.privateCloudDatabase.save(zone)
-        } catch let ckError as CKError where ckError.code == .serverRecordChanged {
-            // Zone already exists, that's fine.
+        } catch let ckErr as CKError where ckErr.code == .serverRecordChanged {
+            // Zone already exists — fine.
         } catch {
             throw ConnectionError.zoneNotFound
         }
+
+        // If a share already exists (e.g., from a previous "Add Device" tap that was
+        // never accepted), reuse it instead of creating a new one. This avoids
+        // serverRecordChanged failures on every subsequent startPairing() call.
+        let shareRecordID = CKRecord.ID(
+            recordName: "DoomCoderShare-\(macDeviceId)",
+            zoneID: zoneID
+        )
+        if let existingShare = try? await container.privateCloudDatabase.record(for: shareRecordID) as? CKShare,
+           let url = existingShare.url {
+            if existingShare.publicPermission != .readWrite {
+                existingShare.publicPermission = .readWrite
+                _ = try? await container.privateCloudDatabase.save(existingShare)
+            }
+            currentShare = existingShare
+            return (existingShare, url)
+        }
+
+        // No existing share — create a fresh one.
         let rootRecord = CKRecord(
             recordType: CloudKitConstants.RecordType.settings,
-            recordID: CKRecord.ID(recordName: "Pairing-\(macDeviceId)")
+            recordID: CKRecord.ID(recordName: "Pairing-\(macDeviceId)", zoneID: zoneID)
         )
         rootRecord["macDeviceId"] = macDeviceId as CKRecordValue
-        let share = CKShare(
-            rootRecord: rootRecord,
-            shareID: CKRecord.ID(recordName: "DoomCoderShare-\(macDeviceId)")
-        )
-        share.publicPermission = .none
+
+        let share = CKShare(rootRecord: rootRecord, shareID: shareRecordID)
+        share.publicPermission = .readWrite
         share[CKShare.SystemFieldKey.title] = "DoomCoder - \(Host.current().localizedName ?? "Mac")" as CKRecordValue
 
-        // Use a CKModifyRecordsOperation directly to control QoS.
-        let saveResults: Result<Void, Error> = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Result<Void, Error>, Error>) in
+        // perRecordSaveBlock is essential: it receives the server-returned
+        // CKShare, which is the only copy that has .url populated.
+        // Also handles serverRecordChanged (race between two taps) by
+        // extracting the server version from CKError.serverRecord.
+        var savedShare: CKShare?
+        let opResult: Result<Void, Error> = try await withCheckedThrowingContinuation { cont in
             let op = CKModifyRecordsOperation(
                 recordsToSave: [rootRecord, share],
                 recordIDsToDelete: []
             )
             op.qualityOfService = .userInitiated
             op.savePolicy = .changedKeys
-            op.modifyRecordsResultBlock = { result in
-                cont.resume(returning: result)
+            op.perRecordSaveBlock = { _, result in
+                switch result {
+                case .success(let saved):
+                    if let s = saved as? CKShare { savedShare = s }
+                case .failure(let err):
+                    // Race condition: another operation saved the share first.
+                    // CKError.serverRecord carries the current server version.
+                    if let ckErr = err as? CKError,
+                       ckErr.code == .serverRecordChanged,
+                       let serverShare = ckErr.serverRecord as? CKShare {
+                        savedShare = serverShare
+                    }
+                }
             }
+            op.modifyRecordsResultBlock = { result in cont.resume(returning: result) }
             container.privateCloudDatabase.add(op)
         }
-        switch saveResults {
+        switch opResult {
         case .success: break
-        case .failure(let err): throw ConnectionError.shareCreationFailed(err.localizedDescription)
+        case .failure(let err):
+            // If we recovered the CKShare from a serverRecordChanged error,
+            // the share is valid — don't throw.
+            if savedShare == nil {
+                throw ConnectionError.shareCreationFailed(err.localizedDescription)
+            }
         }
-        guard let url = share.url else {
-            throw ConnectionError.shareCreationFailed("share had no URL")
+
+        let finalShare = savedShare ?? share
+        guard let url = finalShare.url else {
+            throw ConnectionError.shareCreationFailed("Share had no URL after creation — check CloudKit container entitlements.")
         }
-        return (share, url)
+        currentShare = finalShare
+        return (finalShare, url)
     }
 
+    /// v2.9: hard-revoke — deletes both the share record and its root
+    /// record from CloudKit so the iOS participant truly loses zone access.
+    /// The previous implementation was a no-op.
     private func revokeShare(shareURL: URL) async {
-        // The simplest robust approach: delete the local Connection; the
-        // share itself can be revoked by the user from iCloud Settings if
-        // they want a hard kill switch. We deliberately don't auto-delete
-        // the share from CloudKit because a user may want to revoke via
-        // System Settings and we don't want to race with that.
-        _ = shareURL
+        // Reconstruct the share and root record IDs from their deterministic names.
+        let zoneID = CKRecordZone.ID(
+            zoneName: CloudKitConstants.zoneName,
+            ownerName: CKCurrentUserDefaultName
+        )
+        let shareRecordID = CKRecord.ID(
+            recordName: "DoomCoderShare-\(macDeviceId)",
+            zoneID: zoneID
+        )
+        let rootRecordID = CKRecord.ID(
+            recordName: "Pairing-\(macDeviceId)",
+            zoneID: zoneID
+        )
+        let op = CKModifyRecordsOperation(
+            recordsToSave: nil,
+            recordIDsToDelete: [shareRecordID, rootRecordID]
+        )
+        op.qualityOfService = .userInitiated
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            op.modifyRecordsResultBlock = { _ in cont.resume() }
+            container.privateCloudDatabase.add(op)
+        }
     }
 
     // MARK: - Polling (v2.8: backup path)
 
-    /// v2.8: the primary path is the APNs-driven notification
-    /// `.doomCoderShareAccepted`. This polling loop is now just a
-    /// fallback in case the push is throttled or the user's iCloud
-    /// setup doesn't deliver silent pushes. Interval relaxed from
-    /// 3s → 8s to reduce background load.
     private func startPollingShare(shareRecordID: CKRecord.ID, expiresAt: Date) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 if Date() > expiresAt {
-                    await MainActor.run { [weak self] in
-                        self?.handleExpiry()
-                    }
+                    await MainActor.run { [weak self] in self?.handleExpiry() }
                     return
                 }
                 if let self {
+                    // Check for non-owner participants (cross-account path).
+                    // Same-account pairings are detected via PeerStatus heartbeat
+                    // in ingestPeerStatus(), so no participant will ever appear here
+                    // for same-account — that's expected, not a bug.
                     let accepted = await self.checkShareAcceptance(shareRecordID: shareRecordID)
                     if accepted {
-                        await MainActor.run { [weak self] in
-                            self?.handleAcceptance()
-                        }
+                        await MainActor.run { [weak self] in self?.handleAcceptance() }
                         return
                     }
                 }
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
     }
@@ -240,16 +321,13 @@ public final class MacPairingCoordinator: ObservableObject {
         guard let share = currentShare,
               let shareURL = share.url,
               let _ = pendingConnectionId else { return }
+        deletePublishedCode()
         let ref = CKShareRef(
             shareURL: shareURL,
-            ownerRecordName: share.recordID.recordName,
+            ownerRecordName: macUserRecordName,
             containerIdentifier: CloudKitConstants.containerIdentifier
         )
-        // v2.8: deterministic id derived from shareURL — re-pairing
-        // the same share reuses this row instead of creating a new one.
         let id = Connection.deterministicId(for: .ckShare(ref))
-        // Pre-check: if a row with this id already exists, refresh it
-        // and skip the rest (idempotent on duplicate poll firings).
         if let existing = PairingStore.shared.connections.first(where: { $0.id == id }) {
             var refreshed = existing
             refreshed.status = .active
@@ -265,7 +343,7 @@ public final class MacPairingCoordinator: ObservableObject {
         let connection = Connection(
             id: id,
             macDeviceId: macDeviceId,
-            iosDeviceId: DeviceIDFactory.make(),   // placeholder; PeerStatus heartbeat will fill in
+            iosDeviceId: DeviceIDFactory.make(),   // placeholder; PeerStatus heartbeat fills in
             route: .ckShare(ref),
             status: .active,
             lastSyncAt: Date(),
@@ -281,6 +359,7 @@ public final class MacPairingCoordinator: ObservableObject {
     }
 
     private func handleExpiry() {
+        deletePublishedCode()
         PairingStore.shared.clearPendingCode()
         pollTask?.cancel()
         pollTask = nil
@@ -289,5 +368,36 @@ public final class MacPairingCoordinator: ObservableObject {
         let err = ConnectionError.pairingCodeExpired
         lastError = err
         phase = .failed(err)
+    }
+
+    // MARK: - Public-DB pairing code
+
+    /// Writes a DCPairingCode record to the public database so iOS can look up
+    /// the share URL by typing the 6-char code instead of scanning the QR.
+    private func publishCode(_ code: String, shareURL: URL) async {
+        let key = code.uppercased()
+        let recordID = CKRecord.ID(recordName: key)
+        let record = CKRecord(
+            recordType: CloudKitConstants.RecordType.pairingCode,
+            recordID: recordID
+        )
+        record["shareURL"] = shareURL.absoluteString as CKRecordValue
+        record["expiresAt"] = Date().addingTimeInterval(PairingCode.lifetime) as CKRecordValue
+        do {
+            try await container.publicCloudDatabase.save(record)
+            publishedCodeKey = key
+        } catch {
+            // Non-fatal: QR scan still works. Code typing just won't be available.
+        }
+    }
+
+    /// Fire-and-forget deletion of the public-DB pairing code record.
+    private func deletePublishedCode() {
+        guard let key = publishedCodeKey else { return }
+        publishedCodeKey = nil
+        let db = container.publicCloudDatabase
+        Task.detached(priority: .utility) {
+            _ = try? await db.deleteRecord(withID: CKRecord.ID(recordName: key))
+        }
     }
 }

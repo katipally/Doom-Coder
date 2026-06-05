@@ -75,9 +75,26 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
         }
     }
 
-    /// Deterministic id for an implicit iCloud connection, keyed on macId.
-    public static func implicitConnectionId(macId: DeviceID) -> String {
-        return "implicit-\(macId)"
+    /// Deterministic id for an implicit iCloud connection, keyed on both
+    /// macId and iosDeviceId so multiple iOS devices on the same iCloud
+    /// account each get their own row instead of overwriting each other.
+    public static func implicitConnectionId(macId: DeviceID, iosDeviceId: DeviceID) -> String {
+        return "implicit-\(macId)-\(iosDeviceId)"
+    }
+
+    /// Returns a copy of this Connection with a different id. Used for
+    /// one-shot migrations that rewrite legacy id formats.
+    public func withId(_ newId: String) -> Connection {
+        Connection(
+            id: newId,
+            macDeviceId: macDeviceId,
+            iosDeviceId: iosDeviceId,
+            route: route,
+            status: status,
+            createdAt: createdAt,
+            lastSyncAt: lastSyncAt,
+            ckShareRef: ckShareRef
+        )
     }
 
     private static func shortHash(of s: String) -> String {

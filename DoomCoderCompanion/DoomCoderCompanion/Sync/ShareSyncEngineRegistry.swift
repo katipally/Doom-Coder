@@ -33,9 +33,12 @@ final class ShareSyncEngineRegistry {
 
     /// Register (or refresh) a per-share CKSyncEngine for a Connection.
     /// Idempotent: calling twice with the same id is a no-op.
+    /// Same-account connections are skipped — their data is in privateCloudDatabase,
+    /// which CompanionSyncEngine already handles.
     func register(connection: Connection) {
         guard connection.status == .active,
-              case let .ckShare(ref) = connection.route
+              case let .ckShare(ref) = connection.route,
+              !ref.isSameAccount
         else { return }
         if engines[connection.id] != nil {
             // Already registered — nothing to do. The connection's

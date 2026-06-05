@@ -82,6 +82,15 @@ public struct CKShareRef: Codable, Sendable, Equatable, Hashable {
     public let ownerRecordName: String
     public let containerIdentifier: String
 
+    /// Stored in `ownerRecordName` for same-iCloud-account connections.
+    /// The Mac and iPhone share one Apple ID; the iPhone already has private-zone
+    /// access and does not call `container.accept()`. Sync goes through
+    /// CompanionSyncEngine (private DB), not ShareSyncEngineRegistry (shared DB).
+    public static let sameAccountSentinel = "__same_account__"
+
+    /// True when the Mac and this iPhone belong to the same iCloud account.
+    public var isSameAccount: Bool { ownerRecordName == Self.sameAccountSentinel }
+
     public init(shareURL: URL, ownerRecordName: String, containerIdentifier: String) {
         self.shareURLString = shareURL.absoluteString
         self.ownerRecordName = ownerRecordName
@@ -92,6 +101,16 @@ public struct CKShareRef: Codable, Sendable, Equatable, Hashable {
         self.shareURLString = shareURLString
         self.ownerRecordName = ownerRecordName
         self.containerIdentifier = containerIdentifier
+    }
+
+    /// Factory for same-iCloud-account pairings. Sets the sentinel so
+    /// downstream systems know to use the private-DB sync path.
+    public static func sameAccount(shareURL: URL, containerIdentifier: String) -> CKShareRef {
+        CKShareRef(
+            shareURL: shareURL,
+            ownerRecordName: sameAccountSentinel,
+            containerIdentifier: containerIdentifier
+        )
     }
 
     public var shareURL: URL? {
@@ -106,7 +125,7 @@ public struct CKShareRef: Codable, Sendable, Equatable, Hashable {
         else { return nil }
         return CKShareRef(
             shareURLString: url.absoluteString,
-            ownerRecordName: url.absoluteString,
+            ownerRecordName: "",
             containerIdentifier: containerIdentifier
         )
     }
