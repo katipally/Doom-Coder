@@ -1,6 +1,8 @@
 // DeviceDetailView.swift — DoomCoder Companion
-// Detail view for a paired Mac. Tapping a row in DevicesSection navigates here.
-// Shows live connection status and a prominent Disconnect button.
+// Detail view for a paired Mac. v5 polish: explicit Route / iCloud
+// account / Pairing origin rows, plus a Disconnect button whose
+// footer copy is different for same-account vs cross-account pairs
+// (auto-pairs don't mention "share" since there's no share to revoke).
 
 import SwiftUI
 import DoomCoderCore
@@ -15,14 +17,14 @@ struct DeviceDetailView: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    Image(systemName: deviceIcon)
+                    Image(systemName: routeIcon)
                         .font(.system(size: 36))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(routeTint)
                         .frame(width: 52)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(displayName)
                             .font(.headline)
-                        Text(connection.route.displayName)
+                        Text(routeSubtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -31,15 +33,40 @@ struct DeviceDetailView: View {
             }
 
             Section("Connection") {
-                LabeledContent("Status") {
-                    statusBadge
-                }
+                LabeledContent("Status") { statusBadge }
                 if let last = connection.lastSyncAt {
                     LabeledContent("Last sync", value: last.formatted(.relative(presentation: .named)))
                 } else {
                     LabeledContent("Last sync", value: "Never")
                 }
                 LabeledContent("Paired", value: connection.createdAt.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            Section("Route") {
+                LabeledContent("Type") {
+                    HStack(spacing: 4) {
+                        Image(systemName: connection.route.isCrossAppleID
+                              ? "person.2.crop.square.stack"
+                              : "icloud")
+                            .foregroundStyle(routeTint)
+                        Text(connection.route.displayName)
+                    }
+                }
+                if let ref = connection.ckShareRef {
+                    LabeledContent("Share ID") {
+                        Text(ref.shareURLString)
+                            .font(.caption.monospaced())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                LabeledContent("Pairing origin") {
+                    HStack(spacing: 4) {
+                        Image(systemName: connection.pairingOrigin.systemImage)
+                            .foregroundStyle(.secondary)
+                        Text(connection.pairingOrigin.displayName)
+                    }
+                }
             }
 
             Section {
@@ -58,7 +85,7 @@ struct DeviceDetailView: View {
                 }
                 .disabled(removing)
             } footer: {
-                Text("Disconnecting removes this Mac from your device list. The Mac will be notified to stop syncing this device.")
+                Text(removeFooter)
             }
         }
         .navigationTitle(displayName)
@@ -78,7 +105,7 @@ struct DeviceDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The Mac's agents and notifications will stop appearing on this iPhone.")
+            Text(disconnectMessage)
         }
     }
 
@@ -90,11 +117,38 @@ struct DeviceDetailView: View {
     }
 
     private var displayName: String {
-        MacStatusStore.shared.byMacId[connection.macDeviceId]?.name ?? "Mac"
+        let name = MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
+        return (name?.isEmpty == false ? name : nil) ?? "Mac"
     }
 
-    private var deviceIcon: String {
-        "desktopcomputer"
+    private var routeIcon: String {
+        connection.route.isCrossAppleID
+            ? "person.2.crop.square.stack"
+            : "macbook"
+    }
+
+    private var routeTint: Color {
+        connection.route.isCrossAppleID ? .green : .blue
+    }
+
+    private var routeSubtitle: String {
+        connection.route.isCrossAppleID
+            ? "iCloud Share (different Apple ID)"
+            : "iCloud (same Apple ID)"
+    }
+
+    private var removeFooter: String {
+        if connection.isAutoPaired {
+            return "Disconnecting stops the iPhone from mirroring this Mac's agents and notifications. The Mac won't be asked to revoke anything — auto-pairs use the same-Apple-ID private zone."
+        }
+        return "Disconnecting removes this Mac from your device list. The Mac will be notified to stop syncing this device and you can revoke the share from iCloud settings if you want to fully unlink."
+    }
+
+    private var disconnectMessage: String {
+        if connection.isAutoPaired {
+            return "Your iPhone will stop showing this Mac's agents and notifications. The Mac doesn't need to do anything — the connection is via the same Apple ID."
+        }
+        return "The Mac's agents and notifications will stop appearing on this iPhone."
     }
 
     @ViewBuilder

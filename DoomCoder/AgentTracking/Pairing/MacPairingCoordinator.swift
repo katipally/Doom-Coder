@@ -158,6 +158,18 @@ public final class MacPairingCoordinator: ObservableObject {
            let shareURL = shareRef.shareURL {
             await revokeShare(shareURL: shareURL)
         }
+        // v5: signal the iOS app before local teardown so it
+        // receives a CSC within 1-3s instead of waiting for
+        // the next PeerStatus heart-beat.
+        var snapshot = connection
+        snapshot.stateChangeCounter += 1
+        snapshot.status = .removed
+        snapshot.removedAt = Date()
+        await ConnectionStateChanges.shared.publish(
+            state: .removed,
+            for: snapshot,
+            origin: .mac
+        )
         PairingStore.shared.remove(connectionId: connection.id)
     }
 
@@ -332,7 +344,20 @@ public final class MacPairingCoordinator: ObservableObject {
             var refreshed = existing
             refreshed.status = .active
             refreshed.lastSyncAt = Date()
+            refreshed.shareAcceptedAt = Date()
+            refreshed.stateChangeCounter += 1
             PairingStore.shared.upsert(refreshed)
+            // v5: echo an accepted CSC to the iOS side so the
+            // iPhone gets an instant ack and can dismiss the
+            // success sheet without waiting for the next
+            // PeerStatus heart-beat.
+            Task { @MainActor in
+                await ConnectionStateChanges.shared.publish(
+                    state: .accepted,
+                    for: refreshed,
+                    origin: .mac
+                )
+            }
             pollTask?.cancel()
             pollTask = nil
             currentShare = nil
@@ -340,22 +365,49 @@ public final class MacPairingCoordinator: ObservableObject {
             phase = .active(refreshed)
             return
         }
+        // v5: iosDeviceId starts empty; the iOS app's first
+        // PeerStatus heart-beat (or the v5
+        // ConnectionStateChange{reinstall-detected} fast path)
+        // back-fills it. We never pre-allocate a placeholder
+        // random id — that was the source of the v2.9
+        // "duplicates on the Mac" bug.
         let connection = Connection(
             id: id,
             macDeviceId: macDeviceId,
-            iosDeviceId: DeviceIDFactory.make(),   // placeholder; PeerStatus heartbeat fills in
+            iosDeviceId: "",
             route: .ckShare(ref),
-            status: .active,
-            lastSyncAt: Date(),
-            ckShareRef: ref
+            status: .pending,
+            createdAt: Date(),
+            lastSyncAt: nil,
+            ckShareRef: ref,
+            pairingOrigin: .qr,
+            stateChangeCounter: 1,
+            shareAcceptedAt: nil
         )
+        // First a .pending row so the Mac Connections tab
+        // shows "Waiting for iPhone" immediately, then an
+        // .active row + CSC echo as soon as we know the iOS
+        // app accepted. Single round-trip to the user.
         PairingStore.shared.upsert(connection)
         PairingStore.shared.clearPendingCode()
+        var active = connection
+        active.status = .active
+        active.lastSyncAt = Date()
+        active.shareAcceptedAt = Date()
+        active.stateChangeCounter += 1
+        PairingStore.shared.upsert(active)
+        Task { @MainActor in
+            await ConnectionStateChanges.shared.publish(
+                state: .accepted,
+                for: active,
+                origin: .mac
+            )
+        }
         pollTask?.cancel()
         pollTask = nil
         currentShare = nil
         pendingConnectionId = nil
-        phase = .active(connection)
+        phase = .active(active)
     }
 
     private func handleExpiry() {

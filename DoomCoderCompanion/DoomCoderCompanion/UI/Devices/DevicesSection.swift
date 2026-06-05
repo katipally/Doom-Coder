@@ -28,7 +28,7 @@ struct DevicesSection: View {
                     }
                 }
             } else {
-                ForEach(store.connections) { connection in
+                ForEach(store.connections, id: \.id) { connection in
                     Button {
                         selectedMacId = connection.macDeviceId
                         showingDetail = connection
@@ -74,12 +74,17 @@ struct DevicesSection: View {
             }
         } header: {
             HStack {
-                Text("Devices")
-                Spacer()
-                if store.connections.count > 1 {
-                    Text("\(store.connections.count) paired")
-                        .font(.caption)
+                if store.connections.isEmpty {
+                    Text("No devices")
                         .foregroundStyle(.secondary)
+                } else {
+                    Text("Devices")
+                    Spacer()
+                    if store.connections.count > 1 {
+                        Text("\(store.connections.count) paired")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }

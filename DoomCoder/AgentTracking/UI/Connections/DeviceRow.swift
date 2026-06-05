@@ -1,8 +1,9 @@
 // DeviceRow.swift — DoomCoder Mac
-// Single row in the Connections list. Shows icon, name, route, and status.
-// v2.7: the iOS display name ("Yash's iPhone") is looked up from
-// IosDeviceProfileCache, which is populated by CloudKitPusher when a
-// PeerStatus heartbeat arrives.
+// Single row in the Connections list. v5 polish: color-tinted
+// route glyph (blue for same-Apple-ID, green for cross-account),
+// explicit "Auto (same Apple ID)" / "Reconnected" badge, and a
+// subtitle that shows the iOS device's full name + the iCloud
+// account hint when we have it.
 
 import SwiftUI
 import DoomCoderCore
@@ -18,14 +19,31 @@ struct DeviceRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: connection.route.isCrossAppleID ? "iphone.gen3.radiowaves.left.and.right" : "iphone.gen3")
+            Image(systemName: routeIcon)
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(routeTint)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
-                    .font(.headline)
-                Text(connection.route.shortLabel)
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.headline)
+                    if connection.pairingOrigin == .auto {
+                        Text("Auto")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.blue.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.blue)
+                    } else if connection.pairingOrigin == .reinstall {
+                        Text("Reconnected")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.orange.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text(subtitleText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -34,6 +52,8 @@ struct DeviceRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { onSelect?() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(displayName), \(connection.route.shortLabel), \(connection.status.displayName)")
     }
 
     /// v2.7: prefer the iOS-side display name from the PeerStatus
@@ -41,6 +61,25 @@ struct DeviceRow: View {
     /// landed yet (e.g. just-paired via QR before first heartbeat).
     private var displayName: String {
         IosDeviceProfileCache.shared.name(for: connection.iosDeviceId) ?? "iPhone"
+    }
+
+    private var routeIcon: String {
+        connection.route.isCrossAppleID
+            ? "iphone.gen3.radiowaves.left.and.right"
+            : "iphone.gen3"
+    }
+
+    private var routeTint: Color {
+        connection.route.isCrossAppleID ? .green : .blue
+    }
+
+    private var subtitleText: String {
+        var parts: [String] = [connection.route.shortLabel]
+        if let profile = IosDeviceProfileCache.shared.byId[connection.iosDeviceId],
+           !profile.model.isEmpty {
+            parts.append(profile.model)
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var statusBadge: some View {

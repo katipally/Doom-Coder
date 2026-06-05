@@ -89,6 +89,18 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // database zones in a low-priority background task at launch.
         MacPairingCoordinator.shared.prewarmContainer()
 
+        // v5.1: publish this Mac to the public DB so iOS companions
+        // can discover it. Idempotent — re-publishing updates the
+        // existing row in place.
+        DiscoverableMacPublisher.shared.start()
+        // v5.1: also start the public-DB subscription for
+        // CSC{pending,origin:ios} records so we can show a
+        // "Yash's iPhone wants to pair" banner when the iOS app
+        // taps a Mac in its discoverable list.
+        Task { @MainActor in
+            await PendingPairRequestSubscription.shared.start()
+        }
+
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
         AgentInstallerV2.ensureStableHelper()
 

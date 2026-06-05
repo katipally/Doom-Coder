@@ -69,6 +69,14 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 guard mod.record.recordType == CloudKitConstants.RecordType.peerStatus else { continue }
                 await MainActor.run { self.pusher?.ingestPeerStatus(mod.record) }
             }
+            // v5: ConnectionStateChange records (iOS → Mac state transitions).
+            // Ingested into PairingStore so the Mac's Connections tab
+            // and ConnectionStore observers update within 1-3s of the
+            // iOS app finishing a pair / remove.
+            for mod in fetched.modifications {
+                guard mod.record.recordType == CloudKitConstants.RecordType.connectionStateChange else { continue }
+                await MainActor.run { ConnectionStateChanges.shared.ingest(mod.record) }
+            }
             // v2.8: when a CKShare record changes (e.g. the iPhone just
             // accepted), notify the pairing coordinator so the QR sheet
             // dismisses immediately. The coordinator does its own
@@ -103,7 +111,12 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         let scope = context.options.scope
         let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
-            await MainActor.run { self.pusher?.buildRecord(for: recordID) }
+            await MainActor.run {
+                if recordID.recordName.hasPrefix("CSC-") {
+                    return CSCMacPendingCache.shared.buildCKRecord(for: recordID)
+                }
+                return self.pusher?.buildRecord(for: recordID)
+            }
         }
     }
 

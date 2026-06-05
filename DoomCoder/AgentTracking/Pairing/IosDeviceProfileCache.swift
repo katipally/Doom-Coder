@@ -33,4 +33,25 @@ public final class IosDeviceProfileCache: ObservableObject {
     public func name(for iosDeviceId: String) -> String? {
         byId[iosDeviceId]?.name
     }
+
+    /// v5.1: inserts a placeholder profile so DeviceRow has *some*
+    /// name to render the moment a Connection is created (e.g. when
+    /// the Mac's "Allow" sheet creates a new auto-attached row, or
+    /// when the very first heart-beat triggers Part A's auto-attach
+    /// path). The first real heart-beat overwrites this entry with
+    /// the iOS device's user-set name (e.g. "Yash's iPhone 17 Pro
+    /// Max"). If no real heart-beat ever lands, the placeholder
+    /// keeps the row from rendering as a blank.
+    public func insertPlaceholder(iosDeviceId: String, name: String) {
+        // Don't overwrite a real profile with a placeholder.
+        if byId[iosDeviceId] != nil { return }
+        byId[iosDeviceId] = Profile(
+            iosDeviceId: iosDeviceId,
+            name: name,
+            model: "",
+            systemName: "",
+            appVersion: "",
+            lastSeen: Date()
+        )
+    }
 }

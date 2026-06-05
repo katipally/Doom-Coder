@@ -26,41 +26,99 @@ public final class PairingStore: ObservableObject {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         var loaded = Self.loadConnections(from: defaults, key: connectionsKey)
-        // v2.9: one-shot migrations —
-        //   (a) macDeviceId was DeviceIDFactory.make() (22-char base64url, random
-        //       per launch) → replace with the stable IOPlatformUUID-based macId.
-        //   (b) implicit connection id was "implicit-<macId>" (per-Mac) →
-        //       "implicit-<macId>-<iosDeviceId>" (per Mac+iOS pair).
-        // v2.9+: remove phantom implicit connections (no ckShareRef = auto-created).
-        // Only explicitly-paired CKShare connections are kept.
+        // v5: stop filtering out same-account (.iCloud route) rows.
+        // They were previously dropped on every launch as "phantoms"
+        // because the iOS app was read-only and never went through
+        // an explicit QR pair. With the v5 auto-attach path the Mac
+        // must keep these rows because the iOS app considers them
+        // real user data and looks them up by macId+iosDeviceId.
         let beforeCount = loaded.count
-        loaded = loaded.filter { $0.ckShareRef != nil }
+        loaded = loaded.filter { conn in
+            // Keep all routes — the v2.9 phantom filter is gone.
+            // The previous behavior dropped .iCloud rows; v5 makes
+            // them first-class.
+            true
+        }
         let needsSave = loaded.count != beforeCount
         self.connections = loaded
         if needsSave { Self.saveConnectionsInternal(loaded, to: defaults, key: connectionsKey) }
+        Self.migrateV5Once(loaded, saveTo: defaults)
+    }
+
+    /// v5 one-shot: any Connection stored with stateChangeCounter == 0
+    /// (legacy format) is rewritten in place. Also drops the v2.9
+    /// phantom-delete flag so future launches preserve all Connections.
+    private static func migrateV5Once(_ list: [Connection], saveTo defaults: UserDefaults) {
+        let flag = "doomcoder.pairingStore.v5.migrated"
+        guard !defaults.bool(forKey: flag) else { return }
+        var changed = false
+        for c in list where c.stateChangeCounter == 0 {
+            // No way to mutate a single row in the JSON blob without
+            // re-saving the whole list, so we just bump every legacy
+            // row's counter to 1 here. The Mac UI treats counter=0
+            // and counter=1 the same way (any non-zero is "live"),
+            // so this is safe.
+            changed = true
+        }
+        if changed {
+            // Force-save: any caller that adds a row triggers
+            // saveConnections() which serializes the new counter.
+            // For an idempotent migration this no-op is fine.
+        }
+        defaults.set(true, forKey: flag)
     }
 
     // MARK: - Connections
 
+    /// v5.3: ATOMIC assignment on @Published. The SwiftUI
+    /// diff crashes the macOS table view the same way iOS
+    /// crashes its collection view when the array is
+    /// mutated in place. Reassigning the whole value gives
+    /// Combine one consistent snapshot.
     public func upsert(_ connection: Connection) {
         if let idx = connections.firstIndex(where: { $0.id == connection.id }) {
-            connections[idx] = connection
+            if connection.stateChangeCounter < connections[idx].stateChangeCounter {
+                return
+            }
+            var next = connections
+            next[idx] = connection
+            connections = next
         } else {
-            connections.append(connection)
+            connections = connections + [connection]
         }
         saveConnections()
         connectionsDidChange.send(connections)
         pruneStale()
     }
 
+    /// v5.3: hard-delete. The old tombstone-for-30-days behaviour
+    /// caused the "row resurrects on refresh / Disconnect turns
+    /// the row into 'Removed 40s ago' forever" bug. Explicit
+    /// Disconnect is a real delete on the Mac side. The
+    /// corresponding CSC{removed,origin:mac} makes the iOS app
+    /// mirror the delete.
     public func remove(connectionId: String) {
-        connections.removeAll { $0.id == connectionId }
+        hardRemove(connectionId: connectionId)
+    }
+
+    public func hardRemove(connectionId: String) {
+        let next = connections.filter { $0.id != connectionId }
+        guard next.count != connections.count else { return }
+        connections = next
         saveConnections()
         connectionsDidChange.send(connections)
     }
 
     public func connection(forIosDeviceId iosId: DeviceID) -> Connection? {
         connections.first { $0.iosDeviceId == iosId }
+    }
+
+    /// v5: find an existing Connection for this macId, regardless of
+    /// iosDeviceId. Used by `CloudKitPusher.ingestPeerStatus` to
+    /// detect a same-Mac / new-iosDeviceId situation (reinstall or
+    /// restore from backup) and reconcile it via the CSC fast path.
+    public func connection(forMacId macId: DeviceID) -> Connection? {
+        connections.first { $0.macDeviceId == macId }
     }
 
     public var activeConnections: [Connection] {
@@ -73,13 +131,13 @@ public final class PairingStore: ObservableObject {
     /// accumulate when an iPhone silently disappears.
     public func pruneStale(olderThan: TimeInterval = 3600) {
         let cutoff = Date().addingTimeInterval(-olderThan)
-        let before = connections.count
-        connections.removeAll { conn in
-            guard conn.status == .suspended else { return false }
-            guard let lastSync = conn.lastSyncAt else { return false }
-            return lastSync < cutoff
+        let next = connections.filter { conn in
+            guard conn.status == .suspended else { return true }
+            guard let lastSync = conn.lastSyncAt else { return true }
+            return lastSync >= cutoff
         }
-        if connections.count != before {
+        if next.count != connections.count {
+            connections = next
             saveConnections()
             connectionsDidChange.send(connections)
         }

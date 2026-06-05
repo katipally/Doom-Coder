@@ -24,6 +24,14 @@ final class CompanionSyncEngine: NSObject {
     var zoneReady: Bool = false
     var firstFetchCompleted: Bool = false
 
+    /// v5.2: invoked (on the main actor) the first time `zoneReady`
+    /// transitions from `false` to `true`. Used by `PeerStatusPublisher`
+    /// to fire its first heart-beat with the real `macId` (the
+    /// previous immediate-publish path was silently dropped because
+    /// the CKSyncEngine wasn't ready yet — the first heart-beat went
+    /// out with `macId = nil` and was never usable on the Mac side).
+    var onZoneReady: (() -> Void)?
+
     // MARK: - Private CloudKit plumbing
 
     private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
@@ -76,9 +84,17 @@ final class CompanionSyncEngine: NSObject {
         // CloudKitPusher.publishMacStatus on the Mac side.
         PeerStatusPublisher.shared.start()
         // v2.8: self-heal any per-share CKSyncEngines that were
-        // registered against the wrong database (private instead of
-        // shared). Idempotent.
+        // registered against the wrong database (private instead
+        // of shared). Idempotent.
         ShareSyncEngineRegistry.shared.reconcileAll()
+        // v5.1: install the public-DB CKQuerySubscription for
+        // DiscoverableMac records and fetch the initial list. The
+        // subscription is silent (content-available only) so the
+        // user doesn't see a push notification — the list just
+        // updates silently in the background.
+        Task { @MainActor in
+            await DiscoverableMacSubscription.shared.start()
+        }
 
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
@@ -384,6 +400,24 @@ final class CompanionSyncEngine: NSObject {
 
     // MARK: - Public API
 
+    /// v5.2: sets `zoneReady = true` exactly once and fires the
+    /// `onZoneReady` callback (if set). Called from the two places
+    /// in `handleEvent` that mark the engine ready. Idempotent —
+    /// subsequent calls are a no-op so we don't re-fire the
+    /// callback on every state update after the first one.
+    @MainActor
+    private func markZoneReady() {
+        if zoneReady { return }
+        zoneReady = true
+        if let cb = onZoneReady {
+            // Clear before invoking so a recursive call (e.g. the
+            // callback calls fetchChanges which causes another
+            // stateUpdate) doesn't double-fire.
+            onZoneReady = nil
+            cb()
+        }
+    }
+
     func fetchChanges() async {
         guard let engine = syncEngine else {
             // Engine not initialised yet (e.g. pull-to-refresh fired before
@@ -582,6 +616,12 @@ final class CompanionSyncEngine: NSObject {
                     MacStatusStore.shared.upsert(r)
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
+                    // v5: same-Apple-ID auto-attach. If the iOS app has
+                    // no Connection for this MacId yet, AutoPairDiscovery
+                    // creates one (idempotent — deterministic id collapses
+                    // concurrent heart-beats). If a Connection already
+                    // exists, the existing-row path below updates it.
+                    AutoPairDiscovery.shared.consider(r)
                     // Update status of any existing explicitly-paired connection
                     // for this Mac. Never creates connections automatically.
                     Self.refreshExistingConnections(for: r)
@@ -625,6 +665,13 @@ final class CompanionSyncEngine: NSObject {
                     LocalStore.shared.upsertAgentIcon(slug: slug, fileURL: url)
                 }
 
+            case CloudKitConstants.RecordType.connectionStateChange:
+                // v5: cross-device pairing-state sync. The other side
+                // (Mac or iOS) wrote a CSC and our CKSyncEngine
+                // fetched it; ingest it into ConnectionStore and let
+                // the UI re-render.
+                ConnectionStateChanges.shared.ingest(record)
+
             default:
                 break
             }
@@ -653,7 +700,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
             // any records were returned, making it the reliable "sync completed" signal.
             await MainActor.run {
                 self.lastSyncAt = Date()
-                self.zoneReady = true
+                self.markZoneReady()
                 self.firstFetchCompleted = true
             }
             SyncTelemetry.shared.record(.stateUpdate, side: .ios)
@@ -685,7 +732,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
             }
             await MainActor.run {
-                self.zoneReady = true
+                self.markZoneReady()
                 self.firstFetchCompleted = true
                 self.lastSyncAt = Date()
             }
@@ -698,6 +745,12 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 if save.recordType == CloudKitConstants.RecordType.peerStatus {
                     await MainActor.run {
                         PeerStatusPublisherCache.shared.didSave(save)
+                    }
+                }
+                // v5: same for ConnectionStateChange records.
+                if save.recordType == CloudKitConstants.RecordType.connectionStateChange {
+                    await MainActor.run {
+                        CSCPendingCache.shared.didSave(save)
                     }
                 }
             }
@@ -719,17 +772,19 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
         // v2.7: the engine now also writes PeerStatus heartbeats (see
-        // PeerStatusPublisher). The pending-change set is filtered by
-        // the context's scope, then each record is materialised from
-        // the matching cache (matching the Mac pusher's pattern of
-        // building the CKRecord inside the batch closure to preserve
-        // recordChangeTag).
+        // PeerStatusPublisher). v5: also ConnectionStateChange records
+        // (see ConnectionStateChanges). The pending-change set is
+        // filtered by the context's scope, then each record is
+        // materialised from the matching cache.
         let scope = context.options.scope
         let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         guard !pending.isEmpty else { return nil }
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
             await MainActor.run {
-                PeerStatusPublisherCache.shared.buildCKRecord(for: recordID)
+                if recordID.recordName.hasPrefix("CSC-") {
+                    return CSCPendingCache.shared.buildCKRecord(for: recordID)
+                }
+                return PeerStatusPublisherCache.shared.buildCKRecord(for: recordID)
             }
         }
     }

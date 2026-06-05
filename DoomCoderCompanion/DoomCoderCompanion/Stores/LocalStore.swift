@@ -129,7 +129,11 @@ final class LocalStore: @unchecked Sendable {
             last_sync_at INTEGER,
             share_url TEXT,
             share_owner TEXT,
-            share_container TEXT
+            share_container TEXT,
+            pairing_origin TEXT NOT NULL DEFAULT 'auto',
+            state_change_counter INTEGER NOT NULL DEFAULT 1,
+            removed_at INTEGER,
+            share_accepted_at INTEGER
         );
         """
 
@@ -140,6 +144,42 @@ final class LocalStore: @unchecked Sendable {
         exec(agentIconsTable)
         exec(devicesTable)
         exec(connectionsTable)
+        // v5: additive columns. ADD COLUMN with default is safe on existing
+        // rows — they're back-filled with the default value. Idempotent
+        // guard via PRAGMA check so re-running on an already-migrated
+        // table is a no-op.
+        addColumnIfMissing(
+            table: "connections", column: "pairing_origin",
+            ddl: "ALTER TABLE connections ADD COLUMN pairing_origin TEXT NOT NULL DEFAULT 'auto';"
+        )
+        addColumnIfMissing(
+            table: "connections", column: "state_change_counter",
+            ddl: "ALTER TABLE connections ADD COLUMN state_change_counter INTEGER NOT NULL DEFAULT 1;"
+        )
+        addColumnIfMissing(
+            table: "connections", column: "removed_at",
+            ddl: "ALTER TABLE connections ADD COLUMN removed_at INTEGER;"
+        )
+        addColumnIfMissing(
+            table: "connections", column: "share_accepted_at",
+            ddl: "ALTER TABLE connections ADD COLUMN share_accepted_at INTEGER;"
+        )
+    }
+
+    private func addColumnIfMissing(table: String, column: String, ddl: String) {
+        guard let db = db else { return }
+        let probe = "PRAGMA table_info(\(table));"
+        var stmt: OpaquePointer?
+        var exists = false
+        if sqlite3_prepare_v2(db, probe, -1, &stmt, nil) == SQLITE_OK {
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let cName = sqlite3_column_text(stmt, 1) {
+                    if String(cString: cName) == column { exists = true; break }
+                }
+            }
+        }
+        sqlite3_finalize(stmt)
+        if !exists { exec(ddl) }
     }
 
     /// v2.8: partial UNIQUE index on (mac_device_id, share_url).
@@ -583,8 +623,8 @@ final class LocalStore: @unchecked Sendable {
                 routePayload = ""
             }
             let sql = """
-            INSERT INTO connections (id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO connections (id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container, pairing_origin, state_change_counter, removed_at, share_accepted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 mac_device_id = excluded.mac_device_id,
                 ios_device_id = excluded.ios_device_id,
@@ -594,7 +634,11 @@ final class LocalStore: @unchecked Sendable {
                 last_sync_at = excluded.last_sync_at,
                 share_url = excluded.share_url,
                 share_owner = excluded.share_owner,
-                share_container = excluded.share_container;
+                share_container = excluded.share_container,
+                pairing_origin = excluded.pairing_origin,
+                state_change_counter = excluded.state_change_counter,
+                removed_at = excluded.removed_at,
+                share_accepted_at = excluded.share_accepted_at;
             """
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
@@ -618,6 +662,18 @@ final class LocalStore: @unchecked Sendable {
                     sqlite3_bind_null(stmt, 9)
                     sqlite3_bind_null(stmt, 10)
                     sqlite3_bind_null(stmt, 11)
+                }
+                sqlite3_bind_text(stmt, 12, (c.pairingOrigin.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_int(stmt, 13, Int32(c.stateChangeCounter))
+                if let removedAt = c.removedAt {
+                    sqlite3_bind_int64(stmt, 14, Int64(removedAt.timeIntervalSince1970))
+                } else {
+                    sqlite3_bind_null(stmt, 14)
+                }
+                if let accepted = c.shareAcceptedAt {
+                    sqlite3_bind_int64(stmt, 15, Int64(accepted.timeIntervalSince1970))
+                } else {
+                    sqlite3_bind_null(stmt, 15)
                 }
                 sqlite3_step(stmt)
             }
@@ -646,7 +702,7 @@ final class LocalStore: @unchecked Sendable {
                     return
                 }
                 var stmt: OpaquePointer?
-                let sql = "SELECT id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container FROM connections;"
+                let sql = "SELECT id, mac_device_id, ios_device_id, route_tag, route_payload, status, created_at, last_sync_at, share_url, share_owner, share_container, pairing_origin, state_change_counter, removed_at, share_accepted_at FROM connections;"
                 var results: [Connection] = []
                 if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
                     while sqlite3_step(stmt) == SQLITE_ROW {
@@ -676,6 +732,15 @@ final class LocalStore: @unchecked Sendable {
                            let container = getString(stmt, 10) {
                             ref = CKShareRef(shareURLString: url, ownerRecordName: owner, containerIdentifier: container)
                         }
+                        let originStr = getString(stmt, 11) ?? PairingOrigin.auto.rawValue
+                        let origin = PairingOrigin(rawValue: originStr) ?? .auto
+                        let counter = Int(sqlite3_column_int(stmt, 12))
+                        let removedAt: Date? = sqlite3_column_type(stmt, 13) == SQLITE_NULL
+                            ? nil
+                            : Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 13)))
+                        let shareAcceptedAt: Date? = sqlite3_column_type(stmt, 14) == SQLITE_NULL
+                            ? nil
+                            : Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 14)))
                         results.append(Connection(
                             id: idStr,
                             macDeviceId: macId,
@@ -684,7 +749,11 @@ final class LocalStore: @unchecked Sendable {
                             status: status,
                             createdAt: createdAt,
                             lastSyncAt: lastSync,
-                            ckShareRef: ref
+                            ckShareRef: ref,
+                            pairingOrigin: origin,
+                            stateChangeCounter: counter,
+                            removedAt: removedAt,
+                            shareAcceptedAt: shareAcceptedAt
                         ))
                     }
                 }

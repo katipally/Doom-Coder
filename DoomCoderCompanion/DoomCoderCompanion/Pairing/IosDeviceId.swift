@@ -1,30 +1,50 @@
 // IosDeviceId.swift — DoomCoder Companion
 // Stable per-iOS-device identifier, written into PeerStatus records
-// so the Mac can identify which iPhone is paired. Persisted to
-// UserDefaults so it survives uninstall/reinstall only if iCloud Keychain
-// restores the App Group; in practice a fresh install gets a new id
-// (acceptable — the Mac will simply create a new Connection record
-// for it).
+// so the Mac can identify which iPhone is paired.
 //
 // v2.7: replaces the ad-hoc `DeviceIDFactory.make()` calls scattered
 // around IOSPairingCoordinator that were generating a *fresh* random
 // id every time, which made the Mac unable to track the same iPhone
 // across launches.
+//
+// v5: persisted to iCloud Keychain (kSecAttrSynchronizable = true)
+// so an uninstall + reinstall of the app on the same iCloud account
+// returns the same identifier. Falls back to App Group UserDefaults
+// if iCloud Keychain is unavailable, then to a fresh random id. The
+// install-restore path is the fix for the "Mac shows connected but
+// iPhone doesn't" bug: with v2.7 the iOS app would generate a new id
+// on every reinstall and the Mac-side Connection would be orphaned.
 
 import Foundation
+import Security
 import UIKit
 import DoomCoderCore
 
 @MainActor
 enum IosDeviceId {
     private static let defaultsKey = "doomcoder.ios.deviceId.v1"
+    private static let keychainService = "com.doomcoder.app.companion.deviceId"
+    private static let keychainAccount = "iosDeviceId.v1"
 
-    /// The stable per-install iOS identifier. Reads from UserDefaults;
-    /// if absent, derives from `UIDevice.identifierForVendor` and
-    /// falls back to a freshly-generated DeviceID.
+    /// The stable per-install iOS identifier. Resolution order:
+    ///   1. iCloud Keychain (kSecAttrSynchronizable = true) — survives
+    ///      uninstall + reinstall on the same iCloud account.
+    ///   2. App Group UserDefaults — survives a normal relaunch.
+    ///   3. `UIDevice.identifierForVendor`, hashed to our 22-char
+    ///      DeviceID format. `identifierForVendor` is stable across
+    ///      reinstalls of the same app vendor but only for as long as
+    ///      any app from the vendor is installed; on a true fresh
+    ///      install with no other DoomCoder apps present it can change.
+    ///   4. A fresh random DeviceID. This is the "last resort" — the
+    ///      Mac will see a brand-new iPhone and either auto-attach
+    ///      (same Apple ID) or wait for a QR re-pair.
     static var current: DeviceID {
-        if let stored = AppGroupCache.defaults.string(forKey: defaultsKey), !stored.isEmpty {
-            return stored
+        if let kc = loadFromKeychain() { return kc }
+        if let ud = AppGroupCache.defaults.string(forKey: defaultsKey), !ud.isEmpty {
+            // Promote to iCloud Keychain so a future uninstall+reinstall
+            // also restores this id.
+            try? saveToKeychain(ud)
+            return ud
         }
         let newId: DeviceID = {
             if let vendorId = UIDevice.current.identifierForVendor?.uuidString,
@@ -34,6 +54,7 @@ enum IosDeviceId {
             return DeviceIDFactory.make()
         }()
         AppGroupCache.defaults.set(newId, forKey: defaultsKey)
+        try? saveToKeychain(newId)
         return newId
     }
 
@@ -57,6 +78,56 @@ enum IosDeviceId {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         return "\(v) (\(b))"
+    }
+
+    // MARK: - iCloud Keychain helpers
+
+    private static func loadFromKeychain() -> DeviceID? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecAttrSynchronizable as String: kCFBooleanTrue!,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let str = String(data: data, encoding: .utf8),
+              !str.isEmpty
+        else { return nil }
+        return str
+    }
+
+    private static func saveToKeychain(_ id: DeviceID) throws {
+        let data = Data(id.utf8)
+        let attributes: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecAttrSynchronizable as String: kCFBooleanTrue!,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        // SecItemAdd is fine to call repeatedly — the OS upserts.
+        let addStatus = SecItemAdd(attributes as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            // Update existing entry.
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: keychainAccount,
+                kSecAttrSynchronizable as String: kCFBooleanTrue!,
+            ]
+            let updates: [String: Any] = [
+                kSecValueData as String: data,
+            ]
+            _ = SecItemUpdate(query as CFDictionary, updates as CFDictionary)
+        } else if addStatus != errSecSuccess {
+            throw NSError(domain: "IosDeviceId", code: Int(addStatus))
+        }
     }
 
     /// Apple guarantees `identifierForVendor` is the same for all apps

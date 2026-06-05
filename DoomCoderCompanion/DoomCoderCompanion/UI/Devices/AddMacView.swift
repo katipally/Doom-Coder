@@ -1,51 +1,76 @@
 // AddMacView.swift — DoomCoder Companion
-// Modal sheet that lets the user pair a new Mac. Three pairing paths:
-//   1. Scan QR code shown on the Mac (fastest)
-//   2. Type the 6-char code shown below the QR (hands-free)
-//   3. Paste the pairing link copied from the Mac (remote / async)
+// Modal sheet that lets the user pair a new Mac. v5: tabbed
+// interface (Scan / Type / Paste / Same iCloud) with iOS 26 sheet
+// detents so the QR reticle is always fully visible at .medium
+// and the user can swipe up to .large for the keyboard-entry
+// fields. v5.1: added the "Same iCloud" tab which renders a
+// discoverable list of Macs running DoomCoder on the same iCloud
+// account — no QR needed.
 //
-// v2.8: iOS 26 Liquid Glass — hero card uses .regularMaterial with a
-// 16pt squircle, spring animation on appearance, .symbolEffect(.bounce)
-// on the QR glyph.
-// v2.9: added code-entry sheet and error banner.
+// Structure:
+//   ┌──────────────────────────────┐
+//   │  Pair a Mac          [×]    │
+//   ├──────────────────────────────┤
+//   │  ┌────┬────┬────┬──────────┐  │
+//   │  │Scan│Type│Paste│Same iCloud│
+//   │  └────┴────┴────┴──────────┘  │
+//   │                              │
+//   │   [ tab content ]            │
+//   │                              │
+//   │   error banner (if any)     │
+//   └──────────────────────────────┘
 
 import SwiftUI
 import DoomCoderCore
 
 struct AddMacView: View {
     @State private var coordinator = IOSPairingCoordinator.shared
+    @State private var discoverable = DiscoverableMacSubscription.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var showingScanner = false
-    @State private var showingLinkEntry = false
-    @State private var showingCodeEntry = false
-    @State private var pastedLink = ""
-    @State private var appeared = false
+    @State private var selectedTab: PairingTab = .scan
+    @State private var pastedLink: String = ""
+    @State private var code: String = ""
+    @State private var appeared: Bool = false
+
+    enum PairingTab: String, CaseIterable, Identifiable {
+        case scan = "Scan"
+        case type = "Type"
+        case paste = "Paste"
+        case sameICloud = "Same iCloud"
+        var id: String { rawValue }
+        var systemImage: String {
+            switch self {
+            case .scan:        return "qrcode.viewfinder"
+            case .type:        return "keyboard"
+            case .paste:       return "doc.on.clipboard"
+            case .sameICloud:  return "icloud"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                heroCard
-                instructions
-                Spacer()
-                if case .failed(let err) = coordinator.phase {
-                    errorBanner(err)
-                }
-                scanButton
+            VStack(spacing: 0) {
+                tabBar
+                    .padding(.top, 8)
+                    .padding(.horizontal, 16)
+                Divider()
+                    .padding(.top, 4)
+                TabContent(
+                    tab: selectedTab,
+                    coordinator: coordinator,
+                    discoverable: discoverable,
+                    pastedLink: $pastedLink,
+                    code: $code
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding()
+            .navigationTitle("Pair a Mac")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-            }
-            .sheet(isPresented: $showingScanner) {
-                PairScannerView()
-            }
-            .sheet(isPresented: $showingLinkEntry) {
-                pasteLinkSheet
-            }
-            .sheet(isPresented: $showingCodeEntry) {
-                CodeEntrySheet(coordinator: coordinator)
             }
             .onChange(of: coordinator.phase) { _, newPhase in
                 if case .active = newPhase { dismiss() }
@@ -58,40 +83,55 @@ struct AddMacView: View {
                 }
             }
         }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
-    private var heroCard: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.regularMaterial)
-                Image(systemName: "qrcode.viewfinder")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.tint)
-                    .symbolEffect(.bounce, options: .repeating, value: appeared)
+    private var tabBar: some View {
+        Picker("Pairing method", selection: $selectedTab) {
+            ForEach(PairingTab.allCases) { tab in
+                Label(tab.rawValue, systemImage: tab.systemImage)
+                    .tag(tab)
             }
-            .frame(width: 96, height: 96)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
-            )
-            Text("Pair a Mac")
-                .font(.title2.weight(.semibold))
         }
-        .scaleEffect(appeared ? 1.0 : 0.9)
-        .opacity(appeared ? 1.0 : 0.0)
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Pairing method")
+    }
+}
+
+// MARK: - Tab content
+
+private struct TabContent: View {
+    let tab: AddMacView.PairingTab
+    let coordinator: IOSPairingCoordinator
+    @ObservedObject var discoverable: DiscoverableMacSubscription
+    @Binding var pastedLink: String
+    @Binding var code: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            tabBody
+            if case .failed(let err) = coordinator.phase {
+                errorBanner(err)
+                    .padding(.horizontal, 20)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 12)
     }
 
-    private var instructions: some View {
-        VStack(spacing: 8) {
-            Text("On the Mac")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text("Open DoomCoder, go to **Settings → Connections → Add Device**, then scan the QR code or type the 6-character code shown there.")
-                .multilineTextAlignment(.center)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
+    @ViewBuilder
+    private var tabBody: some View {
+        switch tab {
+        case .scan:
+            ScanTabBody(coordinator: coordinator)
+        case .type:
+            TypeTabBody(coordinator: coordinator, code: $code)
+        case .paste:
+            PasteTabBody(coordinator: coordinator, pastedLink: $pastedLink)
+        case .sameICloud:
+            SameIcloudTab(subscription: discoverable, coordinator: coordinator)
         }
     }
 
@@ -112,81 +152,61 @@ struct AddMacView: View {
                 .strokeBorder(.orange.opacity(0.3), lineWidth: 0.5)
         )
     }
+}
 
-    private var scanButton: some View {
-        VStack(spacing: 12) {
+// MARK: - Scan tab
+
+private struct ScanTabBody: View {
+    let coordinator: IOSPairingCoordinator
+    @State private var showingScanner = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.regularMaterial)
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.tint)
+                    .symbolEffect(.bounce, options: .repeating, value: UUID())
+            }
+            .frame(width: 96, height: 96)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
+            )
+
+            VStack(spacing: 4) {
+                Text("Scan the QR on the Mac")
+                    .font(.headline)
+                Text("On the Mac, open DoomCoder ▸ Settings ▸ Connections ▸ **Add Device**.")
+                    .multilineTextAlignment(.center)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 32)
+            }
+
             Button {
                 showingScanner = true
             } label: {
-                Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                Label("Open Camera", systemImage: "camera.viewfinder")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-
-            Button {
-                coordinator.reset()
-                showingCodeEntry = true
-            } label: {
-                Label("Enter Pairing Code", systemImage: "keyboard")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-
-            Button {
-                pastedLink = UIPasteboard.general.string ?? ""
-                showingLinkEntry = true
-            } label: {
-                Label("Paste Pairing Link", systemImage: "doc.on.clipboard")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .padding(.horizontal, 32)
         }
-    }
-
-    private var pasteLinkSheet: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("doomcoder://pair?ckShareURL=…", text: $pastedLink)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                } header: {
-                    Text("Paste the pairing link from the Mac")
-                } footer: {
-                    Text("On the Mac, tap **Copy Pairing Link** in the Add Device sheet and paste it here.")
-                }
-
-                Section {
-                    Button("Connect") {
-                        let link = pastedLink.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard let url = URL(string: link) else { return }
-                        showingLinkEntry = false
-                        Task { await coordinator.handle(pairURL: url) }
-                    }
-                    .disabled(pastedLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .navigationTitle("Pairing Link")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingLinkEntry = false }
-                }
-            }
+        .sheet(isPresented: $showingScanner) {
+            PairScannerView()
         }
     }
 }
 
-// MARK: - Code Entry Sheet
+// MARK: - Type tab
 
-private struct CodeEntrySheet: View {
+private struct TypeTabBody: View {
     let coordinator: IOSPairingCoordinator
-    @Environment(\.dismiss) private var dismiss
-    @State private var code = ""
+    @Binding var code: String
     @FocusState private var focused: Bool
 
     private var isBusy: Bool {
@@ -196,87 +216,106 @@ private struct CodeEntrySheet: View {
         }
     }
 
-    private var codeError: ConnectionError? {
-        if case .failed(let err) = coordinator.phase { return err }
-        return nil
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "keyboard.badge.eye")
+                .font(.system(size: 44))
+                .foregroundStyle(.tint)
+
+            VStack(spacing: 4) {
+                Text("Type the 6-character code")
+                    .font(.headline)
+                Text("Shown below the QR on the Mac.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("A1B2C3", text: $code)
+                .font(.system(size: 38, weight: .bold, design: .monospaced))
+                .tracking(8)
+                .multilineTextAlignment(.center)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .focused($focused)
+                .onChange(of: code) { _, v in
+                    code = String(v.uppercased().prefix(6))
+                }
+                .padding(.horizontal, 32)
+
+            Button {
+                Task { await coordinator.resolveCode(code) }
+            } label: {
+                Group {
+                    if isBusy {
+                        HStack(spacing: 8) {
+                            ProgressView().tint(.white)
+                            Text("Connecting…")
+                        }
+                    } else {
+                        Text("Connect")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(code.count < 6 || isBusy)
+            .padding(.horizontal, 32)
+        }
+        .onAppear { focused = true }
     }
+}
+
+// MARK: - Paste tab
+
+private struct PasteTabBody: View {
+    let coordinator: IOSPairingCoordinator
+    @Binding var pastedLink: String
+    @State private var loadOnAppear = true
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 28) {
-                Image(systemName: "keyboard.badge.eye")
-                    .font(.system(size: 52))
-                    .foregroundStyle(.tint)
-                    .padding(.top, 16)
+        VStack(spacing: 18) {
+            Image(systemName: "doc.on.clipboard")
+                .font(.system(size: 44))
+                .foregroundStyle(.tint)
 
-                Text("Type the 6-character code shown below the QR on the Mac.")
+            VStack(spacing: 4) {
+                Text("Paste a pairing link")
+                    .font(.headline)
+                Text("Tap **Copy Pairing Link** on the Mac and paste it here. Works from Messages, Mail, or AirDrop.")
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
                     .font(.callout)
-                    .padding(.horizontal, 24)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 32)
+            }
 
-                TextField("A1B2C3", text: $code)
-                    .font(.system(size: 42, weight: .bold, design: .monospaced))
-                    .tracking(8)
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
-                    .focused($focused)
-                    .onChange(of: code) { _, v in
-                        code = String(v.uppercased().prefix(6))
-                    }
-                    .padding(.horizontal, 16)
+            TextField("doomcoder://pair?ckShareURL=…", text: $pastedLink)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                .padding(.horizontal, 32)
 
-                if let err = codeError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text(err.userMessage)
-                            .font(.callout)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .padding(.horizontal, 16)
+            Button {
+                if let url = URL(string: pastedLink.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    Task { await coordinator.handle(pairURL: url) }
                 }
-
-                Button {
-                    Task { await coordinator.resolveCode(code) }
-                } label: {
-                    Group {
-                        if isBusy {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .tint(.white)
-                                Text("Connecting…")
-                            }
-                        } else {
-                            Text("Connect")
-                        }
-                    }
+            } label: {
+                Label("Connect", systemImage: "link")
                     .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(code.count < 6 || isBusy)
-                .padding(.horizontal, 16)
-
-                Spacer()
             }
-            .navigationTitle("Enter Code")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(pastedLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal, 32)
+        }
+        .onAppear {
+            guard loadOnAppear else { return }
+            loadOnAppear = false
+            if pastedLink.isEmpty, let clip = UIPasteboard.general.string {
+                pastedLink = clip
             }
-            .onChange(of: coordinator.phase) { _, phase in
-                if case .active = phase { dismiss() }
-            }
-            .onAppear { focused = true }
         }
     }
 }

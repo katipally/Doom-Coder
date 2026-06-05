@@ -37,12 +37,28 @@ final class PeerStatusPublisher {
 
     private init() {}
 
-    /// Start the heartbeat. Idempotent. The first publish happens
-    /// immediately so the Mac sees the peer within a few seconds of
-    /// the iOS app launching, then once per minute.
+    /// Start the heartbeat. Idempotent. v5.2: instead of firing
+    /// `publish()` immediately (which was silently dropped because
+    /// the CKSyncEngine's zone wasn't ready yet, so the first
+    /// heart-beat went out with `macId = nil` and was never usable
+    /// on the Mac side), we register a one-shot callback on
+    /// `CompanionSyncEngine.zoneReady` and fire the first
+    /// heart-beat from there. The 60s timer also fires as before
+    /// for subsequent heart-beats.
     func start() {
         stop()
-        publish()
+        // If the engine is already ready (e.g. start() was called
+        // twice, or after a fast re-init), publish immediately.
+        if CompanionSyncEngine.shared.zoneReady {
+            publish()
+        } else {
+            // Subscribe to the first transition to ready. The
+            // markZoneReady helper clears the callback after firing
+            // so a re-init doesn't double-fire.
+            CompanionSyncEngine.shared.onZoneReady = { [weak self] in
+                self?.publish()
+            }
+        }
         let timer = Timer(timeInterval: heartbeatInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.publish() }
         }

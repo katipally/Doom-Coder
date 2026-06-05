@@ -1,12 +1,11 @@
 // DashboardView.swift — DoomCoder Companion
 // The Mac-dependent tab. Shows the read-only mirror of the Mac: agent list
-// and per-agent notification log. v2.7 adds a Devices section above the
-// agent list, a per-Mac switcher when more than one Mac is paired, and a
-// "Add a Mac" entry point in the empty state.
-//
-// v2.7 fix: agents are only visible when at least one Connection exists.
-// This prevents ghost agents from showing up before the user has paired
-// (e.g. on a fresh install, or after a user explicitly removes all Macs).
+// and per-agent notification log. v5.3: agents are always visible; the
+// devices section header reads "No devices" when the user has no
+// connections, with an inline "Add a Mac" button (see DevicesSection).
+// This replaces the v2.7 "no Connection → hide agents" behaviour, which
+// the audit flagged as wrong: users with a freshly-paired-then-
+// disconnected Mac saw a blank Agents tab with no affordance to pair.
 
 import SwiftUI
 import DoomCoderCore
@@ -17,14 +16,12 @@ struct DashboardView: View {
     @State private var connectionStore = ConnectionStore.shared
     @State private var selectedMacId: String?
 
-    /// True when at least one active Connection exists. Drives the
-    /// "show agents" vs "Add a Mac" decision.
-    private var hasActiveConnection: Bool {
-        !connectionStore.connections.isEmpty
-    }
-
     var body: some View {
         List {
+            if connectionStore.hasInactiveConnection {
+                StaleConnectionBanner(store: connectionStore)
+            }
+
             DevicesSection(selectedMacId: $selectedMacId)
 
             if connectionStore.connections.count > 1 {
@@ -35,18 +32,16 @@ struct DashboardView: View {
                 }
             }
 
-            // v2.7 invariant: no Connection → no agents. The user sees the
-            // "Add a Mac" empty state until they pair (or, for same-Apple-ID
-            // users, the implicit connection auto-registers when the first
-            // MacStatus record arrives).
-            if !hasActiveConnection {
-                Section {
-                    DashboardEmptyView()
-                }
-            } else if agentStore.agents.isEmpty {
-                if engine.firstFetchCompleted {
+            // v5.3: Agents section is always present. When the
+            // user has no paired Mac the list is empty, but the
+            // user can still see the section header and the
+            // Devices section's "Add a Mac" CTA above.
+            if agentStore.agents.isEmpty {
+                if engine.firstFetchCompleted || !connectionStore.connections.isEmpty {
                     Section {
                         DashboardEmptyView()
+                    } header: {
+                        Text("Agents")
                     }
                 } else {
                     Section {
@@ -57,6 +52,8 @@ struct DashboardView: View {
                         }
                         .listRowBackground(Color.clear)
                         .padding(.vertical, 40)
+                    } header: {
+                        Text("Agents")
                     }
                 }
             } else {
@@ -65,6 +62,8 @@ struct DashboardView: View {
                 if visibleAgents.isEmpty {
                     Section {
                         DashboardEmptyView()
+                    } header: {
+                        Text("Agents")
                     }
                 } else {
                     Section {

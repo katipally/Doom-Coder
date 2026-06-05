@@ -56,6 +56,16 @@ final class ShareSubscription: NSObject, CKSyncEngineDelegate, @unchecked Sendab
     }
 
     func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        return nil
+        let scope = context.options.scope
+        let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !pending.isEmpty else { return nil }
+        return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+            await MainActor.run {
+                if recordID.recordName.hasPrefix("CSC-") {
+                    return CSCPendingCache.shared.buildCKRecord(for: recordID)
+                }
+                return nil
+            }
+        }
     }
 }

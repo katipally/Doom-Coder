@@ -12,7 +12,7 @@ struct MacSwitcher: View {
     var body: some View {
         if connections.count > 1 {
             Picker("Mac", selection: $selectedMacId) {
-                ForEach(connections) { connection in
+                ForEach(connections, id: \.id) { connection in
                     Text(displayName(for: connection)).tag(Optional(connection.macDeviceId))
                 }
             }

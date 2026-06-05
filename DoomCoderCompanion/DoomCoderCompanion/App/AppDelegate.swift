@@ -117,6 +117,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     /// Called for silent pushes (CloudKit subscription pings).
+    /// v5.1: also refreshes the DiscoverableMac list when the
+    /// push came from the public-DB CKQuerySubscription. The
+    /// push payload is the same shape regardless of which
+    /// subscription fired, so we always refresh both. CKQuery
+    /// operations are cheap when the change-set is small.
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
@@ -124,6 +129,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         Task { @MainActor in
             await CompanionSyncEngine.shared.handleRemoteNotification()
+            await DiscoverableMacSubscription.shared.refresh()
             completionHandler(.newData)
         }
     }

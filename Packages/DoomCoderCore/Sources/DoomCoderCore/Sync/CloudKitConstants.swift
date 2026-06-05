@@ -18,6 +18,20 @@ public enum CloudKitConstants {
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
         public static let peerStatus        = "PeerStatus"
+        /// v5: written by either side when a Connection transitions
+        /// state. The other side's CKSyncEngine subscribes to
+        /// DoomCoderZone and receives an APNs silent push within 1–3s,
+        /// giving us instant cross-device pairing-state sync.
+        public static let connectionStateChange = "ConnectionStateChange"
+        /// v5.1: public-DB record type. The Mac publishes one of these
+        /// per device, and the iOS companion subscribes to a
+        /// CKQuerySubscription to render a "discoverable Macs" list
+        /// in the Add Mac sheet's "Same iCloud" tab. Mac is the
+        /// source of truth; iPhones are passive. Records live in the
+        /// public DB so they don't require an iCloud account on the
+        /// iOS side to read — only to verify same-iCloud via the
+        /// creatorUserRecordID on the resulting CSC.
+        public static let discoverableMac    = "DiscoverableMac"
         /// Public-DB only. Temporary record keyed by 6-char pairing code.
         /// TTL matches PairingCode.lifetime (10 min). Mac writes it, iOS reads it.
         public static let pairingCode       = "DCPairingCode"
@@ -38,5 +52,16 @@ public enum CloudKitConstants {
     ///       devices are currently paired. Wire format unchanged for
     ///       all pre-existing record types; old clients ignore the new
     ///       PeerStatus records entirely.
-    public static let schemaVersion = 4
+    ///   5 - added ConnectionStateChange record type. The new record is
+    ///       written by either side whenever a Connection transitions
+    ///       (accepted / suspended / removed / reinstall-detected).
+    ///       The other side's CKSyncEngine subscribes to DoomCoderZone
+    ///       and picks the change up within 1–3s via APNs silent push,
+    ///       giving us instant cross-device state sync without polling.
+    ///       Additive fields only: PeerStatus gains `routeAccountEmail`
+    ///       and `stateChangeCounter`. Connection (local-only) gains
+    ///       `pairingOrigin`, `stateChangeCounter`, `removedAt`,
+    ///       `shareAcceptedAt`. Old clients ignore the new record type
+    ///       and the new fields.
+    public static let schemaVersion = 5
 }

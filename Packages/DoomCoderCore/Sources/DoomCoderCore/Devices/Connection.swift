@@ -22,6 +22,34 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
     public var lastSyncAt: Date?
     public var ckShareRef: CKShareRef?
 
+    // MARK: - v5 additive fields
+
+    /// How this Connection came to be. Drives the UI label in
+    /// DeviceDetailView ("QR code 4E7KQP" / "Auto (same Apple ID)"
+    /// / "Typed code" / "Link"). Local-only — never sent over the
+    /// wire; the Mac computes it on its side from the originating
+    /// flow and so does iOS.
+    public var pairingOrigin: PairingOrigin
+
+    /// Monotonic counter incremented on every state transition.
+    /// ConnectionStateChange records carry the counter value at the
+    /// time of the transition so the receiving side can ignore
+    /// out-of-order APNs replays. Starts at 1 when the Connection
+    /// is first created (the initial `.pending`/`.active` transition).
+    public var stateChangeCounter: Int
+
+    /// Tombstone timestamp — set when status moves to `.removed`.
+    /// The row is kept for 30 days so a re-scan of the same QR
+    /// reactivates the existing id (no duplicate). Purged by
+    /// `purgeRemoved(olderThan:)`.
+    public var removedAt: Date?
+
+    /// Set on the iOS side once `container.accept(metadata)` returns
+    /// successfully. The Mac side back-fills this on the first
+    /// ConnectionStateChange{accepted} it receives. Drives a small
+    /// "Pairing completed" celebration animation.
+    public var shareAcceptedAt: Date?
+
     public init(
         id: String = UUID().uuidString,
         macDeviceId: DeviceID,
@@ -30,7 +58,11 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
         status: ConnectionStatus = .pending,
         createdAt: Date = Date(),
         lastSyncAt: Date? = nil,
-        ckShareRef: CKShareRef? = nil
+        ckShareRef: CKShareRef? = nil,
+        pairingOrigin: PairingOrigin = .auto,
+        stateChangeCounter: Int = 1,
+        removedAt: Date? = nil,
+        shareAcceptedAt: Date? = nil
     ) {
         self.id = id
         self.macDeviceId = macDeviceId
@@ -40,6 +72,10 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.lastSyncAt = lastSyncAt
         self.ckShareRef = ckShareRef
+        self.pairingOrigin = pairingOrigin
+        self.stateChangeCounter = stateChangeCounter
+        self.removedAt = removedAt
+        self.shareAcceptedAt = shareAcceptedAt
     }
 
     /// Connection is fresh if lastSyncAt is within the freshness window.
@@ -93,9 +129,26 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
             status: status,
             createdAt: createdAt,
             lastSyncAt: lastSyncAt,
-            ckShareRef: ckShareRef
+            ckShareRef: ckShareRef,
+            pairingOrigin: pairingOrigin,
+            stateChangeCounter: stateChangeCounter,
+            removedAt: removedAt,
+            shareAcceptedAt: shareAcceptedAt
         )
     }
+
+    /// True if this is a same-Apple-ID (private-zone) auto-paired
+    /// Connection. The UI uses this to decide whether to show the
+    /// "Auto (same Apple ID)" badge and to skip the explicit-disconnect
+    /// confirmation copy that mentions a share being revoked.
+    public var isAutoPaired: Bool {
+        pairingOrigin == .auto
+    }
+
+    /// True if this Connection is in a terminal state. Mirrors
+    /// `ConnectionStatus.isTerminal` but reads from the tombstone
+    /// field so a re-fetched, status-restored row can be detected.
+    public var isTombstoned: Bool { removedAt != nil }
 
     private static func shortHash(of s: String) -> String {
         let digest = SHA256.hash(data: Data(s.utf8))

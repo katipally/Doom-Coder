@@ -27,10 +27,11 @@ import CloudKit
 import AppKit
 import IOKit
 import OSLog
+import Combine
 import DoomCoderCore
 
 @MainActor
-final class CloudKitPusher {
+final class CloudKitPusher: ObservableObject {
 
     static let shared = CloudKitPusher()
 
@@ -40,7 +41,7 @@ final class CloudKitPusher {
     private let zoneID: CKRecordZone.ID
     let serverRecords: ServerRecordCache
 
-    private var engine: CKSyncEngine?
+    fileprivate(set) var engine: CKSyncEngine?
     private var delegate: CloudKitPusherDelegate?
     private var setupInProgress = false
     private var didSetup = false
@@ -82,6 +83,19 @@ final class CloudKitPusher {
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
+        }
+        // v5.2: Return to foreground → fetch. CKSyncEngine
+        // already reacts to .didBecomeActive via the system
+        // (iOS / macOS) but it can be delayed 1–3s after the
+        // app visually appears. Calling fetchChanges() here
+        // closes the gap the user sees in the Connections
+        // tab on alt-tab back to the panel.
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.kickEngine()
+                self?.fetchNow()
+            }
         }
         // Wake from sleep → flush pending writes AND fetch.
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -334,6 +348,44 @@ final class CloudKitPusher {
         Task.detached { try? await engine.fetchChanges() }
     }
 
+    // MARK: - v5.2 manual refresh
+
+    /// Continuously-updated flag the UI uses to drive a spinner
+    /// around the refresh button. True while a manual `forceFetch()`
+    /// is in flight (debounced to one in-flight at a time).
+    @Published public private(set) var isFetching: Bool = false
+
+    private var forceFetchTask: Task<Void, Never>?
+
+    /// v5.2: invoked by the refresh button in ConnectionsView
+    /// header. Calls `engine.fetchChanges()` directly (not via the
+    /// silent-push path) so a missed APNs notification doesn't leave
+    /// the Mac Connections tab stale for up to 60s. Also calls
+    /// `kickEngine()` so any pending writes flush first.
+    @MainActor
+    public func forceFetch() {
+        // Debounce: if a fetch is already in flight, drop this one.
+        if forceFetchTask != nil { return }
+        guard let engine else { return }
+        isFetching = true
+        forceFetchTask = Task { [weak self] in
+            await MainActor.run { [weak self] in
+                self?.kickEngine()
+            }
+            try? await engine.fetchChanges()
+            // Give the engine a beat to materialise the
+            // fetched records into our stores before we
+            // flip isFetching off. Without this, the UI
+            // un-spins before the data lands and the user
+            // sees a brief flash of "no new data".
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            await MainActor.run { [weak self] in
+                self?.isFetching = false
+                self?.forceFetchTask = nil
+            }
+        }
+    }
+
     /// Publish the list of tracked agents on this Mac plus installed-state
     /// and per-agent status text. Called on launch and whenever the user
     /// toggles agents in Tracking pane, installs/uninstalls an agent, or on
@@ -450,7 +502,12 @@ final class CloudKitPusher {
 extension CloudKitPusher {
     /// v2.7: handle an incoming PeerStatus record (iOS → Mac heartbeat).
     /// Registers or refreshes a Connection in PairingStore so the
-    /// Connections tab shows the peer.
+    /// Connections tab shows the peer. v5.1: same-account auto-attach
+    /// is now ALWAYS run on the first heart-beat from a new iOS
+    /// device, even if the iOS app didn't go through its own
+    /// AutoPairDiscovery path (e.g. the Mac sees the heart-beat
+    /// before the iOS app has run autoAttach). This is the fix for
+    /// the "Mac doesn't show the auto-connected iPhone" bug.
     @MainActor
     func ingestPeerStatus(_ record: CKRecord) {
         guard let rec = PeerStatusRecord(record) else {
@@ -471,8 +528,56 @@ extension CloudKitPusher {
             )
         )
 
+        // v5.1: same-account auto-attach is ALWAYS attempted on every
+        // heart-beat. The first time we see a given iosDeviceId, we
+        // create a .iCloud Connection so the Mac Connections tab
+        // shows the iPhone immediately. Subsequent heart-beats just
+        // refresh the existing row's lastSyncAt / status. Same
+        // Apple ID means a CKShare won't fire (no QR was used); this
+        // is the ONLY signal the Mac gets for same-account pairs.
+        let existingForIos = PairingStore.shared.connection(forIosDeviceId: rec.iosDeviceId)
+        if existingForIos == nil, rec.shareURLString == nil {
+            // Brand new same-account iOS device. Auto-attach.
+            // The implicit id is the same on both sides so a CSC
+            // arriving later on the iOS side finds the row by
+            // macId+iosDeviceId and updates timestamp.
+            let new = Connection(
+                id: Connection.implicitConnectionId(macId: macId, iosDeviceId: rec.iosDeviceId),
+                macDeviceId: macId,
+                iosDeviceId: rec.iosDeviceId,
+                route: .iCloud,
+                status: .active,
+                createdAt: Date(),
+                lastSyncAt: rec.lastSeen,
+                ckShareRef: nil,
+                pairingOrigin: .auto,
+                stateChangeCounter: 1,
+                shareAcceptedAt: rec.lastSeen
+            )
+            PairingStore.shared.upsert(new)
+            // v5.1: insert a placeholder profile so the row has
+            // a name immediately on first render. The real name
+            // arrives in this same heart-beat's `rec.name`, but
+            // the upsert order is: cache profile first, then
+            // upsert connection. Wait — we already updated the
+            // profile cache at the top of this function. The
+            // placeholder is only needed when the Mac creates a
+            // Connection from the Allow-tap banner (Part B),
+            // before any heart-beat has landed. For Part A the
+            // real name is already in the cache.
+            logger.notice("ckpusher: v5.1 auto-attached same-account iOS device \(rec.iosDeviceId, privacy: .public)")
+            // No return — fall through so the cross-account
+            // reconciliation / fast-path acceptance logic below
+            // also runs. That code is gated on `existing != nil`
+            // so it won't double-create.
+        }
+
         // iOS device explicitly disconnected — remove the connection immediately
-        // instead of waiting up to an hour for pruneStale to fire.
+        // instead of waiting up to an hour for pruneStale to fire. (v5: the
+        // preferred path is a CSC{removed} record handled by
+        // ConnectionStateChanges.ingest, but we still honour the v2.9
+        // route="disconnecting" trick for backward compat with older
+        // iOS builds that haven't shipped the v5 schema yet.)
         if rec.route == "disconnecting" {
             let conn = PairingStore.shared.connections.first {
                 (rec.shareURLString != nil && $0.ckShareRef?.shareURLString == rec.shareURLString)
@@ -503,7 +608,10 @@ extension CloudKitPusher {
 
         // v2.9: deterministic implicit id includes both macId and iosDeviceId
         // so multiple iOS devices on the same iCloud account each get their
-        // own row instead of overwriting each other.
+        // own row instead of overwriting each other. v5.1: same-account
+        // rows (no ckShareRef) also match by iosDeviceId so a subsequent
+        // heart-beat refreshes them instead of falling through to the
+        // "no matching connection" guard.
         let peerShareURL = rec.shareURLString
         let existing = PairingStore.shared.connections.first { conn in
             // Share-URL match: placeholder ckShare row created at acceptance
@@ -513,24 +621,37 @@ extension CloudKitPusher {
                connShare == peerShare {
                 return true
             }
-            // Exact iosDeviceId match on an already-reconciled ckShare row.
-            if conn.ckShareRef != nil && conn.iosDeviceId == rec.iosDeviceId {
+            // Exact iosDeviceId match on a cross-account or same-account
+            // row. (v5.1: same-account rows have ckShareRef == nil.)
+            if !conn.iosDeviceId.isEmpty, conn.iosDeviceId == rec.iosDeviceId {
                 return true
             }
             return false
         }
 
         guard let existing else {
-            // No matching paired connection — ignore heartbeat from unpaired device.
+            // No matching paired connection — heartbeat from a same-
+            // account iOS device whose auto-attach already ran above
+            // (we returned). For cross-account this means the Mac
+            // hasn't seen a QR for this iOS yet — ignore.
             return
         }
         var updated = existing
+        // v5: ignore heart-beats with stale stateChangeCounter.
+        if rec.stateChangeCounter > 0 && rec.stateChangeCounter < updated.stateChangeCounter {
+            return
+        }
         updated.status = status
         updated.lastSyncAt = rec.lastSeen
         // Back-fill the stable iosId on a placeholder ckShare row created
         // at acceptance time before the first heartbeat arrived.
         if updated.iosDeviceId != rec.iosDeviceId {
             updated.iosDeviceId = rec.iosDeviceId
+        }
+        // Bump our own counter to match the iOS side so the next
+        // round-trip is in lock-step.
+        if rec.stateChangeCounter > updated.stateChangeCounter {
+            updated.stateChangeCounter = rec.stateChangeCounter
         }
         PairingStore.shared.upsert(updated)
     }

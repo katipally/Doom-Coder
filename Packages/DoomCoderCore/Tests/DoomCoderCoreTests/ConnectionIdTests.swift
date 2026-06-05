@@ -9,17 +9,28 @@ import XCTest
 
 final class ConnectionIdTests: XCTestCase {
 
-    func testImplicitIdIsMacIdBased() {
+    func testImplicitIdIsMacAndIosBased() {
         let macId = "ABCDEFGHIJKLMNOPQRSTUV"
-        let id = Connection.implicitConnectionId(macId: macId)
-        XCTAssertEqual(id, "implicit-ABCDEFGHIJKLMNOPQRSTUV")
+        let iosId = "ZYXWVUTSRQPONMLKJIHGFEDCBA".prefix(22).description
+        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
+        XCTAssertEqual(id, "implicit-\(macId)-\(iosId)")
     }
 
     func testImplicitIdIsStable() {
         let macId = "ABCDEFGHIJKLMNOPQRSTUV"
-        let a = Connection.implicitConnectionId(macId: macId)
-        let b = Connection.implicitConnectionId(macId: macId)
+        let iosId = "ABCDEFGHIJKLMNOPQRSTUV"
+        let a = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
+        let b = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
         XCTAssertEqual(a, b)
+    }
+
+    func testImplicitIdDiffersPerIosDevice() {
+        let macId = "ABCDEFGHIJKLMNOPQRSTUV"
+        let ios1 = "IOS1IOS1IOS1IOS1IOS1IOS"
+        let ios2 = "IOS2IOS2IOS2IOS2IOS2IOS"
+        let a = Connection.implicitConnectionId(macId: macId, iosDeviceId: ios1)
+        let b = Connection.implicitConnectionId(macId: macId, iosDeviceId: ios2)
+        XCTAssertNotEqual(a, b)
     }
 
     func testCKShareIdIsShareUrlHash() {

@@ -5,13 +5,16 @@
 // tapping a row opens DeviceDetailView (was previously unwired).
 
 import SwiftUI
+import Combine
 import DoomCoderCore
 
 private let appStoreURL = URL(string: "https://apps.apple.com/app/doomcoder-companion/id6772514212")!
 
 struct ConnectionsView: View {
     @ObservedObject private var store = PairingStore.shared
+    @ObservedObject private var pusher = CloudKitPusher.shared
     @StateObject private var coordinator = MacPairingCoordinator.shared
+    @StateObject private var pendingQueue = PendingPairRequestQueue.shared
     @State private var showingPairSheet = false
     @State private var selectedConnection: Connection?
 
@@ -19,6 +22,30 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            if !pendingQueue.requests.isEmpty {
+                PendingPairRequestBanner(
+                    queue: pendingQueue,
+                    onAllow: { req in
+                        await ConnectionStateChanges.shared.approvePendingRequest(
+                            macId: req.macId,
+                            iosDeviceId: req.iosDeviceId,
+                            iosUserRecordID: req.iosUserRecordID
+                        )
+                        pendingQueue.remove(req)
+                    },
+                    onDeny: { req in
+                        await ConnectionStateChanges.shared.denyPendingRequest(
+                            macId: req.macId,
+                            iosDeviceId: req.iosDeviceId,
+                            iosUserRecordID: req.iosUserRecordID
+                        )
+                        pendingQueue.remove(req)
+                    }
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                Divider()
+            }
             content
         }
         .sheet(isPresented: $showingPairSheet) {
@@ -30,10 +57,32 @@ struct ConnectionsView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 12) {
             Text("Paired Devices")
                 .font(.title2.weight(.semibold))
             Spacer()
+            // v5.2: manual refresh button. Apple's CKSyncEngine
+            // documentation explicitly recommends manual
+            // fetchChanges() triggers for important updates —
+            // silent APNs pushes are coalesced/throttled and
+            // can't be relied on. The 10s background safety
+            // timer (in CloudKitPusher) is the fallback.
+            Button {
+                pusher.forceFetch()
+            } label: {
+                if pusher.isFetching {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 18, height: 18)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(pusher.isFetching)
+            .help("Refresh paired devices (forces a fresh iCloud fetch)")
+
             Button {
                 showingPairSheet = true
                 Task { await coordinator.startPairing() }
@@ -52,7 +101,7 @@ struct ConnectionsView: View {
             emptyState
         } else {
             List {
-                ForEach(store.connections) { connection in
+                ForEach(store.connections, id: \.id) { connection in
                     DeviceRow(connection: connection) {
                         selectedConnection = connection
                     }
