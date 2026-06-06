@@ -9,7 +9,6 @@ public enum CloudKitConstants {
     public static let appGroupIdentifier    = "group.com.doomcoder.app.companion"
 
     public enum RecordType {
-        public static let macStatus         = "MacStatus"
         public static let settings          = "Settings"
         public static let session           = "Session"
         public static let event             = "Event"
@@ -17,12 +16,11 @@ public enum CloudKitConstants {
         public static let wolProfile        = "WoLProfile"
         public static let agentIcon         = "AgentIcon"
         public static let agentConfig       = "AgentConfig"
-        public static let peerStatus        = "PeerStatus"
-        /// v5: written by either side when a Connection transitions
-        /// state. The other side's CKSyncEngine subscribes to
-        /// DoomCoderZone and receives an APNs silent push within 1–3s,
-        /// giving us instant cross-device pairing-state sync.
-        public static let connectionStateChange = "ConnectionStateChange"
+        // v7: `MacStatus`, `PeerStatus` and `ConnectionStateChange` were
+        // retired — all three are subsumed by the single `Device` record
+        // (see `device` below). The CloudKit schema still defines those
+        // record types in Production (old clients ignore them) but no
+        // current client reads or writes them.
         /// Public-DB only. Temporary record keyed by 6-char pairing code.
         /// TTL matches PairingCode.lifetime (10 min). Mac writes it, iOS reads it.
         public static let pairingCode       = "DCPairingCode"
@@ -33,6 +31,11 @@ public enum CloudKitConstants {
         /// Keyed by the iPhone's iosDeviceId; carries the publisher's
         /// userRecordID so the Mac can verify same-iCloud before requesting.
         public static let discoverableDevice = "DiscoverableDevice"
+        /// v7: the single presence/profile record, one per device, written
+        /// only by that device into DoomCoderZone. Collapses MacStatus +
+        /// PeerStatus into one symmetric record and lets connection state be
+        /// derived from record presence + freshness (no state-change machine).
+        public static let device            = "Device"
     }
 
     /// Current schema version published to CloudKit. Bump together with field
@@ -68,5 +71,12 @@ public enum CloudKitConstants {
     ///       identity); new `DiscoverableDevice` public-DB record type
     ///       (iPhone presence the Mac discovers). Old clients ignore the
     ///       new state/fields/record type.
-    public static let schemaVersion = 6
+    ///   7 - "one Device record per device" revamp. New `Device` record type
+    ///       (role mac|ios, profile + presence) written only by the device it
+    ///       describes, into DoomCoderZone. Connection state is now DERIVED
+    ///       from Device presence + `lastSeen` freshness, so the MacStatus,
+    ///       PeerStatus and ConnectionStateChange record types are retired
+    ///       (left defined in Production but no longer written/read).
+    ///       `DiscoverableDevice` gains a `role` field. Additive on the wire.
+    public static let schemaVersion = 7
 }

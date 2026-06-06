@@ -22,6 +22,6 @@ struct MacSwitcher: View {
     }
 
     private func displayName(for connection: Connection) -> String {
-        MacStatusStore.shared.byMacId[connection.macDeviceId]?.name ?? "Mac"
+        MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName ?? "Mac"
     }
 }

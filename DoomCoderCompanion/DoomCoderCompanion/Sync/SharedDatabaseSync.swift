@@ -9,14 +9,15 @@
 // sync events. With a single shared-DB engine + a database subscription,
 // CloudKit delivers every participant zone's changes through one delegate.
 //
-// This engine is READ-ONLY: it fetches records from every shared zone the
-// iPhone participates in (the Mac's zones for cross-account pairings) and
-// fans them through the same `CompanionSyncEngine.ingestSharedRecord` path
-// as the private engine, and it detects share revocation (a shared zone
-// disappearing) to hard-remove the matching local Connection. Outbound
-// cross-account writes (PeerStatus / CSC into the Mac's shared zone) are
-// done as direct idempotent `CKModifyRecordsOperation`s elsewhere — those
-// are not engines, so they don't conflict with this single read engine.
+// v7: this engine is READ + WRITE. It fetches records from every shared zone
+// the iPhone participates in (the Mac's zones for cross-account pairings) and
+// fans them through `CompanionSyncEngine.ingestSharedRecord`, detects share
+// revocation (a shared zone disappearing) to hard-remove the matching local
+// Connection, AND materialises the iPhone's own `DeviceRecord(role: .ios)`
+// into each shared zone via `nextRecordZoneChangeBatch` (enqueued by
+// PeerStatusPublisher). A single engine per database owns all the writes, so
+// recordChangeTags stay clean — no direct CKModifyRecordsOperation presence
+// writes anymore.
 
 import Foundation
 import CloudKit
@@ -41,6 +42,10 @@ final class SharedDatabaseSync {
     private init() {}
 
     var isReady: Bool { engine != nil }
+
+    /// Package-internal accessor so PeerStatusPublisher can enqueue the
+    /// iPhone's own DeviceRecord through this single shared-DB engine.
+    var internalEngine: CKSyncEngine? { engine }
 
     /// Construct the single shared-DB engine. Idempotent + re-entrancy guarded.
     func start() {
@@ -140,17 +145,52 @@ final class SharedDatabaseSyncDelegate: NSObject, CKSyncEngineDelegate, @uncheck
             for change in e.modifications {
                 await MainActor.run { CompanionSyncEngine.shared.ingestSharedRecord(change.record) }
             }
+            // A deleted Mac DeviceRecord means that Mac disconnected — drop the
+            // matching local connection so the iPhone list updates.
+            for deletion in e.deletions {
+                await MainActor.run {
+                    CompanionSyncEngine.shared.ingestRecordDeletion(deletion.recordID)
+                }
+            }
+
+        case .sentRecordZoneChanges(let e):
+            for save in e.savedRecords where save.recordType == DeviceRecord.recordType {
+                await MainActor.run { DeviceRecordPublisherCache.shared.didSave(save) }
+            }
+            for fail in e.failedRecordSaves {
+                let cke = fail.error
+                let recordID = fail.record.recordID
+                switch cke.code {
+                case .serverRecordChanged:
+                    if let server = cke.serverRecord {
+                        await MainActor.run { DeviceRecordPublisherCache.shared.noteServerRecord(server) }
+                        syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+                    }
+                case .unknownItem:
+                    await MainActor.run { DeviceRecordPublisherCache.shared.forgetServerRecord(recordID) }
+                    syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+                default:
+                    break
+                }
+            }
 
         default:
             break
         }
     }
 
-    // Read-only engine: no engine-managed writes, so never any pending batch.
+    // v7: materialise the iPhone's own DeviceRecord into the Mac's shared zone.
     func nextRecordZoneChangeBatch(
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        nil
+        let scope = context.options.scope
+        let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !pending.isEmpty else { return nil }
+        return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+            await MainActor.run {
+                DeviceRecordPublisherCache.shared.buildCKRecord(for: recordID)
+            }
+        }
     }
 }

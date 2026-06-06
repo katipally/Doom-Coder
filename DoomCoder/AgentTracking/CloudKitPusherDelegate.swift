@@ -39,15 +39,10 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
             for saved in sent.savedRecords {
                 let name = saved.recordID.recordName
                 await MainActor.run {
-                    if name.hasPrefix("CSC-") {
-                        // CSC names are unique per send — just clear the pending
-                        // entry once delivered. No etag needed.
-                        CSCMacPendingCache.shared.didSave(saved)
-                    } else {
-                        // Lesson #1 — persist server-known CKRecord for singletons.
-                        self.pusher?.serverRecords.store(saved)
-                        self.pusher?.clearPending(for: saved.recordID)
-                    }
+                    // Lesson #1 — persist server-known CKRecord for singletons
+                    // (the Mac's own Device record, AgentConfig, AgentIcon).
+                    self.pusher?.serverRecords.store(saved)
+                    self.pusher?.clearPending(for: saved.recordID)
                     self.pusher?.resolveSend(name: name, success: true)
                 }
             }
@@ -58,15 +53,8 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 await MainActor.run {
                     self.pusher?.resolveSend(name: name, success: false)
                 }
-                if name.hasPrefix("CSC-") {
-                    // v7: CSC names are unique, so a 14/2004 here means this is a
-                    // STALE leftover from a pre-v7 build (reused counter name).
-                    // Drop it from the cache and DON'T re-enqueue — retrying a
-                    // colliding insert is the infinite-loop bug we're fixing.
-                    await MainActor.run { CSCMacPendingCache.shared.didSave(failed.record) }
-                    continue
-                }
-                // Non-CSC singletons (MacStatus, AgentConfig, …): stash the server
+                // Singletons (the Mac's own Device record, AgentConfig, …):
+                // stash the server
                 // etag and re-enqueue so the next batch rebuilds as an UPDATE
                 // (Apple requires resolving serverRecordChanged ourselves).
                 await MainActor.run {
@@ -94,21 +82,20 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 let record = mod.record
                 await MainActor.run { self.pusher?.serverRecords.store(record) }
             }
-            // v2.7: PeerStatus records (iOS → Mac heartbeats) update the
-            // PairingStore so the Mac's Connections tab shows the peer.
-            // Other record types still go through the same store-record
-            // path for change-tag preservation.
+            // v7: peer iOS DeviceRecords (one presence/profile record per
+            // device) update the unified store + the Connections tab. Routed
+            // UNCONDITIONALLY into the store so the Mac always knows the real
+            // iPhone identity even before a Connection matches.
             for mod in fetched.modifications {
-                guard mod.record.recordType == CloudKitConstants.RecordType.peerStatus else { continue }
-                await MainActor.run { self.pusher?.ingestPeerStatus(mod.record) }
+                guard mod.record.recordType == CloudKitConstants.RecordType.device else { continue }
+                await MainActor.run { self.pusher?.ingestDeviceRecord(mod.record) }
             }
-            // v5: ConnectionStateChange records (iOS → Mac state transitions).
-            // Ingested into PairingStore so the Mac's Connections tab
-            // and ConnectionStore observers update within 1-3s of the
-            // iOS app finishing a pair / remove.
-            for mod in fetched.modifications {
-                guard mod.record.recordType == CloudKitConstants.RecordType.connectionStateChange else { continue }
-                await MainActor.run { ConnectionStateChanges.shared.ingest(mod.record) }
+            // v7: a deleted peer DeviceRecord (iPhone disconnected from its
+            // side, or the shared zone was revoked) drops the Connection +
+            // store entry so the Mac list updates.
+            for deletion in fetched.deletions {
+                let name = deletion.recordID.recordName
+                await MainActor.run { self.pusher?.handleDeviceRecordDeletion(recordName: name) }
             }
             // v2.8: when a CKShare record changes (e.g. the iPhone just
             // accepted), notify the pairing coordinator so the QR sheet
@@ -144,11 +131,11 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         let scope = context.options.scope
         let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+            // v7: materialize only the Mac's own records (its own Device record
+            // + the Mac singletons + pending deletes). buildRecord guards that a
+            // peer's Device-<iosId> never resolves to a record here.
             await MainActor.run {
-                if recordID.recordName.hasPrefix("CSC-") {
-                    return CSCMacPendingCache.shared.buildCKRecord(for: recordID)
-                }
-                return self.pusher?.buildRecord(for: recordID)
+                self.pusher?.buildRecord(for: recordID)
             }
         }
     }

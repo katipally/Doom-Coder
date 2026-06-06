@@ -9,21 +9,12 @@
 import SwiftUI
 import DoomCoderCore
 
-struct IncomingPairRequest: Identifiable {
-    let macId: String
-    let macName: String
-    var id: String { macId }
-}
-
 struct RootTabView: View {
     @State private var router = AppRouter.shared
     /// First-run welcome is informational and dismissible — it never blocks use.
     @State private var showWelcome: Bool = {
         AppGroupCache.defaults.object(forKey: WelcomeView.shownKey) == nil
     }()
-    /// v6: a same-iCloud Mac asked to pair (Mac is the initiator). The user
-    /// accepts or declines here — nothing connects without explicit consent.
-    @State private var pairRequest: IncomingPairRequest?
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -53,23 +44,6 @@ struct RootTabView: View {
         }
         .onOpenURL { url in
             handleURL(url)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .incomingPairRequest)) { note in
-            guard let macId = note.userInfo?["macId"] as? String else { return }
-            let macName = (note.userInfo?["macName"] as? String) ?? "Mac"
-            pairRequest = IncomingPairRequest(macId: macId, macName: macName)
-        }
-        .alert(item: $pairRequest) { req in
-            Alert(
-                title: Text("Pair with \(req.macName)?"),
-                message: Text("This Mac on your iCloud account wants to connect to this iPhone."),
-                primaryButton: .default(Text("Accept")) {
-                    Task { await IOSPairingCoordinator.shared.acceptInboundRequest(macId: req.macId) }
-                },
-                secondaryButton: .cancel(Text("Decline")) {
-                    Task { await IOSPairingCoordinator.shared.declineInboundRequest(macId: req.macId) }
-                }
-            )
         }
     }
 

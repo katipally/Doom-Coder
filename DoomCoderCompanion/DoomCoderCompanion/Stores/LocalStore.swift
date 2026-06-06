@@ -249,37 +249,6 @@ final class LocalStore: @unchecked Sendable {
         }
     }
     
-    // MARK: - Mac status upsert
-    
-    func upsertMacStatus(_ record: MacStatusRecord) {
-        queue.async { [weak self] in
-            guard let self = self, let db = self.db else { return }
-            
-            let sql = """
-            INSERT INTO mac_status (mac_id, name, version, status, mode, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(mac_id) DO UPDATE SET
-                name = excluded.name,
-                version = excluded.version,
-                status = excluded.status,
-                mode = excluded.mode,
-                last_seen = excluded.last_seen;
-            """
-            
-            var stmt: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                sqlite3_bind_text(stmt, 1, (record.macId as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(stmt, 2, (record.name as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(stmt, 3, (record.version as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(stmt, 4, ("online" as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(stmt, 5, (record.mode as NSString).utf8String, -1, nil)
-                sqlite3_bind_int64(stmt, 6, Int64(record.lastSeen.timeIntervalSince1970))
-                sqlite3_step(stmt)
-            }
-            sqlite3_finalize(stmt)
-        }
-    }
-    
     // MARK: - Notification log upsert
     
     func upsertNotificationLog(_ record: NotificationLogRecord) {

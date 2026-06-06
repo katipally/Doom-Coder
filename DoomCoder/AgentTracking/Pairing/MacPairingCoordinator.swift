@@ -129,29 +129,35 @@ public final class MacPairingCoordinator: ObservableObject {
     /// which our ingest turns into an active connection.
     public func requestSameICloudPair(device: DiscoverableDeviceRecord) async {
         // v7: promptless direct-connect. Same iCloud = same trusted account, so
-        // tapping the device connects both sides immediately — no Accept prompt.
-        // The Mac goes active now and publishes CSC{accepted, origin:mac}; the
-        // iPhone creates its matching active row on receipt (no user action).
-        // If a stale row exists, bump its counter so the CSC is ordered after it.
+        // tapping the device records the pairing immediately — no Accept prompt,
+        // no CSC handshake. "Connected" is then DERIVED once the iPhone's
+        // DeviceRecord is observed in the zone (the iPhone, on the same account,
+        // already writes its DeviceRecord into the shared private zone). We seed
+        // a placeholder so the card shows the name instantly; the real
+        // DeviceRecord refreshes it.
         let id = Connection.implicitConnectionId(macId: macDeviceId, iosDeviceId: device.iosDeviceId)
-        let priorCounter = PairingStore.shared.connections.first(where: { $0.id == id })?.stateChangeCounter ?? 0
+        // If the iPhone's DeviceRecord is already in the store, the connection
+        // is born active; otherwise pending until it arrives.
+        let peer = IosDeviceProfileCache.shared.record(for: device.iosDeviceId)
+        let derived = DerivedDeviceState.derive(hasPairing: true, peer: peer)
         let conn = Connection(
             id: id,
             macDeviceId: macDeviceId,
             iosDeviceId: device.iosDeviceId,
             route: .iCloud,
-            status: .active,
+            status: derived == .active ? .active : .pending,
             createdAt: Date(),
-            lastSyncAt: Date(),
+            lastSyncAt: peer?.lastSeen,
             ckShareRef: nil,
             pairingOrigin: .sameICloud,
-            stateChangeCounter: priorCounter + 1,
+            stateChangeCounter: 1,
             shareAcceptedAt: Date()
         )
         PairingStore.shared.upsert(conn)
         IosDeviceProfileCache.shared.insertPlaceholder(iosDeviceId: device.iosDeviceId, name: device.name)
-        await ConnectionStateChanges.shared.publish(state: .accepted, for: conn, origin: .mac)
-        NotificationDispatcher.shared.notifyDeviceConnected(name: device.name)
+        if derived == .active {
+            NotificationDispatcher.shared.notifyDeviceConnected(name: device.name)
+        }
     }
 
     // MARK: - Same-iCloud code / QR (alternative to the picker)
@@ -280,24 +286,30 @@ public final class MacPairingCoordinator: ObservableObject {
     /// deletes the local Connection. The iOS app wipes its own local
     /// cache separately on next launch.
     public func remove(connection: Connection) async {
+        // v7: disconnect = delete the peer's DeviceRecord from the zone and
+        // (for different-iCloud) revoke the CKShare so the iPhone loses zone
+        // access. The iPhone, fetching the deletion / losing the zone, derives
+        // `.disconnected` and tears down its own side — no CSC handshake.
+        if !connection.iosDeviceId.isEmpty,
+           let engine = CloudKitPusher.shared.engine {
+            let zoneID = CKRecordZone.ID(
+                zoneName: CloudKitConstants.zoneName,
+                ownerName: CKCurrentUserDefaultName
+            )
+            let peerRecordID = CKRecord.ID(
+                recordName: "Device-\(connection.iosDeviceId)",
+                zoneID: zoneID
+            )
+            engine.state.add(pendingRecordZoneChanges: [.deleteRecord(peerRecordID)])
+            CloudKitPusher.shared.kickEngine()
+        }
         if let shareRef = connection.ckShareRef,
            let shareURL = shareRef.shareURL {
             await revokeShare(shareURL: shareURL)
         }
         // v7: no suppression — a disconnected iPhone simply leaves the list and
         // stays discoverable in the picker for an explicit re-pair.
-        // v5: signal the iOS app before local teardown so it
-        // receives a CSC within 1-3s instead of waiting for
-        // the next PeerStatus heart-beat.
-        var snapshot = connection
-        snapshot.stateChangeCounter += 1
-        snapshot.status = .removed
-        snapshot.removedAt = Date()
-        await ConnectionStateChanges.shared.publish(
-            state: .removed,
-            for: snapshot,
-            origin: .mac
-        )
+        IosDeviceProfileCache.shared.remove(deviceId: connection.iosDeviceId)
         PairingStore.shared.remove(connectionId: connection.id)
     }
 
@@ -483,24 +495,13 @@ public final class MacPairingCoordinator: ObservableObject {
         let id = Connection.deterministicId(for: .ckShare(ref))
         if let existing = PairingStore.shared.connections.first(where: { $0.id == id }) {
             var refreshed = existing
-            refreshed.status = .active
-            refreshed.lastSyncAt = Date()
-            refreshed.shareAcceptedAt = Date()
-            refreshed.stateChangeCounter += 1
+            refreshed.shareAcceptedAt = refreshed.shareAcceptedAt ?? Date()
             if let n = peer.name { refreshed.peerAccountName = n }
             if let e = peer.email { refreshed.peerAccountEmail = e }
+            // v7: "connected" is DERIVED once the iPhone's DeviceRecord lands;
+            // reflect the current derivation now so the UI is consistent.
+            refreshed.status = IosDeviceProfileCache.shared.derivedState(for: refreshed) == .active ? .active : .pending
             PairingStore.shared.upsert(refreshed)
-            // v5: echo an accepted CSC to the iOS side so the
-            // iPhone gets an instant ack and can dismiss the
-            // success sheet without waiting for the next
-            // PeerStatus heart-beat.
-            Task { @MainActor in
-                await ConnectionStateChanges.shared.publish(
-                    state: .accepted,
-                    for: refreshed,
-                    origin: .mac
-                )
-            }
             pollTask?.cancel()
             pollTask = nil
             currentShare = nil
@@ -508,12 +509,9 @@ public final class MacPairingCoordinator: ObservableObject {
             phase = .active(refreshed)
             return
         }
-        // v5: iosDeviceId starts empty; the iOS app's first
-        // PeerStatus heart-beat (or the v5
-        // ConnectionStateChange{reinstall-detected} fast path)
-        // back-fills it. We never pre-allocate a placeholder
-        // random id — that was the source of the v2.9
-        // "duplicates on the Mac" bug.
+        // v7: iosDeviceId starts empty; the iPhone's first DeviceRecord
+        // (fetched out of the shared zone) back-fills it and flips the derived
+        // state to .active. We never pre-allocate a random placeholder id.
         let connection = Connection(
             id: id,
             macDeviceId: macDeviceId,
@@ -525,34 +523,20 @@ public final class MacPairingCoordinator: ObservableObject {
             ckShareRef: ref,
             pairingOrigin: .qr,
             stateChangeCounter: 1,
-            shareAcceptedAt: nil,
+            shareAcceptedAt: Date(),
             peerAccountName: peer.name,
             peerAccountEmail: peer.email
         )
-        // First a .pending row so the Mac Connections tab
-        // shows "Waiting for iPhone" immediately, then an
-        // .active row + CSC echo as soon as we know the iOS
-        // app accepted. Single round-trip to the user.
+        // A .pending row so the Mac Connections tab shows "Connecting…"
+        // immediately; the derivation flips it to "Connected" the moment the
+        // iPhone's DeviceRecord appears in the shared zone.
         PairingStore.shared.upsert(connection)
         PairingStore.shared.clearPendingCode()
-        var active = connection
-        active.status = .active
-        active.lastSyncAt = Date()
-        active.shareAcceptedAt = Date()
-        active.stateChangeCounter += 1
-        PairingStore.shared.upsert(active)
-        Task { @MainActor in
-            await ConnectionStateChanges.shared.publish(
-                state: .accepted,
-                for: active,
-                origin: .mac
-            )
-        }
         pollTask?.cancel()
         pollTask = nil
         currentShare = nil
         pendingConnectionId = nil
-        phase = .active(active)
+        phase = .active(connection)
     }
 
     private func handleExpiry() {

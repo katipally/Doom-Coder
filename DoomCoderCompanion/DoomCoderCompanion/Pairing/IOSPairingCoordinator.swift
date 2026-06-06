@@ -51,103 +51,6 @@ final class IOSPairingCoordinator {
         lastError = nil
     }
 
-    // MARK: - Inbound same-iCloud pairing request (v6: Mac initiates)
-
-    /// v6: the Mac sent a CSC{requested} to this iPhone (same-iCloud picker).
-    /// Create/refresh a `.pendingOnPhone` row so the Accept/Decline prompt
-    /// surfaces. The user explicitly accepts before any connection goes active.
-    public func ingestInboundRequest(macId: String, macName: String) {
-        let iosId = IosDeviceId.current
-        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
-        if let existing = ConnectionStore.shared.connections.first(where: { $0.id == id }) {
-            if existing.status == .active { return }   // already paired
-            var updated = existing
-            updated.status = .pendingOnPhone
-            ConnectionStore.shared.upsert(updated)
-        } else {
-            let connection = Connection(
-                id: id,
-                macDeviceId: macId,
-                iosDeviceId: iosId,
-                route: .iCloud,
-                status: .pendingOnPhone,
-                createdAt: Date(),
-                lastSyncAt: nil,
-                ckShareRef: nil,
-                pairingOrigin: .sameICloud,
-                stateChangeCounter: 1
-            )
-            ConnectionStore.shared.upsert(connection)
-        }
-        NotificationCenter.default.post(
-            name: .incomingPairRequest, object: nil,
-            userInfo: ["macId": macId, "macName": macName]
-        )
-    }
-
-    /// User tapped Accept on the same-iCloud request. Mark active and tell the
-    /// Mac via CSC{accepted, origin:ios}.
-    public func acceptInboundRequest(macId: String) async {
-        let iosId = IosDeviceId.current
-        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
-        guard var conn = ConnectionStore.shared.connections.first(where: { $0.id == id }) else { return }
-        conn.status = .active
-        conn.lastSyncAt = Date()
-        conn.stateChangeCounter += 1
-        ConnectionStore.shared.upsert(conn)
-        await ConnectionStateChanges.shared.publish(state: .accepted, for: conn, origin: .ios)
-        ConnectionNotifier.shared.notifyConnected(macName: MacStatusStore.shared.byMacId[macId]?.name)
-    }
-
-    /// v7: promptless same-iCloud connect. The Mac tapped this iPhone in its
-    /// picker (CSC{accepted, origin:mac}); connect directly and echo back
-    /// CSC{accepted, origin:ios} so both sides agree. `counter` is the Mac's
-    /// CSC counter — we send back a strictly-greater one.
-    public func connectFromMacInitiated(macId: String, counter: Int) {
-        let iosId = IosDeviceId.current
-        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
-        var conn: Connection
-        if let existing = ConnectionStore.shared.connections.first(where: { $0.id == id }) {
-            conn = existing
-            conn.status = .active
-            conn.lastSyncAt = Date()
-            conn.stateChangeCounter = max(conn.stateChangeCounter, counter) + 1
-            if conn.removedAt != nil { conn.removedAt = nil }
-        } else {
-            conn = Connection(
-                id: id,
-                macDeviceId: macId,
-                iosDeviceId: iosId,
-                route: .iCloud,
-                status: .active,
-                createdAt: Date(),
-                lastSyncAt: Date(),
-                ckShareRef: nil,
-                pairingOrigin: .sameICloud,
-                stateChangeCounter: counter + 1,
-                shareAcceptedAt: Date()
-            )
-        }
-        ConnectionStore.shared.upsert(conn)
-        let macName = MacStatusStore.shared.byMacId[macId]?.name
-        ConnectionNotifier.shared.notifyConnected(macName: macName)
-        // Echo back so the Mac confirms the iPhone joined, and pull data now.
-        Task {
-            await ConnectionStateChanges.shared.publish(state: .accepted, for: conn, origin: .ios)
-            await CompanionSyncEngine.shared.fetchChanges()
-            PeerStatusPublisher.shared.publishNow(force: true)
-        }
-    }
-
-    /// User tapped Decline. Drop the pending row and tell the Mac.
-    public func declineInboundRequest(macId: String) async {
-        let iosId = IosDeviceId.current
-        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosId)
-        guard let conn = ConnectionStore.shared.connections.first(where: { $0.id == id }) else { return }
-        await ConnectionStateChanges.shared.publish(state: .denied, for: conn, origin: .ios)
-        ConnectionStore.shared.remove(id: id)
-    }
-
     // MARK: - URL entry points
 
     /// Called by AppDelegate when doomcoder://pair?ckShareURL=... arrives.
@@ -360,7 +263,7 @@ final class IOSPairingCoordinator {
         // Deterministic id keyed on share URL — re-scanning the same QR upserts
         // the existing row rather than creating a duplicate.
         let id = Connection.deterministicId(for: .ckShare(ref))
-        let macId = MacStatusStore.shared.primary?.macId ?? ""
+        let macId = MacStatusStore.shared.primary?.deviceId ?? ""
 
         if let existing = ConnectionStore.shared.connections.first(where: { $0.id == id }) {
             var refreshed = existing
@@ -372,17 +275,9 @@ final class IOSPairingCoordinator {
             if let peerEmail { refreshed.peerAccountEmail = peerEmail }
             ConnectionStore.shared.upsert(refreshed)
             registerSyncEngine(for: refreshed, isSameAccount: isSameAccount)
-            // Echo an accepted CSC so the Mac learns within 1-3s
-            // (instead of waiting for the 60s PeerStatus heart-beat
-            // or the CKShare-change delegate callback).
-            await ConnectionStateChanges.shared.publish(
-                state: .accepted,
-                for: refreshed,
-                origin: .ios
-            )
             // Use the Mac's actual name if we have it; fall back to
             // a generic "Paired" line.
-            let macName = MacStatusStore.shared.byMacId[refreshed.macDeviceId]?.name
+            let macName = MacStatusStore.shared.byMacId[refreshed.macDeviceId]?.displayName
             successMessage = macName.map { "Paired with \($0)" } ?? "Paired with this Mac"
             presentSuccess = true
             phase = .active(refreshed)
@@ -405,13 +300,7 @@ final class IOSPairingCoordinator {
         )
         ConnectionStore.shared.upsert(connection)
         registerSyncEngine(for: connection, isSameAccount: isSameAccount)
-        // Echo an accepted CSC so the Mac learns within 1-3s.
-        await ConnectionStateChanges.shared.publish(
-            state: .accepted,
-            for: connection,
-            origin: .ios
-        )
-        let macName = MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
+        let macName = MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName
         successMessage = macName.map { "Paired with \($0)" } ?? "Paired with this Mac"
         presentSuccess = true
         phase = .active(connection)
@@ -426,12 +315,11 @@ final class IOSPairingCoordinator {
             // promptly (it auto-discovers the zone via the DB subscription).
             Task { await SharedDatabaseSync.shared.fetchChanges() }
         }
-        // Belt-and-braces: a PeerStatus heart-beat lands on the next event,
-        // so the Mac always has at least one signal path to discover the
-        // iOS device.
+        // v7: write the iPhone's DeviceRecord into the Mac's zone so the Mac
+        // discovers this iPhone within a few seconds.
         PeerStatusPublisher.shared.publishNow(force: true)
         ConnectionNotifier.shared.notifyConnected(
-            macName: MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
+            macName: MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName
         )
     }
 
@@ -533,11 +421,11 @@ final class IOSPairingCoordinator {
             )
         }
         ConnectionStore.shared.upsert(conn)
-        // Tell the Mac within 1-3s; its ingest creates/activates the row.
-        await ConnectionStateChanges.shared.publish(state: .accepted, for: conn, origin: .ios)
+        // v7: promptless. We now own a Connection into the Mac's (same-iCloud)
+        // private zone; start writing our DeviceRecord so the Mac discovers us.
         Task { await CompanionSyncEngine.shared.fetchChanges() }
         PeerStatusPublisher.shared.publishNow(force: true)
-        let macName = MacStatusStore.shared.byMacId[macId]?.name
+        let macName = MacStatusStore.shared.byMacId[macId]?.displayName
         successMessage = macName.map { "Paired with \($0)" } ?? "Paired with this Mac"
         presentSuccess = true
         ConnectionNotifier.shared.notifyConnected(macName: macName)
@@ -546,45 +434,47 @@ final class IOSPairingCoordinator {
 
     // MARK: - Removal
 
-    /// v5.3: hard-delete the connection on BOTH sides. The user
-    /// expects the row to disappear the moment they tap
-    /// Disconnect — not turn into a tombstone, not come back on
-    /// the next heart-beat, not require a 30-day wait. The flow:
-    ///   1. Bump counter + write CSC{removed,origin=ios} so the
-    ///      Mac hard-deletes its side within 1-3s via the
-    ///      silent-push path.
-    ///   2. Hard-delete locally. The tombstone-on-remove behaviour
-    ///      (v5) was the source of the "row resurrects on
-    ///      refresh" bug: a 30s later heart-beat would arrive,
-    ///      nothing would re-add the row (no auto-attach), but it
-    ///      would re-render as "Removed 40 seconds ago" until
-    ///      purgeTombstones ran 30 days later. That was the
-    ///      correct semantics for a re-pair window but the wrong
-    ///      semantics for an explicit user-driven disconnect.
-    ///   3. Drop the per-Mac sync engine. Same-account auto-attach
-    ///      remains disabled for this Mac for the 5-minute
-    ///      cooldown (in case the user just hit Disconnect by
-    ///      accident and immediately wants to re-pair — they can
-    ///      wait it out, or hit "Re-pair" in the agent list
-    ///      which is unaffected by the cooldown).
+    /// v7: disconnect a Mac. Delete this iPhone's OWN DeviceRecord from that
+    /// Mac's zone (so the Mac drops the iPhone card), leave/decline the CKShare
+    /// for a different-iCloud pairing, then hard-delete the local Connection +
+    /// store entry. There is no ConnectionStateChange handshake anymore — the
+    /// Mac derives the disconnect from the iPhone's vanished DeviceRecord and/or
+    /// the revoked share.
     public func remove(connection: Connection) async {
-        // v7: no suppression — the Mac stays discoverable for an explicit re-pair.
-        var snapshot = connection
-        snapshot.stateChangeCounter += 1
-        snapshot.status = .removed
-        snapshot.removedAt = Date()
-        await ConnectionStateChanges.shared.publish(
-            state: .removed,
-            for: snapshot,
-            origin: .ios
-        )
-        // Hard-delete on the local side. This is the v5.3
-        // contract: explicit disconnect is a real delete, not a
-        // tombstone. The Mac side mirrors this via the CSC.
+        let macName = MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName
+
+        // Enqueue deletion of our own DeviceRecord from the Mac's zone.
+        PeerStatusPublisher.shared.enqueueDeletion(for: connection)
+
+        // Different-iCloud: also leave the share so we lose zone access and the
+        // Mac sees us drop out as a participant.
+        if case .ckShare(let ref) = connection.route, !ref.isSameAccount,
+           let shareURL = ref.shareURL {
+            await leaveShare(shareURL: shareURL)
+        }
+
+        // Hard-delete locally. Explicit disconnect is a real delete, not a
+        // tombstone.
+        MacStatusStore.shared.remove(macId: connection.macDeviceId)
         ConnectionStore.shared.hardRemove(id: connection.id)
         await LocalStore.shared.clearMacData(macId: connection.macDeviceId)
-        ConnectionNotifier.shared.notifyDisconnected(
-            macName: MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
-        )
+        ConnectionNotifier.shared.notifyDisconnected(macName: macName)
+    }
+
+    /// Decline/leave a CKShare so the iPhone loses access to the Mac's shared
+    /// zone. Best-effort: failure here still proceeds with the local teardown.
+    private func leaveShare(shareURL: URL) async {
+        do {
+            let metadata = try await container.shareMetadata(for: shareURL)
+            let share = metadata.share
+            let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: [share.recordID])
+            op.qualityOfService = .userInitiated
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                op.modifyRecordsResultBlock = { _ in cont.resume() }
+                container.sharedCloudDatabase.add(op)
+            }
+        } catch {
+            // Share already revoked / unreachable — local teardown still runs.
+        }
     }
 }

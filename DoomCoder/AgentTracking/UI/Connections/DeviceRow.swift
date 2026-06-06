@@ -11,11 +11,16 @@ import DoomCoderCore
 struct DeviceRow: View {
     let connection: Connection
     let onSelect: (() -> Void)?
+    @ObservedObject private var store = IosDeviceProfileCache.shared
 
     init(connection: Connection, onSelect: (() -> Void)? = nil) {
         self.connection = connection
         self.onSelect = onSelect
     }
+
+    /// v7: the peer iOS DeviceRecord (if known) + the derived connection state.
+    private var peer: DeviceRecord? { store.peer(for: connection) }
+    private var derived: DerivedDeviceState { store.derivedState(for: connection) }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -40,7 +45,7 @@ struct DeviceRow: View {
         .contentShape(Rectangle())
         .onTapGesture { onSelect?() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(displayName), \(connection.route.shortLabel), \(connection.status.displayName)")
+        .accessibilityLabel("\(displayName), \(connection.route.shortLabel), \(derived.displayName)")
     }
 
     @ViewBuilder private func badge(_ text: String, _ color: Color) -> some View {
@@ -66,11 +71,10 @@ struct DeviceRow: View {
         else { badge("Same iCloud", .teal) }
     }
 
-    /// v2.7: prefer the iOS-side display name from the PeerStatus
-    /// cache; fall back to a generic "iPhone" if no heartbeat has
-    /// landed yet (e.g. just-paired via QR before first heartbeat).
+    /// v7: prefer the iOS-side display name from the peer DeviceRecord; fall
+    /// back to a generic "iPhone" if the record hasn't landed yet.
     private var displayName: String {
-        IosDeviceProfileCache.shared.name(for: connection.iosDeviceId) ?? "iPhone"
+        peer?.displayName ?? "iPhone"
     }
 
     private var routeIcon: String {
@@ -85,9 +89,8 @@ struct DeviceRow: View {
 
     private var subtitleText: String {
         var parts: [String] = []
-        let profile = IosDeviceProfileCache.shared.byId[connection.iosDeviceId]
-        let name = connection.peerAccountName ?? profile?.accountName
-        let email = connection.peerAccountEmail ?? profile?.accountEmail
+        let name = connection.peerAccountName ?? peer?.accountName
+        let email = connection.peerAccountEmail ?? peer?.accountEmail
         // Account identity: prefer real name, then email, else the route label.
         if let name, !name.isEmpty {
             parts.append(name)
@@ -97,29 +100,43 @@ struct DeviceRow: View {
         } else {
             parts.append(connection.route.shortLabel)
         }
-        if let model = profile?.model, !model.isEmpty {
-            parts.append(model)
+        if let model = peer?.model, !model.isEmpty { parts.append(model) }
+        if let os = peer?.osVersion, !os.isEmpty { parts.append(os) }
+        // Live online dot / last-seen hint.
+        if let peer {
+            if peer.isOnline() {
+                parts.append("Online")
+            } else {
+                parts.append("last seen \(peer.lastSeen.formatted(.relative(presentation: .named)))")
+            }
+        }
+        if let battery = peer?.battery, battery > 0 {
+            parts.append("\(Int(battery * 100))%")
         }
         return parts.joined(separator: " · ")
     }
 
+    /// v7: badge text + color come from the DERIVED state, not Connection.status.
     private var statusBadge: some View {
-        Text(connection.status.displayName)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(badgeColor.opacity(0.2), in: Capsule())
-            .foregroundStyle(badgeColor)
+        HStack(spacing: 5) {
+            Circle()
+                .fill(badgeColor)
+                .frame(width: 7, height: 7)
+            Text(derived.displayName)
+                .font(.caption.weight(.medium))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(badgeColor.opacity(0.2), in: Capsule())
+        .foregroundStyle(badgeColor)
     }
 
     private var badgeColor: Color {
-        switch connection.status {
-        case .active:         return .green
-        case .pending:        return .orange
-        case .suspended:      return .yellow
-        case .removed:        return .red
-        case .awaitingAccept: return .blue
-        case .pendingOnPhone: return .blue
+        switch derived {
+        case .active:       return .green
+        case .pending:      return .orange
+        case .offline:      return .yellow
+        case .disconnected: return .red
         }
     }
 }

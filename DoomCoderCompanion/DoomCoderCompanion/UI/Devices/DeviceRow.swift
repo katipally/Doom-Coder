@@ -16,7 +16,7 @@ struct DeviceRow: View {
     let isSelected: Bool
 
     private var macName: String {
-        let name = MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
+        let name = MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName
         if let name, !name.isEmpty { return name }
         // Fall back to the host name encoded in the share URL or a
         // generic "Mac" if we don't have either.
@@ -37,7 +37,7 @@ struct DeviceRow: View {
         var parts: [String] = []
         // v6: the Mac owner's iCloud identity (captured from the CKShare on a
         // different-Apple-ID pairing). Same-account shows the route label.
-        let name = connection.peerAccountName ?? mac?.accountFullName
+        let name = connection.peerAccountName ?? mac?.accountName
         let email = connection.peerAccountEmail ?? mac?.accountEmail
         if let name, !name.isEmpty {
             parts.append(name)
@@ -50,7 +50,7 @@ struct DeviceRow: View {
         return parts.joined(separator: " · ")
     }
 
-    private var mac: MacStatusRecord? {
+    private var mac: DeviceRecord? {
         MacStatusStore.shared.byMacId[connection.macDeviceId]
     }
 
@@ -77,19 +77,24 @@ struct DeviceRow: View {
         else { badge("Same iCloud", .teal) }
     }
 
+    /// v7: connection state is DERIVED from the Mac's DeviceRecord freshness.
+    private var derived: DerivedDeviceState {
+        let hasPairing = connection.status != .removed && connection.removedAt == nil
+        return DerivedDeviceState.derive(hasPairing: hasPairing, peer: mac)
+    }
+
     private var lastSeenText: String {
-        guard let last = connection.lastSyncAt else { return "Never" }
+        let last = mac?.lastSeen ?? connection.lastSyncAt
+        guard let last else { return "Never" }
         return last.formatted(.relative(presentation: .named))
     }
 
     private var statusColor: Color {
-        switch connection.status {
-        case .active:         return .green
-        case .pending:        return .orange
-        case .suspended:      return .yellow
-        case .removed:        return .red
-        case .awaitingAccept: return .blue
-        case .pendingOnPhone: return .blue
+        switch derived {
+        case .active:       return .green
+        case .pending:      return .orange
+        case .offline:      return .yellow
+        case .disconnected: return .red
         }
     }
 
@@ -113,12 +118,17 @@ struct DeviceRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(connection.status.displayName)
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.2), in: Capsule())
-                    .foregroundStyle(statusColor)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 7, height: 7)
+                    Text(derived.displayName)
+                        .font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(statusColor.opacity(0.2), in: Capsule())
+                .foregroundStyle(statusColor)
                 Text(lastSeenText)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -131,6 +141,6 @@ struct DeviceRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(macName), \(connection.route.shortLabel), \(connection.status.displayName), last seen \(lastSeenText)")
+        .accessibilityLabel("\(macName), \(connection.route.shortLabel), \(derived.displayName), last seen \(lastSeenText)")
     }
 }

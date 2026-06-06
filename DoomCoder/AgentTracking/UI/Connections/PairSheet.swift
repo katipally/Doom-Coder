@@ -210,7 +210,8 @@ struct PairSheet: View {
     }
 
     private func deviceTile(_ device: DiscoverableDeviceRecord) -> some View {
-        let status = store.connections.first(where: { $0.iosDeviceId == device.iosDeviceId })?.status
+        let conn = store.connections.first(where: { $0.iosDeviceId == device.iosDeviceId })
+        let state: DerivedDeviceState? = conn.map { IosDeviceProfileCache.shared.derivedState(for: $0) }
         return Button {
             Task { await coordinator.requestSameICloudPair(device: device) }
         } label: {
@@ -219,15 +220,15 @@ struct PairSheet: View {
                     Circle()
                         .fill(.regularMaterial)
                         .frame(width: 76, height: 76)
-                        .overlay(Circle().strokeBorder(tileTint(status).opacity(0.5), lineWidth: 2))
+                        .overlay(Circle().strokeBorder(tileTint(state).opacity(0.5), lineWidth: 2))
                     Image(systemName: "iphone.gen3")
                         .font(.system(size: 32))
-                        .foregroundStyle(tileTint(status))
+                        .foregroundStyle(tileTint(state))
                 }
                 Text(device.name)
                     .font(.callout.weight(.medium))
                     .lineLimit(1)
-                Text(tileSubtitle(status))
+                Text(tileSubtitle(state))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -239,19 +240,20 @@ struct PairSheet: View {
         // connection (idempotent) so a desynced iPhone reconnects.
     }
 
-    private func tileTint(_ status: ConnectionStatus?) -> Color {
-        switch status {
-        case .active:         return .green
-        case .awaitingAccept: return .blue
-        default:              return .accentColor
+    private func tileTint(_ state: DerivedDeviceState?) -> Color {
+        switch state {
+        case .active:  return .green
+        case .pending: return .blue
+        default:       return .accentColor
         }
     }
 
-    private func tileSubtitle(_ status: ConnectionStatus?) -> String {
-        switch status {
-        case .active:         return "Connected · tap to re-sync"
-        case .awaitingAccept: return "Connecting…"
-        default:              return "Tap to pair"
+    private func tileSubtitle(_ state: DerivedDeviceState?) -> String {
+        switch state {
+        case .active:  return "Connected · tap to re-sync"
+        case .pending: return "Connecting…"
+        case .offline: return "Paired · offline"
+        default:       return "Tap to pair"
         }
     }
 

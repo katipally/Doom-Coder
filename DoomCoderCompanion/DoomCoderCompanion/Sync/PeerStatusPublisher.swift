@@ -1,20 +1,19 @@
 // PeerStatusPublisher.swift — DoomCoder Companion
 //
-// v2.7: writes a PeerStatusRecord into the shared DoomCoderZone on a
-// 60-second heartbeat so the Mac can see this iOS device in its
-// Connections tab. Symmetric to CloudKitPusher.publishMacStatus on the
-// Mac side.
+// v7: publishes this iPhone's own `DeviceRecord(role: .ios)` — the single
+// presence/profile record — into the Mac's shared DoomCoderZone on a light
+// foreground heartbeat. Replaces the v2.x PeerStatusRecord writer.
 //
-// Uses the same CKSyncEngine that CompanionSyncEngine already
-// constructs for the same-Apple-ID (iCloud) path. No second engine,
-// no second zone, no second subscription.
-//
-// v2.9: cross-account (CKShare) path. When the active connection uses
-// a CKShare with .readWrite permission (set by the Mac at share-creation
-// time), we write PeerStatus directly to the Mac's shared zone via
-// container.sharedCloudDatabase using a CKModifyRecordsOperation.
-// This lets the Mac discover cross-account iOS devices just as fast
-// as same-account ones (previously the Mac was blind to CKShare peers).
+// "Which database" is the ONLY same/different-iCloud branch:
+//   • Same iCloud  → the iPhone shares the Mac's PRIVATE zone, so it enqueues
+//     its DeviceRecord through CompanionSyncEngine (private DB) via
+//     `nextRecordZoneChangeBatch`. zoneOwner = CKCurrentUserDefaultName.
+//   • Different iCloud → the iPhone has the Mac's zone in its SHARED database
+//     (after accepting the CKShare), so it enqueues its DeviceRecord through
+//     SharedDatabaseSync's engine (shared DB) via `nextRecordZoneChangeBatch`,
+//     using the Mac's owner record name as the zoneOwner. NO direct
+//     CKModifyRecordsOperation — the engine owns the write so recordChangeTag
+//     is managed cleanly (single writer → clean UPDATEs).
 
 import Foundation
 import CloudKit
@@ -27,7 +26,6 @@ final class PeerStatusPublisher {
 
     static let shared = PeerStatusPublisher()
 
-    private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
     private var lastPublishedAt: Date = .distantPast
     private var heartbeatTimer: Timer?
     /// Light foreground heartbeat so the Mac sees fresh "last seen" / online
@@ -35,22 +33,11 @@ final class PeerStatusPublisher {
     /// effectively foreground-only — no background battery cost).
     private let heartbeatInterval: TimeInterval = 30
 
-    // Per-owner server record cache for shared DB writes (preserves
-    // recordChangeTag). Persisted to disk (app-group defaults) so the etag
-    // survives app relaunch — otherwise the first cross-account heartbeat after
-    // a relaunch is a blind INSERT and CloudKit returns 14/2004
-    // ("record to insert already exists"). Same fix as the same-account path.
-    private let sharedDbServerCache = ServerRecordCache(
-        defaults: AppGroupCache.defaults,
-        key: "ck.ios.peerStatus.sharedDBServerCache.v1"
-    )
-
     private init() {}
 
-    /// Start publishing presence. v6: event-driven (NO 60s timer). The first
-    /// heart-beat fires when the engine's zone becomes ready; subsequent ones
-    /// fire on app activation and after connection changes (see
-    /// `CompanionSyncEngine` activation handler / `publishNow`).
+    /// Start publishing presence. Event-driven (no 60s wire timer): the first
+    /// heartbeat fires when the private engine's zone becomes ready; subsequent
+    /// ones fire on app activation and after connection changes.
     func start() {
         if CompanionSyncEngine.shared.zoneReady {
             publish()
@@ -68,201 +55,183 @@ final class PeerStatusPublisher {
         heartbeatTimer = timer
     }
 
-    /// Force-publish right now (used on app foreground, after a
-    /// connection change, etc.). Debounced to one publish per 10s.
+    /// Force-publish right now (used on app foreground, after a connection
+    /// change, etc.). Debounced to one publish per 10s unless forced.
     func publishNow(force: Bool = false) {
         if force || Date().timeIntervalSince(lastPublishedAt) > 10 {
             publish()
         }
     }
 
+    /// Build + enqueue the iPhone's DeviceRecord into every paired Mac's zone.
+    /// A same-iCloud Mac shares its private zone (zoneOwner = current user);
+    /// a different-iCloud Mac is reached through its shared zone (zoneOwner =
+    /// the Mac owner's record name).
     private func publish() {
-        let macId: String? = MacStatusStore.shared.primary?.macId
-        let connections = ConnectionStore.shared.connections.filter { $0.status == .active }
-        let shareConnection = connections.first { $0.ckShareRef != nil }
-
-        // v2.9: prefer the CKShare path when available — writes to the
-        // Mac's shared zone so the Mac can see us even on a different
-        // Apple ID. Same-account connections use the private-DB engine but
-        // still include the shareURLString so Mac's ingestPeerStatus can
-        // match this heartbeat to the pending pairing during the QR flow.
-        if let conn = shareConnection,
-           let ref = conn.ckShareRef,
-           !ref.ownerRecordName.isEmpty,
-           !ref.isSameAccount {
-            publishViaSharedDB(macId: macId, ref: ref)
-        } else {
-            let shareURLString = shareConnection?.ckShareRef?.shareURLString
-            publishViaPrivateEngine(macId: macId, shareURLString: shareURLString)
+        // Same-iCloud discovery + presence: ALWAYS write our DeviceRecord into
+        // the private DoomCoderZone once it's ready. Same-Apple-ID devices share
+        // one private database, so this single record is how the Mac DISCOVERS
+        // this iPhone for the very first pairing (its picker is fed by the
+        // DeviceRecords it fetches) AND how it keeps "last seen" fresh after.
+        // It does not require an existing connection — that was the chicken-and-
+        // egg bug (no connection → no record → nothing to discover → no pairing).
+        var didPublish = false
+        if CompanionSyncEngine.shared.zoneReady {
+            enqueuePrivate()
+            didPublish = true
         }
+
+        // Cross-account presence: write into each accepted different-iCloud
+        // Mac's SHARED zone. This genuinely needs an accepted CKShare, so it is
+        // gated on an active ckShare connection (there is no pre-pairing
+        // discovery channel for different Apple IDs — that's what QR/code is for).
+        for conn in ConnectionStore.shared.connections where conn.status == .active {
+            if case .ckShare(let ref) = conn.route, !ref.isSameAccount, !ref.ownerRecordName.isEmpty {
+                enqueueShared(zoneOwner: ref.ownerRecordName)
+                didPublish = true
+            }
+        }
+        if didPublish { lastPublishedAt = Date() }
     }
 
-    // MARK: - Same-account path (private DB sync engine)
+    // MARK: - Private-DB path (same iCloud)
 
-    private func publishViaPrivateEngine(macId: String?, shareURLString: String?) {
+    private func enqueuePrivate() {
         let engine = CompanionSyncEngine.shared
-        guard engine.zoneReady else { return }
-
-        let rec = buildRecord(macId: macId, shareURLString: shareURLString, route: "iCloud")
-        guard let engineRef = engine.internalSyncEngine else { return }
-        engineRef.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
-        PeerStatusPublisherCache.shared.put(rec)
-        lastPublishedAt = Date()
-        SyncTelemetry.shared.record(.stateUpdate, side: .ios, detail: "peerStatus heartbeat (iCloud)")
+        guard engine.zoneReady, let engineRef = engine.internalSyncEngine else { return }
+        let rec = buildRecord()
+        let recordID = rec.recordID  // zoneOwner = CKCurrentUserDefaultName
+        DeviceRecordPublisherCache.shared.put(rec, recordID: recordID)
+        engineRef.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+        SyncTelemetry.shared.record(.stateUpdate, side: .ios, detail: "device heartbeat (private)")
     }
 
-    // MARK: - Cross-account path (shared DB direct write)
+    // MARK: - Shared-DB path (different iCloud)
 
-    private func publishViaSharedDB(macId: String?, ref: CKShareRef) {
-        let rec = buildRecord(macId: macId, shareURLString: ref.shareURLString, route: "iCloud Share")
-        let ownerName = ref.ownerRecordName
-        let zoneID = CKRecordZone.ID(
-            zoneName: CloudKitConstants.zoneName,
-            ownerName: ownerName
-        )
-        let recordID = rec.recordID(zoneOwner: ownerName)
-        let base = sharedDbServerCache.record(for: recordID)
-        let ckRecord = rec.toCKRecord(zoneOwner: ownerName, base: base)
-
-        let op = CKModifyRecordsOperation(recordsToSave: [ckRecord], recordIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        op.savePolicy = .changedKeys
-        op.perRecordSaveBlock = { [weak self] _, result in
-            if case .success(let saved) = result {
-                Task { @MainActor [weak self] in
-                    self?.sharedDbServerCache.store(saved)
-                }
-            }
+    private func enqueueShared(zoneOwner: String) {
+        guard let engineRef = SharedDatabaseSync.shared.internalEngine else {
+            // Engine not ready yet — kick a setup; the next heartbeat lands.
+            SharedDatabaseSync.shared.start()
+            return
         }
-        op.modifyRecordsResultBlock = { result in
-            switch result {
-            case .success:
-                SyncTelemetry.shared.record(.sent, side: .ios, recordType: CloudKitConstants.RecordType.peerStatus)
-            case .failure(let err):
-                print("[PeerStatusPublisher] sharedDB write failed: \(err.localizedDescription)")
-            }
-        }
-        // Use sharedCloudDatabase — the record lives in the Mac's zone,
-        // which is accessible because the Mac granted .readWrite permission.
-        _ = zoneID  // confirms correct zoneID is embedded in ckRecord.recordID
-        container.sharedCloudDatabase.add(op)
-        lastPublishedAt = Date()
-        SyncTelemetry.shared.record(.stateUpdate, side: .ios, detail: "peerStatus heartbeat (sharedDB)")
+        let rec = buildRecord()
+        let recordID = rec.recordID(zoneOwner: zoneOwner)
+        DeviceRecordPublisherCache.shared.put(rec, recordID: recordID, zoneOwner: zoneOwner)
+        engineRef.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+        SyncTelemetry.shared.record(.stateUpdate, side: .ios, detail: "device heartbeat (shared)")
     }
 
-    // MARK: - Disconnect signal
+    // MARK: - Disconnect
 
-    /// Writes a PeerStatus record with route = "disconnecting" synchronously to
-    /// CloudKit before local teardown. Mac's ingestPeerStatus detects this and
-    /// removes the connection immediately (vs. waiting up to an hour for pruneStale).
-    func publishDisconnect(connection: Connection) async {
-        let macId = connection.macDeviceId.isEmpty ? nil : connection.macDeviceId
-        let ref = connection.ckShareRef
-        let shareURLString = ref?.shareURLString
-        let rec = buildRecord(macId: macId, shareURLString: shareURLString, route: "disconnecting")
-
-        if let ref, !ref.isSameAccount {
-            // Pull the cached server base so the final write is an UPDATE, not a
-            // blind INSERT that would 14/2004 (the record already exists).
-            let base = sharedDbServerCache.record(for: rec.recordID(zoneOwner: ref.ownerRecordName))
-            let ckRecord = rec.toCKRecord(zoneOwner: ref.ownerRecordName, base: base)
-            let op = CKModifyRecordsOperation(recordsToSave: [ckRecord])
-            op.savePolicy = .allKeys
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                op.modifyRecordsResultBlock = { _ in cont.resume() }
-                container.sharedCloudDatabase.add(op)
-            }
-        } else {
-            let base = PeerStatusPublisherCache.shared.serverBase(for: rec.recordID)
-            let ckRecord = rec.toCKRecord(base: base)
-            let op = CKModifyRecordsOperation(recordsToSave: [ckRecord])
-            op.savePolicy = .allKeys
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                op.modifyRecordsResultBlock = { _ in cont.resume() }
-                container.privateCloudDatabase.add(op)
-            }
+    /// Enqueue a deletion of this iPhone's OWN DeviceRecord from a Mac's zone.
+    /// Called when the user disconnects a Mac so the Mac drops the iPhone card.
+    func enqueueDeletion(for connection: Connection) {
+        let iosId = IosDeviceId.current
+        switch connection.route {
+        case .ckShare(let ref) where !ref.isSameAccount && !ref.ownerRecordName.isEmpty:
+            guard let engineRef = SharedDatabaseSync.shared.internalEngine else { return }
+            let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: ref.ownerRecordName)
+            let recordID = CKRecord.ID(recordName: "Device-\(iosId)", zoneID: zone)
+            DeviceRecordPublisherCache.shared.forget(recordID: recordID)
+            engineRef.state.add(pendingRecordZoneChanges: [.deleteRecord(recordID)])
+        default:
+            guard let engineRef = CompanionSyncEngine.shared.internalSyncEngine else { return }
+            let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
+            let recordID = CKRecord.ID(recordName: "Device-\(iosId)", zoneID: zone)
+            DeviceRecordPublisherCache.shared.forget(recordID: recordID)
+            engineRef.state.add(pendingRecordZoneChanges: [.deleteRecord(recordID)])
         }
     }
 
     // MARK: - Record construction
 
-    private func buildRecord(macId: String?, shareURLString: String?, route: String) -> PeerStatusRecord {
-        PeerStatusRecord(
-            iosDeviceId: IosDeviceId.current,
-            name: IosDeviceId.displayName,
+    private func buildRecord() -> DeviceRecord {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let level = UIDevice.current.batteryLevel
+        let battery: Double? = (level >= 0) ? Double(level) : nil
+
+        // Best-effort iCloud account identity from a paired connection (captured
+        // at share-accept time). Carried so the Mac can label the iPhone card.
+        let conn = ConnectionStore.shared.connections.first { $0.status == .active }
+        return DeviceRecord(
+            deviceId: IosDeviceId.current,
+            role: .ios,
+            displayName: IosDeviceId.displayName,
             model: IosDeviceId.model,
-            systemName: IosDeviceId.systemName,
+            osVersion: IosDeviceId.systemName,
             appVersion: IosDeviceId.appVersion,
             lastSeen: Date(),
-            route: route,
-            macId: macId,
-            shareURLString: shareURLString
+            accountName: conn?.peerAccountName,
+            accountEmail: conn?.peerAccountEmail,
+            battery: battery
         )
     }
 }
 
-// MARK: - Local cache of the last-built record (for the engine delegate)
+// MARK: - DeviceRecord publisher cache (shared by both engine batch delegates)
 
-/// Holds the most recently built PeerStatusRecord so the engine's
-/// `nextRecordZoneChangeBatch` can materialise the CKRecord on demand
-/// (matching the Mac-side pattern of building the record inside the
-/// batch closure to preserve `recordChangeTag`).
+/// Holds the most recently built `DeviceRecord(role: .ios)` per recordID so
+/// either engine's `nextRecordZoneChangeBatch` can materialise the CKRecord on
+/// demand. Persists the server `recordChangeTag` (system fields) so heartbeats
+/// after relaunch are clean UPDATEs, not blind INSERTs (which 14/2004 forever).
 @MainActor
-final class PeerStatusPublisherCache {
-    static let shared = PeerStatusPublisherCache()
+final class DeviceRecordPublisherCache {
+    static let shared = DeviceRecordPublisherCache()
     private init() {}
 
-    private var pending: [String: PeerStatusRecord] = [:]
-    /// Persisted to disk (app-group defaults) so the server `recordChangeTag`
-    /// survives app relaunch. PeerStatus has a STABLE recordID
-    /// ("PeerStatus-{macId}-{iosDeviceId}") that is re-saved on every
-    /// heartbeat — without a persisted etag, the first save after relaunch is a
-    /// blind INSERT and CloudKit returns 14/2004 forever, which is exactly the
-    /// bug that froze the Mac's device list. (Mirrors the Mac's ServerRecordCache.)
+    /// Pending DeviceRecord + its zoneOwner (nil = private/current-user zone).
+    private var pending: [String: (record: DeviceRecord, zoneOwner: String?)] = [:]
+
     private let serverCache = ServerRecordCache(
         defaults: AppGroupCache.defaults,
-        key: "ck.ios.peerStatus.serverCache.v1"
+        key: "ck.ios.deviceRecord.serverCache.v7"
     )
 
-    func put(_ r: PeerStatusRecord) {
-        pending[r.recordID.recordName] = r
+    func put(_ r: DeviceRecord, recordID: CKRecord.ID, zoneOwner: String? = nil) {
+        pending[recordID.recordName + "@" + recordID.zoneID.ownerName] = (r, zoneOwner)
+    }
+
+    private func key(_ recordID: CKRecord.ID) -> String {
+        recordID.recordName + "@" + recordID.zoneID.ownerName
     }
 
     func buildCKRecord(for recordID: CKRecord.ID) -> CKRecord? {
-        guard let rec = pending[recordID.recordName] else { return nil }
+        guard let entry = pending[key(recordID)] else { return nil }
         let base = serverCache.record(for: recordID)
-        let built = rec.toCKRecord(base: base)
-        if let base = base {
-            for key in built.allKeys() { base[key] = built[key] }
+        let built: CKRecord
+        if let owner = entry.zoneOwner {
+            built = entry.record.toCKRecord(zoneOwner: owner, base: base)
+        } else {
+            built = entry.record.toCKRecord(base: base)
+        }
+        if let base, base !== built {
+            for k in built.allKeys() { base[k] = built[k] }
             return base
         }
         return built
     }
 
-    /// The persisted server stub (system fields only) for a recordID, if known.
-    func serverBase(for recordID: CKRecord.ID) -> CKRecord? {
-        serverCache.record(for: recordID)
-    }
-
     func didSave(_ record: CKRecord) {
         serverCache.store(record)
-        pending.removeValue(forKey: record.recordID.recordName)
+        pending.removeValue(forKey: key(record.recordID))
     }
 
-    /// Self-heal: stash the server's copy of the record (from a
-    /// `serverRecordChanged` failure) WITHOUT clearing `pending`, so the next
-    /// batch rebuilds against the fresh etag and the save becomes an UPDATE.
+    /// Stash the server's copy after a `serverRecordChanged` failure WITHOUT
+    /// clearing pending, so the next batch rebuilds against the fresh etag.
     func noteServerRecord(_ record: CKRecord) {
         serverCache.store(record)
     }
 
-    /// The record was deleted server-side (`unknownItem`) — drop the stale etag
-    /// so the next save INSERTs cleanly.
-    func forgetServerRecord(name: String) {
-        serverCache.remove(name: name)
+    /// Drop a stale etag (record deleted server-side / `unknownItem`).
+    func forgetServerRecord(_ recordID: CKRecord.ID) {
+        serverCache.remove(name: recordID.recordName)
     }
 
-    /// Clear on account switch / dev zone-wipe (mirrors the Mac side).
+    func forget(recordID: CKRecord.ID) {
+        pending.removeValue(forKey: key(recordID))
+        serverCache.remove(name: recordID.recordName)
+    }
+
     func clear() {
         pending.removeAll()
         serverCache.clear()

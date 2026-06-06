@@ -86,7 +86,7 @@ struct StaleConnectionBanner: View {
         // we look up the most-recently-seen MacStatus. The
         // tombstone's macDeviceId is the same as the original
         // row's, so the lookup works.
-        if let name = MacStatusStore.shared.byMacId[tombstone.macDeviceId]?.name, !name.isEmpty {
+        if let name = MacStatusStore.shared.byMacId[tombstone.macDeviceId]?.displayName, !name.isEmpty {
             return name
         }
         return "Previous Mac"

@@ -117,7 +117,7 @@ struct DeviceDetailView: View {
     }
 
     private var displayName: String {
-        let name = MacStatusStore.shared.byMacId[connection.macDeviceId]?.name
+        let name = MacStatusStore.shared.byMacId[connection.macDeviceId]?.displayName
         return (name?.isEmpty == false ? name : nil) ?? "Mac"
     }
 

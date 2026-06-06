@@ -156,19 +156,58 @@ final class CompanionSyncEngine: NSObject {
         foregroundPollTask = nil
     }
 
-    /// When a MacStatus record arrives, update the status of any existing
-    /// explicitly-paired connection for that Mac. Never creates new connections.
-    private static func refreshExistingConnections(for status: MacStatusRecord) {
+    /// A Mac's `DeviceRecord` arrived on the PRIVATE engine. That only happens
+    /// when the Mac is on the SAME Apple ID (a different-iCloud Mac's records
+    /// arrive on the shared engine instead). So this is the same-iCloud path:
+    /// refresh the existing connection, or CREATE one if the Mac initiated the
+    /// pair from its picker. There is no ConnectionStateChange handshake
+    /// anymore — the Mac's DeviceRecord simply appearing in our private zone IS
+    /// the signal that we're paired with one of the user's own Macs. Creating
+    /// the connection here ungates that Mac's device card, its agents and its
+    /// notifications (all keyed on an active connection for the macId).
+    @MainActor
+    private static func refreshExistingConnections(for dev: DeviceRecord) {
         let store = ConnectionStore.shared
         let iosId = IosDeviceId.current
-        for conn in store.connections where conn.macDeviceId == status.macId
-                                        || (conn.macDeviceId.isEmpty && conn.iosDeviceId == iosId) {
-            var updated = conn
-            if updated.macDeviceId.isEmpty { updated.macDeviceId = status.macId }
-            updated.status = .active
-            updated.lastSyncAt = status.lastSeen
+        let derived = DerivedDeviceState.derive(hasPairing: true, peer: dev)
+        let status: ConnectionStatus = (derived == .active) ? .active : .suspended
+
+        if let existing = store.connections.first(where: {
+            $0.macDeviceId == dev.deviceId || ($0.macDeviceId.isEmpty && $0.iosDeviceId == iosId)
+        }) {
+            var updated = existing
+            if updated.macDeviceId.isEmpty { updated.macDeviceId = dev.deviceId }
+            updated.status = status
+            updated.lastSyncAt = dev.lastSeen
+            if updated.peerAccountName == nil { updated.peerAccountName = dev.accountName }
+            if updated.peerAccountEmail == nil { updated.peerAccountEmail = dev.accountEmail }
             store.upsert(updated)
+            return
         }
+
+        // No connection yet → same-iCloud auto-connect.
+        let id = Connection.implicitConnectionId(macId: dev.deviceId, iosDeviceId: iosId)
+        let conn = Connection(
+            id: id,
+            macDeviceId: dev.deviceId,
+            iosDeviceId: iosId,
+            route: .iCloud,
+            status: status,
+            createdAt: Date(),
+            lastSyncAt: dev.lastSeen,
+            ckShareRef: nil,
+            pairingOrigin: .sameICloud,
+            stateChangeCounter: 1,
+            shareAcceptedAt: Date(),
+            peerAccountName: dev.accountName,
+            peerAccountEmail: dev.accountEmail
+        )
+        store.upsert(conn)
+        ConnectionNotifier.shared.notifyConnected(macName: dev.displayName)
+        // Start writing our own DeviceRecord so the Mac sees us, and pull this
+        // Mac's agents/notifications now that the active connection ungates them.
+        PeerStatusPublisher.shared.publishNow(force: true)
+        Task { await CompanionSyncEngine.shared.fetchChanges() }
     }
 
     /// Stops the engine, clears local stores, and resets state so the
@@ -326,7 +365,7 @@ final class CompanionSyncEngine: NSObject {
                 print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
                 sharedDefaults.removeObject(forKey: Self.engineStateKey)
                 serverRecords.clear()
-                PeerStatusPublisherCache.shared.clear()
+                DeviceRecordPublisherCache.shared.clear()
                 MacStatusStore.shared.clear()
             }
             sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
@@ -463,8 +502,8 @@ final class CompanionSyncEngine: NSObject {
         let testRecord = NotificationLogRecord(
             notifId: UUID().uuidString,
             sessionKey: "test-\(UUID().uuidString)",
-            macId: primary.macId,
-            macName: primary.name,
+            macId: primary.deviceId,
+            macName: primary.displayName,
             agent: "claude",
             phase: NormalizedEventPhase.permissionNeeded.rawValue,
             rawEvent: "test",
@@ -511,7 +550,7 @@ final class CompanionSyncEngine: NSObject {
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
         sharedDefaults.synchronize()
         serverRecords.clear()
-        PeerStatusPublisherCache.shared.clear()
+        DeviceRecordPublisherCache.shared.clear()
 
         await setupSyncEngine()
         print("[CompanionSyncEngine] resetLocalSyncState: done")
@@ -587,16 +626,20 @@ final class CompanionSyncEngine: NSObject {
     nonisolated private func handleFetched(_ record: CKRecord) {
         Task { @MainActor in
             switch record.recordType {
-            case CloudKitConstants.RecordType.macStatus:
-                if let r = MacStatusRecord(record) {
-                    MacStatusStore.shared.upsert(r)
-                    // Persist server record for changeTag
+            case DeviceRecord.recordType:
+                guard let dev = DeviceRecord(record) else { return }
+                switch dev.role {
+                case .mac:
+                    // The Mac's presence/profile record. Upsert into the unified
+                    // device store and refresh the liveness of any existing
+                    // explicitly-paired connection. NO auto-attach.
+                    MacStatusStore.shared.upsert(dev)
                     self.serverRecords.store(record)
-                    // v6: NO auto-attach. A MacStatus heartbeat only refreshes
-                    // the liveness of an EXISTING explicitly-paired connection —
-                    // it never creates one. Pairing is always an explicit
-                    // Mac-initiated request + iPhone accept.
-                    Self.refreshExistingConnections(for: r)
+                    Self.refreshExistingConnections(for: dev)
+                case .ios:
+                    // Our own record echoed back via the shared private zone —
+                    // ignore (we are the writer).
+                    break
                 }
 
             case CloudKitConstants.RecordType.notificationLog:
@@ -607,12 +650,14 @@ final class CompanionSyncEngine: NSObject {
             case "AgentConfig":
                 // Custom record type: { macId, agents, installedAgents, statuses, updatedAt, schemaVersion }
                 guard let r = AgentConfigRecord(record) else { return }
-                // Manual-only: same-iCloud shares one private DB, so an UNPAIRED
-                // Mac's AgentConfig arrives here too. Never surface its agents
-                // until the user has an active connection to that Mac.
-                guard ConnectionStore.shared.connections.contains(where: {
-                    $0.macDeviceId == r.macId && $0.status == .active
-                }) else { return }
+                // v10: no ingestion gate. A same-iCloud Mac's DeviceRecord makes
+                // us auto-connect to it (see refreshExistingConnections), so every
+                // Mac whose AgentConfig reaches this private engine is one of the
+                // user's own, paired Macs. Gating here previously dropped the
+                // AgentConfig on the FIRST sync when it arrived in the same batch
+                // before the Mac's DeviceRecord (which creates the connection) —
+                // and CKSyncEngine never redelivers it. So we always ingest;
+                // the device list / Mac switcher scope the UI per connection.
                 let agents = r.agents.compactMap { TrackedAgent(rawValue: $0) }
                 let installed = r.installedAgents.compactMap { TrackedAgent(rawValue: $0) }
                 var statusMap: [TrackedAgent: String] = [:]
@@ -643,16 +688,30 @@ final class CompanionSyncEngine: NSObject {
                     LocalStore.shared.upsertAgentIcon(slug: slug, fileURL: url)
                 }
 
-            case CloudKitConstants.RecordType.connectionStateChange:
-                // v5: cross-device pairing-state sync. The other side
-                // (Mac or iOS) wrote a CSC and our CKSyncEngine
-                // fetched it; ingest it into ConnectionStore and let
-                // the UI re-render.
-                ConnectionStateChanges.shared.ingest(record)
-
             default:
                 break
             }
+        }
+    }
+
+    /// v7: a Mac's DeviceRecord was deleted from the zone (the Mac disconnected
+    /// / forgot this iPhone). Drop the matching local Connection + store entry
+    /// so the iPhone list updates without waiting for a stale-prune.
+    func ingestRecordDeletion(_ recordID: CKRecord.ID) {
+        let name = recordID.recordName
+        guard name.hasPrefix("Device-") else { return }
+        let deviceId = String(name.dropFirst("Device-".count))
+        guard !deviceId.isEmpty else { return }
+        // Only react to a Mac's deletion (our own deletion uses our iosDeviceId).
+        guard deviceId != IosDeviceId.current else { return }
+        MacStatusStore.shared.remove(macId: deviceId)
+        let toRemove = ConnectionStore.shared.connections.filter { $0.macDeviceId == deviceId }
+        for conn in toRemove {
+            ConnectionStore.shared.remove(id: conn.id)
+            Task { await LocalStore.shared.clearMacData(macId: conn.macDeviceId) }
+        }
+        if !toRemove.isEmpty {
+            ConnectionNotifier.shared.notifyDisconnected(macName: nil)
         }
     }
 }
@@ -692,7 +751,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                     self.accountAvailable = false
                 case .switchAccounts:
                     self.serverRecords.clear()
-                    PeerStatusPublisherCache.shared.clear()
+                    DeviceRecordPublisherCache.shared.clear()
                     MacStatusStore.shared.clear()
                     AgentListStore.shared.clear()
                     NotificationLogStore.shared.clear()
@@ -716,6 +775,11 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 }
                 SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
             }
+            // v7: a deleted Mac DeviceRecord (same-iCloud) means that Mac
+            // disconnected — drop the matching local connection.
+            for deletion in e.deletions {
+                await MainActor.run { self.ingestRecordDeletion(deletion.recordID) }
+            }
             await MainActor.run {
                 self.markZoneReady()
                 self.firstFetchCompleted = true
@@ -725,17 +789,11 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         case .sentRecordZoneChanges(let e):
             for save in e.savedRecords {
                 SyncTelemetry.shared.record(.sent, side: .ios, recordType: save.recordType)
-                // v2.7: clear the PeerStatus cache entry so the next
-                // heartbeat builds against a fresh server-known base.
-                if save.recordType == CloudKitConstants.RecordType.peerStatus {
+                // v7: clear the DeviceRecord cache entry so the next heartbeat
+                // builds against a fresh server-known base (preserved etag).
+                if save.recordType == DeviceRecord.recordType {
                     await MainActor.run {
-                        PeerStatusPublisherCache.shared.didSave(save)
-                    }
-                }
-                // v5: same for ConnectionStateChange records.
-                if save.recordType == CloudKitConstants.RecordType.connectionStateChange {
-                    await MainActor.run {
-                        CSCPendingCache.shared.didSave(save)
+                        DeviceRecordPublisherCache.shared.didSave(save)
                     }
                 }
             }
@@ -747,30 +805,16 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 print("[CompanionSyncEngine] save failed on \(fail.record.recordID.recordName): \(cke.localizedDescription)")
 
                 // Apple requires the app to resolve `serverRecordChanged` itself
-                // (CKSyncEngine docs). Without this the iOS PeerStatus heartbeat
-                // wedges forever on 14/2004 and the Mac never sees fresh data.
-                // Stash the server record (carries the live etag), then re-enqueue
-                // so the next batch rebuilds as an UPDATE. This also recovers
-                // installs already stuck on the server, with no zone wipe.
+                // (CKSyncEngine docs). DeviceRecord has a stable recordID
+                // ("Device-<id>") re-saved on every heartbeat, so without the
+                // etag self-heal the heartbeat would wedge on 14/2004.
                 let recordID = fail.record.recordID
-                let name = recordID.recordName
-
-                // v7: CSC names are unique per send, so a 14/2004 on a CSC is a
-                // STALE leftover from a pre-v7 build (reused counter name). Drop
-                // it and DON'T re-enqueue — retrying a colliding insert is the
-                // infinite-loop bug. (PeerStatus has a stable name and DOES need
-                // the etag self-heal below.)
-                if name.hasPrefix("CSC-") {
-                    await MainActor.run { CSCPendingCache.shared.didSave(fail.record) }
-                    continue
-                }
+                guard fail.record.recordType == DeviceRecord.recordType else { continue }
                 switch cke.code {
                 case .serverRecordChanged:
                     if let server = cke.serverRecord {
                         await MainActor.run {
-                            if name.hasPrefix("PeerStatus-") {
-                                PeerStatusPublisherCache.shared.noteServerRecord(server)
-                            }
+                            DeviceRecordPublisherCache.shared.noteServerRecord(server)
                         }
                         syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
                     }
@@ -778,9 +822,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                     // Record was deleted server-side — drop the stale etag and
                     // re-enqueue so the next save INSERTs cleanly.
                     await MainActor.run {
-                        if name.hasPrefix("PeerStatus-") {
-                            PeerStatusPublisherCache.shared.forgetServerRecord(name: name)
-                        }
+                        DeviceRecordPublisherCache.shared.forgetServerRecord(recordID)
                     }
                     syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
                 default:
@@ -797,20 +839,15 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        // v2.7: the engine now also writes PeerStatus heartbeats (see
-        // PeerStatusPublisher). v5: also ConnectionStateChange records
-        // (see ConnectionStateChanges). The pending-change set is
-        // filtered by the context's scope, then each record is
-        // materialised from the matching cache.
+        // v7: the engine writes the iPhone's own DeviceRecord(role: .ios)
+        // heartbeats (see PeerStatusPublisher). Materialise each pending record
+        // from the DeviceRecord cache, preserving recordChangeTag.
         let scope = context.options.scope
         let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         guard !pending.isEmpty else { return nil }
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
             await MainActor.run {
-                if recordID.recordName.hasPrefix("CSC-") {
-                    return CSCPendingCache.shared.buildCKRecord(for: recordID)
-                }
-                return PeerStatusPublisherCache.shared.buildCKRecord(for: recordID)
+                DeviceRecordPublisherCache.shared.buildCKRecord(for: recordID)
             }
         }
     }

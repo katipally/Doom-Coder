@@ -12,6 +12,10 @@ struct DeviceDetailView: View {
     let connection: Connection
     @State private var showingRemoveDialog = false
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var store = IosDeviceProfileCache.shared
+
+    private var peer: DeviceRecord? { store.peer(for: connection) }
+    private var derived: DerivedDeviceState { store.derivedState(for: connection) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -20,7 +24,7 @@ struct DeviceDetailView: View {
                     .font(.system(size: 36))
                     .foregroundStyle(routeTint)
                 VStack(alignment: .leading) {
-                    Text(IosDeviceProfileCache.shared.name(for: connection.iosDeviceId) ?? "Device")
+                    Text(peer?.displayName ?? "Device")
                         .font(.title.weight(.semibold))
                     Text(connection.route.displayName)
                         .foregroundStyle(.secondary)
@@ -28,7 +32,7 @@ struct DeviceDetailView: View {
                 Spacer()
             }
 
-            if connection.status == .suspended {
+            if derived == .offline {
                 suspendedBanner
             }
 
@@ -81,11 +85,23 @@ struct DeviceDetailView: View {
         Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
             GridRow {
                 Text("Status").foregroundStyle(.secondary)
-                Text(connection.status.displayName)
+                Text(derived.displayName)
             }
             GridRow {
                 Text("Route").foregroundStyle(.secondary)
                 Text(connection.route.shortLabel)
+            }
+            if let model = peer?.model, !model.isEmpty {
+                GridRow {
+                    Text("Model").foregroundStyle(.secondary)
+                    Text(model)
+                }
+            }
+            if let os = peer?.osVersion, !os.isEmpty {
+                GridRow {
+                    Text("OS").foregroundStyle(.secondary)
+                    Text(os)
+                }
             }
             GridRow {
                 Text("Pairing").foregroundStyle(.secondary)
@@ -115,7 +131,9 @@ struct DeviceDetailView: View {
     }
 
     private var syncLabel: String {
-        guard let last = connection.lastSyncAt else { return "Never" }
+        // v7: prefer the peer DeviceRecord's lastSeen (authoritative heartbeat).
+        let last = peer?.lastSeen ?? connection.lastSyncAt
+        guard let last, last > .distantPast else { return "Never" }
         return last.formatted(.relative(presentation: .named))
     }
 }

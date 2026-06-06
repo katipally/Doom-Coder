@@ -1,14 +1,18 @@
 // IosDeviceProfileCache.swift — DoomCoder Mac
 //
-// v2.7: in-memory cache of every iOS device's profile (display name,
-// model, last seen) so DeviceRow can render "Yash's iPhone" instead of
-// a generic "iPhone" label. Populated by CloudKitPusher.ingestPeerStatus
-// when a PeerStatus record arrives via the Mac's read-pipeline.
+// v7 revamp: the unified device store. Holds the peer iOS `DeviceRecord`s
+// the Mac has read out of DoomCoderZone, keyed by `deviceId`. Replaces the
+// old PeerStatus-derived `Profile` cache. Every iOS DeviceRecord the Mac
+// fetches is upserted here UNCONDITIONALLY (this fixes the headline bug
+// where the old code dropped the profile when no connection matched), so
+// the Mac always knows the real iPhone identity.
 //
-// v6: persisted to UserDefaults so the card renders name/model/OS
-// instantly on relaunch (previously in-memory only → blank cards until
-// the next heartbeat landed). Also carries the peer's iCloud identity
-// (account name/email from CloudKit discoverability).
+// Still a `@MainActor ObservableObject` with `@Published` storage so the
+// Connections UI re-renders, and still persisted to UserDefaults so cards
+// render instantly on relaunch.
+//
+// Connection-state display is derived via
+// `DerivedDeviceState.derive(hasPairing:peer:)` — see `derivedState(for:)`.
 
 import Foundation
 import Combine
@@ -18,79 +22,82 @@ import DoomCoderCore
 public final class IosDeviceProfileCache: ObservableObject {
     public static let shared = IosDeviceProfileCache()
 
-    public struct Profile: Equatable, Sendable, Codable {
-        public let iosDeviceId: String
-        public let name: String
-        public let model: String
-        public let systemName: String
-        public let appVersion: String
-        public let lastSeen: Date
-        /// v6: best-effort iCloud identity of the iPhone's account.
-        public var accountName: String?
-        public var accountEmail: String?
+    /// Peer DeviceRecords (role == .ios) the Mac has read from the zone,
+    /// keyed by `deviceId`.
+    @Published public private(set) var byId: [String: DeviceRecord] = [:]
 
-        public init(iosDeviceId: String, name: String, model: String,
-                    systemName: String, appVersion: String, lastSeen: Date,
-                    accountName: String? = nil, accountEmail: String? = nil) {
-            self.iosDeviceId = iosDeviceId
-            self.name = name
-            self.model = model
-            self.systemName = systemName
-            self.appVersion = appVersion
-            self.lastSeen = lastSeen
-            self.accountName = accountName
-            self.accountEmail = accountEmail
-        }
-    }
-
-    @Published public private(set) var byId: [String: Profile] = [:]
-
-    private static let storageKey = "DoomCoder.IosDeviceProfileCache.v6"
+    private static let storageKey = "DoomCoder.DeviceRecordStore.v7"
 
     private init() {
         load()
     }
 
-    public func upsert(_ p: Profile) {
-        // Preserve a previously-known identity if the incoming profile
-        // doesn't carry one (heartbeats may omit the discoverability fields).
-        var merged = p
-        if merged.accountName == nil { merged.accountName = byId[p.iosDeviceId]?.accountName }
-        if merged.accountEmail == nil { merged.accountEmail = byId[p.iosDeviceId]?.accountEmail }
-        byId[p.iosDeviceId] = merged
+    // MARK: - Upsert / lookup
+
+    /// Upsert a peer DeviceRecord. Called for every iOS DeviceRecord the Mac
+    /// fetches — unconditionally, regardless of whether a Connection matches.
+    public func upsert(_ record: DeviceRecord) {
+        guard !record.deviceId.isEmpty else { return }
+        // Merge: preserve a previously-known account identity if the incoming
+        // record doesn't carry one (heartbeats may omit discoverability fields).
+        var merged = record
+        if merged.accountName == nil { merged.accountName = byId[record.deviceId]?.accountName }
+        if merged.accountEmail == nil { merged.accountEmail = byId[record.deviceId]?.accountEmail }
+        var next = byId
+        next[record.deviceId] = merged
+        byId = next
         save()
     }
 
-    public func name(for iosDeviceId: String) -> String? {
-        byId[iosDeviceId]?.name
+    /// The peer DeviceRecord for a deviceId, if known.
+    public func record(for deviceId: String) -> DeviceRecord? {
+        byId[deviceId]
     }
 
-    public func profile(for iosDeviceId: String) -> Profile? {
-        byId[iosDeviceId]
+    /// Display name for a deviceId (convenience for the UI).
+    public func name(for deviceId: String) -> String? {
+        byId[deviceId]?.displayName
     }
 
-    /// Drop a profile (e.g. on hard disconnect) so stale identities don't linger.
-    public func remove(iosDeviceId: String) {
-        byId.removeValue(forKey: iosDeviceId)
+    /// The peer DeviceRecord for a Connection, matched by its iosDeviceId.
+    public func peer(for connection: Connection) -> DeviceRecord? {
+        guard !connection.iosDeviceId.isEmpty else { return nil }
+        return byId[connection.iosDeviceId]
+    }
+
+    /// Derived connection state for a Connection: paired (and not removed) +
+    /// the peer's DeviceRecord freshness.
+    public func derivedState(for connection: Connection) -> DerivedDeviceState {
+        let hasPairing = connection.removedAt == nil
+        return DerivedDeviceState.derive(hasPairing: hasPairing, peer: peer(for: connection))
+    }
+
+    /// Drop a record (e.g. on hard disconnect or a fetched deletion) so stale
+    /// identities don't linger.
+    public func remove(deviceId: String) {
+        guard byId[deviceId] != nil else { return }
+        var next = byId
+        next.removeValue(forKey: deviceId)
+        byId = next
         save()
     }
 
-    /// v5.1: inserts a placeholder profile so DeviceRow has *some*
-    /// name to render the moment a Connection is created. The first
-    /// real heart-beat overwrites this entry with the iOS device's
-    /// user-set name. If no real heart-beat ever lands, the
-    /// placeholder keeps the row from rendering as a blank.
+    /// Inserts a placeholder DeviceRecord so the UI has *some* name to render
+    /// the moment a Connection is created, before the first real DeviceRecord
+    /// lands. Never overwrites a real record.
     public func insertPlaceholder(iosDeviceId: String, name: String) {
-        // Don't overwrite a real profile with a placeholder.
-        if byId[iosDeviceId] != nil { return }
-        byId[iosDeviceId] = Profile(
-            iosDeviceId: iosDeviceId,
-            name: name,
+        guard !iosDeviceId.isEmpty, byId[iosDeviceId] == nil else { return }
+        var next = byId
+        next[iosDeviceId] = DeviceRecord(
+            deviceId: iosDeviceId,
+            role: .ios,
+            displayName: name,
             model: "",
-            systemName: "",
+            osVersion: "",
             appVersion: "",
-            lastSeen: Date()
+            lastSeen: .distantPast   // placeholder → derives as .pending, not .active
         )
+        byId = next
         save()
     }
 
@@ -98,7 +105,7 @@ public final class IosDeviceProfileCache: ObservableObject {
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: Self.storageKey),
-              let decoded = try? JSONDecoder().decode([String: Profile].self, from: data)
+              let decoded = try? JSONDecoder().decode([String: DeviceRecord].self, from: data)
         else { return }
         byId = decoded
     }

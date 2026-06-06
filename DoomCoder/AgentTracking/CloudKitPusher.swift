@@ -1,9 +1,11 @@
 // CloudKitPusher.swift
 //
 // Mac-side push-only CKSyncEngine wrapper. Writes NotificationLog (one per
-// dispatched notification), MacStatus (heartbeat singleton), AgentConfig
-// (list of tracked agents singleton), AgentIcon (CKAssets for runtime icon
-// delivery to iOS).
+// dispatched notification), the Mac's own DeviceRecord(role: .mac) (heartbeat
+// presence singleton, v7 — replaces MacStatus), AgentConfig (list of tracked
+// agents singleton), AgentIcon (CKAssets for runtime icon delivery to iOS).
+// READS peer DeviceRecord(role: .ios) out of the zone into the unified device
+// store; connection state is DERIVED (DerivedDeviceState), not tracked.
 //
 // Lessons baked in (from exp-ios-to-mac branch's hard-won fixes):
 //   1. Persist `record.encodeSystemFields()` to disk for singletons
@@ -306,25 +308,58 @@ final class CloudKitPusher: ObservableObject {
         pendingNotificationLogs[rec.recordID.recordName] = rec
     }
 
-    /// Heartbeat / status singleton. Called every 60s + on sleep/wake + on any
+    /// Heartbeat / presence record. Called every 60s + on sleep/wake + on any
     /// SleepManager state change. Reflects the LIVE keep-awake state so iOS can
     /// see at a glance whether the Mac is awake.
+    ///
+    /// v7: publishes THIS Mac's single `DeviceRecord(role: .mac)` — the one
+    /// presence/profile record this device owns in DoomCoderZone. Replaces the
+    /// old MacStatus singleton. The ServerRecordCache etag-preservation pattern
+    /// keeps repeated heartbeats clean UPDATEs (single writer → no INSERT
+    /// collisions).
     func publishMacStatus(sleepActive: Bool? = nil) {
         guard let engine else { return }
         let sm = SleepManager.shared
 
-        let rec = MacStatusRecord(
-            macId: macId,
-            name: macName,
-            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
+        let rec = DeviceRecord(
+            deviceId: macId,
+            role: .mac,
+            displayName: macName,
+            model: Self.macModel,
+            osVersion: Self.macOSVersion,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
+            lastSeen: Date(),
+            accountName: macAccountName,
+            accountEmail: macAccountEmail,
             sleepActive: sleepActive ?? sm.isActive,
             mode: sm.mode.rawValue,
-            lastSeen: Date(),
             thermalState: sm.thermalStateText
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
         pendingMacStatus = rec
     }
+
+    /// Best-effort iCloud identity of this Mac's account, captured once when
+    /// known (e.g. during share creation). Carried on the Mac's DeviceRecord.
+    var macAccountName: String?
+    var macAccountEmail: String?
+
+    /// Hardware model identifier (e.g. "MacBookPro18,3").
+    static let macModel: String = {
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        guard size > 0 else { return "Mac" }
+        var buf = [UInt8](repeating: 0, count: size)
+        sysctlbyname("hw.model", &buf, &size, nil, 0)
+        if let nul = buf.firstIndex(of: 0) { buf.removeSubrange(nul...) }
+        return String(decoding: buf, as: UTF8.self)
+    }()
+
+    /// "macOS 26.0" style string.
+    static let macOSVersion: String = {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+    }()
 
     /// Pull zone changes now. Used to pick up any new Mac state promptly
     /// (launch, foreground, wake, and the safety timer).
@@ -430,7 +465,7 @@ final class CloudKitPusher: ObservableObject {
     // MARK: - In-flight payloads (read by delegate)
 
     var pendingNotificationLogs: [String: NotificationLogRecord] = [:]
-    var pendingMacStatus: MacStatusRecord?
+    var pendingMacStatus: DeviceRecord?
     var pendingAgentConfig: AgentConfigRecord?
     var pendingAgentIcons: [String: (AgentIconRecord, URL)] = [:]
 
@@ -441,8 +476,11 @@ final class CloudKitPusher: ObservableObject {
         switch recordID.recordName {
         case let name where name.hasPrefix("NotificationLog-"):
             return pendingNotificationLogs[name]?.toCKRecord()
-        case let name where name.hasPrefix("MacStatus-"):
-            guard let rec = pendingMacStatus else { return nil }
+        case let name where name.hasPrefix("Device-"):
+            // v7: the Mac's own DeviceRecord(role: .mac). Only ever the Mac's
+            // own record is materialised here — a peer's Device-<iosId> record
+            // is never queued for save.
+            guard let rec = pendingMacStatus, name == "Device-\(macId)" else { return nil }
             return rec.toCKRecord(base: serverRecords.record(forName: name))
         case let name where name.hasPrefix("AgentConfig-"):
             guard let rec = pendingAgentConfig else { return nil }
@@ -465,7 +503,7 @@ final class CloudKitPusher: ObservableObject {
     func clearPending(for recordID: CKRecord.ID) {
         let name = recordID.recordName
         pendingNotificationLogs.removeValue(forKey: name)
-        if name.hasPrefix("MacStatus-")   { pendingMacStatus = nil }
+        if name == "Device-\(macId)"      { pendingMacStatus = nil }
         if name.hasPrefix("AgentConfig-") { pendingAgentConfig = nil }
         pendingAgentIcons.removeValue(forKey: name)
     }
@@ -531,136 +569,100 @@ final class CloudKitPusher: ObservableObject {
 }
 
 extension CloudKitPusher {
-    /// v2.7: handle an incoming PeerStatus record (iOS → Mac heartbeat).
-    /// Same-iCloud iPhones AUTO-attach here (the heartbeat lands in the shared
-    /// private zone, so a same-account iPhone is discoverable with no QR). The
-    /// row is created once per iosDeviceId, UNLESS the user has explicitly
-    /// disconnected it (PairingStore suppression) — in which case it stays gone
-    /// until an explicit re-pair via the Same-iCloud picker.
+    /// v7: ingest a peer iOS `DeviceRecord` fetched from DoomCoderZone.
+    ///
+    /// The DeviceRecord is upserted into the unified device store
+    /// UNCONDITIONALLY (this fixes the headline bug: the old PeerStatus code
+    /// dropped the profile whenever no Connection matched). The Mac therefore
+    /// always knows the real iPhone identity. After storing, if a Connection
+    /// exists for this iOS deviceId — or a CKShare connection whose placeholder
+    /// iosDeviceId hasn't been reconciled yet — we refresh it and back-fill the
+    /// real deviceId. Connection *state* is derived (DerivedDeviceState), not
+    /// stamped from a heartbeat counter.
     @MainActor
-    func ingestPeerStatus(_ record: CKRecord) {
-        guard let rec = PeerStatusRecord(record) else {
-            logger.error("ckpusher: failed to decode PeerStatus record \(record.recordID.recordName, privacy: .public)")
-            return
-        }
-        // Update the per-iOS-device profile cache so DeviceRow can
-        // render the user's iPhone name (e.g. "Yash's iPhone")
-        // instead of a generic "iPhone" label.
-        IosDeviceProfileCache.shared.upsert(
-            IosDeviceProfileCache.Profile(
-                iosDeviceId: rec.iosDeviceId,
-                name: rec.name,
-                model: rec.model,
-                systemName: rec.systemName,
-                appVersion: rec.appVersion,
-                lastSeen: rec.lastSeen
-            )
+    func ingestDeviceRecord(_ record: CKRecord) {
+        guard let dev = DeviceRecord(record), dev.role == .ios else { return }
+
+        // 1. Always store the peer profile so cards render the real identity.
+        IosDeviceProfileCache.shared.upsert(dev)
+
+        // 2. Feed the Add-Device "Same iCloud" picker so an unpaired iPhone is
+        //    discoverable for an explicit connect.
+        DiscoverableDeviceSubscription.shared.noteSeen(
+            iosDeviceId: dev.deviceId,
+            name: dev.displayName,
+            model: dev.model,
+            systemVersion: dev.osVersion,
+            lastSeen: dev.lastSeen
         )
 
-        // Feed the Add-Device "Same iCloud" picker from PeerStatus (same
-        // Apple ID = no share URL). Done BEFORE the suppression/auto-attach
-        // checks so a disconnected iPhone still appears in the picker for
-        // explicit re-connect.
-        if rec.shareURLString == nil, rec.route != "disconnecting" {
-            DiscoverableDeviceSubscription.shared.noteSeen(
-                iosDeviceId: rec.iosDeviceId,
-                name: rec.name,
-                model: rec.model,
-                systemVersion: rec.systemName,
-                lastSeen: rec.lastSeen
-            )
+        // 3. Fast-path acceptance: if the Mac is showing the QR sheet, an iOS
+        //    DeviceRecord appearing in the shared zone means the share was
+        //    accepted (the iPhone can now write into the zone). Signal the
+        //    coordinator so the sheet dismisses and the connection is reconciled.
+        if case .waitingForAcceptance = MacPairingCoordinator.shared.phase {
+            NotificationCenter.default.post(name: .doomCoderShareAccepted, object: nil)
         }
 
-        // v7: NO auto-attach. Same-iCloud devices are DISCOVERED here (the
-        // `noteSeen` picker feed above) and surface live status for already-paired
-        // rows (the "update existing connection" path below), but a connection
-        // only ever forms through an explicit user action — the Mac picker +
-        // iPhone Accept handshake, or the same-iCloud code/QR flow. We never
-        // silently create a row from an incoming heartbeat.
-
-        // iOS device explicitly disconnected — remove the connection immediately
-        // instead of waiting up to an hour for pruneStale to fire. (v5: the
-        // preferred path is a CSC{removed} record handled by
-        // ConnectionStateChanges.ingest, but we still honour the v2.9
-        // route="disconnecting" trick for backward compat with older
-        // iOS builds that haven't shipped the v5 schema yet.)
-        if rec.route == "disconnecting" {
-            let conn = PairingStore.shared.connections.first {
-                (rec.shareURLString != nil && $0.ckShareRef?.shareURLString == rec.shareURLString)
-                || $0.iosDeviceId == rec.iosDeviceId
-            }
-            if let conn {
-                PairingStore.shared.remove(connectionId: conn.id)
-            }
-            return
+        // 4. Reconcile / refresh a matching Connection. Match by exact
+        //    iosDeviceId, OR a CKShare row whose placeholder iosDeviceId hasn't
+        //    been back-filled yet (there can be at most one such pending row).
+        let connections = PairingStore.shared.connections
+        let exact = connections.first { !$0.iosDeviceId.isEmpty && $0.iosDeviceId == dev.deviceId }
+        let pendingShare = connections.first {
+            $0.iosDeviceId.isEmpty && $0.ckShareRef != nil
         }
+        guard let existing = exact ?? pendingShare else { return }
 
-        // Fast-path acceptance detection: when the Mac is showing the QR sheet
-        // (waitingForAcceptance), any PeerStatus from the pairing iOS device
-        // signals that the share was accepted. Posts the same notification that
-        // the CKShare-change delegate path uses, so handleAcceptance() fires in
-        // 1-3s instead of up to 3s polling + round-trip.
-        if case .waitingForAcceptance(_, let shareURL, _) = MacPairingCoordinator.shared.phase {
-            let crossAccountMatch = rec.shareURLString == shareURL.absoluteString
-            let alreadyPaired = PairingStore.shared.connections.contains { $0.iosDeviceId == rec.iosDeviceId }
-            let sameAccountCandidate = rec.shareURLString == nil && !alreadyPaired
-            if crossAccountMatch || sameAccountCandidate {
-                NotificationCenter.default.post(name: .doomCoderShareAccepted, object: nil)
-            }
-        }
-
-        let nowFresh = Date().timeIntervalSince(rec.lastSeen) < 300  // 5-min staleness
-        let status: ConnectionStatus = nowFresh ? .active : .suspended
-
-        // v2.9: deterministic implicit id includes both macId and iosDeviceId
-        // so multiple iOS devices on the same iCloud account each get their
-        // own row instead of overwriting each other. v5.1: same-account
-        // rows (no ckShareRef) also match by iosDeviceId so a subsequent
-        // heart-beat refreshes them instead of falling through to the
-        // "no matching connection" guard.
-        let peerShareURL = rec.shareURLString
-        let existing = PairingStore.shared.connections.first { conn in
-            // Share-URL match: placeholder ckShare row created at acceptance
-            // time carries a temp iosDeviceId — reconcile on the first heartbeat.
-            if let connShare = conn.ckShareRef?.shareURLString,
-               let peerShare = peerShareURL,
-               connShare == peerShare {
-                return true
-            }
-            // Exact iosDeviceId match on a cross-account or same-account
-            // row. (v5.1: same-account rows have ckShareRef == nil.)
-            if !conn.iosDeviceId.isEmpty, conn.iosDeviceId == rec.iosDeviceId {
-                return true
-            }
-            return false
-        }
-
-        guard let existing else {
-            // No matching paired connection — heartbeat from a same-
-            // account iOS device whose auto-attach already ran above
-            // (we returned). For cross-account this means the Mac
-            // hasn't seen a QR for this iOS yet — ignore.
-            return
-        }
         var updated = existing
-        // v5: ignore heart-beats with stale stateChangeCounter.
-        if rec.stateChangeCounter > 0 && rec.stateChangeCounter < updated.stateChangeCounter {
-            return
+        if updated.iosDeviceId != dev.deviceId {
+            updated.iosDeviceId = dev.deviceId   // reconcile placeholder → real id
         }
-        updated.status = status
-        updated.lastSyncAt = rec.lastSeen
-        // Back-fill the stable iosId on a placeholder ckShare row created
-        // at acceptance time before the first heartbeat arrived.
-        if updated.iosDeviceId != rec.iosDeviceId {
-            updated.iosDeviceId = rec.iosDeviceId
+        // Drive status from the derivation so the UI keeps compiling on
+        // Connection.status while we no longer run the CSC machine.
+        let derived = DerivedDeviceState.derive(hasPairing: true, peer: dev)
+        let wasActive = (updated.status == .active)
+        switch derived {
+        case .active:  updated.status = .active
+        case .offline: updated.status = .suspended
+        case .pending: updated.status = .pending
+        case .disconnected: updated.status = .suspended
         }
-        // Bump our own counter to match the iOS side so the next
-        // round-trip is in lock-step.
-        if rec.stateChangeCounter > updated.stateChangeCounter {
-            updated.stateChangeCounter = rec.stateChangeCounter
-        }
+        updated.lastSyncAt = dev.lastSeen
+        if updated.removedAt != nil { updated.removedAt = nil }
+        if let name = dev.accountName, !name.isEmpty { updated.peerAccountName = name }
+        if let email = dev.accountEmail, !email.isEmpty { updated.peerAccountEmail = email }
         PairingStore.shared.upsert(updated)
+
+        if !wasActive, derived == .active {
+            NotificationDispatcher.shared.notifyDeviceConnected(name: dev.displayName)
+        }
     }
+
+    /// v7: a peer iOS DeviceRecord was DELETED from the zone (the iPhone
+    /// disconnected from its side, or the shared zone was revoked). Drop the
+    /// store entry and the matching Connection so the Mac list updates.
+    @MainActor
+    func handleDeviceRecordDeletion(recordName: String) {
+        guard recordName.hasPrefix("Device-") else { return }
+        let deviceId = String(recordName.dropFirst("Device-".count))
+        // Never act on our own record's deletion.
+        guard deviceId != macId, !deviceId.isEmpty else { return }
+        IosDeviceProfileCache.shared.remove(deviceId: deviceId)
+        let name = IosDeviceProfileCache.shared.name(for: deviceId)
+        for conn in PairingStore.shared.connections where conn.iosDeviceId == deviceId {
+            PairingStore.shared.remove(connectionId: conn.id)
+        }
+        NotificationDispatcher.shared.notifyDeviceDisconnected(name: name)
+    }
+
+    /// Legacy entry point retained for any stale callers; routes to the v7
+    /// DeviceRecord ingest. PeerStatus records are no longer produced.
+    @MainActor
+    func ingestPeerStatus(_ record: CKRecord) {
+        ingestDeviceRecord(record)
+    }
+
 }
 
 extension Notification.Name {

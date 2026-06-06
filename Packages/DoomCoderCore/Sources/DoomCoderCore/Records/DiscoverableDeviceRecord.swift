@@ -21,6 +21,10 @@ import CloudKit
 
 public struct DiscoverableDeviceRecord: Sendable, Codable, Equatable, Hashable, Identifiable {
     public var iosDeviceId: String
+    /// v7: role of the advertising device. Currently always `.ios` (only the
+    /// iPhone advertises for the Mac's same-iCloud picker), but carried
+    /// explicitly so the discovery feed stays symmetric with DeviceRecord.
+    public var role: DeviceRole
     public var name: String                 // e.g. "Yash's iPhone"
     public var model: String                // e.g. "iPhone17,2"
     public var systemVersion: String        // e.g. "iOS 26.4"
@@ -37,6 +41,7 @@ public struct DiscoverableDeviceRecord: Sendable, Codable, Equatable, Hashable, 
 
     public init(
         iosDeviceId: String,
+        role: DeviceRole = .ios,
         name: String,
         model: String,
         systemVersion: String,
@@ -47,6 +52,7 @@ public struct DiscoverableDeviceRecord: Sendable, Codable, Equatable, Hashable, 
         schemaVersion: Int = CloudKitConstants.schemaVersion
     ) {
         self.iosDeviceId = iosDeviceId
+        self.role = role
         self.name = name
         self.model = model
         self.systemVersion = systemVersion
@@ -83,6 +89,7 @@ extension DiscoverableDeviceRecord {
 
     private func fill(_ r: CKRecord) {
         r["iosDeviceId"]   = iosDeviceId as CKRecordValue
+        r["role"]          = role.rawValue as CKRecordValue
         r["name"]          = name as CKRecordValue
         r["model"]         = model as CKRecordValue
         r["systemVersion"] = systemVersion as CKRecordValue
@@ -104,6 +111,7 @@ extension DiscoverableDeviceRecord {
         else { return nil }
         self.init(
             iosDeviceId: iosDeviceId,
+            role: (r["role"] as? String).flatMap(DeviceRole.init(rawValue:)) ?? .ios,
             name: name,
             model: model,
             systemVersion: sysVer,

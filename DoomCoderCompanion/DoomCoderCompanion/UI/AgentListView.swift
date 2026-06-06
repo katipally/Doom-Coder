@@ -49,7 +49,7 @@ struct AgentListView: View {
                             HStack {
                                 Image(systemName: "desktopcomputer")
                                     .accessibilityHidden(true)
-                                Text(mac.name)
+                                Text(mac.displayName)
                                 Spacer()
                                 Text(relativeTime(mac.lastSeen))
                                     .foregroundStyle(.secondary)

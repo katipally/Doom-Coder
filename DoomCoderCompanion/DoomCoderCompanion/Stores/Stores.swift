@@ -6,11 +6,18 @@
 import Foundation
 import DoomCoderCore
 
-// MARK: - MacStatusStore
+// MARK: - MacStatusStore (v7: DeviceRecord-backed)
 
-/// Holds the latest MacStatusRecord for every paired Mac. The "primary" is
-/// always the most recently seen Mac — there is no user-selectable pinning
-/// because the iOS app is read-only and never pairs explicitly.
+/// v7: the unified device store. Holds the latest `DeviceRecord(role: .mac)`
+/// for every paired Mac, keyed by the Mac's `deviceId` (its macId). This
+/// replaces the old `MacStatusRecord`-keyed store — the single v7
+/// presence/profile record carries everything the UI used to read off
+/// MacStatus (name, lastSeen, account identity, sleep/mode/thermals).
+///
+/// The "primary" is the most recently seen Mac. The iOS app never writes a
+/// Mac record; it only writes its OWN `DeviceRecord(role: .ios)` (see
+/// PeerStatusPublisher). The type name is retained so the dozens of
+/// `MacStatusStore.shared` call sites compile unchanged.
 @MainActor
 @Observable
 final class MacStatusStore {
@@ -19,26 +26,37 @@ final class MacStatusStore {
     private init() {
         // Warm from App Group cache so the cold-launch UI shows the last
         // known Mac instantly, before the first CloudKit fetch resolves.
-        if let cached = AppGroupCache.read([String: MacStatusRecord].self,
+        if let cached = AppGroupCache.read([String: DeviceRecord].self,
                                            forKey: Self.cacheKey) {
             byMacId = cached
         }
     }
 
-    /// App Group cache key for the full byMacId snapshot.
-    static let cacheKey = "cache.macStatus.byMacId"
+    /// App Group cache key for the full byMacId snapshot. v7 bumps the key so
+    /// a stale v6 MacStatusRecord blob doesn't fail to decode as DeviceRecord.
+    static let cacheKey = "cache.deviceRecord.mac.byMacId.v7"
 
-    private(set) var byMacId: [String: MacStatusRecord] = [:]
+    /// The Mac's DeviceRecord, keyed by its deviceId (macId).
+    private(set) var byMacId: [String: DeviceRecord] = [:]
 
     /// Most recently seen Mac.
-    var primary: MacStatusRecord? {
+    var primary: DeviceRecord? {
         byMacId.values.max(by: { $0.lastSeen < $1.lastSeen })
     }
 
-    func upsert(_ r: MacStatusRecord) {
-        byMacId[r.macId] = r
+    /// Upsert a Mac's DeviceRecord. Only `.mac` role records belong here.
+    func upsert(_ r: DeviceRecord) {
+        guard r.role == .mac else { return }
+        byMacId[r.deviceId] = r
         AppGroupCache.write(byMacId, forKey: Self.cacheKey)
-        LocalStore.shared.upsertMacStatus(r)
+    }
+
+    /// Remove a Mac's record (e.g. when its DeviceRecord is deleted from the
+    /// zone or the shared zone disappears).
+    func remove(macId: String) {
+        guard byMacId[macId] != nil else { return }
+        byMacId.removeValue(forKey: macId)
+        AppGroupCache.write(byMacId, forKey: Self.cacheKey)
     }
 
     func clear() {
