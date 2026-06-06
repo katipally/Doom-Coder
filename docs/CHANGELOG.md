@@ -8,12 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [2.7.0] - 2026-06-06
+
 ### Added -- Hooks & notifications overhaul
 
 - **Full hook coverage.** Previously-dropped agent events are now notifiable categories: file edits, context compaction, agent thinking, prompt sent, and background/housekeeping tasks. Each is opt-in (default off) and only shown for agents that actually emit it.
 - **Approval debounce ("no more auto-accept spam").** Copilot CLI, Cursor, and Windsurf fire a permission hook *before* their own allowlist auto-approves. A new `ApprovalArbiter` defers the alert by a short window (default 0.8s, adjustable 0.5-3s in Settings) and cancels it if proof arrives that the tool actually ran. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) still alert instantly.
 - **Per-agent reliability policy** -- `PermissionHookReliability` classifies each agent as `reliable` (dispatch immediately) or `preDecision` (route through the arbiter).
 - **Approval debounce window** setting in Configure > Settings.
+
+### Added -- iPhone/iPad sync reliability
+
+- **CKSyncEngine-backed companion sync.** Every companion write (control commands, device-presence heartbeats) now flows through `CKSyncEngine` instead of raw CloudKit operations, so change tags, batching, and retries are managed for us. This eliminates the "record already exists" and stale-change-tag loops that could wedge a device's connection.
+- **Automatic recovery from CloudKit edge cases.** The Mac and companion now self-heal from server-record conflicts, missing records (`unknownItem`), and deleted/missing zones (`zoneNotFound`) by re-inserting or re-asserting their own zone, with a bounded conflict-retry guard so a pathological conflict can never spin forever.
+- **Test Connection** (replaces "Send Test Push"). Sends a round-trip `.check` command that rings a notification on the connected Mac and confirms the link end-to-end; the button reports success only when the Mac actually acknowledges.
 
 ### Changed -- Configure UI
 
@@ -29,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Per-agent channel overrides.** Channels are now a single global mac + iPhone setting; a one-time migration clears any stored overrides. Per-agent control lives in the categories card instead.
 - Duplicate "DoomCoder for iPhone & iPad" banner in Settings (companion setup now lives only in the Connections tab).
+- Obsolete CloudKit record types (`Settings`, `Session`, `Event`, `WoLProfile`) dropped from the shared schema constants -- leftovers from earlier sync designs that no longer ship.
 
 ### Migration
 

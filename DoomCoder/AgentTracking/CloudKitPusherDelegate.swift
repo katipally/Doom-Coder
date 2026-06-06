@@ -43,11 +43,40 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                     self.pusher?.clearPending(for: saved.recordID)
                 }
             }
+            var needsRecoveryKick = false
             for failed in sent.failedRecordSaves {
                 let code = failed.error.code
                 logger.error("ckpusher.delegate: failed save \(failed.record.recordID.recordName, privacy: .public) code=\(String(describing: code), privacy: .public)")
-                if let serverRec = failed.error.serverRecord {
-                    await MainActor.run { self.pusher?.serverRecords.store(serverRec) }
+                let recordID = failed.record.recordID
+                switch code {
+                case .serverRecordChanged:
+                    // Conflict: adopt the server's record so the next save carries
+                    // the correct change tag.
+                    if let serverRec = failed.error.serverRecord {
+                        await MainActor.run { self.pusher?.serverRecords.store(serverRec) }
+                    }
+                case .unknownItem:
+                    // Stale base tag for a record the server no longer has
+                    // (e.g. after a dev-environment reset) → re-insert fresh.
+                    await MainActor.run { self.pusher?.recoverUnknownItem(recordID) }
+                    needsRecoveryKick = true
+                case .zoneNotFound, .userDeletedZone:
+                    // Our zone is gone → recreate it and re-insert.
+                    await MainActor.run { self.pusher?.recoverZoneNotFound(recordID) }
+                    needsRecoveryKick = true
+                default:
+                    if let serverRec = failed.error.serverRecord {
+                        await MainActor.run { self.pusher?.serverRecords.store(serverRec) }
+                    }
+                }
+            }
+            if needsRecoveryKick {
+                // Defer the flush — never call sendChanges() re-entrantly from a
+                // delegate callback. The brief delay lets the engine finish the
+                // current send before we re-queue the recovered changes.
+                Task { @MainActor [weak pusher] in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    pusher?.kickEngine()
                 }
             }
 
@@ -142,6 +171,17 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         for cmd in applicable {
             appliedIds.append(cmd.commandId)
 
+            // Connectivity diagnostic — always delivered (even while suspended)
+            // and never touches SleepManager. Rings a local notification so the
+            // user can confirm the iPhone reaches this Mac, then acks normally.
+            if cmd.verb == .check {
+                NotificationDispatcher.shared.postCheckNotification()
+                ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
+                changed = true
+                logger.notice("ckpusher.delegate: applied check (rang local notification)")
+                continue
+            }
+
             if cmd.verb == .setMasterEnabled {
                 guard let on = Bool(cmd.value) else { continue }
                 // Local-change wins: ignore a remote master command issued before
@@ -187,7 +227,9 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 } else {
                     continue
                 }
-            case .setMasterEnabled, .none:
+            case .setMasterEnabled, .check, .none:
+                // setMasterEnabled + check are handled in the always-deliver
+                // region above; reaching here means they were already consumed.
                 continue
             }
             ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)

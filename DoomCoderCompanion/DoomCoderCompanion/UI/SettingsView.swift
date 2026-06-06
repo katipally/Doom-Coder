@@ -352,7 +352,7 @@ struct SettingsView: View {
                     Haptics.tap()
                     showDisconnectConfirm = true
                 } label: {
-                    Label("Disconnect \(mac.name)", systemImage: "link.badge.minus")
+                    Label("Disconnect \(mac.name)", systemImage: "minus.circle")
                 }
             } else {
                 Button {
@@ -457,7 +457,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Test push
+    // MARK: - Connection check
 
     @ViewBuilder
     private var testSection: some View {
@@ -465,17 +465,17 @@ struct SettingsView: View {
             Section {
                 Button {
                     Task {
-                        await sync.sendTestNotification()
-                        testSent = true
+                        let cid = await sync.sendConnectionCheck()
+                        testSent = (cid != nil)
                         try? await Task.sleep(for: .seconds(3))
                         testSent = false
                     }
                 } label: {
-                    Label(testSent ? "Sent ✓" : "Send Test Push", systemImage: "bell.badge")
+                    Label(testSent ? "Sent ✓" : "Test Connection", systemImage: "bell.badge")
                 }
                 .disabled(testSent)
             } footer: {
-                Text("Sends a test notification through CloudKit to your connected Mac.")
+                Text("Rings a test notification on your connected Mac to confirm the link.")
             }
         }
     }

@@ -55,7 +55,7 @@ struct DashboardView: View {
                     } label: { Label("Switch to this Mac", systemImage: "checkmark.circle") }
                     Button(role: .destructive) {
                         disconnect(mac)
-                    } label: { Label("Disconnect", systemImage: "link.badge.minus") }
+                    } label: { Label("Disconnect", systemImage: "minus.circle") }
                 } label: {
                     Label(isActive ? "\(mac.name) (active)" : mac.name,
                           systemImage: isActive ? "checkmark" : "desktopcomputer")

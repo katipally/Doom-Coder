@@ -37,6 +37,11 @@ public struct ControlCommandRecord: Sendable, Codable, Equatable {
         /// v2.6 — Auto-mode snooze override. The Mac applies by switching
         /// to Auto mode (if not already) and setting the snooze timer.
         case setSnooze
+        /// value = "" (ignored). Connectivity diagnostic: the Mac rings a local
+        /// notification and acks via `MacStatusRecord.lastAppliedCommandId`.
+        /// Always-deliver (bypasses the master suspend gate, like
+        /// `setMasterEnabled`) and never mutates SleepManager.
+        case check
     }
 
     public var commandId: String
