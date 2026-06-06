@@ -132,20 +132,19 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
 extension MacStatusRecord {
     public static let recordType = CloudKitConstants.RecordType.macStatus
 
-    public var recordID: CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        return CKRecord.ID(recordName: "MacStatus-\(macId)", zoneID: zone)
+    /// Record ID within a specific zone. The owner Mac passes its own
+    /// `DoomCoderZone-<macId>` zoneID.
+    public func recordID(in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "MacStatus-\(macId)", zoneID: zoneID)
     }
 
-    public func toCKRecord() -> CKRecord { toCKRecord(base: nil) }
-
-    /// Builds a CKRecord for this status. If `base` is provided (the server
-    /// CKRecord cached from the most recent fetch/save), its
+    /// Builds a CKRecord for this status in `zoneID`. If `base` is provided (the
+    /// server CKRecord cached from the most recent fetch/save), its
     /// `recordChangeTag` is preserved by mutating it in place. Without the
     /// tag, every heartbeat looks like an INSERT to CloudKit and the second
     /// one fails with code 14/2004 ("record to insert already exists").
-    public func toCKRecord(base: CKRecord?) -> CKRecord {
-        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord(in zoneID: CKRecordZone.ID, base: CKRecord? = nil) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID(in: zoneID))
         r["macId"]         = macId as CKRecordValue
         r["name"]          = name as CKRecordValue
         r["version"]       = version as CKRecordValue

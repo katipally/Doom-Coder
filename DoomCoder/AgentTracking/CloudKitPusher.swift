@@ -35,9 +35,9 @@ final class CloudKitPusher {
     static let shared = CloudKitPusher()
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "ckpusher")
-    private let container: CKContainer
-    private let database: CKDatabase
-    private let zoneID: CKRecordZone.ID
+    let container: CKContainer
+    let database: CKDatabase
+    let zoneID: CKRecordZone.ID
     let serverRecords: ServerRecordCache
 
     private var engine: CKSyncEngine?
@@ -59,13 +59,17 @@ final class CloudKitPusher {
     private init() {
         self.container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
         self.database  = container.privateCloudDatabase
-        self.zoneID    = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
+        let macId = Self.stableMacID()
+        self.macId = macId
+        // Per-Mac zone owned by this Mac. Shared zone-wide via a CKShare so
+        // iPhones (same or different Apple ID) can join. Per-Mac naming avoids a
+        // collision when two Macs share one Apple ID.
+        self.zoneID    = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName(forMacId: macId),
                                          ownerName: CKCurrentUserDefaultName)
         self.serverRecords = ServerRecordCache(
             defaults: UserDefaults.standard,
             key: "doomcoder.ckpusher.serverRecords.v1"
         )
-        self.macId = Self.stableMacID()
         self.macName = Host.current().localizedName ?? "Mac"
     }
 
@@ -216,6 +220,19 @@ final class CloudKitPusher {
             UserDefaults.standard.set(currentEnv, forKey: environmentKey)
         }
 
+        // ── v3 shared-zone migration (one-shot) ──────────────────────────
+        // The zone moved from the single "DoomCoderZone" to a per-Mac
+        // "DoomCoderZone-<macId>". Old engine state / server records reference
+        // the defunct zone, so wipe them once so the engine recreates the new
+        // zone and re-uploads cleanly.
+        let v3Key = "doomcoder.ckpusher.v3.zoneMigration"
+        if !UserDefaults.standard.bool(forKey: v3Key) {
+            logger.notice("ckpusher: v3 zone migration → wiping pre-v3 engine state + server cache")
+            serverRecords.clear()
+            UserDefaults.standard.removeObject(forKey: "doomcoder.ckpusher.engineState.v1")
+            UserDefaults.standard.set(true, forKey: v3Key)
+        }
+
         let stateKey = "doomcoder.ckpusher.engineState.v1"
         let state: CKSyncEngine.State.Serialization?
         if let data = UserDefaults.standard.data(forKey: stateKey),
@@ -304,8 +321,9 @@ final class CloudKitPusher {
             logger.notice("ckpusher: not ready, dropping notif \(rec.notifId, privacy: .public)")
             return
         }
-        engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
-        pendingNotificationLogs[rec.recordID.recordName] = rec
+        let id = rec.recordID(in: zoneID)
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
+        pendingNotificationLogs[id.recordName] = rec
     }
 
     /// Heartbeat / status singleton. Called every 60s + on sleep/wake + on any
@@ -355,7 +373,7 @@ final class CloudKitPusher {
             snoozeUntil: sm.snoozeUntil,
             snoozeDuration: sm.snoozeDuration?.rawValue
         )
-        engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID(in: zoneID))])
         pendingMacStatus = rec
     }
 
@@ -397,7 +415,7 @@ final class CloudKitPusher {
             statuses: statusesJSON,
             updatedAt: Date()
         )
-        engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID)])
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID(in: zoneID))])
         pendingAgentConfig = rec
     }
 
@@ -406,7 +424,7 @@ final class CloudKitPusher {
     func publishAgentIcon(agent: TrackedAgent, pngFileURL: URL, pngSHA256: String) {
         guard let engine else { return }
         let rec = AgentIconRecord(agent: agent.rawValue, pngSHA256: pngSHA256)
-        let id = AgentIconRecord.recordID(for: agent.rawValue)
+        let id = AgentIconRecord.recordID(for: agent.rawValue, in: zoneID)
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
         pendingAgentIcons[id.recordName] = (rec, pngFileURL)
     }
@@ -422,9 +440,7 @@ final class CloudKitPusher {
     /// the sync engine can remove it; a still-alive device simply re-registers.
     func deleteCompanionStatus(deviceId: String) {
         guard let engine else { return }
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
-                                   ownerName: CKCurrentUserDefaultName)
-        let id = CKRecord.ID(recordName: "CompanionStatus-\(deviceId)", zoneID: zone)
+        let id = CKRecord.ID(recordName: "CompanionStatus-\(deviceId)", zoneID: zoneID)
         engine.state.add(pendingRecordZoneChanges: [.deleteRecord(id)])
         kickEngine()
     }
@@ -442,16 +458,16 @@ final class CloudKitPusher {
     func buildRecord(for recordID: CKRecord.ID) -> CKRecord? {
         switch recordID.recordName {
         case let name where name.hasPrefix("NotificationLog-"):
-            return pendingNotificationLogs[name]?.toCKRecord()
+            return pendingNotificationLogs[name]?.toCKRecord(in: zoneID)
         case let name where name.hasPrefix("MacStatus-"):
             guard let rec = pendingMacStatus else { return nil }
-            return rec.toCKRecord(base: serverRecords.record(forName: name))
+            return rec.toCKRecord(in: zoneID, base: serverRecords.record(forName: name))
         case let name where name.hasPrefix("AgentConfig-"):
             guard let rec = pendingAgentConfig else { return nil }
-            return rec.toCKRecord(base: serverRecords.record(forName: name))
+            return rec.toCKRecord(in: zoneID, base: serverRecords.record(forName: name))
         case let name where name.hasPrefix("AgentIcon-"):
             guard let (rec, url) = pendingAgentIcons[name] else { return nil }
-            let r = rec.toCKRecord(pngFileURL: url)
+            let r = rec.toCKRecord(in: zoneID, pngFileURL: url)
             // Preserve recordChangeTag if known
             if let base = serverRecords.record(forName: name) {
                 // copy system fields by mutating base's fields with new values
@@ -503,4 +519,148 @@ extension Notification.Name {
     /// Posted on main thread once the CKSyncEngine is constructed and the
     /// zone exists. Subscribers may begin calling publish* methods.
     static let cloudKitPusherReady = Notification.Name("doomcoder.ckpusher.ready")
+}
+
+// MARK: - CKShare coordinator (Mac = owner)
+//
+// The Mac owns its per-Mac zone and shares it ZONE-WIDE via a single
+// `CKShare(recordZoneID:)`. Every iPhone — same OR different Apple ID — accepts
+// that share and syncs through its `sharedCloudDatabase`. Share management
+// (create / fetch / participant list / revoke) uses direct database operations,
+// which is the supported path for shares (the sync engine handles record data,
+// not share lifecycle).
+
+/// A device that has accepted this Mac's share, surfaced for the Connections UI.
+struct ShareParticipantInfo: Identifiable, Sendable {
+    let id: String            // participant userRecordID name (stable)
+    let displayName: String   // account name, or "Participant"
+    let email: String?
+    let isCurrentUser: Bool   // a same-Apple-ID participant (owner's own devices)
+    let acceptanceStatus: String  // "Accepted" | "Pending" | "Removed"
+}
+
+@MainActor
+@Observable
+final class MacShareCoordinator {
+    static let shared = MacShareCoordinator()
+
+    /// The active zone-wide share, once created/fetched.
+    private(set) var share: CKShare?
+    /// The share URL to encode in a QR / copy as a link. Nil until ready.
+    private(set) var shareURL: URL?
+    /// Participants who have accepted (or are pending), for the device list.
+    private(set) var participants: [ShareParticipantInfo] = []
+    /// Last user-facing error (e.g. account unavailable), or nil.
+    private(set) var lastError: String?
+    /// True while a create/fetch is in flight (drives the UI spinner).
+    private(set) var isWorking = false
+
+    private var container: CKContainer { CloudKitPusher.shared.container }
+    private var database: CKDatabase { CloudKitPusher.shared.database }
+    private var zoneID: CKRecordZone.ID { CloudKitPusher.shared.zoneID }
+
+    private init() {}
+
+    /// Ensures a zone-wide share exists for this Mac's zone, creating it on first
+    /// use. Idempotent — subsequent calls fetch the existing share. Safe to call
+    /// whenever the Add-Device sheet is opened.
+    func ensureShare() async {
+        guard CloudKitPusher.shared.isReady else {
+            lastError = "iCloud isn't ready yet. Try again in a moment."
+            return
+        }
+        isWorking = true
+        defer { isWorking = false }
+        lastError = nil
+
+        let shareID = CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)
+        // Fast path: a share already exists for this zone.
+        if let existing = try? await database.record(for: shareID) as? CKShare {
+            apply(existing)
+            return
+        }
+        // Create a new zone-wide share with read-write public permission so any
+        // device that scans the QR / opens the link can join AND write (control
+        // commands, its own presence). The link is therefore a secret; the user
+        // can revoke participants from the Connections list.
+        let newShare = CKShare(recordZoneID: zoneID)
+        newShare.publicPermission = .readWrite
+        newShare[CKShare.SystemFieldKey.title] =
+            "DoomCoder — \(CloudKitPusher.shared.macName)" as CKRecordValue
+        do {
+            let result = try await database.modifyRecords(saving: [newShare], deleting: [])
+            for (_, saveResult) in result.saveResults {
+                if case .success(let rec) = saveResult, let s = rec as? CKShare {
+                    apply(s)
+                    return
+                }
+            }
+            // Some accounts return the share via a follow-up fetch.
+            if let fetched = try? await database.record(for: shareID) as? CKShare {
+                apply(fetched)
+            } else {
+                lastError = "Couldn't create the share. Check your iCloud sign-in."
+            }
+        } catch let e as CKError where e.code == .serverRecordChanged {
+            // Lost a create race — fetch the winner.
+            if let fetched = try? await database.record(for: shareID) as? CKShare {
+                apply(fetched)
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Re-fetches the share to refresh the participant list (after someone joins
+    /// or is removed).
+    func refresh() async {
+        let shareID = CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)
+        if let s = try? await database.record(for: shareID) as? CKShare {
+            apply(s)
+        }
+    }
+
+    /// Revokes a participant (the user tapped "Remove" on a device row).
+    func removeParticipant(id: String) async {
+        guard let share else { return }
+        guard let participant = share.participants.first(where: {
+            $0.userIdentity.userRecordID?.recordName == id
+        }) else { return }
+        share.removeParticipant(participant)
+        do {
+            _ = try await database.modifyRecords(saving: [share], deleting: [])
+            await refresh()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func apply(_ s: CKShare) {
+        self.share = s
+        self.shareURL = s.url
+        self.participants = s.participants.compactMap { p in
+            // Skip the owner (this Mac) in the device list.
+            guard p.role != .owner else { return nil }
+            let identity = p.userIdentity
+            let recName = identity.userRecordID?.recordName ?? UUID().uuidString
+            let name = identity.nameComponents
+                .map { PersonNameComponentsFormatter().string(from: $0) }
+                .flatMap { $0.isEmpty ? nil : $0 } ?? "Participant"
+            let email = identity.lookupInfo?.emailAddress
+            let status: String
+            switch p.acceptanceStatus {
+            case .accepted: status = "Accepted"
+            case .pending:  status = "Pending"
+            case .removed:  status = "Removed"
+            default:        status = "Unknown"
+            }
+            return ShareParticipantInfo(
+                id: recName,
+                displayName: name,
+                email: email,
+                isCurrentUser: identity.userRecordID?.recordName == CKCurrentUserDefaultName,
+                acceptanceStatus: status
+            )
+        }
+    }
 }

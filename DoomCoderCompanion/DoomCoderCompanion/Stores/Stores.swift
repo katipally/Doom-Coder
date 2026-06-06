@@ -58,6 +58,14 @@ final class MacStatusStore {
         LocalStore.shared.upsertMacStatus(r)
     }
 
+    /// Removes a single Mac (multi-Mac disconnect), keeping the others. If it was
+    /// the pinned primary, the pin clears and `primary` falls back to most-recent.
+    func remove(macId: String) {
+        byMacId[macId] = nil
+        if primaryMacIdOverride == macId { setPrimary(nil) }
+        AppGroupCache.write(byMacId, forKey: Self.cacheKey)
+    }
+
     func clear() {
         byMacId.removeAll()
         primaryMacIdOverride = nil
@@ -68,51 +76,57 @@ final class MacStatusStore {
 
 // MARK: - AgentListStore
 
-/// Holds the configured agents from the Mac's AgentConfig record.
+/// Holds the configured agents from each Mac's AgentConfig record, scoped per
+/// macId so multiple connected Macs don't overwrite each other. The plain
+/// `agents`/`installedAgents`/`statuses` accessors reflect the ACTIVE Mac
+/// (`MacStatusStore.primary`), so existing views show the selected Mac's agents
+/// and re-render automatically when the user switches Macs.
 @MainActor
 @Observable
 final class AgentListStore {
 
     static let shared = AgentListStore()
-    private init() {
-        // Warm installedAgents from cache so the filter works before first sync.
-        if let slugs = AppGroupCache.read([String].self, forKey: AppGroupCache.installedAgentsKey) {
-            installedAgents = Set(slugs.compactMap { TrackedAgent(rawValue: $0) })
-        }
-        Task {
-            agents = await LocalStore.shared.fetchAgents()
-        }
-    }
+    private init() {}
 
-    private(set) var agents: [TrackedAgent] = []
-    /// Subset of `agents` that are installed on the Mac. Read by the UI to
-    /// dim or badge non-installed rows.
-    private(set) var installedAgents: Set<TrackedAgent> = []
-    /// Per-agent human-readable status (e.g. "running", "waiting for approval",
-    /// "closed"). Empty means status is unknown.
-    private(set) var statuses: [TrackedAgent: String] = [:]
+    private var agentsByMac: [String: [TrackedAgent]] = [:]
+    private var installedByMac: [String: Set<TrackedAgent>] = [:]
+    private var statusesByMac: [String: [TrackedAgent: String]] = [:]
 
-    func updateAgents(_ newAgents: [TrackedAgent], macId: String) {
-        agents = newAgents.sorted { $0.displayName < $1.displayName }
-        LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
-    }
+    private var activeMacId: String? { MacStatusStore.shared.primary?.macId }
+
+    // MARK: - Active-Mac accessors (used by the UI)
+
+    var agents: [TrackedAgent] { activeMacId.flatMap { agentsByMac[$0] } ?? [] }
+    var installedAgents: Set<TrackedAgent> { activeMacId.flatMap { installedByMac[$0] } ?? [] }
+    var statuses: [TrackedAgent: String] { activeMacId.flatMap { statusesByMac[$0] } ?? [:] }
+
+    // MARK: - Per-Mac accessors
+
+    func agents(forMac macId: String) -> [TrackedAgent] { agentsByMac[macId] ?? [] }
+    func installedAgents(forMac macId: String) -> Set<TrackedAgent> { installedByMac[macId] ?? [] }
+    func statuses(forMac macId: String) -> [TrackedAgent: String] { statusesByMac[macId] ?? [:] }
 
     func updateState(agents newAgents: [TrackedAgent],
                      installed: [TrackedAgent],
                      statuses newStatuses: [TrackedAgent: String],
                      macId: String) {
-        agents = newAgents.sorted { $0.displayName < $1.displayName }
-        installedAgents = Set(installed)
-        statuses = newStatuses
+        agentsByMac[macId] = newAgents.sorted { $0.displayName < $1.displayName }
+        installedByMac[macId] = Set(installed)
+        statusesByMac[macId] = newStatuses
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
-        // Persist so the filter is correct on next cold launch before first sync.
-        AppGroupCache.write(installed.map { $0.rawValue }, forKey: AppGroupCache.installedAgentsKey)
+    }
+
+    /// Removes a single Mac's agent state (per-Mac disconnect).
+    func clear(macId: String) {
+        agentsByMac[macId] = nil
+        installedByMac[macId] = nil
+        statusesByMac[macId] = nil
     }
 
     func clear() {
-        agents.removeAll()
-        installedAgents.removeAll()
-        statuses.removeAll()
+        agentsByMac.removeAll()
+        installedByMac.removeAll()
+        statusesByMac.removeAll()
     }
 }
 
@@ -150,8 +164,9 @@ final class NotificationLogStore {
         LocalStore.shared.upsertNotificationLog(r)
     }
     
-    func fetchLogs(forAgent agent: TrackedAgent) async -> [NotificationLogRecord] {
-        return await LocalStore.shared.fetchNotifications(forAgent: agent, limit: 100)
+    /// Logs for an agent, optionally scoped to a single Mac (multi-Mac).
+    func fetchLogs(forAgent agent: TrackedAgent, macId: String? = nil) async -> [NotificationLogRecord] {
+        return await LocalStore.shared.fetchNotifications(forAgent: agent, macId: macId, limit: 100)
     }
 
     func clear() {
@@ -159,10 +174,10 @@ final class NotificationLogStore {
         AppGroupCache.defaults.removeObject(forKey: AppGroupCache.notificationLogKey)
     }
 
-    func clear(forAgent agent: TrackedAgent) {
-        entries.removeAll { $0.agent == agent.rawValue }
+    func clear(forAgent agent: TrackedAgent, macId: String? = nil) {
+        entries.removeAll { $0.agent == agent.rawValue && (macId == nil || $0.macId == macId) }
         AppGroupCache.write(entries, forKey: AppGroupCache.notificationLogKey)
-        LocalStore.shared.clearNotifications(forAgent: agent)
+        LocalStore.shared.clearNotifications(forAgent: agent, macId: macId)
     }
 
     func delete(_ record: NotificationLogRecord) {

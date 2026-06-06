@@ -281,31 +281,38 @@ final class LocalStore: @unchecked Sendable {
         }
     }
     
-    func fetchNotifications(forAgent agent: TrackedAgent, limit: Int = 100) async -> [NotificationLogRecord] {
+    func fetchNotifications(forAgent agent: TrackedAgent, macId: String? = nil, limit: Int = 100) async -> [NotificationLogRecord] {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self = self, let db = self.db else {
                     continuation.resume(returning: [])
                     return
                 }
-                
+
                 let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 3600)
+                // Optionally scope to a single Mac (multi-Mac: show only the
+                // active Mac's notifications for this agent).
+                let macClause = (macId != nil) ? "AND mac_id = ? " : ""
                 let sql = """
                 SELECT notif_id, session_key, mac_id, mac_name, agent, phase, title, body, ts,
                        last_tool, cwd_base, raw_event, channel, success
                 FROM notifications
-                WHERE agent = ? AND ts >= ?
+                WHERE agent = ? \(macClause)AND ts >= ?
                 ORDER BY ts DESC
                 LIMIT ?;
                 """
-                
+
                 var stmt: OpaquePointer?
                 var result: [NotificationLogRecord] = []
-                
+
                 if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                    sqlite3_bind_text(stmt, 1, (agent.rawValue as NSString).utf8String, -1, nil)
-                    sqlite3_bind_int64(stmt, 2, Int64(sevenDaysAgo.timeIntervalSince1970))
-                    sqlite3_bind_int(stmt, 3, Int32(limit))
+                    var idx: Int32 = 1
+                    sqlite3_bind_text(stmt, idx, (agent.rawValue as NSString).utf8String, -1, nil); idx += 1
+                    if let macId {
+                        sqlite3_bind_text(stmt, idx, (macId as NSString).utf8String, -1, nil); idx += 1
+                    }
+                    sqlite3_bind_int64(stmt, idx, Int64(sevenDaysAgo.timeIntervalSince1970)); idx += 1
+                    sqlite3_bind_int(stmt, idx, Int32(limit))
                     
                     while sqlite3_step(stmt) == SQLITE_ROW {
                         guard let notifId = self.getString(stmt, 0),
@@ -385,13 +392,17 @@ final class LocalStore: @unchecked Sendable {
 
     // MARK: - Clear per-agent notifications
 
-    func clearNotifications(forAgent agent: TrackedAgent) {
+    func clearNotifications(forAgent agent: TrackedAgent, macId: String? = nil) {
         queue.async { [weak self] in
             guard let self, let db = self.db else { return }
-            let sql = "DELETE FROM notifications WHERE agent = ?;"
+            let macClause = (macId != nil) ? " AND mac_id = ?" : ""
+            let sql = "DELETE FROM notifications WHERE agent = ?\(macClause);"
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
                 sqlite3_bind_text(stmt, 1, (agent.rawValue as NSString).utf8String, -1, nil)
+                if let macId {
+                    sqlite3_bind_text(stmt, 2, (macId as NSString).utf8String, -1, nil)
+                }
                 sqlite3_step(stmt)
             }
             sqlite3_finalize(stmt)
