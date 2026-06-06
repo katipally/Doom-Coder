@@ -1,28 +1,40 @@
 // ConnectFlowView.swift — DoomCoder Companion
-// "Add Device" sheet with two clear sections:
-//   • Same iCloud      — auto-discovered Macs on your iCloud → tap to connect.
-//   • Different iCloud  — scan a QR code or paste the invite link (e.g. a work
-//                         laptop on another Apple ID).
-// Reused from the Dashboard switcher ("Add Device…") and Settings for a
-// consistent UX. After connecting we optionally ask for notification permission.
+// "Add Device" sheet for the iOS companion.
+//
+// iOS 26 design:
+//   • Partial-height sheet (`.medium` / `.large` detents) with a Liquid Glass
+//     background — the system supplies the material; we removed our custom
+//     `Color(.systemGroupedBackground)` so it can shine through.
+//   • Top inline nav title, trailing "Done" button (system role .cancel).
+//   • Two `GlassEffectContainer` cards: "Same iCloud" and "Different iCloud".
+//   • `navigationZoomTransition` is presented by the toolbar "Add Device"
+//     button in DashboardView (HIG: sheets morph out of source buttons).
+//   • A custom stepper header in non-chooser phases for clarity at small detent.
+//   • `navigationZoomTransition` reads the source as a namespace key on the
+//     Dashboard's "Add Device" button. The destination is the sheet's root.
+//
+// Steps: checkingiCloud → icloudNeeded (or chooser) → connecting → connected.
+// Notification permission is no longer requested here — it lives in the
+// onboarding "Get Started" + cold-launch denied-check flow (see
+// NotificationPermissionCenter + RootTabView).
 
 import SwiftUI
 import CloudKit
-import UserNotifications
 import AVFoundation
 import UIKit
 import DoomCoderCore
 
+// MARK: - Root sheet
+
 struct ConnectFlowView: View {
     let onFinished: () -> Void
 
-    enum Step {
+    enum Step: Equatable {
         case checkingiCloud
         case icloudNeeded
         case chooser
         case connecting
         case connected
-        case notifications
     }
 
     @State private var step: Step = .checkingiCloud
@@ -32,6 +44,8 @@ struct ConnectFlowView: View {
     @State private var pastedURL = ""
     @State private var isLooking = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
 
     /// "online" if a Mac's heartbeat is recent.
     private func isOnline(_ mac: MacStatusRecord) -> Bool {
@@ -41,21 +55,27 @@ struct ConnectFlowView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 18) {
+                    if step != .chooser {
+                        StepperHeader(step: step)
+                            .padding(.top, 4)
+                    }
                     content
                 }
-                .padding(20)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Add Device")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { finish() }
+                    Button(role: .cancel) { finish() } label: { Text("Done") }
                 }
             }
             .task { await begin() }
             .sheet(isPresented: $showScanner) {
-                QRScannerView { code in
+                QRScannerSheet { code in
                     showScanner = false
                     Task { await handleURLString(code) }
                 } onCancel: {
@@ -63,6 +83,9 @@ struct ConnectFlowView: View {
                 }
             }
         }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
     }
 
     // MARK: - Content
@@ -71,114 +94,163 @@ struct ConnectFlowView: View {
     private var content: some View {
         switch step {
         case .checkingiCloud:
-            phase(symbol: "icloud", title: "Checking iCloud…",
-                  detail: "DoomCoder uses iCloud to sync with your Mac.",
-                  showSpinner: true)
+            PhaseHero(
+                symbol: "icloud",
+                title: "Checking iCloud…",
+                detail: "DoomCoder uses iCloud to sync with your Mac.",
+                showSpinner: true
+            )
 
         case .icloudNeeded:
-            phase(symbol: "icloud.slash", title: "Sign in to iCloud",
-                  detail: "To connect a Mac on your own iCloud, sign in to iCloud in the Settings app, then try again. (A Mac on a different iCloud can still be added by QR or link.)")
+            PhaseHero(
+                symbol: "icloud.slash",
+                title: "Sign in to iCloud",
+                detail: "To connect a Mac on your own iCloud, sign in to iCloud in the Settings app, then try again. (A Mac on a different iCloud can still be added by QR or link.)"
+            )
             VStack(spacing: 12) {
-                Button("Open Settings") { openSettings() }
-                    .buttonStyle(.borderedProminent)
-                Button("Try Again") { Task { await begin() } }
-                Button("Continue anyway") { step = .chooser }
-                    .foregroundStyle(.secondary)
+                Button {
+                    openURL(URL(string: UIApplication.openSettingsURLString)!)
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    Task { await begin() }
+                } label: {
+                    Text("Try Again").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button {
+                    step = .chooser
+                } label: {
+                    Text("Continue anyway")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.top, 2)
             }
+            .padding(.top, 8)
 
         case .chooser:
             chooser
 
         case .connecting:
-            phase(symbol: "antenna.radiowaves.left.and.right", title: "Connecting…",
-                  detail: "Joining your Mac and syncing for the first time.",
-                  showSpinner: true)
+            PhaseHero(
+                symbol: "antenna.radiowaves.left.and.right",
+                title: "Connecting…",
+                detail: "Joining your Mac and syncing for the first time.",
+                showSpinner: true
+            )
 
         case .connected:
-            phase(symbol: "checkmark.circle.fill", title: "Connected",
-                  detail: "You're connected to \(macStore.primary?.name ?? "your Mac").")
-                .onAppear {
-                    Haptics.success()
-                    Task {
-                        try? await Task.sleep(for: .seconds(1))
-                        await advanceAfterConnect()
-                    }
+            PhaseHero(
+                symbol: "checkmark.circle.fill",
+                title: "Connected",
+                detail: "You're connected to \(macStore.primary?.name ?? "your Mac")."
+            )
+            .onAppear {
+                Haptics.success()
+                Task {
+                    try? await Task.sleep(for: .seconds(reduceMotion ? 0.6 : 1.0))
+                    finish()
                 }
-
-        case .notifications:
-            phase(symbol: "bell.badge", title: "Get notified",
-                  detail: "DoomCoder can alert you when an agent on your Mac needs your attention — for example, when it's waiting for approval. No marketing, ever. This is optional.")
-            VStack(spacing: 12) {
-                Button("Enable Notifications") { Task { await requestNotifications() } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                Button("Not Now") { finish() }
-                    .foregroundStyle(.secondary)
             }
         }
     }
 
-    // MARK: - Chooser (two sections)
+    // MARK: - Chooser (two glass cards)
 
     private var chooser: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 14) {
             if let pairingError {
                 Label(pairingError, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .background(Color.orange.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityElement(children: .combine)
             }
-            sameICloudSection
-            differentICloudSection
+            sameICloudCard
+            differentICloudCard
         }
+        .animation(.snappy(duration: 0.25), value: pairingError)
     }
 
-    private var sameICloudSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Same iCloud", systemImage: "person.icloud")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    Task { await refreshSameICloud() }
-                } label: {
-                    if isLooking { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.clockwise") }
-                }
-                .accessibilityLabel("Look for Macs again")
-            }
+    // MARK: Same-iCloud card
 
-            let macs = Array(macStore.byMacId.values).sorted { $0.lastSeen > $1.lastSeen }
-            if macs.isEmpty {
-                Text(isLooking
-                     ? "Looking for Macs on your iCloud…"
-                     : "No Macs found on your iCloud yet. Open DoomCoder on your Mac and make sure it's signed in to the same iCloud account.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+    private var sameICloudCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Label("Same iCloud", systemImage: "person.crop.rectangle.stack.fill")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        Task { await refreshSameICloud() }
+                    } label: {
+                        if isLooking {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityLabel("Look for Macs again")
+                    .accessibilityHint("Re-fetches the list of Macs on your iCloud")
+                }
+
+                let macs = Array(macStore.byMacId.values).sorted { $0.lastSeen > $1.lastSeen }
+                if macs.isEmpty {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "macbook.slash")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(isLooking ? "Looking for Macs on your iCloud…" : "No Macs found on your iCloud yet.")
+                                .font(.callout)
+                            Text("Open DoomCoder on your Mac and make sure it's signed in to the same iCloud account.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                ForEach(macs, id: \.macId) { mac in
-                    macRow(mac)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(macs.enumerated()), id: \.element.macId) { index, mac in
+                            macRow(mac)
+                            if index < macs.count - 1 {
+                                Divider().opacity(0.5)
+                            }
+                        }
+                    }
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
+    @ViewBuilder
     private func macRow(_ mac: MacStatusRecord) -> some View {
         let isActive = mac.macId == macStore.primary?.macId
-        return Button {
+        Button {
+            Haptics.selection()
             select(mac.macId)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "desktopcomputer")
+                    .font(.title3)
                     .foregroundStyle(.tint)
+                    .frame(width: 28)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mac.name).font(.callout.weight(.medium))
@@ -186,8 +258,10 @@ struct ConnectFlowView: View {
                         Circle()
                             .fill(isOnline(mac) ? Color.green : Color.secondary.opacity(0.4))
                             .frame(width: 7, height: 7)
+                            .contentTransition(.symbolEffect(.replace))
                         Text(isOnline(mac) ? "Online" : "Last seen \(mac.lastSeen, style: .relative) ago")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -195,80 +269,80 @@ struct ConnectFlowView: View {
                     Label("Connected", systemImage: "checkmark.circle.fill")
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.green)
+                        .accessibilityLabel("Connected")
                 } else {
-                    Text("Connect").font(.subheadline.weight(.semibold))
+                    Text("Connect")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
                 }
             }
+            .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 4)
-    }
-
-    private var differentICloudSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Different iCloud", systemImage: "qrcode")
-                .font(.headline)
-            Text("Connect a Mac on another Apple ID (e.g. a work laptop). On that Mac: DoomCoder ▸ Connections ▸ Add Device.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                pairingError = nil
-                showScanner = true
-            } label: {
-                Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            Button {
-                if let s = UIPasteboard.general.string { Task { await handleURLString(s) } }
-                else { pairingError = "Clipboard is empty. Copy the invite link on your Mac first." }
-            } label: {
-                Label("Paste Invite Link", systemImage: "doc.on.clipboard")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-
-            HStack(spacing: 8) {
-                TextField("or paste the link here", text: $pastedURL)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.go)
-                    .onSubmit { Task { await handleURLString(pastedURL) } }
-                Button("Go") { Task { await handleURLString(pastedURL) } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(pastedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func phase(symbol: String, title: String, detail: String, showSpinner: Bool = false) -> some View {
-        VStack(spacing: 18) {
-            Image(systemName: symbol)
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
-                .symbolRenderingMode(.hierarchical)
-                .accessibilityHidden(true)
-            Text(title).font(.title2.bold()).multilineTextAlignment(.center)
-            Text(detail)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            if showSpinner { ProgressView().padding(.top, 4) }
-        }
-        .padding(.top, 12)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(mac.name), \(isOnline(mac) ? "online" : "last seen \(mac.lastSeen.formatted(.relative(presentation: .named)))")")
+        .accessibilityHint(isActive ? "Currently connected" : "Double tap to connect")
+    }
+
+    // MARK: Different-iCloud card
+
+    private var differentICloudCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Different iCloud", systemImage: "qrcode.viewfinder")
+                    .font(.headline)
+
+                Text("Connect a Mac on another Apple ID (e.g. a work laptop). On that Mac: DoomCoder ▸ Connections ▸ Add Device.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    Haptics.tap()
+                    pairingError = nil
+                    showScanner = true
+                } label: {
+                    Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    if let s = UIPasteboard.general.string {
+                        Task { await handleURLString(s) }
+                    } else {
+                        pairingError = "Clipboard is empty. Copy the invite link on your Mac first."
+                    }
+                } label: {
+                    Label("Paste Invite Link", systemImage: "doc.on.clipboard")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                HStack(spacing: 8) {
+                    TextField("or paste the link here", text: $pastedURL)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.go)
+                        .onSubmit {
+                            Task { await handleURLString(pastedURL) }
+                        }
+                    Button {
+                        Task { await handleURLString(pastedURL) }
+                    } label: {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(pastedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Submit invite link")
+                }
+            }
+        }
     }
 
     // MARK: - Flow logic
@@ -276,9 +350,12 @@ struct ConnectFlowView: View {
     private func begin() async {
         step = .checkingiCloud
         let available = await isiCloudAvailable()
-        guard available else { step = .icloudNeeded; return }
-        step = .chooser
-        await refreshSameICloud()
+        if available {
+            step = .chooser
+            await refreshSameICloud()
+        } else {
+            step = .icloudNeeded
+        }
     }
 
     /// Pulls the private database so same-iCloud Macs appear in the list. Does
@@ -327,29 +404,9 @@ struct ConnectFlowView: View {
         }
     }
 
-    private func advanceAfterConnect() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            step = .notifications
-        } else {
-            finish()
-        }
-    }
-
-    private func requestNotifications() async {
-        _ = try? await UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound, .badge])
-        finish()
-    }
-
     private func isiCloudAvailable() async -> Bool {
         let status = try? await CKContainer(identifier: CloudKitConstants.containerIdentifier).accountStatus()
         return status == .available
-    }
-
-    private func openSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
     }
 
     private func finish() {
@@ -358,11 +415,120 @@ struct ConnectFlowView: View {
     }
 }
 
-// MARK: - QR scanner
+// MARK: - GlassCard container
 
-/// Lightweight AVFoundation QR scanner presented during pairing. Reports the
-/// first decoded string via `onScan`. Requires `NSCameraUsageDescription`.
-struct QRScannerView: UIViewControllerRepresentable {
+/// A card whose contents sit on the system Liquid Glass material (iOS 26).
+/// We let the system provide the material via `.glassEffect()` on iOS 26+
+/// and fall back to a flat grouped background on older OSes.
+private struct GlassCard<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            )
+    }
+}
+
+// MARK: - Phase hero
+
+private struct PhaseHero: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    var showSpinner: Bool = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 56, weight: .regular))
+                .foregroundStyle(.tint)
+                .symbolRenderingMode(.hierarchical)
+                .symbolEffect(.variableColor.iterative, isActive: showSpinner)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            if showSpinner {
+                ProgressView().padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(detail)")
+    }
+}
+
+// MARK: - Stepper header
+
+/// A small visual progress strip used for non-chooser phases. Hidden in
+/// `.chooser` so it doesn't fight the two main cards.
+private struct StepperHeader: View {
+    let step: ConnectFlowView.Step
+
+    private struct Step: Hashable { let key: String; let label: String }
+
+    private var steps: [Step] {
+        [Step(key: "icloud", label: "iCloud"),
+         Step(key: "choose", label: "Choose"),
+         Step(key: "connect", label: "Connect"),
+         Step(key: "done", label: "Done")]
+    }
+
+    private var activeIndex: Int {
+        switch step {
+        case .checkingiCloud:   return 0
+        case .icloudNeeded:     return 0
+        case .chooser:          return 1
+        case .connecting:       return 2
+        case .connected:        return 3
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { idx, s in
+                HStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        Circle()
+                            .fill(idx <= activeIndex ? Color.accentColor : Color.secondary.opacity(0.25))
+                            .frame(width: 8, height: 8)
+                            .animation(.snappy(duration: 0.25), value: activeIndex)
+                        Text(s.label)
+                            .font(.caption2)
+                            .foregroundStyle(idx <= activeIndex ? .primary : .secondary)
+                    }
+                    if idx < steps.count - 1 {
+                        Rectangle()
+                            .fill(idx < activeIndex ? Color.accentColor : Color.secondary.opacity(0.25))
+                            .frame(height: 2)
+                            .animation(.snappy(duration: 0.25), value: activeIndex)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(activeIndex + 1) of \(steps.count): \(steps[activeIndex].label)")
+    }
+}
+
+// MARK: - QR scanner sheet
+
+/// AVFoundation QR scanner wrapped for SwiftUI presentation. Reports the first
+/// decoded string via `onScan`. Requires `NSCameraUsageDescription`.
+struct QRScannerSheet: UIViewControllerRepresentable {
     let onScan: (String) -> Void
     let onCancel: () -> Void
 
@@ -383,13 +549,9 @@ struct QRScannerView: UIViewControllerRepresentable {
         private var didScan = false
         init(onScan: @escaping (String) -> Void) { self.onScan = onScan }
 
-        // Delivered on the main queue (we set `queue: .main` on the output), so
-        // assumeIsolated is safe and lets us call the @MainActor onScan closure.
         nonisolated func metadataOutput(_ output: AVCaptureMetadataOutput,
                                         didOutput metadataObjects: [AVMetadataObject],
                                         from connection: AVCaptureConnection) {
-            // Extract the Sendable String in the nonisolated context, then hop —
-            // only the String crosses the isolation boundary.
             guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
                   obj.type == .qr,
                   let value = obj.stringValue else { return }
@@ -414,22 +576,28 @@ struct QRScannerView: UIViewControllerRepresentable {
         private let session = AVCaptureSession()
         private let sessionQueue = DispatchQueue(label: "doomcoder.qr.session")
         private var preview: AVCaptureVideoPreviewLayer?
+        private var torchOn = false
 
         override func viewDidLoad() {
             super.viewDidLoad()
             view.backgroundColor = .black
             configureSession()
 
-            let cancel = UIButton(type: .system)
-            cancel.setTitle("Cancel", for: .normal)
-            cancel.setTitleColor(.white, for: .normal)
-            cancel.titleLabel?.font = .preferredFont(forTextStyle: .headline)
-            cancel.addAction(UIAction { [weak self] _ in self?.onCancel?() }, for: .touchUpInside)
-            cancel.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(cancel)
+            // Liquid Glass viewfinder cutout (system material on top of camera).
+            let cutout = UIView()
+            cutout.translatesAutoresizingMaskIntoConstraints = false
+            cutout.backgroundColor = .clear
+            cutout.layer.borderColor = UIColor.white.withAlphaComponent(0.85).cgColor
+            cutout.layer.borderWidth = 3
+            cutout.layer.cornerRadius = 22
+            cutout.layer.cornerCurve = .continuous
+            cutout.isUserInteractionEnabled = false
+            view.addSubview(cutout)
             NSLayoutConstraint.activate([
-                cancel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
-                cancel.centerXAnchor.constraint(equalTo: view.centerXAnchor)
+                cutout.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                cutout.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                cutout.widthAnchor.constraint(equalToConstant: 260),
+                cutout.heightAnchor.constraint(equalToConstant: 260)
             ])
 
             let hint = UILabel()
@@ -445,6 +613,48 @@ struct QRScannerView: UIViewControllerRepresentable {
                 hint.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
                 hint.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24)
             ])
+
+            // Top-leading Cancel
+            let cancel = UIButton(type: .system)
+            cancel.setTitle("Cancel", for: .normal)
+            cancel.setTitleColor(.white, for: .normal)
+            cancel.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+            cancel.addAction(UIAction { [weak self] _ in self?.onCancel?() }, for: .touchUpInside)
+            cancel.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(cancel)
+            NSLayoutConstraint.activate([
+                cancel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+                cancel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16)
+            ])
+
+            // Top-trailing Torch toggle (only if device has one)
+            if AVCaptureDevice.default(for: .video)?.hasTorch == true {
+                let torch = UIButton(type: .system)
+                torch.setImage(UIImage(systemName: "bolt.slash.fill"), for: .normal)
+                torch.tintColor = .white
+                torch.addAction(UIAction { [weak self] _ in self?.toggleTorch(torch: torch) }, for: .touchUpInside)
+                torch.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(torch)
+                NSLayoutConstraint.activate([
+                    torch.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+                    torch.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+                    torch.widthAnchor.constraint(equalToConstant: 44),
+                    torch.heightAnchor.constraint(equalToConstant: 44)
+                ])
+            }
+        }
+
+        private func toggleTorch(torch: UIButton) {
+            guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
+            do {
+                try device.lockForConfiguration()
+                torchOn.toggle()
+                device.torchMode = torchOn ? .on : .off
+                device.unlockForConfiguration()
+                torch.setImage(UIImage(systemName: torchOn ? "bolt.fill" : "bolt.slash.fill"), for: .normal)
+            } catch {
+                // Silently ignore — torch not critical.
+            }
         }
 
         private func configureSession() {

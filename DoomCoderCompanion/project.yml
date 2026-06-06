@@ -93,6 +93,8 @@ targets:
           - "Info.plist"
           - "NotificationService.entitlements"
       - path: SharedCache
+    resources:
+      - path: NotificationService/Resources/agent-icons
     info:
       path: NotificationService/Info.plist
       properties:

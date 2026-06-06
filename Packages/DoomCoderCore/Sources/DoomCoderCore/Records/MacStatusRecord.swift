@@ -6,8 +6,8 @@ import CloudKit
 /// Snapshot of a Mac's live state. One record per Mac, keyed by `macId`
 /// (a stable identifier derived from the IOPlatformUUID).
 ///
-/// Writer: Mac. Readers: iOS (Home tab header), NSE (notification subtitle
-/// shows "<macName>").
+/// Writer: Mac. Readers: iOS (Dashboard tab header), NSE (notification
+/// subtitle "On <macName>").
 public struct MacStatusRecord: Sendable, Codable, Equatable {
     public var macId: String
     public var name: String
