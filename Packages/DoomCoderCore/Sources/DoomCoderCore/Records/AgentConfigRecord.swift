@@ -40,17 +40,15 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
 extension AgentConfigRecord {
     public static let recordType = CloudKitConstants.RecordType.agentConfig
 
-    public var recordID: CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        return CKRecord.ID(recordName: "AgentConfig-\(macId)", zoneID: zone)
+    /// Record ID within a specific zone. The owner Mac passes its own zoneID.
+    public func recordID(in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "AgentConfig-\(macId)", zoneID: zoneID)
     }
-
-    public func toCKRecord() -> CKRecord { toCKRecord(base: nil) }
 
     /// Pass the server-cached `base` to preserve `recordChangeTag` and avoid
     /// CKError 14/2004 on the second save.
-    public func toCKRecord(base: CKRecord?) -> CKRecord {
-        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID)
+    public func toCKRecord(in zoneID: CKRecordZone.ID, base: CKRecord? = nil) -> CKRecord {
+        let r = base ?? CKRecord(recordType: Self.recordType, recordID: recordID(in: zoneID))
         r["macId"]           = macId as CKRecordValue
         r["agents"]          = agents as CKRecordValue
         r["installedAgents"] = installedAgents as CKRecordValue

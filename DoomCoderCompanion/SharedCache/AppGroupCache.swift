@@ -60,24 +60,56 @@ enum AppGroupCache {
     static let notificationLogKey = "cache.notificationLog"
     static let installedAgentsKey  = "cache.installedAgents"
 
+    // MARK: - Device name
+    //
+    // The user-typed custom device name. Stored in the App Group so the NSE can
+    // read it too. Empty = "use the marketing model name" (DeviceModelName).
+    private static let customDeviceNameKey = "doomcoder.companion.customDeviceName"
+
+    /// User-typed custom device name ("" when unset). Trimmed on write.
+    static var customDeviceName: String {
+        get { defaults.string(forKey: customDeviceNameKey) ?? "" }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed, forKey: customDeviceNameKey)
+        }
+    }
+
+    /// The name this device publishes/shows: the custom name if set, else the
+    /// marketing model name (e.g. "iPhone 17 Pro").
+    static var resolvedDeviceName: String {
+        let custom = customDeviceName
+        return custom.isEmpty ? DeviceModelName.current : custom
+    }
+
     // MARK: - Schema version guard
     //
     // Bumped whenever a cache key's encoded shape changes incompatibly. On
     // mismatch we nuke the affected keys so a stale decode doesn't silently
     // return nil for the rest of the app's lifetime.
     private static let schemaVersionKey = "cache.schemaVersion"
-    private static let currentSchemaVersion = 2
+    // v3: shared-zone + CKShare model. The CloudKit zone moved from the single
+    // private-DB "DoomCoderZone" to a per-Mac shared zone, so ALL cached sync
+    // state (engine token, server records, learned zones, Mac cache) is stale and
+    // must be wiped — the user re-pairs once via QR/link (the "Reconnect" flow).
+    private static let currentSchemaVersion = 3
 
     /// Call once on app launch (after `runV3MigrationOnce`). Idempotent.
-    /// Wipes mac-status / notification-log / paired-mac caches if the
-    /// stored schema version is older than `currentSchemaVersion`.
+    /// Wipes caches that are incompatible with the current schema version.
     static func enforceSchemaVersion() {
         let stored = defaults.integer(forKey: schemaVersionKey)
         guard stored < currentSchemaVersion else { return }
         let staleKeys = [
             "cache.macStatus.byMacId",
             notificationLogKey,
-            "doomcoder.companion.pairedMacEverSeen"
+            "doomcoder.companion.pairedMacEverSeen",
+            // v3 shared-zone migration — drop all old private-DB sync state.
+            "ck.engineState",
+            "ck.ios.serverRecords",
+            "ck.ios.macZones.v1",
+            "ck.ios.environment.v1",
+            "ck.ios.environment.v2",
+            "doomcoder.companion.primaryMacId"
         ]
         for k in staleKeys { defaults.removeObject(forKey: k) }
         defaults.set(currentSchemaVersion, forKey: schemaVersionKey)

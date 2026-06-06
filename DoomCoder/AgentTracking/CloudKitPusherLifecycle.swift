@@ -195,8 +195,9 @@ final class CloudKitPusherLifecycle {
         guard CloudKitPusher.shared.isReady else { return }
         let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
         let db = container.privateCloudDatabase
-        let zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName,
-                                     ownerName: CKCurrentUserDefaultName)
+        // The Mac owns its per-Mac zone in its private DB, so the reaper queries
+        // there (records are shared zone-wide but still live in the owner's DB).
+        let zoneID = CloudKitPusher.shared.zoneID
         let cutoff = Date().addingTimeInterval(-7 * 86_400) as NSDate
         let pred = NSPredicate(format: "ts < %@", cutoff)
         let query = CKQuery(recordType: NotificationLogRecord.recordType, predicate: pred)

@@ -6,6 +6,7 @@
 import UIKit
 import UserNotifications
 import BackgroundTasks
+import CloudKit
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -102,6 +103,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         task.expirationHandler = { work.cancel() }
     }
 
+    // MARK: - CloudKit share acceptance (pairing via link)
+
+    /// Invoked when the user opens a DoomCoder iCloud share link (the Mac's
+    /// "Copy Invite Link" / Share). The app has no scene manifest, so the share
+    /// callback lands here on `UIApplicationDelegate` (which also fires on cold
+    /// launch, avoiding the SwiftUI SceneDelegate caveat). The QR-scan path
+    /// accepts programmatically instead (see `CompanionSyncEngine.acceptShare`).
+    func application(
+        _ application: UIApplication,
+        userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
+    ) {
+        Task { @MainActor in
+            let ok = await CompanionSyncEngine.shared.acceptShareMetadata(cloudKitShareMetadata)
+            if ok { Haptics.success() }
+        }
+    }
+
     // MARK: - Remote notifications
 
     func application(
@@ -153,9 +171,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler()
     }
 
-    /// Extracts the agent raw value from a CloudKit query-subscription payload:
-    /// `userInfo["ck"]["qry"]["af"]["agent"]["value"]`.
+    /// Extracts the agent raw value from a notification payload. Local
+    /// notifications (shared-DB delivery) carry a direct `"agent"` key; legacy
+    /// CloudKit query-subscription pushes nested it under `ck.qry.af.agent.value`.
     private nonisolated static func agentSlug(from userInfo: [AnyHashable: Any]) -> String? {
+        if let direct = userInfo["agent"] as? String, !direct.isEmpty { return direct }
         guard
             let ck  = userInfo["ck"]  as? [String: Any],
             let qry = ck["qry"]       as? [String: Any],

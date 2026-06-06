@@ -6,6 +6,7 @@
 import Foundation
 import CloudKit
 import UIKit
+import UserNotifications
 import DoomCoderCore
 
 @MainActor
@@ -27,13 +28,33 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Private CloudKit plumbing
 
     private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
-    private var db: CKDatabase { container.privateCloudDatabase }
-    private var zone: CKRecordZone { CKRecordZone(zoneName: CloudKitConstants.zoneName) }
 
-    private var syncEngine: CKSyncEngine?
+    /// Which database a given Mac's zone lives in. CloudKit rule: a Mac on the
+    /// SAME Apple ID puts its zone in our PRIVATE database (one private DB is
+    /// shared across all a user's devices); a Mac on a DIFFERENT Apple ID exposes
+    /// its zone in our SHARED database after we accept its CKShare. So we run BOTH
+    /// engines and route writes to the correct database per Mac.
+    enum DBScope: String { case privateDB, sharedDB }
+
+    private var privateDB: CKDatabase { container.privateCloudDatabase }
+    private var sharedDB: CKDatabase { container.sharedCloudDatabase }
+
+    /// macId → that Mac's zone ID (owner = the Mac), learned from fetched
+    /// MacStatus records. Persisted so writes work before the first fetch.
+    private var macZones: [String: CKRecordZone.ID] = [:]
+    /// macId → which database its zone is in (private = same account).
+    private var macScopes: [String: DBScope] = [:]
+
+    private var privateEngine: CKSyncEngine?
+    private var sharedEngine: CKSyncEngine?
     private var subscriptionsReady = false
     private var setupInProgress = false
     private var fetchInProgress = false
+
+    /// The database to WRITE a record into for a given Mac (presence, commands).
+    private func database(forMacId macId: String) -> CKDatabase {
+        (macScopes[macId] == .sharedDB) ? sharedDB : privateDB
+    }
 
     /// Repeating fetch while the app is foregrounded. Silent CloudKit pushes are
     /// throttled by iOS, so without this an open-but-idle app could go many
@@ -55,7 +76,10 @@ final class CompanionSyncEngine: NSObject {
 
     // MARK: - Defaults key for engine state
 
-    private static let engineStateKey = "ck.engineState"
+    /// Per-database engine state key (two engines → two keys).
+    private static func engineStateKey(_ scope: DBScope) -> String {
+        "ck.engineState.\(scope.rawValue)"
+    }
     private var sharedDefaults: UserDefaults { AppGroupCache.defaults }
 
     // MARK: - Lifecycle
@@ -95,7 +119,7 @@ final class CompanionSyncEngine: NSObject {
                 guard let self else { return }
                 self.startForegroundPolling()
                 self.startHeartbeat()
-                if self.syncEngine == nil {
+                if self.privateEngine == nil && self.sharedEngine == nil {
                     // Reset any stale in-progress guard from a background hang
                     // so the fresh setup attempt is not silently skipped.
                     self.setupInProgress = false
@@ -174,33 +198,45 @@ final class CompanionSyncEngine: NSObject {
         print("[CompanionSyncEngine] persistEngineStateNow: shared defaults synchronized")
     }
 
-    // MARK: - Zone creation
+    // MARK: - Mac zone cache (participant addressing)
 
-    private func ensureZone() async -> Bool {
-        let z = CKRecordZone(zoneID: zone.zoneID)
-        let op = CKModifyRecordZonesOperation(recordZonesToSave: [z], recordZoneIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            op.modifyRecordZonesResultBlock = { result in
-                switch result {
-                case .success:
-                    cont.resume(returning: true)
-                case .failure(let err):
-                    if let cke = err as? CKError,
-                       cke.code == .serverRecordChanged || cke.code == .unknownItem {
-                        // Already exists — treat as success
-                        cont.resume(returning: true)
-                    } else {
-                        print("[CompanionSyncEngine] ensureZone error: \(err)")
-                        SyncTelemetry.shared.record(.engineError, side: .ios,
-                                                    detail: "ensureZone: \(err.localizedDescription)")
-                        cont.resume(returning: false)
-                    }
+    private static let macZonesKey = "ck.ios.macZones.v1"
+
+    private func loadMacZones() {
+        guard let dict = sharedDefaults.dictionary(forKey: Self.macZonesKey) as? [String: String]
+        else { return }
+        for (macId, encoded) in dict {
+            // Encoded as "zoneName|ownerName|scope".
+            let parts = encoded.components(separatedBy: "|")
+            if parts.count >= 2 {
+                macZones[macId] = CKRecordZone.ID(zoneName: parts[0], ownerName: parts[1])
+                if parts.count >= 3, let s = DBScope(rawValue: parts[2]) {
+                    macScopes[macId] = s
                 }
             }
-            db.add(op)
         }
     }
+
+    private func saveMacZones() {
+        var dict: [String: String] = [:]
+        for (macId, zid) in macZones {
+            let scope = (macScopes[macId] ?? .privateDB).rawValue
+            dict[macId] = "\(zid.zoneName)|\(zid.ownerName)|\(scope)"
+        }
+        sharedDefaults.set(dict, forKey: Self.macZonesKey)
+    }
+
+    /// Records the zoneID + database a Mac's records arrive in, so writes can be
+    /// addressed back into the correct database/zone.
+    private func noteMacZone(macId: String, zoneID: CKRecordZone.ID, scope: DBScope) {
+        guard macZones[macId] != zoneID || macScopes[macId] != scope else { return }
+        macZones[macId] = zoneID
+        macScopes[macId] = scope
+        saveMacZones()
+    }
+
+    /// The shared-zone ID for a given Mac, if known.
+    private func zoneID(forMacId macId: String) -> CKRecordZone.ID? { macZones[macId] }
 
     // MARK: - Setup
 
@@ -211,6 +247,8 @@ final class CompanionSyncEngine: NSObject {
         }
         setupInProgress = true
         defer { setupInProgress = false }
+
+        loadMacZones()
 
         // Verify account status — retry up to 3 times for transient statuses
         // (.couldNotDetermine, .temporarilyUnavailable) common on first launch.
@@ -246,14 +284,13 @@ final class CompanionSyncEngine: NSObject {
             return
         }
 
-        // Ensure zone exists BEFORE constructing engine
-        guard await ensureZone() else {
-            SyncTelemetry.shared.record(.engineError, side: .ios, detail: "ensureZone failed — aborting setup")
-            return
-        }
+        // NOTE: participants do NOT create the zone — the Mac (owner) creates and
+        // shares it. The accepted share's zone appears in our shared database; we
+        // just point the engine at the shared database and fetch.
 
-        if syncEngine != nil {
-            syncEngine = nil
+        if privateEngine != nil || sharedEngine != nil {
+            privateEngine = nil
+            sharedEngine = nil
             subscriptionsReady = false
         }
 
@@ -274,55 +311,49 @@ final class CompanionSyncEngine: NSObject {
         let envKey = "ck.ios.environment.v2"
         let previousEnv = sharedDefaults.string(forKey: envKey)
         if previousEnv != currentEnv {
-            let hasStaleState = sharedDefaults.data(forKey: Self.engineStateKey) != nil
-            if hasStaleState {
-                print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
-                sharedDefaults.removeObject(forKey: Self.engineStateKey)
-                serverRecords.clear()
-                MacStatusStore.shared.clear()
-            }
+            print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
+            sharedDefaults.removeObject(forKey: Self.engineStateKey(.privateDB))
+            sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
+            serverRecords.clear()
+            MacStatusStore.shared.clear()
             sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
             sharedDefaults.set(currentEnv, forKey: envKey)
         }
 
-        // Restore persisted engine state
-        let serialization: CKSyncEngine.State.Serialization? = {
-            guard let data = sharedDefaults.data(forKey: Self.engineStateKey),
+        func restore(_ scope: DBScope) -> CKSyncEngine.State.Serialization? {
+            guard let data = sharedDefaults.data(forKey: Self.engineStateKey(scope)),
                   let s = try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: data)
             else { return nil }
             return s
-        }()
+        }
 
-        let config = CKSyncEngine.Configuration(
-            database: db,
-            stateSerialization: serialization,
-            delegate: self
-        )
+        // Two participant engines: PRIVATE (same-Apple-ID Macs, auto-discovered)
+        // and SHARED (different-Apple-ID Macs after CKShare accept). Both feed the
+        // same record fan-out; writes are routed per-Mac by `database(forMacId:)`.
+        privateEngine = CKSyncEngine(CKSyncEngine.Configuration(
+            database: privateDB, stateSerialization: restore(.privateDB), delegate: self))
+        sharedEngine = CKSyncEngine(CKSyncEngine.Configuration(
+            database: sharedDB, stateSerialization: restore(.sharedDB), delegate: self))
 
-        let engine = CKSyncEngine(config)
-        syncEngine = engine
-        
-        // Re-assert the zone in the engine's database state
-        engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone.zoneID))])
-
-        // Register subscriptions once per launch
+        // Register subscriptions once per launch (on both databases)
         if !subscriptionsReady {
             subscriptionsReady = true
             await ensureSubscriptions()
         }
 
-        do {
-            try await engine.fetchChanges()
-            await publishCompanionStatus()
-        } catch {
-            SyncTelemetry.shared.record(.engineError, side: .ios,
-                                        detail: "initial fetchChanges: \(error.localizedDescription)")
-            print("[CompanionSyncEngine] initial fetchChanges error: \(error)")
-            // Schedule one retry after 5 s so a transient CloudKit error on first
-            // launch doesn't leave the user permanently stuck at "Mac not visible."
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(5))
-                await self?.fetchChanges()
+        await fetchAllEngines()
+        await publishCompanionStatus()
+    }
+
+    /// Fetches both engines, tolerating per-engine errors (e.g. an empty shared
+    /// database before any cross-account share is accepted).
+    private func fetchAllEngines() async {
+        for engine in [privateEngine, sharedEngine].compactMap({ $0 }) {
+            do { try await engine.fetchChanges() }
+            catch {
+                SyncTelemetry.shared.record(.engineError, side: .ios,
+                                            detail: "fetchChanges: \(error.localizedDescription)")
+                print("[CompanionSyncEngine] fetchChanges error: \(error)")
             }
         }
     }
@@ -330,43 +361,113 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Public API
 
     func fetchChanges() async {
-        guard let engine = syncEngine else {
-            // Engine not initialised yet (e.g. pull-to-refresh fired before
-            // setup finished, or setup failed at launch). Attempt setup so a
-            // manual refresh always does real work instead of silently no-oping.
+        guard privateEngine != nil || sharedEngine != nil else {
+            // Engines not initialised yet (e.g. pull-to-refresh fired before
+            // setup finished). Attempt setup so a manual refresh does real work.
             if !setupInProgress { await setupSyncEngine() }
             return
         }
-        do {
-            guard !fetchInProgress else { return }
-            fetchInProgress = true
-            defer { fetchInProgress = false }
-            try await engine.fetchChanges()
-        } catch {
-            SyncTelemetry.shared.record(.engineError, side: .ios,
-                                        detail: "fetchChanges: \(error.localizedDescription)")
-            print("[CompanionSyncEngine] fetchChanges error: \(error)")
-        }
+        guard !fetchInProgress else { return }
+        fetchInProgress = true
+        defer { fetchInProgress = false }
+        await fetchAllEngines()
     }
 
-    /// Clears the saved sync token and re-initialises the engine so the next
-    /// fetch retrieves ALL records from CloudKit — not just incremental changes.
+    /// Clears the saved sync tokens and re-initialises both engines so the next
+    /// fetch retrieves ALL records — not just incremental changes.
     /// Lighter than resetLocalSyncState(): does not wipe stores or environment keys.
     func forceFetchAll() async {
-        sharedDefaults.removeObject(forKey: Self.engineStateKey)
+        sharedDefaults.removeObject(forKey: Self.engineStateKey(.privateDB))
+        sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
         sharedDefaults.synchronize()
-        syncEngine = nil
+        privateEngine = nil
+        sharedEngine = nil
         zoneReady = false
         firstFetchCompleted = false
         setupInProgress = false          // Clear guard so setupSyncEngine() runs
         await setupSyncEngine()
     }
 
+    // MARK: - Share acceptance (pairing)
+
+    /// Accepts a Mac's zone-wide share from its share URL (QR-scan / pasted link
+    /// path). Fetches the share metadata, accepts it, then fetches so the Mac's
+    /// records (and its zone) appear immediately. Returns true on success.
+    @discardableResult
+    func acceptShare(at url: URL) async -> Bool {
+        let metadata: CKShare.Metadata? = await withCheckedContinuation { cont in
+            let op = CKFetchShareMetadataOperation(shareURLs: [url])
+            op.shouldFetchRootRecord = false
+            var found: CKShare.Metadata?
+            op.perShareMetadataResultBlock = { _, result in
+                if case .success(let m) = result { found = m }
+            }
+            op.fetchShareMetadataResultBlock = { _ in cont.resume(returning: found) }
+            container.add(op)
+        }
+        guard let metadata else {
+            print("[CompanionSyncEngine] acceptShare: could not fetch metadata for \(url)")
+            return false
+        }
+        return await acceptShareMetadata(metadata)
+    }
+
+    /// Accepts share metadata delivered by the system (link tap →
+    /// `userDidAcceptCloudKitShareWith`) or fetched from a URL.
+    @discardableResult
+    func acceptShareMetadata(_ metadata: CKShare.Metadata) async -> Bool {
+        // SAME Apple ID: we are the share OWNER. You cannot (and need not) accept
+        // your own share — the Mac's zone is already in our PRIVATE database. Just
+        // make sure the engines are up and do a full fetch so the Mac appears.
+        if metadata.participantRole == .owner {
+            if privateEngine == nil && sharedEngine == nil { await setupSyncEngine() }
+            await forceFetchAll()
+            await publishCompanionStatus()
+            return true
+        }
+        // Already accepted earlier? Just refresh.
+        if metadata.participantStatus != .accepted {
+            let ok: Bool = await withCheckedContinuation { cont in
+                let op = CKAcceptSharesOperation(shareMetadatas: [metadata])
+                op.acceptSharesResultBlock = { result in
+                    switch result {
+                    case .success: cont.resume(returning: true)
+                    case .failure(let e):
+                        print("[CompanionSyncEngine] acceptShares failed: \(e)")
+                        cont.resume(returning: false)
+                    }
+                }
+                container.add(op)
+            }
+            guard ok else { return false }
+        }
+        // Pull the newly-shared zone's records so MacStatus arrives and populates
+        // macZones/macScopes for writes. forceFetchAll recreates engines so the
+        // shared engine discovers the just-accepted zone.
+        if privateEngine == nil && sharedEngine == nil { await setupSyncEngine() }
+        await forceFetchAll()
+        await publishCompanionStatus()
+        return true
+    }
+
+    /// Disconnects from a Mac. For a DIFFERENT-account Mac (shared scope) we
+    /// remove the shared zone from our shared database so we leave the share. For
+    /// a SAME-account Mac (private scope) the zone holds the Mac's own data in our
+    /// shared private DB — we must NOT delete it; we only forget it locally.
+    func leaveShare(forMacId macId: String) async {
+        if macScopes[macId] == .sharedDB, let zid = zoneID(forMacId: macId) {
+            _ = try? await sharedDB.modifyRecordZones(saving: [], deleting: [zid])
+        }
+        macZones[macId] = nil
+        macScopes[macId] = nil
+        saveMacZones()
+    }
+
     func handleRemoteNotification() async {
         SyncTelemetry.shared.record(.pushReceived, side: .ios)
-        // If the engine never initialized (e.g. accountStatus failed at launch),
+        // If the engines never initialized (e.g. accountStatus failed at launch),
         // use the push arrival as an opportunity to re-attempt setup.
-        if syncEngine == nil {
+        if privateEngine == nil && sharedEngine == nil {
             await setupSyncEngine()
         }
         await fetchChanges()
@@ -379,7 +480,11 @@ final class CompanionSyncEngine: NSObject {
             print("[CompanionSyncEngine] sendTestNotification: no primary Mac found")
             return
         }
-        
+        guard let zid = zoneID(forMacId: primary.macId) else {
+            print("[CompanionSyncEngine] sendTestNotification: no zone for \(primary.macId)")
+            return
+        }
+
         let testRecord = NotificationLogRecord(
             notifId: UUID().uuidString,
             sessionKey: "test-\(UUID().uuidString)",
@@ -395,8 +500,8 @@ final class CompanionSyncEngine: NSObject {
             ts: Date()
         )
         
-        let ckRecord = testRecord.toCKRecord()
-        
+        let ckRecord = testRecord.toCKRecord(in: zid)
+
         let op = CKModifyRecordsOperation(recordsToSave: [ckRecord], recordIDsToDelete: nil)
         op.qualityOfService = .userInitiated
         op.savePolicy = .allKeys
@@ -411,7 +516,7 @@ final class CompanionSyncEngine: NSObject {
                 }
                 cont.resume()
             }
-            db.add(op)
+            database(forMacId: primary.macId).add(op)
         }
     }
 
@@ -460,6 +565,18 @@ final class CompanionSyncEngine: NSObject {
             print("[CompanionSyncEngine] sendControlCommand: no primary Mac")
             return nil
         }
+        // The target Mac's zone is learned from a fetched MacStatus. If it isn't
+        // known yet (e.g. first command right after launch), fetch once so the
+        // command isn't silently dropped.
+        var zid = zoneID(forMacId: primary.macId)
+        if zid == nil {
+            await fetchChanges()
+            zid = zoneID(forMacId: primary.macId)
+        }
+        guard let zid else {
+            print("[CompanionSyncEngine] sendControlCommand: no zone for \(primary.macId)")
+            return nil
+        }
         let command = ControlCommandRecord(
             targetMacId: primary.macId,
             issuerDeviceId: Self.issuerDeviceId,
@@ -467,7 +584,7 @@ final class CompanionSyncEngine: NSObject {
             value: value,
             clientVersion: Self.clientVersion
         )
-        let op = CKModifyRecordsOperation(recordsToSave: [command.toCKRecord()],
+        let op = CKModifyRecordsOperation(recordsToSave: [command.toCKRecord(in: zid)],
                                           recordIDsToDelete: nil)
         op.qualityOfService = .userInitiated
         op.savePolicy = .allKeys
@@ -485,7 +602,7 @@ final class CompanionSyncEngine: NSObject {
                     cont.resume(returning: nil)
                 }
             }
-            db.add(op)
+            database(forMacId: primary.macId).add(op)
         }
     }
 
@@ -540,32 +657,64 @@ final class CompanionSyncEngine: NSObject {
         isPublishingPresence = false
     }
 
+    /// Per-zone server CompanionStatus record (keyed by zone name, which is
+    /// unique per Mac). Preserves recordChangeTag across the multiple Macs we
+    /// publish presence to — the shared `serverRecords` cache keys by recordName
+    /// only, which would collide across zones (same "CompanionStatus-<id>").
+    @ObservationIgnored private var presenceBaseByZone: [String: CKRecord] = [:]
+
     private func performPresenceSave() async -> Bool {
+        // Publish presence into EVERY connected Mac's zone so each Mac shows this
+        // device as connected — not just the active one. Until a Mac is known
+        // (share accepted / MacStatus fetched), there's nowhere to write.
+        let targets: [(macId: String, zid: CKRecordZone.ID)] = macScopes.keys.compactMap { macId in
+            guard let zid = zoneID(forMacId: macId) else { return nil }
+            return (macId, zid)
+        }
+        guard !targets.isEmpty else { return true }
+
         let device = UIDevice.current
+        // `device.name` is generic ("iPhone") since iOS 16 without an
+        // Apple-approval-gated entitlement, so publish the resolved name (custom
+        // name → marketing model) and the marketing model name explicitly.
+        let custom = AppGroupCache.customDeviceName
+        let model = DeviceModelName.current
         let status = CompanionStatusRecord(
             deviceId: Self.issuerDeviceId,
-            name: device.name,
-            model: device.model,
+            name: custom.isEmpty ? model : custom,
+            model: model,
             systemVersion: "\(device.systemName) \(device.systemVersion)",
-            appVersion: Self.clientVersion
+            appVersion: Self.clientVersion,
+            customDeviceName: custom
         )
-        let base = serverRecords.record(forName: status.recordID.recordName)
-        let op = CKModifyRecordsOperation(recordsToSave: [status.toCKRecord(base: base)],
+        SyncTelemetry.shared.record(.localEdit, side: .ios,
+                                    recordType: CompanionStatusRecord.recordType,
+                                    detail: "presence heartbeat ×\(targets.count)")
+        var allOK = true
+        for (macId, zid) in targets {
+            let ok = await savePresence(status, macId: macId, zid: zid)
+            if !ok { allOK = false }
+        }
+        return allOK
+    }
+
+    private func savePresence(_ status: CompanionStatusRecord,
+                              macId: String, zid: CKRecordZone.ID) async -> Bool {
+        let zoneName = zid.zoneName
+        let base = presenceBaseByZone[zoneName]
+        let op = CKModifyRecordsOperation(recordsToSave: [status.toCKRecord(in: zid, base: base)],
                                           recordIDsToDelete: nil)
         op.qualityOfService = .utility
         op.savePolicy = .allKeys
-        SyncTelemetry.shared.record(.localEdit, side: .ios,
-                                    recordType: CompanionStatusRecord.recordType,
-                                    detail: "presence heartbeat")
         op.perRecordSaveBlock = { [weak self] _, result in
             switch result {
             case .success(let saved):
-                Task { @MainActor [weak self] in self?.serverRecords.store(saved) }
+                Task { @MainActor [weak self] in self?.presenceBaseByZone[zoneName] = saved }
             case .failure(let error):
-                // Cache the server's record so the retry rebuilds on the
+                // Cache the server's record so the next write rebuilds on the
                 // correct change tag instead of looping on 14/2004.
                 if let server = (error as? CKError)?.serverRecord {
-                    Task { @MainActor [weak self] in self?.serverRecords.store(server) }
+                    Task { @MainActor [weak self] in self?.presenceBaseByZone[zoneName] = server }
                 }
             }
         }
@@ -574,7 +723,7 @@ final class CompanionSyncEngine: NSObject {
                 if case .success = result { cont.resume(returning: true) }
                 else { cont.resume(returning: false) }
             }
-            db.add(op)
+            database(forMacId: macId).add(op)
         }
     }
 
@@ -583,12 +732,14 @@ final class CompanionSyncEngine: NSObject {
         SyncTelemetry.shared.record(.engineError, side: .ios,
                                     detail: "user-initiated local sync reset")
         
-        syncEngine = nil
+        privateEngine = nil
+        sharedEngine = nil
         subscriptionsReady = false
         zoneReady = false
         firstFetchCompleted = false
-        
-        sharedDefaults.removeObject(forKey: Self.engineStateKey)
+
+        sharedDefaults.removeObject(forKey: Self.engineStateKey(.privateDB))
+        sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
         sharedDefaults.synchronize()
@@ -600,91 +751,64 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Subscriptions
 
     private func ensureSubscriptions() async {
-        await setupDatabaseSubscription()
-        await setupNotificationLogSubscription()
+        // Silent content-available subscriptions on BOTH databases: the private DB
+        // catches same-Apple-ID Macs; the shared DB catches different-account Macs.
+        await setupDatabaseSubscription(on: privateDB, id: "companion-private-db-sub-v1")
+        await setupDatabaseSubscription(on: sharedDB, id: "companion-shared-db-sub-v1")
+        // Clean up legacy private-DB query subscriptions: CKQuerySubscription is
+        // NOT supported on the shared database, so visible notifications are now
+        // delivered as LOCAL notifications after a silent-push fetch.
+        for legacyID in ["notif-log-v6", "notif-log-v7", "notif-log-v8", "notif-log-v9"] {
+            _ = try? await privateDB.deleteSubscription(withID: legacyID)
+            _ = try? await sharedDB.deleteSubscription(withID: legacyID)
+        }
     }
 
-    /// Database-level subscription for silent content-available pushes
-    private func setupDatabaseSubscription() async {
-        let sub = CKDatabaseSubscription(subscriptionID: "companion-db-sub-v1")
+    /// Silent content-available subscription. Wakes the app on any change so it
+    /// can fetch and post local notifications for new NotificationLog records.
+    private func setupDatabaseSubscription(on database: CKDatabase, id: String) async {
+        let sub = CKDatabaseSubscription(subscriptionID: id)
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true
         sub.notificationInfo = info
-        
         do {
-            try await db.save(sub)
+            try await database.save(sub)
         } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
             // Already exists
         } catch {
-            print("[CompanionSyncEngine] Database subscription error: \(error)")
-        }
-    }
-
-    /// NotificationLog subscription with pre-baked alertTitle/alertBody (v8 format)
-    private func setupNotificationLogSubscription() async {
-        // Clean up legacy subscription IDs so a single live subscription owns the channel.
-        for legacyID in ["notif-log-v6", "notif-log-v7", "notif-log-v8"] {
-            _ = try? await db.deleteSubscription(withID: legacyID)
-        }
-
-        let predicate = NSPredicate(value: true)
-        let sub = CKQuerySubscription(
-            recordType: CloudKitConstants.RecordType.notificationLog,
-            predicate: predicate,
-            subscriptionID: "notif-log-v9",
-            options: [.firesOnRecordCreation]
-        )
-        sub.zoneID = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName)
-        
-        let info = CKSubscription.NotificationInfo()
-        // For iOS to display a banner (not silent push), the NotificationInfo
-        // must include user-visible alert content. Map the CKRecord's "title"
-        // and "body" fields straight into aps.alert via APNs localization
-        // substitution. The NSE then runs (because shouldSendMutableContent)
-        // and can further enrich (icon attachment, interruption level, thread
-        // id) without changing the title/body.
-        info.titleLocalizationKey = "%@"
-        info.titleLocalizationArgs = ["title"]
-        info.alertLocalizationKey = "%@"
-        info.alertLocalizationArgs = ["body"]
-        info.soundName = "default"
-        info.shouldBadge = true
-        info.shouldSendMutableContent = true
-        info.desiredKeys = ["agent", "title", "body", "sessionKey", "phase"]
-        sub.notificationInfo = info
-        
-        do {
-            try await db.save(sub)
-        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
-            // Already exists
-        } catch {
-            print("[CompanionSyncEngine] NotificationLog subscription error: \(error)")
+            print("[CompanionSyncEngine] DB subscription (\(id)) error: \(error)")
         }
     }
 
     // MARK: - Record fan-out
 
-    nonisolated private func handleFetched(_ record: CKRecord) {
-        Task { @MainActor in
+    @MainActor
+    private func handleFetched(_ record: CKRecord, scope: DBScope) {
+        do {
             switch record.recordType {
             case CloudKitConstants.RecordType.macStatus:
                 if let r = MacStatusRecord(record) {
+                    // Learn this Mac's zone + database so writes route correctly.
+                    self.noteMacZone(macId: r.macId, zoneID: record.recordID.zoneID, scope: scope)
                     MacStatusStore.shared.upsert(r)
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
                 }
-                
+
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) {
                     NotificationLogStore.shared.append(r)
+                    // Shared DB can't use a query subscription, so the silent push
+                    // brought us here — post a local notification for fresh events.
+                    self.postLocalNotification(for: r)
                 }
 
             case CompanionStatusRecord.recordType:
-                // Our own heartbeat fetched back — cache its server record so
-                // the next publish carries the correct change tag even after a
-                // local cache wipe (env migration / reinstall).
+                // Our own heartbeat fetched back — cache its server record (keyed
+                // per zone) so the next publish to that Mac carries the correct
+                // change tag even after a local cache wipe.
                 if record.recordID.recordName == "CompanionStatus-\(Self.issuerDeviceId)" {
-                    self.serverRecords.store(record)
+                    self.presenceBaseByZone[record.recordID.zoneID.zoneName] = record
                 }
                 
             case "AgentConfig":
@@ -725,22 +849,68 @@ final class CompanionSyncEngine: NSObject {
             }
         }
     }
+
+    // MARK: - Local notifications (shared-DB delivery)
+
+    /// Tracks already-posted notifIds so a re-fetch (incremental sync replay)
+    /// doesn't double-post. Bounded ring persisted in the App Group.
+    private static let postedNotifKey = "ck.ios.postedNotifIds.v1"
+
+    /// Posts a local notification for a freshly-fetched NotificationLog record.
+    /// Required because the shared database can't use a CKQuerySubscription, so
+    /// the server push is silent (content-available) and the app must render the
+    /// banner itself. Dedups by notifId and ignores backfilled/old records.
+    @MainActor
+    private func postLocalNotification(for r: NotificationLogRecord) {
+        // Only surface recent events (avoid a banner storm on first full sync).
+        guard Date().timeIntervalSince(r.ts) < 600 else { return }
+
+        var posted = sharedDefaults.stringArray(forKey: Self.postedNotifKey) ?? []
+        guard !posted.contains(r.notifId) else { return }
+        posted.append(r.notifId)
+        if posted.count > 400 { posted.removeFirst(posted.count - 400) }
+        sharedDefaults.set(posted, forKey: Self.postedNotifKey)
+
+        let content = UNMutableNotificationContent()
+        content.title = r.title.isEmpty ? r.macName : r.title
+        content.body = r.body
+        content.sound = .default
+        content.threadIdentifier = r.sessionKey           // group by session
+        content.userInfo = ["notifId": r.notifId, "macId": r.macId, "agent": r.agent]
+        if r.phase == NormalizedEventPhase.permissionNeeded.rawValue {
+            content.interruptionLevel = .timeSensitive
+        }
+        // Attach the agent icon if cached in the App Group.
+        let slug = TrackedAgent(rawValue: r.agent)?.iconSlug ?? r.agent
+        if let iconURL = AppGroupCache.iconURL(slug: slug),
+           let attachment = try? UNNotificationAttachment(identifier: slug, url: iconURL) {
+            content.attachments = [attachment]
+        }
+        let request = UNNotificationRequest(identifier: r.notifId, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
 }
 
 // MARK: - CKSyncEngineDelegate
 
 extension CompanionSyncEngine: CKSyncEngineDelegate {
 
+    /// Which database an engine instance drives (private = same Apple ID).
+    @MainActor private func scope(of engine: CKSyncEngine) -> DBScope {
+        engine === sharedEngine ? .sharedDB : .privateDB
+    }
+
     nonisolated func handleEvent(
         _ event: CKSyncEngine.Event,
         syncEngine: CKSyncEngine
     ) async {
+        let scope = await scope(of: syncEngine)
         switch event {
         case .stateUpdate(let e):
-            // Persist the engine state
+            // Persist the engine state under its per-database key.
             if let data = try? JSONEncoder().encode(e.stateSerialization) {
                 await MainActor.run {
-                    AppGroupCache.defaults.set(data, forKey: Self.engineStateKey)
+                    AppGroupCache.defaults.set(data, forKey: Self.engineStateKey(scope))
                 }
             }
             // Always update sync timestamp and mark zone/fetch ready on state update —
@@ -775,7 +945,7 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 let rtype = change.record.recordType
                 SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
                 await MainActor.run {
-                    self.handleFetched(change.record)
+                    self.handleFetched(change.record, scope: scope)
                 }
                 SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
             }

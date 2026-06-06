@@ -29,13 +29,12 @@ public struct AgentIconRecord: Sendable {
 extension AgentIconRecord {
     public static let recordType = CloudKitConstants.RecordType.agentIcon
 
-    public static func recordID(for agent: String) -> CKRecord.ID {
-        let zone = CKRecordZone.ID(zoneName: CloudKitConstants.zoneName, ownerName: CKCurrentUserDefaultName)
-        return CKRecord.ID(recordName: "AgentIcon-\(agent)", zoneID: zone)
+    public static func recordID(for agent: String, in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "AgentIcon-\(agent)", zoneID: zoneID)
     }
 
-    public func toCKRecord(pngFileURL: URL) -> CKRecord {
-        let r = CKRecord(recordType: Self.recordType, recordID: Self.recordID(for: agent))
+    public func toCKRecord(in zoneID: CKRecordZone.ID, pngFileURL: URL) -> CKRecord {
+        let r = CKRecord(recordType: Self.recordType, recordID: Self.recordID(for: agent, in: zoneID))
         r["agent"]         = agent as CKRecordValue
         r["pngSHA256"]     = pngSHA256 as CKRecordValue
         r["pngAsset"]      = CKAsset(fileURL: pngFileURL)
