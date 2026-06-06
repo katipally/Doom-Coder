@@ -28,6 +28,9 @@ public enum PairingOrigin: String, Codable, Sendable, Equatable, Hashable, CaseI
     /// Imported from a backup / migration. UI shows "Imported" so
     /// the user knows no fresh handshake happened on this device.
     case imported
+    /// v6: Mac-initiated same-iCloud pairing (the Mac picked this iPhone in
+    /// its AirDrop-style "Same iCloud" list and the user accepted on the phone).
+    case sameICloud
 
     public var displayName: String {
         switch self {
@@ -37,6 +40,7 @@ public enum PairingOrigin: String, Codable, Sendable, Equatable, Hashable, CaseI
         case .auto:       return "Auto (same Apple ID)"
         case .reinstall:  return "Reinstalled app"
         case .imported:   return "Imported"
+        case .sameICloud: return "Same iCloud"
         }
     }
 
@@ -48,6 +52,7 @@ public enum PairingOrigin: String, Codable, Sendable, Equatable, Hashable, CaseI
         case .auto:       return "icloud"
         case .reinstall:  return "arrow.clockwise.circle"
         case .imported:   return "tray.and.arrow.down"
+        case .sameICloud: return "person.2.fill"
         }
     }
 }

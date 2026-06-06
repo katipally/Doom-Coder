@@ -137,8 +137,8 @@ final class NotificationLogStore {
         LocalStore.shared.upsertNotificationLog(r)
     }
 
-    func fetchLogs(forAgent agent: TrackedAgent) async -> [NotificationLogRecord] {
-        return await LocalStore.shared.fetchNotifications(forAgent: agent, limit: 100)
+    func fetchLogs(forAgent agent: TrackedAgent, macId: String? = nil) async -> [NotificationLogRecord] {
+        return await LocalStore.shared.fetchNotifications(forAgent: agent, macId: macId, limit: 100)
     }
 
     func clear() {

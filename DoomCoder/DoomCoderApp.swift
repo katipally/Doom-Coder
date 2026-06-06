@@ -89,16 +89,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         // database zones in a low-priority background task at launch.
         MacPairingCoordinator.shared.prewarmContainer()
 
-        // v5.1: publish this Mac to the public DB so iOS companions
-        // can discover it. Idempotent — re-publishing updates the
-        // existing row in place.
-        DiscoverableMacPublisher.shared.start()
-        // v5.1: also start the public-DB subscription for
-        // CSC{pending,origin:ios} records so we can show a
-        // "Yash's iPhone wants to pair" banner when the iOS app
-        // taps a Mac in its discoverable list.
+        // v6: discover this account's iPhones (published to the public DB)
+        // so the Add-Device "Same iCloud" picker can list them. The Mac is
+        // the initiator of every pairing; iPhones never discover Macs.
         Task { @MainActor in
-            await PendingPairRequestSubscription.shared.start()
+            await DiscoverableDeviceSubscription.shared.start()
         }
 
         // Copy dc-hook to a stable path that survives Xcode rebuilds.
@@ -201,10 +196,12 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("[DoomCoder] APNs device token registered (\(String(hex.prefix(8)))…)")
+        Task { @MainActor in CloudKitPusher.shared.setPushRegistered(true) }
     }
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[DoomCoder] APNs registration failed: \(error.localizedDescription)")
+        Task { @MainActor in CloudKitPusher.shared.setPushRegistered(false) }
     }
 
     /// CloudKit sends a silent content-available push when zone changes land.

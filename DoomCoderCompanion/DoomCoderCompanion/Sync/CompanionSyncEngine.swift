@@ -47,18 +47,13 @@ final class CompanionSyncEngine: NSObject {
     private var subscriptionsReady = false
     private var setupInProgress = false
     private var fetchInProgress = false
-
-    /// Repeating fetch while the app is foregrounded. Silent CloudKit pushes are
-    /// throttled by iOS, so without this an open-but-idle app could go many
-    /// minutes without picking up new Mac/agent state. Runs only in foreground.
-    @ObservationIgnored private var _foregroundPollTimer: Timer?
-    private let foregroundPollInterval: TimeInterval = 30
-
-    /// 2-minute watchdog: if Mac's lastSeen grows stale while iOS is foregrounded,
-    /// self-heals by triggering a fresh CloudKit fetch. Catches the case where
-    /// setupSyncEngine() failed at launch and the engine was never initialised.
-    @ObservationIgnored private var _macWatchdogTimer: Timer?
-    private let macWatchdogInterval: TimeInterval = 120
+    /// Foreground fetch poll. APNs silent push is unreliable in dev/unsigned
+    /// builds (OSStatus 13) and can be throttled even in Release, so while the
+    /// app is active we pull changes on a light cadence. This is what makes a
+    /// Mac-initiated pair request (CSC{requested}) surface promptly without a
+    /// push. Cancelled on background; the heavy lifting is still push-driven.
+    private var foregroundPollTask: Task<Void, Never>?
+    private let foregroundPollInterval: UInt64 = 6_000_000_000  // 6s
 
     /// Persistent server-record cache so MacStatus updates carry recordChangeTag
     private let serverRecords = ServerRecordCache(
@@ -78,23 +73,17 @@ final class CompanionSyncEngine: NSObject {
         // created through explicit QR pairing (IOSPairingCoordinator).
         // MacStatus records update status on existing connections only.
         Task { await setupSyncEngine() }
-        startForegroundPolling()
         // v2.7: start writing PeerStatus heartbeats so the Mac can
         // see this iOS device in its Connections tab. Symmetric to
         // CloudKitPusher.publishMacStatus on the Mac side.
         PeerStatusPublisher.shared.start()
-        // v2.8: self-heal any per-share CKSyncEngines that were
-        // registered against the wrong database (private instead
-        // of shared). Idempotent.
-        ShareSyncEngineRegistry.shared.reconcileAll()
-        // v5.1: install the public-DB CKQuerySubscription for
-        // DiscoverableMac records and fetch the initial list. The
-        // subscription is silent (content-available only) so the
-        // user doesn't see a push notification — the list just
-        // updates silently in the background.
-        Task { @MainActor in
-            await DiscoverableMacSubscription.shared.start()
-        }
+        // v6: a SINGLE CKSyncEngine for the whole shared database (was
+        // one-engine-per-share, which violated Apple's one-engine-per-DB
+        // rule and dropped sync events).
+        SharedDatabaseSync.shared.start()
+        // v6.1: the Mac discovers same-iCloud iPhones directly from the
+        // PeerStatus heartbeats it already receives (shared private zone) —
+        // no public-DB presence record needed, so we don't publish one.
 
         // Re-bootstrap when the iCloud account changes mid-session
         NotificationCenter.default.addObserver(
@@ -112,6 +101,7 @@ final class CompanionSyncEngine: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.stopForegroundPoll()
                 self.persistEngineStateNow()
                 self.beginBackgroundSync()
             }
@@ -124,7 +114,6 @@ final class CompanionSyncEngine: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.startForegroundPolling()
                 if self.syncEngine == nil {
                     // Reset any stale in-progress guard from a background hang
                     // so the fresh setup attempt is not silently skipped.
@@ -133,13 +122,42 @@ final class CompanionSyncEngine: NSObject {
                 } else {
                     await self.fetchChanges()
                 }
+                // v6 event-driven: also pull shared-DB changes and re-publish
+                // presence/heartbeat on every activation (replaces the polling
+                // timers).
+                await SharedDatabaseSync.shared.fetchChanges()
+                PeerStatusPublisher.shared.publishNow(force: true)
+                self.startForegroundPoll()
+            }
+        }
+
+        // Start the foreground poll right away (launch is a foreground event).
+        startForegroundPoll()
+    }
+
+    // MARK: - Foreground fetch poll (push fallback)
+
+    private func startForegroundPoll() {
+        guard foregroundPollTask == nil else { return }
+        foregroundPollTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: self.foregroundPollInterval)
+                if Task.isCancelled { break }
+                if self.syncEngine != nil {
+                    await self.fetchChanges()
+                }
             }
         }
     }
 
+    private func stopForegroundPoll() {
+        foregroundPollTask?.cancel()
+        foregroundPollTask = nil
+    }
+
     /// When a MacStatus record arrives, update the status of any existing
-    /// explicitly-paired connection for that Mac. Never creates new connections
-    /// — users must go through the QR scan flow to pair.
+    /// explicitly-paired connection for that Mac. Never creates new connections.
     private static func refreshExistingConnections(for status: MacStatusRecord) {
         let store = ConnectionStore.shared
         let iosId = IosDeviceId.current
@@ -172,23 +190,6 @@ final class CompanionSyncEngine: NSObject {
         NotificationLogStore.shared.clear()
     }
 
-    /// Starts (or restarts) the foreground fetch timer. Idempotent.
-    private func startForegroundPolling() {
-        stopForegroundPolling()
-        let t = Timer(timeInterval: foregroundPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.fetchChanges() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        _foregroundPollTimer = t
-        startMacWatchdog()
-    }
-
-    private func stopForegroundPolling() {
-        _foregroundPollTimer?.invalidate()
-        _foregroundPollTimer = nil
-        stopMacWatchdog()
-    }
-
     /// Requests a UIBackgroundTask slot and performs a final fetch before
     /// iOS suspends the app. Uses a class holder to avoid the mutation-after-capture
     /// Swift concurrency warning with UIBackgroundTaskIdentifier.
@@ -203,32 +204,6 @@ final class CompanionSyncEngine: NSObject {
         Task { @MainActor [weak self] in
             await self?.fetchChanges()
             UIApplication.shared.endBackgroundTask(holder.id)
-        }
-    }
-
-    private func startMacWatchdog() {
-        _macWatchdogTimer?.invalidate()
-        let t = Timer(timeInterval: macWatchdogInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.healMacConnectionIfStale() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        _macWatchdogTimer = t
-    }
-
-    private func stopMacWatchdog() {
-        _macWatchdogTimer?.invalidate()
-        _macWatchdogTimer = nil
-    }
-
-    private func healMacConnectionIfStale() async {
-        guard let mac = MacStatusStore.shared.primary else { return }
-        let age = -mac.lastSeen.timeIntervalSinceNow
-        guard age > 180 else { return }  // < 3 min = fresh enough, do nothing
-        if age > 600 {
-            // Very stale (>10 min): wipe sync token and do a full re-fetch
-            await forceFetchAll()
-        } else {
-            await fetchChanges()
         }
     }
 
@@ -351,6 +326,7 @@ final class CompanionSyncEngine: NSObject {
                 print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
                 sharedDefaults.removeObject(forKey: Self.engineStateKey)
                 serverRecords.clear()
+                PeerStatusPublisherCache.shared.clear()
                 MacStatusStore.shared.clear()
             }
             sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
@@ -459,32 +435,29 @@ final class CompanionSyncEngine: NSObject {
             await setupSyncEngine()
         }
         await fetchChanges()
+        // v6: a silent push may be for a cross-account shared-zone change.
+        await SharedDatabaseSync.shared.fetchChanges()
     }
 
-    /// Called by ShareSubscription when a per-share CKSyncEngine delivers
-    /// records fetched from a paired Mac. v2.7 routes these through the
-    /// same record fan-out as the implicit-iCloud path.
-    func handleFetchedZoneChanges(_ event: CKSyncEngine.Event.FetchedRecordZoneChanges, from connection: Connection) async {
-        for change in event.modifications {
-            let rtype = change.record.recordType
-            SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
-            await MainActor.run {
-                self.handleFetched(change.record)
-            }
-            // Mark the connection as recently synced.
-            var updated = connection
-            updated.lastSyncAt = Date()
-            ConnectionStore.shared.upsert(updated)
-            SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
-        }
+    /// v6: called by the single shared-DB engine (SharedDatabaseSync) when it
+    /// fetches a record from a paired Mac's shared zone (cross-account). Routes
+    /// it through the same record fan-out as the private-engine path.
+    func ingestSharedRecord(_ record: CKRecord) {
+        SyncTelemetry.shared.record(.fetched, side: .ios, recordType: record.recordType)
+        handleFetched(record)
+        SyncTelemetry.shared.record(.applied, side: .ios, recordType: record.recordType)
     }
 
     // MARK: - Send Test Notification
 
-    func sendTestNotification() async {
+    /// Sends a test NotificationLog to CloudKit. Returns `true` only once the
+    /// write is confirmed by the server, `false` on failure — so the UI can
+    /// report honestly instead of always showing "Sent ✓".
+    @discardableResult
+    func sendTestNotification() async -> Bool {
         guard let primary = MacStatusStore.shared.primary else {
             print("[CompanionSyncEngine] sendTestNotification: no primary Mac found")
-            return
+            return false
         }
 
         let testRecord = NotificationLogRecord(
@@ -508,15 +481,16 @@ final class CompanionSyncEngine: NSObject {
         op.qualityOfService = .userInitiated
         op.savePolicy = .allKeys
 
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             op.modifyRecordsResultBlock = { result in
                 switch result {
                 case .success:
                     print("[CompanionSyncEngine] Test notification sent successfully")
+                    cont.resume(returning: true)
                 case .failure(let error):
                     print("[CompanionSyncEngine] Test notification failed: \(error)")
+                    cont.resume(returning: false)
                 }
-                cont.resume()
             }
             db.add(op)
         }
@@ -536,6 +510,8 @@ final class CompanionSyncEngine: NSObject {
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
         sharedDefaults.synchronize()
+        serverRecords.clear()
+        PeerStatusPublisherCache.shared.clear()
 
         await setupSyncEngine()
         print("[CompanionSyncEngine] resetLocalSyncState: done")
@@ -616,14 +592,10 @@ final class CompanionSyncEngine: NSObject {
                     MacStatusStore.shared.upsert(r)
                     // Persist server record for changeTag
                     self.serverRecords.store(record)
-                    // v5: same-Apple-ID auto-attach. If the iOS app has
-                    // no Connection for this MacId yet, AutoPairDiscovery
-                    // creates one (idempotent — deterministic id collapses
-                    // concurrent heart-beats). If a Connection already
-                    // exists, the existing-row path below updates it.
-                    AutoPairDiscovery.shared.consider(r)
-                    // Update status of any existing explicitly-paired connection
-                    // for this Mac. Never creates connections automatically.
+                    // v6: NO auto-attach. A MacStatus heartbeat only refreshes
+                    // the liveness of an EXISTING explicitly-paired connection —
+                    // it never creates one. Pairing is always an explicit
+                    // Mac-initiated request + iPhone accept.
                     Self.refreshExistingConnections(for: r)
                 }
 
@@ -635,6 +607,12 @@ final class CompanionSyncEngine: NSObject {
             case "AgentConfig":
                 // Custom record type: { macId, agents, installedAgents, statuses, updatedAt, schemaVersion }
                 guard let r = AgentConfigRecord(record) else { return }
+                // Manual-only: same-iCloud shares one private DB, so an UNPAIRED
+                // Mac's AgentConfig arrives here too. Never surface its agents
+                // until the user has an active connection to that Mac.
+                guard ConnectionStore.shared.connections.contains(where: {
+                    $0.macDeviceId == r.macId && $0.status == .active
+                }) else { return }
                 let agents = r.agents.compactMap { TrackedAgent(rawValue: $0) }
                 let installed = r.installedAgents.compactMap { TrackedAgent(rawValue: $0) }
                 var statusMap: [TrackedAgent: String] = [:]
@@ -713,6 +691,8 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 case .signOut:
                     self.accountAvailable = false
                 case .switchAccounts:
+                    self.serverRecords.clear()
+                    PeerStatusPublisherCache.shared.clear()
                     MacStatusStore.shared.clear()
                     AgentListStore.shared.clear()
                     NotificationLogStore.shared.clear()
@@ -728,6 +708,11 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                 SyncTelemetry.shared.record(.fetched, side: .ios, recordType: rtype)
                 await MainActor.run {
                     self.handleFetched(change.record)
+                    // v7: NO auto-attach. A same-account MacStatus arriving here
+                    // only refreshes status for an ALREADY-paired Mac (handled in
+                    // handleFetched → refreshExistingConnections). A connection is
+                    // created exclusively by an explicit user action: accepting a
+                    // Mac-initiated pair request, or the same-iCloud code/QR flow.
                 }
                 SyncTelemetry.shared.record(.applied, side: .ios, recordType: rtype)
             }
@@ -760,6 +745,47 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                                             recordType: fail.record.recordType,
                                             detail: "\(cke.code.rawValue): \(cke.localizedDescription)")
                 print("[CompanionSyncEngine] save failed on \(fail.record.recordID.recordName): \(cke.localizedDescription)")
+
+                // Apple requires the app to resolve `serverRecordChanged` itself
+                // (CKSyncEngine docs). Without this the iOS PeerStatus heartbeat
+                // wedges forever on 14/2004 and the Mac never sees fresh data.
+                // Stash the server record (carries the live etag), then re-enqueue
+                // so the next batch rebuilds as an UPDATE. This also recovers
+                // installs already stuck on the server, with no zone wipe.
+                let recordID = fail.record.recordID
+                let name = recordID.recordName
+
+                // v7: CSC names are unique per send, so a 14/2004 on a CSC is a
+                // STALE leftover from a pre-v7 build (reused counter name). Drop
+                // it and DON'T re-enqueue — retrying a colliding insert is the
+                // infinite-loop bug. (PeerStatus has a stable name and DOES need
+                // the etag self-heal below.)
+                if name.hasPrefix("CSC-") {
+                    await MainActor.run { CSCPendingCache.shared.didSave(fail.record) }
+                    continue
+                }
+                switch cke.code {
+                case .serverRecordChanged:
+                    if let server = cke.serverRecord {
+                        await MainActor.run {
+                            if name.hasPrefix("PeerStatus-") {
+                                PeerStatusPublisherCache.shared.noteServerRecord(server)
+                            }
+                        }
+                        syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+                    }
+                case .unknownItem:
+                    // Record was deleted server-side — drop the stale etag and
+                    // re-enqueue so the next save INSERTs cleanly.
+                    await MainActor.run {
+                        if name.hasPrefix("PeerStatus-") {
+                            PeerStatusPublisherCache.shared.forgetServerRecord(name: name)
+                        }
+                    }
+                    syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+                default:
+                    break
+                }
             }
 
         default:

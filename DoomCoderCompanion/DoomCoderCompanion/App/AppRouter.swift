@@ -19,6 +19,9 @@ final class AppRouter {
     var selectedTab: RootTab = .prompts
     /// Navigation path for the Dashboard tab's NavigationStack.
     var agentPath: [TrackedAgent] = []
+    /// The Mac currently selected in the Dashboard's multi-Mac switcher. nil =
+    /// "All Macs". Used to scope the per-agent logs to one Mac.
+    var selectedMacId: String?
 
     /// Text handed off from Notes' "Turn into a prompt". PromptsView consumes it
     /// on appear: it opens a fresh chat with this text pre-filled in the input

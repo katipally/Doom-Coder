@@ -50,6 +50,14 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
     /// "Pairing completed" celebration animation.
     public var shareAcceptedAt: Date?
 
+    /// v6: cached display identity of the *peer* device's iCloud account
+    /// (the other side's name + email from CloudKit discoverability).
+    /// Local-only render cache so device cards show "Yashwanth ·
+    /// you@icloud.com" instantly; refreshed from heartbeats / share
+    /// metadata. Nil → fall back to the route label ("Same/Different iCloud").
+    public var peerAccountName: String?
+    public var peerAccountEmail: String?
+
     public init(
         id: String = UUID().uuidString,
         macDeviceId: DeviceID,
@@ -62,7 +70,9 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
         pairingOrigin: PairingOrigin = .auto,
         stateChangeCounter: Int = 1,
         removedAt: Date? = nil,
-        shareAcceptedAt: Date? = nil
+        shareAcceptedAt: Date? = nil,
+        peerAccountName: String? = nil,
+        peerAccountEmail: String? = nil
     ) {
         self.id = id
         self.macDeviceId = macDeviceId
@@ -76,6 +86,8 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
         self.stateChangeCounter = stateChangeCounter
         self.removedAt = removedAt
         self.shareAcceptedAt = shareAcceptedAt
+        self.peerAccountName = peerAccountName
+        self.peerAccountEmail = peerAccountEmail
     }
 
     /// Connection is fresh if lastSyncAt is within the freshness window.
@@ -133,7 +145,9 @@ public struct Connection: Codable, Sendable, Equatable, Identifiable, Hashable {
             pairingOrigin: pairingOrigin,
             stateChangeCounter: stateChangeCounter,
             removedAt: removedAt,
-            shareAcceptedAt: shareAcceptedAt
+            shareAcceptedAt: shareAcceptedAt,
+            peerAccountName: peerAccountName,
+            peerAccountEmail: peerAccountEmail
         )
     }
 

@@ -14,7 +14,6 @@ struct ConnectionsView: View {
     @ObservedObject private var store = PairingStore.shared
     @ObservedObject private var pusher = CloudKitPusher.shared
     @StateObject private var coordinator = MacPairingCoordinator.shared
-    @StateObject private var pendingQueue = PendingPairRequestQueue.shared
     @State private var showingPairSheet = false
     @State private var selectedConnection: Connection?
 
@@ -22,30 +21,6 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if !pendingQueue.requests.isEmpty {
-                PendingPairRequestBanner(
-                    queue: pendingQueue,
-                    onAllow: { req in
-                        await ConnectionStateChanges.shared.approvePendingRequest(
-                            macId: req.macId,
-                            iosDeviceId: req.iosDeviceId,
-                            iosUserRecordID: req.iosUserRecordID
-                        )
-                        pendingQueue.remove(req)
-                    },
-                    onDeny: { req in
-                        await ConnectionStateChanges.shared.denyPendingRequest(
-                            macId: req.macId,
-                            iosDeviceId: req.iosDeviceId,
-                            iosUserRecordID: req.iosUserRecordID
-                        )
-                        pendingQueue.remove(req)
-                    }
-                )
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                Divider()
-            }
             content
         }
         .sheet(isPresented: $showingPairSheet) {
@@ -53,6 +28,16 @@ struct ConnectionsView: View {
         }
         .sheet(item: $selectedConnection) { conn in
             DeviceDetailView(connection: conn)
+        }
+        .task {
+            // Live refresh while the Connections tab is visible. Silent push is
+            // best-effort (and unavailable in unsigned/dev builds — APNs
+            // registration fails there), so poll lightly ONLY while the user is
+            // looking. `.task` is cancelled automatically on disappear.
+            while !Task.isCancelled {
+                pusher.fetchNow()
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+            }
         }
     }
 
@@ -65,8 +50,9 @@ struct ConnectionsView: View {
             // documentation explicitly recommends manual
             // fetchChanges() triggers for important updates —
             // silent APNs pushes are coalesced/throttled and
-            // can't be relied on. The 10s background safety
-            // timer (in CloudKitPusher) is the fallback.
+            // can't be relied on. v6 is otherwise event-driven
+            // (push + foreground + wake); this button is the
+            // explicit user-initiated fetch.
             Button {
                 pusher.forceFetch()
             } label: {
@@ -85,7 +71,6 @@ struct ConnectionsView: View {
 
             Button {
                 showingPairSheet = true
-                Task { await coordinator.startPairing() }
             } label: {
                 Label("Add Device", systemImage: "plus")
             }
@@ -137,7 +122,6 @@ struct ConnectionsView: View {
             .controlSize(.large)
             Button {
                 showingPairSheet = true
-                Task { await coordinator.startPairing() }
             } label: {
                 Label("Add Device", systemImage: "plus")
                     .frame(maxWidth: 260)

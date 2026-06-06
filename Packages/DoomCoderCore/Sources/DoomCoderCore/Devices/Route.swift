@@ -85,7 +85,7 @@ public struct CKShareRef: Codable, Sendable, Equatable, Hashable {
     /// Stored in `ownerRecordName` for same-iCloud-account connections.
     /// The Mac and iPhone share one Apple ID; the iPhone already has private-zone
     /// access and does not call `container.accept()`. Sync goes through
-    /// CompanionSyncEngine (private DB), not ShareSyncEngineRegistry (shared DB).
+    /// CompanionSyncEngine (private DB), not the shared-DB engine.
     public static let sameAccountSentinel = "__same_account__"
 
     /// True when the Mac and this iPhone belong to the same iCloud account.

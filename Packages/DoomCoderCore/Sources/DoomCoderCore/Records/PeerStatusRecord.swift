@@ -45,6 +45,10 @@ public struct PeerStatusRecord: Sendable, Codable, Equatable {
     /// DeviceRow / DeviceDetailView. The Mac UI substitutes
     /// "Signed in to iCloud" when this is nil.
     public var routeAccountEmail: String?
+    /// v6: the iCloud account's display name (from CloudKit discoverability,
+    /// `CKShare.Participant.userIdentity.nameComponents`). Best-effort —
+    /// nil if the user declined the discoverability prompt.
+    public var accountFullName: String?
     /// v5: copy of the current Connection.stateChangeCounter at
     /// the time this heartbeat was written. Lets the Mac detect
     /// heartbeats from a stale Connection (counter < the row's
@@ -63,6 +67,7 @@ public struct PeerStatusRecord: Sendable, Codable, Equatable {
         macId: String? = nil,
         shareURLString: String? = nil,
         routeAccountEmail: String? = nil,
+        accountFullName: String? = nil,
         stateChangeCounter: Int = 0,
         schemaVersion: Int = CloudKitConstants.schemaVersion
     ) {
@@ -76,6 +81,7 @@ public struct PeerStatusRecord: Sendable, Codable, Equatable {
         self.macId = macId
         self.shareURLString = shareURLString
         self.routeAccountEmail = routeAccountEmail
+        self.accountFullName = accountFullName
         self.stateChangeCounter = stateChangeCounter
         self.schemaVersion = schemaVersion
     }
@@ -128,6 +134,7 @@ extension PeerStatusRecord {
         if let m = macId { r["macId"] = m as CKRecordValue } else { r["macId"] = nil }
         if let s = shareURLString { r["shareURLString"] = s as CKRecordValue } else { r["shareURLString"] = nil }
         if let e = routeAccountEmail { r["routeAccountEmail"] = e as CKRecordValue } else { r["routeAccountEmail"] = nil }
+        if let n = accountFullName { r["accountFullName"] = n as CKRecordValue } else { r["accountFullName"] = nil }
         r["stateChangeCounter"] = stateChangeCounter as CKRecordValue
         r["schemaVersion"] = schemaVersion as CKRecordValue
     }
@@ -147,6 +154,7 @@ extension PeerStatusRecord {
             macId:        r["macId"]       as? String,
             shareURLString: r["shareURLString"] as? String,
             routeAccountEmail: r["routeAccountEmail"] as? String,
+            accountFullName: r["accountFullName"] as? String,
             stateChangeCounter: (r["stateChangeCounter"] as? Int) ?? 0,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )

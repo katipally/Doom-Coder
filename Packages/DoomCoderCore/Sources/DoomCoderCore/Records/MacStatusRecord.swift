@@ -26,6 +26,11 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     /// IPv4 broadcast address of the primary interface (e.g. "192.168.1.255")
     /// so the magic packet reaches the correct subnet.
     public var broadcastIPv4: String?
+    /// v6: the Mac's iCloud account display name + email (CloudKit
+    /// discoverability). Best-effort — nil if the user declined the prompt.
+    /// Lets the iPhone show "MacBook Pro · Yashwanth · you@icloud.com".
+    public var accountFullName: String?
+    public var accountEmail: String?
 
     public init(macId: String,
                 name: String,
@@ -37,6 +42,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
                 thermalState: String = "Normal",
                 macAddress: String? = nil,
                 broadcastIPv4: String? = nil,
+                accountFullName: String? = nil,
+                accountEmail: String? = nil,
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.name = name
@@ -48,6 +55,8 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
         self.thermalState = thermalState
         self.macAddress = macAddress
         self.broadcastIPv4 = broadcastIPv4
+        self.accountFullName = accountFullName
+        self.accountEmail = accountEmail
         self.schemaVersion = schemaVersion
     }
 }
@@ -81,6 +90,8 @@ extension MacStatusRecord {
         r["thermalState"]  = thermalState as CKRecordValue
         if let m = macAddress { r["macAddress"] = m as CKRecordValue } else { r["macAddress"] = nil }
         if let b = broadcastIPv4 { r["broadcastIPv4"] = b as CKRecordValue } else { r["broadcastIPv4"] = nil }
+        if let n = accountFullName { r["accountFullName"] = n as CKRecordValue } else { r["accountFullName"] = nil }
+        if let e = accountEmail { r["accountEmail"] = e as CKRecordValue } else { r["accountEmail"] = nil }
         r["schemaVersion"] = schemaVersion as CKRecordValue
         return r
     }
@@ -101,6 +112,8 @@ extension MacStatusRecord {
             thermalState: (r["thermalState"] as? String) ?? "Normal",
             macAddress: r["macAddress"] as? String,
             broadcastIPv4: r["broadcastIPv4"] as? String,
+            accountFullName: r["accountFullName"] as? String,
+            accountEmail: r["accountEmail"] as? String,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

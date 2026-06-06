@@ -47,6 +47,18 @@ public final class MacPairingCoordinator: ObservableObject {
     @Published public private(set) var phase: Phase = .idle
     @Published public private(set) var lastError: ConnectionError?
 
+    /// Same-iCloud code/QR payload, shown alongside the AirDrop-style picker so
+    /// the user can also pair by typing a code or scanning a QR on the iPhone.
+    /// Independent of `phase` (which is the cross-account CKShare state machine).
+    public struct SameICloudCode: Equatable, Sendable {
+        public let code: String      // 6-char code (also resolvable via public DB)
+        public let payloadURL: URL   // doomcoder://pair?sameICloud=1&… (QR + link)
+        public let expiresAt: Date
+    }
+    @Published public private(set) var sameICloudCode: SameICloudCode?
+    private var sameICloudCodeKey: String?   // public-DB record name for the code
+    private var sameICloudExpiryTask: Task<Void, Never>?
+
     private let container: CKContainer
     private var pollTask: Task<Void, Never>?
     private var currentShare: CKShare?
@@ -109,6 +121,119 @@ public final class MacPairingCoordinator: ObservableObject {
 
     // MARK: - Public API
 
+    /// v6: Mac-initiated same-iCloud pairing. The user picked an iPhone in the
+    /// Add-Device "Same iCloud" AirDrop-style list. We create an awaiting row
+    /// and send a CSC{requested, origin:mac}; because we're on the same Apple
+    /// ID, the iPhone's private-DB engine fetches it and surfaces an
+    /// Accept/Decline prompt. On accept it sends CSC{accepted, origin:ios},
+    /// which our ingest turns into an active connection.
+    public func requestSameICloudPair(device: DiscoverableDeviceRecord) async {
+        // v7: promptless direct-connect. Same iCloud = same trusted account, so
+        // tapping the device connects both sides immediately — no Accept prompt.
+        // The Mac goes active now and publishes CSC{accepted, origin:mac}; the
+        // iPhone creates its matching active row on receipt (no user action).
+        // If a stale row exists, bump its counter so the CSC is ordered after it.
+        let id = Connection.implicitConnectionId(macId: macDeviceId, iosDeviceId: device.iosDeviceId)
+        let priorCounter = PairingStore.shared.connections.first(where: { $0.id == id })?.stateChangeCounter ?? 0
+        let conn = Connection(
+            id: id,
+            macDeviceId: macDeviceId,
+            iosDeviceId: device.iosDeviceId,
+            route: .iCloud,
+            status: .active,
+            createdAt: Date(),
+            lastSyncAt: Date(),
+            ckShareRef: nil,
+            pairingOrigin: .sameICloud,
+            stateChangeCounter: priorCounter + 1,
+            shareAcceptedAt: Date()
+        )
+        PairingStore.shared.upsert(conn)
+        IosDeviceProfileCache.shared.insertPlaceholder(iosDeviceId: device.iosDeviceId, name: device.name)
+        await ConnectionStateChanges.shared.publish(state: .accepted, for: conn, origin: .mac)
+        NotificationDispatcher.shared.notifyDeviceConnected(name: device.name)
+    }
+
+    // MARK: - Same-iCloud code / QR (alternative to the picker)
+
+    /// Generate and publish a same-iCloud pairing code + QR payload. The iPhone
+    /// can type the code, scan the QR, or open the link to connect without the
+    /// picker. No CKShare — the payload carries this Mac's id + iCloud user
+    /// record name so the iPhone can verify same-account and run the CSC
+    /// handshake. Idempotent while a live code already exists.
+    public func startSameICloudCodeIfNeeded() async {
+        if let existing = sameICloudCode, existing.expiresAt > Date() { return }
+        // Need the REAL CloudKit user record name (not CKCurrentUserDefaultName)
+        // so the iPhone can compare it against its own account identity.
+        if macUserRecordName == CKCurrentUserDefaultName,
+           let userID = try? await container.userRecordID() {
+            macUserRecordName = userID.recordName
+        }
+        guard macUserRecordName != CKCurrentUserDefaultName else { return }
+        let code = PairingStore.shared.generatePendingCode()
+        guard let payload = Self.sameICloudDeepLink(
+            macId: macDeviceId,
+            macUserRecordID: macUserRecordName
+        ) else { return }
+        sameICloudCode = SameICloudCode(code: code.code, payloadURL: payload, expiresAt: code.expiresAt)
+        await publishSameICloudCode(code.code, expiresAt: code.expiresAt)
+        // Auto-clear when the code expires so the UI doesn't show a dead code.
+        sameICloudExpiryTask?.cancel()
+        let interval = code.expiresAt.timeIntervalSinceNow
+        sameICloudExpiryTask = Task { [weak self] in
+            if interval > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+            if !Task.isCancelled { self?.stopSameICloudCode() }
+        }
+    }
+
+    /// Delete the published same-iCloud code and clear local state.
+    public func stopSameICloudCode() {
+        sameICloudExpiryTask?.cancel()
+        sameICloudExpiryTask = nil
+        sameICloudCode = nil
+        guard let key = sameICloudCodeKey else { return }
+        sameICloudCodeKey = nil
+        let db = container.publicCloudDatabase
+        Task.detached(priority: .utility) {
+            _ = try? await db.deleteRecord(withID: CKRecord.ID(recordName: key))
+        }
+    }
+
+    private func publishSameICloudCode(_ code: String, expiresAt: Date) async {
+        let key = code.uppercased()
+        let recordID = CKRecord.ID(recordName: key)
+        let record = CKRecord(
+            recordType: CloudKitConstants.RecordType.pairingCode,
+            recordID: recordID
+        )
+        record["kind"] = "sameICloud" as CKRecordValue
+        record["macId"] = macDeviceId as CKRecordValue
+        record["macUserRecordID"] = macUserRecordName as CKRecordValue
+        record["expiresAt"] = expiresAt as CKRecordValue
+        do {
+            try await container.publicCloudDatabase.save(record)
+            sameICloudCodeKey = key
+        } catch {
+            // Non-fatal: the QR / link still work (they're self-contained); only
+            // typing the 6-char code needs the public-DB lookup.
+        }
+    }
+
+    static func sameICloudDeepLink(macId: String, macUserRecordID: String) -> URL? {
+        var c = URLComponents()
+        c.scheme = "doomcoder"
+        c.host = "pair"
+        c.queryItems = [
+            URLQueryItem(name: "sameICloud", value: "1"),
+            URLQueryItem(name: "macId", value: macId),
+            URLQueryItem(name: "macUser", value: macUserRecordID),
+            URLQueryItem(name: "container", value: CloudKitConstants.containerIdentifier)
+        ]
+        return c.url
+    }
+
     public func startPairing() async {
         phase = .creatingShare
         do {
@@ -147,6 +272,7 @@ public final class MacPairingCoordinator: ObservableObject {
         currentShare = nil
         PairingStore.shared.clearPendingCode()
         deletePublishedCode()
+        stopSameICloudCode()
         phase = .idle
     }
 
@@ -158,6 +284,8 @@ public final class MacPairingCoordinator: ObservableObject {
            let shareURL = shareRef.shareURL {
             await revokeShare(shareURL: shareURL)
         }
+        // v7: no suppression — a disconnected iPhone simply leaves the list and
+        // stays discoverable in the picker for an explicit re-pair.
         // v5: signal the iOS app before local teardown so it
         // receives a CSC within 1-3s instead of waiting for
         // the next PeerStatus heart-beat.
@@ -293,28 +421,25 @@ public final class MacPairingCoordinator: ObservableObject {
         }
     }
 
-    // MARK: - Polling (v2.8: backup path)
+    // MARK: - Acceptance (v6: event-driven, expiry-only timer)
 
     private func startPollingShare(shareRecordID: CKRecord.ID, expiresAt: Date) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                if Date() > expiresAt {
-                    await MainActor.run { [weak self] in self?.handleExpiry() }
-                    return
-                }
-                if let self {
-                    // Check for non-owner participants (cross-account path).
-                    // Same-account pairings are detected via PeerStatus heartbeat
-                    // in ingestPeerStatus(), so no participant will ever appear here
-                    // for same-account — that's expected, not a bug.
-                    let accepted = await self.checkShareAcceptance(shareRecordID: shareRecordID)
-                    if accepted {
-                        await MainActor.run { [weak self] in self?.handleAcceptance() }
-                        return
-                    }
-                }
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            // v6: acceptance arrives via the `.doomCoderShareAccepted` APNs push
+            // (CloudKitPusher delegate). One belt-and-braces check covers the
+            // race where the push landed before the sheet opened; after that we
+            // only wait out the expiry deadline — NO 3s polling loop.
+            if let self, await self.checkShareAcceptance(shareRecordID: shareRecordID) {
+                await MainActor.run { [weak self] in self?.handleAcceptance() }
+                return
+            }
+            let interval = expiresAt.timeIntervalSinceNow
+            if interval > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+            if !Task.isCancelled {
+                await MainActor.run { [weak self] in self?.handleExpiry() }
             }
         }
     }
@@ -329,11 +454,27 @@ public final class MacPairingCoordinator: ObservableObject {
         }
     }
 
+    /// Extracts the iPhone user's iCloud identity (name/email) from the
+    /// accepted share's non-owner participant. Non-deprecated; populated only
+    /// if the participant shared their identity. Different-Apple-ID only —
+    /// same-account shares have no non-owner participant.
+    private static func peerIdentity(from share: CKShare) -> (name: String?, email: String?) {
+        guard let participant = share.participants.first(where: { $0.role != .owner }),
+              let identity = participant.userIdentity as CKUserIdentity?
+        else { return (nil, nil) }
+        let name: String? = identity.nameComponents.map {
+            PersonNameComponentsFormatter().string(from: $0)
+        }.flatMap { $0.isEmpty ? nil : $0 }
+        let email = identity.lookupInfo?.emailAddress
+        return (name, (email?.isEmpty == false) ? email : nil)
+    }
+
     private func handleAcceptance() {
         guard let share = currentShare,
               let shareURL = share.url,
               let _ = pendingConnectionId else { return }
         deletePublishedCode()
+        let peer = Self.peerIdentity(from: share)
         let ref = CKShareRef(
             shareURL: shareURL,
             ownerRecordName: macUserRecordName,
@@ -346,6 +487,8 @@ public final class MacPairingCoordinator: ObservableObject {
             refreshed.lastSyncAt = Date()
             refreshed.shareAcceptedAt = Date()
             refreshed.stateChangeCounter += 1
+            if let n = peer.name { refreshed.peerAccountName = n }
+            if let e = peer.email { refreshed.peerAccountEmail = e }
             PairingStore.shared.upsert(refreshed)
             // v5: echo an accepted CSC to the iOS side so the
             // iPhone gets an instant ack and can dismiss the
@@ -382,7 +525,9 @@ public final class MacPairingCoordinator: ObservableObject {
             ckShareRef: ref,
             pairingOrigin: .qr,
             stateChangeCounter: 1,
-            shareAcceptedAt: nil
+            shareAcceptedAt: nil,
+            peerAccountName: peer.name,
+            peerAccountEmail: peer.email
         )
         // First a .pending row so the Mac Connections tab
         // shows "Waiting for iPhone" immediately, then an

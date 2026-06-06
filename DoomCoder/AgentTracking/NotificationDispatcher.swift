@@ -152,12 +152,46 @@ final class NotificationDispatcher {
             postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
             return true
         case .cloudKit:
-            postCloudKit(ev: nil, title: "DoomCoder", body: "iPhone push channel is working ✨")
-            return true
+            // Honest test: enqueue a NotificationLog and await CloudKit's
+            // actual send confirmation rather than reporting success on a
+            // local enqueue. If APNs registration failed, push is unavailable.
+            let pusher = CloudKitPusher.shared
+            if pusher.pushRegistered == false { return false }
+            let rec = NotificationLogRecord(
+                sessionKey: "test",
+                macId: pusher.macId,
+                macName: pusher.macName,
+                agent: "doomcoder",
+                phase: "test",
+                rawEvent: "test",
+                title: "DoomCoder",
+                body: "iPhone push channel is working ✨",
+                channel: "iOS",
+                success: true,
+                ts: Date(),
+                lastTool: nil,
+                cwdBase: nil
+            )
+            return await pusher.publishNotificationLogAwaitingSend(rec)
         }
     }
 
     enum TestChannel { case macOS, cloudKit }
+
+    // MARK: - Connection notifications (v6)
+
+    /// Posts a local notification when an iPhone connects. Fired once per
+    /// transition by the pairing/CSC ingest paths.
+    func notifyDeviceConnected(name: String?) {
+        let n = (name?.isEmpty == false) ? name! : "iPhone"
+        postLocal(title: "Connected", body: "\(n) connected", threadID: "connection")
+    }
+
+    /// Posts a local notification when an iPhone disconnects.
+    func notifyDeviceDisconnected(name: String?) {
+        let n = (name?.isEmpty == false) ? name! : "iPhone"
+        postLocal(title: "Disconnected", body: "\(n) disconnected", threadID: "connection")
+    }
 
     // MARK: - Copy
 

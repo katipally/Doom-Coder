@@ -7,16 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		06F30691F6C00BF1D73D930A /* PendingPairRequestQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9004C0FCB6EF99BFE442CF6 /* PendingPairRequestQueue.swift */; };
 		086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87477377B262B2B2BA39729A /* CloudKitPusher.swift */; };
 		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
-		26811A5E15EEB45E869A8641 /* PendingPairRequestSubscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = C83B32372FE7018EEC2D7E73 /* PendingPairRequestSubscription.swift */; };
 		2916CD2D867CA587B6B7ADFE /* ConnectionStateChanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F350EDF82D264906CF0840 /* ConnectionStateChanges.swift */; };
 		581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
-		75DE5A9C60742318BF047B82 /* PendingPairRequestBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86243BDE58F377C4EFC00015 /* PendingPairRequestBanner.swift */; };
-		9D689B6AD2AF043B1F9162E8 /* DiscoverableMacPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6F263028354D27825072C61 /* DiscoverableMacPublisher.swift */; };
-		ACAA6E06B1DFC5C870966402 /* PendingPairRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD04309B17A5788EF5C0CC9 /* PendingPairRequestSheet.swift */; };
+		AA0200000000000000000001 /* DiscoverableDeviceSubscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000002 /* DiscoverableDeviceSubscription.swift */; };
 		DC0000000000001000000060 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC0000000000005000000060 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
@@ -84,12 +80,9 @@
 
 /* Begin PBXFileReference section */
 		10BE8A907052E381A9766A37 /* DoomCoder.Release.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DoomCoder.Release.entitlements; sourceTree = "<group>"; };
-		3DD04309B17A5788EF5C0CC9 /* PendingPairRequestSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingPairRequestSheet.swift; sourceTree = "<group>"; };
-		86243BDE58F377C4EFC00015 /* PendingPairRequestBanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingPairRequestBanner.swift; sourceTree = "<group>"; };
 		87477377B262B2B2BA39729A /* CloudKitPusher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusher.swift; sourceTree = "<group>"; };
 		AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherLifecycle.swift; sourceTree = "<group>"; };
 		B3F350EDF82D264906CF0840 /* ConnectionStateChanges.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionStateChanges.swift; sourceTree = "<group>"; };
-		C83B32372FE7018EEC2D7E73 /* PendingPairRequestSubscription.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingPairRequestSubscription.swift; sourceTree = "<group>"; };
 		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
@@ -156,8 +149,7 @@
 		DC0000000000001000002011 /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
 		DC0000000000001000002020 /* IosDeviceProfileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosDeviceProfileCache.swift; sourceTree = "<group>"; };
 		DC0000000000005000000060 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
-		E9004C0FCB6EF99BFE442CF6 /* PendingPairRequestQueue.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingPairRequestQueue.swift; sourceTree = "<group>"; };
-		F6F263028354D27825072C61 /* DiscoverableMacPublisher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DiscoverableMacPublisher.swift; path = DiscoverableMacPublisher.swift; sourceTree = "<group>"; };
+		AA0200000000000000000002 /* DiscoverableDeviceSubscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverableDeviceSubscription.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,9 +264,7 @@
 				DC0000000000001000002004 /* MacPairingCoordinator.swift */,
 				DC0000000000001000002020 /* IosDeviceProfileCache.swift */,
 				B3F350EDF82D264906CF0840 /* ConnectionStateChanges.swift */,
-				F6F263028354D27825072C61 /* DiscoverableMacPublisher.swift */,
-				E9004C0FCB6EF99BFE442CF6 /* PendingPairRequestQueue.swift */,
-				C83B32372FE7018EEC2D7E73 /* PendingPairRequestSubscription.swift */,
+				AA0200000000000000000002 /* DiscoverableDeviceSubscription.swift */,
 			);
 			path = Pairing;
 			sourceTree = "<group>";
@@ -288,8 +278,6 @@
 				DC0000000000001000002008 /* PairSheet.swift */,
 				DC0000000000001000002009 /* RemoveDeviceDialog.swift */,
 				DC0000000000001000002011 /* ConnectionsView.swift */,
-				3DD04309B17A5788EF5C0CC9 /* PendingPairRequestSheet.swift */,
-				86243BDE58F377C4EFC00015 /* PendingPairRequestBanner.swift */,
 			);
 			path = UI/Connections;
 			sourceTree = "<group>";
@@ -460,11 +448,7 @@
 				DC0000000000002000002009 /* RemoveDeviceDialog.swift in Sources */,
 				DC0000000000002000002011 /* ConnectionsView.swift in Sources */,
 				2916CD2D867CA587B6B7ADFE /* ConnectionStateChanges.swift in Sources */,
-				9D689B6AD2AF043B1F9162E8 /* DiscoverableMacPublisher.swift in Sources */,
-				ACAA6E06B1DFC5C870966402 /* PendingPairRequestSheet.swift in Sources */,
-				75DE5A9C60742318BF047B82 /* PendingPairRequestBanner.swift in Sources */,
-				06F30691F6C00BF1D73D930A /* PendingPairRequestQueue.swift in Sources */,
-				26811A5E15EEB45E869A8641 /* PendingPairRequestSubscription.swift in Sources */,
+				AA0200000000000000000001 /* DiscoverableDeviceSubscription.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

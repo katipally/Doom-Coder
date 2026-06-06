@@ -21,34 +21,59 @@ import CloudKit
 
 struct PairSheet: View {
     @ObservedObject private var coordinator = MacPairingCoordinator.shared
+    @ObservedObject private var deviceSub = DiscoverableDeviceSubscription.shared
+    @ObservedObject private var store = PairingStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var qrAppeared: Bool = false
+
+    enum Route: String, CaseIterable, Identifiable {
+        case sameICloud = "Same iCloud"
+        case differentICloud = "Different iCloud"
+        var id: String { rawValue }
+    }
+    @State private var route: Route = .sameICloud
 
     var body: some View {
         VStack(spacing: 0) {
             sheetHeader
+            Picker("", selection: $route) {
+                ForEach(Route.allCases) { r in Text(r.rawValue).tag(r) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
             Divider()
             ScrollView {
-                VStack(spacing: 18) {
-                    qrCard
-                    if case .waitingForAcceptance(_, _, let expiresAt) = coordinator.phase {
-                        codePanel(expiresAt: expiresAt)
-                    }
-                    if case .waitingForAcceptance(_, let shareURL, _) = coordinator.phase {
-                        linkButtons(shareURL: shareURL)
-                    }
-                    if case .creatingShare = coordinator.phase {
-                        creatingCopy
-                    }
-                    footerNote
+                switch route {
+                case .sameICloud:      sameICloudTab
+                case .differentICloud: differentICloudTab
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 22)
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
             }
         }
         .frame(minWidth: 540, idealWidth: 560, maxWidth: 600, minHeight: 580, idealHeight: 620, maxHeight: 720)
+        .task {
+            await deviceSub.start()
+            // Default tab is Same iCloud — publish its code/QR right away.
+            await coordinator.startSameICloudCodeIfNeeded()
+            // Keep the Same-iCloud picker live while the sheet is open by
+            // pulling fresh PeerStatus (cancelled automatically on dismiss).
+            while !Task.isCancelled {
+                CloudKitPusher.shared.fetchNow()
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+        .onChange(of: route) { _, newRoute in
+            if newRoute == .sameICloud {
+                // Ensure the same-iCloud code/QR is live when the user returns.
+                Task { await coordinator.startSameICloudCodeIfNeeded() }
+            }
+            // Lazily create the CKShare only when the user actually wants the
+            // cross-account (QR/code/link) flow.
+            if newRoute == .differentICloud, case .idle = coordinator.phase {
+                Task { await coordinator.startPairing() }
+            }
+        }
         .onChange(of: coordinator.phase) { _, newPhase in
             if case .active = newPhase {
                 Task {
@@ -56,6 +81,177 @@ struct PairSheet: View {
                     dismiss()
                 }
             }
+        }
+    }
+
+    // MARK: - Different iCloud tab (QR / code / link)
+
+    private var differentICloudTab: some View {
+        VStack(spacing: 18) {
+            qrCard
+            if case .waitingForAcceptance(_, _, let expiresAt) = coordinator.phase {
+                codePanel(expiresAt: expiresAt)
+            }
+            if case .waitingForAcceptance(_, let shareURL, _) = coordinator.phase {
+                linkButtons(shareURL: shareURL)
+            }
+            if case .creatingShare = coordinator.phase {
+                creatingCopy
+            }
+            footerNote
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 22)
+        .frame(maxWidth: 540)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Same iCloud tab (AirDrop-style picker)
+
+    private var sameICloudTab: some View {
+        VStack(spacing: 16) {
+            if deviceSub.devices.isEmpty {
+                sameICloudEmptyState
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 150), spacing: 18)], spacing: 18) {
+                    ForEach(deviceSub.devices) { device in
+                        deviceTile(device)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+            }
+            Text("Pick an iPhone on your iCloud account. It will get a request to accept on its screen.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+            sameICloudCodeSection
+        }
+        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Alternative to the picker: a QR + 6-char code + link the iPhone can scan,
+    /// type, or open to connect on the same iCloud account.
+    @ViewBuilder private var sameICloudCodeSection: some View {
+        if let scc = coordinator.sameICloudCode {
+            VStack(spacing: 12) {
+                Divider().padding(.horizontal, 24).padding(.top, 4)
+                Text("Or pair with a code / QR")
+                    .font(.subheadline.weight(.medium))
+                if let img = QRImageGenerator.image(for: scc.payloadURL, size: 200) {
+                    Image(nsImage: img)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .padding(12)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 0.5)
+                        )
+                }
+                HStack(spacing: 10) {
+                    Text(scc.code)
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
+                        .tracking(4)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(scc.code, forType: .string)
+                    } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .help("Copy code")
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(scc.payloadURL.absoluteString, forType: .string)
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                Text("On iPhone: scan in Add Device ▸ Scan, or type the code in Add Device ▸ Type.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var sameICloudEmptyState: some View {
+        VStack(spacing: 12) {
+            if deviceSub.isLoading {
+                ProgressView().controlSize(.large)
+            } else {
+                Image(systemName: "iphone.gen3.slash")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+            }
+            Text("No iPhones found on this iCloud")
+                .font(.headline)
+            Text("Open DoomCoder on your iPhone (signed in to the same Apple ID) and it will appear here.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            Button {
+                Task { await deviceSub.refresh() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, minHeight: 280)
+    }
+
+    private func deviceTile(_ device: DiscoverableDeviceRecord) -> some View {
+        let status = store.connections.first(where: { $0.iosDeviceId == device.iosDeviceId })?.status
+        return Button {
+            Task { await coordinator.requestSameICloudPair(device: device) }
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(.regularMaterial)
+                        .frame(width: 76, height: 76)
+                        .overlay(Circle().strokeBorder(tileTint(status).opacity(0.5), lineWidth: 2))
+                    Image(systemName: "iphone.gen3")
+                        .font(.system(size: 32))
+                        .foregroundStyle(tileTint(status))
+                }
+                Text(device.name)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                Text(tileSubtitle(status))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 130)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // v7: always tappable. Tapping a connected device re-asserts the
+        // connection (idempotent) so a desynced iPhone reconnects.
+    }
+
+    private func tileTint(_ status: ConnectionStatus?) -> Color {
+        switch status {
+        case .active:         return .green
+        case .awaitingAccept: return .blue
+        default:              return .accentColor
+        }
+    }
+
+    private func tileSubtitle(_ status: ConnectionStatus?) -> String {
+        switch status {
+        case .active:         return "Connected · tap to re-sync"
+        case .awaitingAccept: return "Connecting…"
+        default:              return "Tap to pair"
         }
     }
 

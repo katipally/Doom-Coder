@@ -90,6 +90,9 @@ final class ConnectionStateChanges {
             return
         }
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(ck.recordID)])
+        // Flush now instead of waiting on automaticallySync's indeterminate
+        // schedule — a pairing CSC{requested} must reach the iPhone promptly.
+        CloudKitPusher.shared.kickEngine()
     }
 
     private func writeDirectToPrivateDB(record: ConnectionStateChangeRecord, counter: Int) async {
@@ -123,6 +126,7 @@ final class ConnectionStateChanges {
             return
         }
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(ck.recordID)])
+        CloudKitPusher.shared.kickEngine()
     }
 
     private func writeDirectToSharedDB(record: ConnectionStateChangeRecord, counter: Int) async {
@@ -140,160 +144,13 @@ final class ConnectionStateChanges {
 
     public func ingest(_ record: CKRecord) {
         guard let csc = ConnectionStateChangeRecord(record) else { return }
-        ingest(csc)
+        // v7: the counter is a record FIELD (record names are now unique per
+        // send), decoded into `csc.counter` — no more name parsing.
+        ingest(csc, counter: csc.counter)
     }
 
-    // MARK: - v5.1 same-iCloud gated response
-
-    /// v5.1: called by the Mac's PendingPairRequestSheet when
-    /// the user clicks Allow. Creates a real .iCloud Connection
-    /// in PairingStore, publishes CSC{accepted,origin:mac} back
-    /// to the iOS app, and inserts a placeholder profile so the
-    /// Mac's Connections tab has a name to render immediately
-    /// (the iOS app's real name arrives within 60s on the next
-    /// heart-beat).
-    public func approvePendingRequest(
-        macId: String,
-        iosDeviceId: String,
-        iosUserRecordID: String?
-    ) async {
-        // Authoritative same-iCloud check via the canonical
-        // non-deprecated Apple API: compare the iOS-supplied
-        // iosUserRecordID to the Mac's own userRecordID(). When
-        // they match, the iOS device is on the same iCloud
-        // account and the user already opted in by clicking
-        // Allow. We don't need a CKShare — the existing private
-        // DB subscription is enough.
-        let sameICloud: Bool
-        if let iosUserRecordID, !iosUserRecordID.isEmpty {
-            let macUserRecordName: String
-            do {
-                macUserRecordName = try await container.userRecordID().recordName
-            } catch {
-                macUserRecordName = ""
-            }
-            sameICloud = !macUserRecordName.isEmpty && macUserRecordName == iosUserRecordID
-        } else {
-            sameICloud = false
-        }
-
-        let id = Connection.implicitConnectionId(macId: macId, iosDeviceId: iosDeviceId)
-        let new = Connection(
-            id: id,
-            macDeviceId: macId,
-            iosDeviceId: iosDeviceId,
-            route: .iCloud,
-            status: .active,
-            createdAt: Date(),
-            lastSyncAt: Date(),
-            ckShareRef: nil,
-            pairingOrigin: .auto,
-            stateChangeCounter: 1,
-            shareAcceptedAt: Date()
-        )
-        PairingStore.shared.upsert(new)
-        // Insert a placeholder so the Mac's Connections tab has
-        // a name to render immediately. The real name arrives
-        // on the next PeerStatus heart-beat.
-        IosDeviceProfileCache.shared.insertPlaceholder(
-            iosDeviceId: iosDeviceId,
-            name: sameICloud ? "iPhone" : "iPhone (different iCloud)"
-        )
-
-        // Publish CSC{accepted,origin:mac} back to the iOS app
-        // via the public DB so the iOS app can dismiss the
-        // pair sheet with the success celebration.
-        let accepted = ConnectionStateChangeRecord(
-            macId: macId,
-            iosDeviceId: iosDeviceId,
-            state: ConnectionStateChangeRecord.State.accepted.rawValue,
-            timestamp: Date(),
-            origin: ConnectionStateChangeRecord.Origin.mac.rawValue,
-            routeTag: "iCloud",
-            shareURLString: nil,
-            routeAccountEmail: nil,
-            oldIosDeviceId: nil,
-            iosUserRecordID: nil
-        )
-        // Direct write — no engine required. The iOS app's
-        // public-DB subscription picks it up in 1-3s.
-        let ck = accepted.toCKRecord(counter: 1)
-        // The CSC targets the public DB default zone. Construct
-        // an explicit recordID to avoid the private-DB default.
-        let publicRecordID = CKRecord.ID(
-            recordName: ck.recordID.recordName,
-            zoneID: CKRecordZone.ID(zoneName: "DoomCoderZone", ownerName: CKCurrentUserDefaultName)
-        )
-        let publicRec = CKRecord(
-            recordType: CloudKitConstants.RecordType.connectionStateChange,
-            recordID: publicRecordID
-        )
-        publicRec["macId"] = macId as CKRecordValue
-        publicRec["iosDeviceId"] = iosDeviceId as CKRecordValue
-        publicRec["state"] = "accepted" as CKRecordValue
-        publicRec["timestamp"] = Date() as CKRecordValue
-        publicRec["origin"] = "mac" as CKRecordValue
-        publicRec["routeTag"] = "iCloud" as CKRecordValue
-        publicRec["schemaVersion"] = CloudKitConstants.schemaVersion as CKRecordValue
-        let op = CKModifyRecordsOperation(recordsToSave: [publicRec], recordIDsToDelete: nil)
-        op.savePolicy = .allKeys
-        op.qualityOfService = .userInitiated
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            op.modifyRecordsResultBlock = { _ in cont.resume() }
-            container.publicCloudDatabase.add(op)
-        }
-    }
-
-    /// v5.1: called by the Mac's PendingPairRequestSheet when
-    /// the user clicks Deny. Publishes CSC{denied,origin:mac}
-    /// back to the iOS app so the pair sheet dismisses with an
-    /// error toast. No Connection is created.
-    public func denyPendingRequest(
-        macId: String,
-        iosDeviceId: String,
-        iosUserRecordID: String?
-    ) async {
-        let denied = ConnectionStateChangeRecord(
-            macId: macId,
-            iosDeviceId: iosDeviceId,
-            state: ConnectionStateChangeRecord.State.denied.rawValue,
-            timestamp: Date(),
-            origin: ConnectionStateChangeRecord.Origin.mac.rawValue,
-            routeTag: "iCloud",
-            shareURLString: nil,
-            routeAccountEmail: nil,
-            oldIosDeviceId: nil,
-            iosUserRecordID: nil
-        )
-        let ck = denied.toCKRecord(counter: 1)
-        let publicRecordID = CKRecord.ID(
-            recordName: ck.recordID.recordName,
-            zoneID: CKRecordZone.ID(zoneName: "DoomCoderZone", ownerName: CKCurrentUserDefaultName)
-        )
-        let publicRec = CKRecord(
-            recordType: CloudKitConstants.RecordType.connectionStateChange,
-            recordID: publicRecordID
-        )
-        publicRec["macId"] = macId as CKRecordValue
-        publicRec["iosDeviceId"] = iosDeviceId as CKRecordValue
-        publicRec["state"] = "denied" as CKRecordValue
-        publicRec["timestamp"] = Date() as CKRecordValue
-        publicRec["origin"] = "mac" as CKRecordValue
-        publicRec["routeTag"] = "iCloud" as CKRecordValue
-        publicRec["schemaVersion"] = CloudKitConstants.schemaVersion as CKRecordValue
-        let op = CKModifyRecordsOperation(recordsToSave: [publicRec], recordIDsToDelete: nil)
-        op.savePolicy = .allKeys
-        op.qualityOfService = .userInitiated
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            op.modifyRecordsResultBlock = { _ in cont.resume() }
-            container.publicCloudDatabase.add(op)
-        }
-    }
-
-    public func ingest(_ csc: ConnectionStateChangeRecord) {
-        let counter = ConnectionStateChangeRecord
-            .counterFromRecordName(csc.recordName(counter: 0))
-            ?? 0
+    public func ingest(_ csc: ConnectionStateChangeRecord, counter overrideCounter: Int? = nil) {
+        let counter = overrideCounter ?? csc.counter
         let macId = csc.macId
         let iosId = csc.iosDeviceId
 
@@ -340,7 +197,7 @@ final class ConnectionStateChanges {
                 createdAt: csc.timestamp,
                 lastSyncAt: csc.timestamp,
                 ckShareRef: nil,
-                pairingOrigin: .auto,
+                pairingOrigin: .sameICloud,
                 stateChangeCounter: max(counter, 1),
                 shareAcceptedAt: csc.timestamp
             )
@@ -349,7 +206,10 @@ final class ConnectionStateChanges {
                 iosDeviceId: iosId,
                 name: "iPhone"
             )
-            logger.notice("csc.mac: v5.2 created row from CSC{accepted,origin=ios} for mac=\(macId, privacy: .public) ios=\(iosId, privacy: .public)")
+            // If this came from the same-iCloud code/QR flow, tear down the live
+            // code now that a device has paired.
+            MacPairingCoordinator.shared.stopSameICloudCode()
+            logger.notice("csc.mac: v7 created row from CSC{accepted,origin=ios} for mac=\(macId, privacy: .public) ios=\(iosId, privacy: .public)")
         }
 
         guard var connection = PairingStore.shared.connections.first(where: {
@@ -372,9 +232,14 @@ final class ConnectionStateChanges {
         connection.stateChangeCounter = counter
         switch state {
         case .accepted, .active:
+            let wasActive = (connection.status == .active)
             connection.status = .active
             connection.lastSyncAt = csc.timestamp
             if connection.removedAt != nil { connection.removedAt = nil }
+            if !wasActive {
+                let name = IosDeviceProfileCache.shared.name(for: connection.iosDeviceId)
+                NotificationDispatcher.shared.notifyDeviceConnected(name: name)
+            }
         case .suspended:
             connection.status = .suspended
         case .removed:
@@ -387,20 +252,25 @@ final class ConnectionStateChanges {
             // with a "Removed 40s ago" pill until
             // purgeTombstones ran 30 days later.
             let toDelete = connection
+            let name = IosDeviceProfileCache.shared.name(for: toDelete.iosDeviceId)
+            // v7: no suppression — the iPhone stays discoverable in the picker.
             PairingStore.shared.hardRemove(connectionId: toDelete.id)
+            NotificationDispatcher.shared.notifyDeviceDisconnected(name: name)
             return
         case .reinstallDetected:
             break  // handled above
         case .pending:
-            // Mac-side CSC ingest path doesn't see .pending CSCs
-            // (those are on the public DB and handled by
-            // PendingPairRequestSubscription). If we do see one
-            // here (e.g., a future v6 cross-DB routing), no-op
-            // is the safe behaviour.
+            // Legacy v5.1 state — no longer produced (the iPhone no longer
+            // initiates same-iCloud requests). Kept for decode-compat; no-op.
             break
         case .denied:
             // Mac doesn't receive .denied CSCs (only the iOS
             // app does). Same defensive no-op.
+            break
+        case .requested:
+            // v6: CSC{requested} is written by the MAC (initiator) into
+            // the public DB for the iPhone to accept. The Mac never
+            // ingests its own request as a zone state change — no-op.
             break
         }
         if csc.origin == ConnectionStateChangeRecord.Origin.ios.rawValue,

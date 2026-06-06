@@ -6,8 +6,7 @@
 // with a "Removed 40s ago" pill until purgeTombstones ran 30
 // days later. Worse, a 30s-later heart-beat would re-render the
 // row as "live" because the .removed row's macId was still in
-// the list, so AutoPairDiscovery's `contains(macId ==)`
-// dedup gate was satisfied. User had to refresh the panel
+// the list. User had to refresh the panel
 // to see the row vanish — and on next launch it was back.
 //
 // v5.3 contract: explicit disconnect is a real delete on both

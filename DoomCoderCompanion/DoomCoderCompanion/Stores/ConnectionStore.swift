@@ -19,12 +19,14 @@ final class ConnectionStore {
     private(set) var connections: [Connection] = []
 
     private init() {
+        // v7: legacy disconnect-suppression set removed (no auto-attach to block).
+        AppGroupCache.defaults.removeObject(forKey: "doomcoder.ios.suppressedMacs.v1")
         if let cached = AppGroupCache.read([Connection].self, forKey: Self.cacheKey) {
-            connections = Self.migrateV5(cached)
+            connections = Self.migrateV7(Self.migrateV5(cached))
         }
         Task {
             let fetched = await LocalStore.shared.fetchConnections()
-            let migrated = Self.migrateV5(fetched)
+            let migrated = Self.migrateV7(Self.migrateV5(fetched))
             connections = migrated
             AppGroupCache.write(migrated, forKey: Self.cacheKey)
             if !migrated.isEmpty {
@@ -35,11 +37,31 @@ final class ConnectionStore {
         }
     }
 
+    /// v7 one-shot: drop legacy auto-attached rows. Earlier builds silently
+    /// created `.auto` same-iCloud connections from heartbeats; v7 is
+    /// manual-only, so these stale rows (which made the iPhone show a Mac's
+    /// agents — and suppressed the pair prompt as "already paired") must go.
+    /// The user re-pairs explicitly via the picker, code, or QR.
+    private static func migrateV7(_ list: [Connection]) -> [Connection] {
+        let defaults = AppGroupCache.defaults
+        let flag = "doomcoder.connectionsStore.v7.dropAuto"
+        guard !defaults.bool(forKey: flag) else {
+            return list.filter { $0.pairingOrigin != .auto }
+        }
+        let kept = list.filter { $0.pairingOrigin != .auto }
+        for c in list where c.pairingOrigin == .auto {
+            LocalStore.shared.deleteConnection(id: c.id)
+            Task { await LocalStore.shared.clearMacData(macId: c.macDeviceId) }
+        }
+        defaults.set(true, forKey: flag)
+        return kept
+    }
+
     /// v5 migration: same-account (.iCloud route) Connections are now
     /// first-class. v2.9 used to delete them on every launch as
     /// "phantoms" because the iOS app was supposed to be read-only
-    /// with no QR required. With the v5 auto-attach path (see
-    /// `AutoPairDiscovery`) these rows are real user data and must
+    /// with no QR required. These rows are real user data (a
+    /// Mac-initiated same-iCloud pairing the user accepted) and must
     /// survive a relaunch. The v2.9 phantom-delete ran on every
     /// launch and wiped them — turning into the "Mac shows connected
     /// but iPhone doesn't" bug users reported.
@@ -103,8 +125,8 @@ final class ConnectionStore {
     }
 
     /// Find an existing Connection by its macId, regardless of
-    /// iosDeviceId. Used by `AutoPairDiscovery` to detect "we have
-    /// a row for this Mac but with an old iosDeviceId — the user
+    /// iosDeviceId. Used by reinstall reconciliation to detect "we
+    /// have a row for this Mac but with an old iosDeviceId — the user
     /// reinstalled the iOS app" and trigger the reinstall-detected
     /// CSC fast path. Returns the row + the matched iosDeviceId
     /// so the caller can tell whether it's a clean hit or a
@@ -152,6 +174,20 @@ final class ConnectionStore {
         AppGroupCache.write(connections, forKey: Self.cacheKey)
         LocalStore.shared.deleteConnection(id: id)
         NotificationCenter.default.post(name: .connectionsChanged, object: nil)
+    }
+
+    /// v6: hard-remove any cross-account connection whose CKShare lives in the
+    /// given zone owner's shared zone. Called when the single shared-DB engine
+    /// reports that zone was deleted (the Mac revoked the share).
+    func removeCrossAccount(forZoneOwner ownerRecordName: String) {
+        guard !ownerRecordName.isEmpty else { return }
+        let toRemove = connections.filter { conn in
+            if case let .ckShare(ref) = conn.route {
+                return !ref.isSameAccount && ref.ownerRecordName == ownerRecordName
+            }
+            return false
+        }
+        for conn in toRemove { remove(id: conn.id) }
     }
 
     /// v2.8: GC pass. Removes connections that have been .suspended
@@ -211,14 +247,14 @@ extension Notification.Name {
     /// status change). The sync engine listens to this to (re)attach or
     /// tear down, so an empty Connection list keeps the engine offline.
     static let connectionsChanged = Notification.Name("com.doomcoder.connectionsChanged")
-    /// v5.1: posted when a Mac denies a CSC{pending,origin:ios} pair
-    /// request from the "Same iCloud" discoverable list. The
-    /// SameIcloudTab observes this and dismisses its pair sheet
-    /// with an inline error message.
+    /// Posted when a Mac publishes CSC{denied,origin:mac}. Observed by any
+    /// UI that needs to dismiss a pairing affordance with an error.
     static let connectionPairDenied = Notification.Name("com.doomcoder.connectionPairDenied")
-    /// v5.1: posted when a Mac accepts the same-iCloud pair
-    /// request. SameIcloudTab dismisses its pair sheet and the
-    /// AddMacView's onChange(of:coordinator.phase) closes the
-    /// outer sheet with the success celebration.
+    /// Posted when a Mac publishes CSC{accepted,origin:mac} (e.g. it completed
+    /// a QR/code/link pairing). Observed by pairing UI to show success.
     static let connectionPairAccepted = Notification.Name("com.doomcoder.connectionPairAccepted")
+    /// v6: posted when a same-iCloud Mac sends a pairing request to this
+    /// iPhone (Mac is the initiator). The UI surfaces an Accept/Decline prompt.
+    /// userInfo: ["macId": String, "macName": String].
+    static let incomingPairRequest = Notification.Name("com.doomcoder.incomingPairRequest")
 }

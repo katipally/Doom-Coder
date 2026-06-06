@@ -170,6 +170,14 @@ struct DeviceDetailView: View {
             Label("Removed", systemImage: "xmark.circle.fill")
                 .foregroundStyle(.red)
                 .font(.subheadline)
+        case .awaitingAccept:
+            Label("Waiting to accept", systemImage: "hourglass")
+                .foregroundStyle(.blue)
+                .font(.subheadline)
+        case .pendingOnPhone:
+            Label("Pairing request", systemImage: "person.crop.circle.badge.questionmark")
+                .foregroundStyle(.blue)
+                .font(.subheadline)
         @unknown default:
             Text(connection.status.displayName)
         }

@@ -1,22 +1,18 @@
 // AddMacView.swift — DoomCoder Companion
-// Modal sheet that lets the user pair a new Mac. v5: tabbed
-// interface (Scan / Type / Paste / Same iCloud) with iOS 26 sheet
-// detents so the QR reticle is always fully visible at .medium
-// and the user can swipe up to .large for the keyboard-entry
-// fields. v5.1: added the "Same iCloud" tab which renders a
-// discoverable list of Macs running DoomCoder on the same iCloud
-// account — no QR needed.
+// Modal sheet that lets the user pair a Mac on a DIFFERENT Apple ID
+// (Scan / Type / Paste — all CKShare-based). Same-iCloud pairing is
+// initiated FROM the Mac in v6 (Mac ▸ Add Device ▸ Same iCloud picker);
+// the iPhone simply receives an Accept/Decline prompt, so there is no
+// "Same iCloud" tab here anymore.
 //
 // Structure:
 //   ┌──────────────────────────────┐
 //   │  Pair a Mac          [×]    │
 //   ├──────────────────────────────┤
-//   │  ┌────┬────┬────┬──────────┐  │
-//   │  │Scan│Type│Paste│Same iCloud│
-//   │  └────┴────┴────┴──────────┘  │
-//   │                              │
+//   │  ┌────┬────┬─────┐           │
+//   │  │Scan│Type│Paste│           │
+//   │  └────┴────┴─────┘           │
 //   │   [ tab content ]            │
-//   │                              │
 //   │   error banner (if any)     │
 //   └──────────────────────────────┘
 
@@ -25,7 +21,6 @@ import DoomCoderCore
 
 struct AddMacView: View {
     @State private var coordinator = IOSPairingCoordinator.shared
-    @State private var discoverable = DiscoverableMacSubscription.shared
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab: PairingTab = .scan
     @State private var pastedLink: String = ""
@@ -36,14 +31,12 @@ struct AddMacView: View {
         case scan = "Scan"
         case type = "Type"
         case paste = "Paste"
-        case sameICloud = "Same iCloud"
         var id: String { rawValue }
         var systemImage: String {
             switch self {
             case .scan:        return "qrcode.viewfinder"
             case .type:        return "keyboard"
             case .paste:       return "doc.on.clipboard"
-            case .sameICloud:  return "icloud"
             }
         }
     }
@@ -56,10 +49,10 @@ struct AddMacView: View {
                     .padding(.horizontal, 16)
                 Divider()
                     .padding(.top, 4)
+                sameICloudHint
                 TabContent(
                     tab: selectedTab,
                     coordinator: coordinator,
-                    discoverable: discoverable,
                     pastedLink: $pastedLink,
                     code: $code
                 )
@@ -97,6 +90,20 @@ struct AddMacView: View {
         .pickerStyle(.segmented)
         .accessibilityLabel("Pairing method")
     }
+
+    /// Tells the user that same-Apple-ID Macs pair from the Mac side.
+    private var sameICloudHint: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.2.fill")
+                .foregroundStyle(.tint)
+            Text("On the **same Apple ID**? Pair from the Mac instead: DoomCoder ▸ Connections ▸ Add Device ▸ Same iCloud, then accept here.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+    }
 }
 
 // MARK: - Tab content
@@ -104,7 +111,6 @@ struct AddMacView: View {
 private struct TabContent: View {
     let tab: AddMacView.PairingTab
     let coordinator: IOSPairingCoordinator
-    @ObservedObject var discoverable: DiscoverableMacSubscription
     @Binding var pastedLink: String
     @Binding var code: String
 
@@ -130,8 +136,6 @@ private struct TabContent: View {
             TypeTabBody(coordinator: coordinator, code: $code)
         case .paste:
             PasteTabBody(coordinator: coordinator, pastedLink: $pastedLink)
-        case .sameICloud:
-            SameIcloudTab(subscription: discoverable, coordinator: coordinator)
         }
     }
 

@@ -34,23 +34,47 @@ struct DeviceRow: View {
     }
 
     private var subtitleText: String {
-        var parts: [String] = [connection.route.shortLabel]
-        if let email = connectionEmailHint {
-            parts.append("Signed in as \(email)")
+        var parts: [String] = []
+        // v6: the Mac owner's iCloud identity (captured from the CKShare on a
+        // different-Apple-ID pairing). Same-account shows the route label.
+        let name = connection.peerAccountName ?? mac?.accountFullName
+        let email = connection.peerAccountEmail ?? mac?.accountEmail
+        if let name, !name.isEmpty {
+            parts.append(name)
+            if let email, !email.isEmpty { parts.append(email) }
+        } else if let email, !email.isEmpty {
+            parts.append(email)
+        } else {
+            parts.append(connection.route.shortLabel)
         }
         return parts.joined(separator: " · ")
     }
 
-    /// Best-effort iCloud account email from the most recent
-    /// PeerStatus for this Mac. Apple doesn't expose the email
-    /// through CKContainer APIs in all environments, so this is
-    /// best-effort. Returns nil when we don't know.
-    private var connectionEmailHint: String? {
-        // Look at the most-recent PeerStatusRecord that this app
-        // has fetched; we don't have direct access to it from
-        // here so we fall back to the display hint in the route
-        // label.
-        return nil
+    private var mac: MacStatusRecord? {
+        MacStatusStore.shared.byMacId[connection.macDeviceId]
+    }
+
+    @ViewBuilder private func badge(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    /// v7: every connection is manual (picker+accept, or code/QR/link). Legacy
+    /// `.auto` rows from earlier builds fold into "Manual" too.
+    @ViewBuilder private var originBadge: some View {
+        switch connection.pairingOrigin {
+        case .reinstall: badge("Reconnected", .orange)
+        default:         badge("Manual", .purple)
+        }
+    }
+
+    @ViewBuilder private var routeBadge: some View {
+        if connection.route.isCrossAppleID { badge("Different iCloud", .green) }
+        else { badge("Same iCloud", .teal) }
     }
 
     private var lastSeenText: String {
@@ -60,10 +84,12 @@ struct DeviceRow: View {
 
     private var statusColor: Color {
         switch connection.status {
-        case .active:    return .green
-        case .pending:   return .orange
-        case .suspended: return .yellow
-        case .removed:   return .red
+        case .active:         return .green
+        case .pending:        return .orange
+        case .suspended:      return .yellow
+        case .removed:        return .red
+        case .awaitingAccept: return .blue
+        case .pendingOnPhone: return .blue
         }
     }
 
@@ -77,21 +103,8 @@ struct DeviceRow: View {
                 HStack(spacing: 6) {
                     Text(macName)
                         .font(.headline)
-                    if connection.pairingOrigin == .auto {
-                        Text("Auto")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.blue.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.blue)
-                    } else if connection.pairingOrigin == .reinstall {
-                        Text("Reconnected")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.orange.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.orange)
-                    }
+                    originBadge
+                    routeBadge
                 }
                 Text(subtitleText)
                     .font(.caption)

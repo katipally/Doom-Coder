@@ -379,31 +379,39 @@ final class LocalStore: @unchecked Sendable {
         }
     }
     
-    func fetchNotifications(forAgent agent: TrackedAgent, limit: Int = 100) async -> [NotificationLogRecord] {
+    func fetchNotifications(forAgent agent: TrackedAgent, macId: String? = nil, limit: Int = 100) async -> [NotificationLogRecord] {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self = self, let db = self.db else {
                     continuation.resume(returning: [])
                     return
                 }
-                
+
                 let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 3600)
+                // v6: optional per-Mac filter so the multi-Mac switcher shows
+                // each Mac's own logs.
+                let macFilter = (macId?.isEmpty == false) ? "AND mac_id = ?" : ""
                 let sql = """
                 SELECT notif_id, session_key, mac_id, mac_name, agent, phase, title, body, ts,
                        last_tool, cwd_base, raw_event, channel, success
                 FROM notifications
-                WHERE agent = ? AND ts >= ?
+                WHERE agent = ? AND ts >= ? \(macFilter)
                 ORDER BY ts DESC
                 LIMIT ?;
                 """
-                
+
                 var stmt: OpaquePointer?
                 var result: [NotificationLogRecord] = []
-                
+
                 if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
                     sqlite3_bind_text(stmt, 1, (agent.rawValue as NSString).utf8String, -1, nil)
                     sqlite3_bind_int64(stmt, 2, Int64(sevenDaysAgo.timeIntervalSince1970))
-                    sqlite3_bind_int(stmt, 3, Int32(limit))
+                    var nextIdx: Int32 = 3
+                    if let macId, !macId.isEmpty {
+                        sqlite3_bind_text(stmt, nextIdx, (macId as NSString).utf8String, -1, nil)
+                        nextIdx += 1
+                    }
+                    sqlite3_bind_int(stmt, nextIdx, Int32(limit))
                     
                     while sqlite3_step(stmt) == SQLITE_ROW {
                         guard let notifId = self.getString(stmt, 0),

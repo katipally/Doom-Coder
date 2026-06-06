@@ -18,9 +18,9 @@
 //   2. CKRecordZoneSubscription with shouldSendContentAvailable
 //      fires an APNs silent push within 1-3s on every device that
 //      has access to the zone.
-//   3. For cross-account CKShare, the iOS app's per-share engine
-//      in ShareSyncEngineRegistry subscribes to the shared zone at
-//      accept time — same mechanism, same latency.
+//   3. For cross-account CKShare, the iOS app's single shared-DB
+//      engine (SharedDatabaseSync) subscribes to the shared zone —
+//      same mechanism, same latency.
 //
 // The state field is a string (rather than an enum) so the wire
 // format is forward-compatible: a future v6 client can write a
@@ -55,6 +55,16 @@ public struct ConnectionStateChangeRecord: Sendable, Codable, Equatable, Hashabl
     /// `CKRecord.creatorUserRecordID`). When empty, the Mac
     /// falls back to the `routeTag` hint.
     public var iosUserRecordID: String?
+    /// v6: the Mac's `container.userRecordID().recordName`, set when the Mac
+    /// writes a CSC{requested} from the Add-Device "Same iCloud" picker. The
+    /// iPhone compares it against its own userRecordID to confirm same-iCloud
+    /// before showing the Accept prompt (symmetric to `iosUserRecordID`).
+    public var macUserRecordID: String?
+    /// v7: monotonic ordering counter, carried as a RECORD FIELD (not parsed
+    /// from the record name). The record name is now unique per send so CSC
+    /// writes are always clean INSERTs and can never hit 14/2004; the receiver
+    /// uses this field to reject out-of-order deliveries.
+    public var counter: Int
     public var schemaVersion: Int
 
     public init(
@@ -68,6 +78,8 @@ public struct ConnectionStateChangeRecord: Sendable, Codable, Equatable, Hashabl
         routeAccountEmail: String? = nil,
         oldIosDeviceId: String? = nil,
         iosUserRecordID: String? = nil,
+        macUserRecordID: String? = nil,
+        counter: Int = 0,
         schemaVersion: Int = CloudKitConstants.schemaVersion
     ) {
         self.macId = macId
@@ -80,6 +92,8 @@ public struct ConnectionStateChangeRecord: Sendable, Codable, Equatable, Hashabl
         self.routeAccountEmail = routeAccountEmail
         self.oldIosDeviceId = oldIosDeviceId
         self.iosUserRecordID = iosUserRecordID
+        self.macUserRecordID = macUserRecordID
+        self.counter = counter
         self.schemaVersion = schemaVersion
     }
 
@@ -94,11 +108,17 @@ public struct ConnectionStateChangeRecord: Sendable, Codable, Equatable, Hashabl
         /// v5.1: iOS is asking the Mac to pair (gated same-iCloud
         /// discoverable-list flow). The Mac user must click Allow
         /// or Deny; the result is published as CSC{accepted} or
-        /// CSC{denied}.
+        /// CSC{denied}. Retained for decode-compat; the v6 flow uses
+        /// `requested` (Mac→iPhone) instead.
         case pending
         /// v5.1: Mac denied the request. iOS dismisses the
         /// pair sheet with an error toast.
         case denied
+        /// v6: the MAC is asking a same-iCloud iPhone to pair (the
+        /// Mac is now the initiator for every route). The iPhone shows
+        /// an Accept/Decline prompt; Accept publishes CSC{accepted,
+        /// origin:ios}, Decline publishes CSC{denied, origin:ios}.
+        case requested
     }
 
     public enum Origin: String, Sendable, Codable, Equatable, CaseIterable {
@@ -118,15 +138,25 @@ extension ConnectionStateChangeRecord {
     /// the tuple + counter to:
     ///   • locate the right local Connection without a DB scan
     ///   • reject out-of-order deliveries (counter <= last seen)
+    /// Legacy helper (kept for decode-compat with records written before v7).
     public func recordName(counter: Int) -> String {
         "CSC-\(macId)-\(iosDeviceId)-\(counter)"
+    }
+
+    /// v7: a UNIQUE record name per send. The `(macId, iosDeviceId, counter)`
+    /// prefix keeps it debuggable and lets the receiver locate the row; the
+    /// trailing nonce guarantees every write is a fresh INSERT — no etag, no
+    /// 14/2004, no counter-reuse collisions across pairing attempts.
+    private func uniqueRecordName(counter: Int) -> String {
+        let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10)
+        return "CSC-\(macId)-\(iosDeviceId)-\(counter)-\(nonce)"
     }
 
     public func toCKRecord(counter: Int) -> CKRecord {
         let r = CKRecord(
             recordType: Self.recordType,
             recordID: CKRecord.ID(
-                recordName: recordName(counter: counter),
+                recordName: uniqueRecordName(counter: counter),
                 zoneID: CKRecordZone.ID(
                     zoneName: CloudKitConstants.zoneName,
                     ownerName: CKCurrentUserDefaultName
@@ -134,6 +164,7 @@ extension ConnectionStateChangeRecord {
             )
         )
         fill(r)
+        r["counter"] = counter as CKRecordValue
         return r
     }
 
@@ -144,7 +175,7 @@ extension ConnectionStateChangeRecord {
         let r = CKRecord(
             recordType: Self.recordType,
             recordID: CKRecord.ID(
-                recordName: recordName(counter: counter),
+                recordName: uniqueRecordName(counter: counter),
                 zoneID: CKRecordZone.ID(
                     zoneName: CloudKitConstants.zoneName,
                     ownerName: zoneOwner
@@ -152,6 +183,7 @@ extension ConnectionStateChangeRecord {
             )
         )
         fill(r)
+        r["counter"] = counter as CKRecordValue
         return r
     }
 
@@ -166,6 +198,7 @@ extension ConnectionStateChangeRecord {
         if let e = routeAccountEmail { r["routeAccountEmail"] = e as CKRecordValue } else { r["routeAccountEmail"] = nil }
         if let o = oldIosDeviceId   { r["oldIosDeviceId"]   = o as CKRecordValue } else { r["oldIosDeviceId"] = nil }
         if let i = iosUserRecordID  { r["iosUserRecordID"]  = i as CKRecordValue } else { r["iosUserRecordID"] = nil }
+        if let m = macUserRecordID  { r["macUserRecordID"]  = m as CKRecordValue } else { r["macUserRecordID"] = nil }
         r["schemaVersion"]    = schemaVersion as CKRecordValue
     }
 
@@ -178,6 +211,11 @@ extension ConnectionStateChangeRecord {
               let routeTag    = r["routeTag"] as? String,
               let timestamp   = r["timestamp"] as? Date
         else { return nil }
+        // v7: prefer the `counter` field; fall back to parsing the legacy
+        // record name for records written before the field existed.
+        let counter = (r["counter"] as? Int)
+            ?? Self.counterFromRecordName(r.recordID.recordName)
+            ?? 0
         self.init(
             macId: macId,
             iosDeviceId: iosDeviceId,
@@ -189,6 +227,8 @@ extension ConnectionStateChangeRecord {
             routeAccountEmail: r["routeAccountEmail"] as? String,
             oldIosDeviceId:   r["oldIosDeviceId"]   as? String,
             iosUserRecordID:  r["iosUserRecordID"]  as? String,
+            macUserRecordID:  r["macUserRecordID"]  as? String,
+            counter:          counter,
             schemaVersion:    (r["schemaVersion"]   as? Int) ?? CloudKitConstants.schemaVersion
         )
     }

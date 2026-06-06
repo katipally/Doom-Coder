@@ -25,6 +25,8 @@ public final class PairingStore: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        // v7: legacy disconnect-suppression set removed (no auto-attach to block).
+        defaults.removeObject(forKey: "DoomCoder.Pairing.SuppressedIos.v1")
         var loaded = Self.loadConnections(from: defaults, key: connectionsKey)
         // v5: stop filtering out same-account (.iCloud route) rows.
         // They were previously dropped on every launch as "phantoms"
@@ -39,10 +41,23 @@ public final class PairingStore: ObservableObject {
             // them first-class.
             true
         }
+        // v7 one-shot: drop legacy auto-attached rows. Earlier builds created
+        // `.auto` same-iCloud connections from incoming heartbeats; v7 is
+        // manual-only, so these stale rows must go (the user re-pairs via the
+        // picker, code, or QR). Gated on a flag so a real future `.auto` row
+        // (none are produced now) wouldn't be wiped repeatedly.
+        if !defaults.bool(forKey: "DoomCoder.Pairing.v7.dropAuto") {
+            let n = loaded.count
+            loaded = loaded.filter { $0.pairingOrigin != .auto }
+            if loaded.count != n { Self.saveConnectionsInternal(loaded, to: defaults, key: connectionsKey) }
+            defaults.set(true, forKey: "DoomCoder.Pairing.v7.dropAuto")
+        } else {
+            loaded = loaded.filter { $0.pairingOrigin != .auto }
+        }
         let needsSave = loaded.count != beforeCount
-        self.connections = loaded
         if needsSave { Self.saveConnectionsInternal(loaded, to: defaults, key: connectionsKey) }
         Self.migrateV5Once(loaded, saveTo: defaults)
+        self.connections = loaded
     }
 
     /// v5 one-shot: any Connection stored with stateChangeCounter == 0

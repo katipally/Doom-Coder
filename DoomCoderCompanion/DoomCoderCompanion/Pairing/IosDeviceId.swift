@@ -18,6 +18,7 @@
 import Foundation
 import Security
 import UIKit
+import CloudKit
 import DoomCoderCore
 
 @MainActor
@@ -25,6 +26,39 @@ enum IosDeviceId {
     private static let defaultsKey = "doomcoder.ios.deviceId.v1"
     private static let keychainService = "com.doomcoder.app.companion.deviceId"
     private static let keychainAccount = "iosDeviceId.v1"
+    private static let userRecordKey = "doomcoder.ios.userRecordName.v1"
+
+    /// The current iCloud account's `CKUserRecordID.recordName`, memoized in
+    /// the App Group. This is the canonical, stable identifier for *which
+    /// Apple ID this is* — used to decide same-vs-different iCloud during
+    /// pairing (comparing against the share owner's record name) instead of
+    /// the racy `CKShare.Metadata.participantRole`, which can momentarily
+    /// report a non-owner role before the share fully propagates.
+    static func iCloudUserRecordName() async -> String? {
+        if let cached = AppGroupCache.defaults.string(forKey: userRecordKey), !cached.isEmpty {
+            return cached
+        }
+        do {
+            let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
+            let id = try await container.userRecordID()
+            AppGroupCache.defaults.set(id.recordName, forKey: userRecordKey)
+            return id.recordName
+        } catch {
+            return nil
+        }
+    }
+
+    /// Synchronous read of the cached record name (nil if not yet fetched).
+    static var cachedICloudUserRecordName: String? {
+        let v = AppGroupCache.defaults.string(forKey: userRecordKey)
+        return (v?.isEmpty == false) ? v : nil
+    }
+
+    /// Invalidate the cached user-record name (call on `.CKAccountChanged`
+    /// so a sign-out/switch doesn't leave a stale account identity).
+    static func invalidateICloudUserRecordName() {
+        AppGroupCache.defaults.removeObject(forKey: userRecordKey)
+    }
 
     /// The stable per-install iOS identifier. Resolution order:
     ///   1. iCloud Keychain (kSecAttrSynchronizable = true) — survives

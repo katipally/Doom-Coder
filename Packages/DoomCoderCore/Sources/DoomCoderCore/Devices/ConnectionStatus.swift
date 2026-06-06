@@ -22,13 +22,22 @@ public enum ConnectionStatus: String, Codable, Sendable, CaseIterable, Hashable 
     case active
     case suspended
     case removed
+    /// v6: this side initiated a pairing and is waiting for the other side to
+    /// accept. On the Mac: it sent a CSC{requested} / is showing a QR/code/link
+    /// and waiting for the iPhone. The row is NOT yet a real connection.
+    case awaitingAccept
+    /// v6: the iPhone received a CSC{requested} from a Mac and must show the
+    /// Accept/Decline prompt. Not yet active.
+    case pendingOnPhone
 
     public var displayName: String {
         switch self {
-        case .pending:   return "Pending"
-        case .active:    return "Connected"
-        case .suspended: return "Suspended"
-        case .removed:   return "Removed"
+        case .pending:        return "Pending"
+        case .active:         return "Connected"
+        case .suspended:      return "Suspended"
+        case .removed:        return "Removed"
+        case .awaitingAccept: return "Waiting to accept"
+        case .pendingOnPhone: return "Pairing request"
         }
     }
 
@@ -38,6 +47,11 @@ public enum ConnectionStatus: String, Codable, Sendable, CaseIterable, Hashable 
 
     public var isTerminal: Bool {
         self == .removed
+    }
+
+    /// True while a handshake is in flight (neither side fully connected yet).
+    public var isHandshaking: Bool {
+        self == .awaitingAccept || self == .pendingOnPhone || self == .pending
     }
 
     /// Returns the result of applying a transition. Returns nil if the
@@ -50,7 +64,11 @@ public enum ConnectionStatus: String, Codable, Sendable, CaseIterable, Hashable 
              (.active, .active),
              (.suspended, .active),
              (.suspended, .suspended),
-             (.pending, .pending):
+             (.pending, .pending),
+             (.awaitingAccept, .active),
+             (.awaitingAccept, .awaitingAccept),
+             (.pendingOnPhone, .active),
+             (.pendingOnPhone, .pendingOnPhone):
             return next
         case (_, .removed):
             return .removed

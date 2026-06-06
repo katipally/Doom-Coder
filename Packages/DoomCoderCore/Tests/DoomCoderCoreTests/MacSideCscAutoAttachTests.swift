@@ -86,7 +86,7 @@ final class MacSideCscAutoAttachTests: XCTestCase {
         // regress the row's status. (The Mac-side ingest drops
         // these; we verify the underlying model rejects the write
         // shape that would be produced.)
-        var conn = Connection(
+        let conn = Connection(
             id: "x",
             macDeviceId: "m",
             iosDeviceId: "i",

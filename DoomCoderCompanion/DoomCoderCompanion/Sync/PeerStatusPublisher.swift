@@ -28,47 +28,44 @@ final class PeerStatusPublisher {
     static let shared = PeerStatusPublisher()
 
     private let container = CKContainer(identifier: CloudKitConstants.containerIdentifier)
-    private let heartbeatInterval: TimeInterval = 60
-    private var heartbeatTimer: Timer?
     private var lastPublishedAt: Date = .distantPast
+    private var heartbeatTimer: Timer?
+    /// Light foreground heartbeat so the Mac sees fresh "last seen" / online
+    /// status (iOS auto-pauses timers when the app is suspended, so this is
+    /// effectively foreground-only — no background battery cost).
+    private let heartbeatInterval: TimeInterval = 30
 
-    // Per-owner server record cache for shared DB writes (preserves recordChangeTag).
-    private var sharedDbServerCache: [String: CKRecord] = [:]
+    // Per-owner server record cache for shared DB writes (preserves
+    // recordChangeTag). Persisted to disk (app-group defaults) so the etag
+    // survives app relaunch — otherwise the first cross-account heartbeat after
+    // a relaunch is a blind INSERT and CloudKit returns 14/2004
+    // ("record to insert already exists"). Same fix as the same-account path.
+    private let sharedDbServerCache = ServerRecordCache(
+        defaults: AppGroupCache.defaults,
+        key: "ck.ios.peerStatus.sharedDBServerCache.v1"
+    )
 
     private init() {}
 
-    /// Start the heartbeat. Idempotent. v5.2: instead of firing
-    /// `publish()` immediately (which was silently dropped because
-    /// the CKSyncEngine's zone wasn't ready yet, so the first
-    /// heart-beat went out with `macId = nil` and was never usable
-    /// on the Mac side), we register a one-shot callback on
-    /// `CompanionSyncEngine.zoneReady` and fire the first
-    /// heart-beat from there. The 60s timer also fires as before
-    /// for subsequent heart-beats.
+    /// Start publishing presence. v6: event-driven (NO 60s timer). The first
+    /// heart-beat fires when the engine's zone becomes ready; subsequent ones
+    /// fire on app activation and after connection changes (see
+    /// `CompanionSyncEngine` activation handler / `publishNow`).
     func start() {
-        stop()
-        // If the engine is already ready (e.g. start() was called
-        // twice, or after a fast re-init), publish immediately.
         if CompanionSyncEngine.shared.zoneReady {
             publish()
         } else {
-            // Subscribe to the first transition to ready. The
-            // markZoneReady helper clears the callback after firing
-            // so a re-init doesn't double-fire.
             CompanionSyncEngine.shared.onZoneReady = { [weak self] in
                 self?.publish()
             }
         }
+        // Foreground heartbeat for live presence on the Mac side.
+        heartbeatTimer?.invalidate()
         let timer = Timer(timeInterval: heartbeatInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.publish() }
         }
         RunLoop.main.add(timer, forMode: .common)
         heartbeatTimer = timer
-    }
-
-    func stop() {
-        heartbeatTimer?.invalidate()
-        heartbeatTimer = nil
     }
 
     /// Force-publish right now (used on app foreground, after a
@@ -124,7 +121,7 @@ final class PeerStatusPublisher {
             ownerName: ownerName
         )
         let recordID = rec.recordID(zoneOwner: ownerName)
-        let base = sharedDbServerCache[recordID.recordName]
+        let base = sharedDbServerCache.record(for: recordID)
         let ckRecord = rec.toCKRecord(zoneOwner: ownerName, base: base)
 
         let op = CKModifyRecordsOperation(recordsToSave: [ckRecord], recordIDsToDelete: nil)
@@ -133,7 +130,7 @@ final class PeerStatusPublisher {
         op.perRecordSaveBlock = { [weak self] _, result in
             if case .success(let saved) = result {
                 Task { @MainActor [weak self] in
-                    self?.sharedDbServerCache[saved.recordID.recordName] = saved
+                    self?.sharedDbServerCache.store(saved)
                 }
             }
         }
@@ -165,7 +162,10 @@ final class PeerStatusPublisher {
         let rec = buildRecord(macId: macId, shareURLString: shareURLString, route: "disconnecting")
 
         if let ref, !ref.isSameAccount {
-            let ckRecord = rec.toCKRecord(zoneOwner: ref.ownerRecordName, base: nil)
+            // Pull the cached server base so the final write is an UPDATE, not a
+            // blind INSERT that would 14/2004 (the record already exists).
+            let base = sharedDbServerCache.record(for: rec.recordID(zoneOwner: ref.ownerRecordName))
+            let ckRecord = rec.toCKRecord(zoneOwner: ref.ownerRecordName, base: base)
             let op = CKModifyRecordsOperation(recordsToSave: [ckRecord])
             op.savePolicy = .allKeys
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -173,7 +173,8 @@ final class PeerStatusPublisher {
                 container.sharedCloudDatabase.add(op)
             }
         } else {
-            let ckRecord = rec.toCKRecord(base: nil)
+            let base = PeerStatusPublisherCache.shared.serverBase(for: rec.recordID)
+            let ckRecord = rec.toCKRecord(base: base)
             let op = CKModifyRecordsOperation(recordsToSave: [ckRecord])
             op.savePolicy = .allKeys
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -212,7 +213,16 @@ final class PeerStatusPublisherCache {
     private init() {}
 
     private var pending: [String: PeerStatusRecord] = [:]
-    private var serverCache: [String: CKRecord] = [:]
+    /// Persisted to disk (app-group defaults) so the server `recordChangeTag`
+    /// survives app relaunch. PeerStatus has a STABLE recordID
+    /// ("PeerStatus-{macId}-{iosDeviceId}") that is re-saved on every
+    /// heartbeat — without a persisted etag, the first save after relaunch is a
+    /// blind INSERT and CloudKit returns 14/2004 forever, which is exactly the
+    /// bug that froze the Mac's device list. (Mirrors the Mac's ServerRecordCache.)
+    private let serverCache = ServerRecordCache(
+        defaults: AppGroupCache.defaults,
+        key: "ck.ios.peerStatus.serverCache.v1"
+    )
 
     func put(_ r: PeerStatusRecord) {
         pending[r.recordID.recordName] = r
@@ -220,7 +230,7 @@ final class PeerStatusPublisherCache {
 
     func buildCKRecord(for recordID: CKRecord.ID) -> CKRecord? {
         guard let rec = pending[recordID.recordName] else { return nil }
-        let base = serverCache[recordID.recordName]
+        let base = serverCache.record(for: recordID)
         let built = rec.toCKRecord(base: base)
         if let base = base {
             for key in built.allKeys() { base[key] = built[key] }
@@ -229,8 +239,32 @@ final class PeerStatusPublisherCache {
         return built
     }
 
+    /// The persisted server stub (system fields only) for a recordID, if known.
+    func serverBase(for recordID: CKRecord.ID) -> CKRecord? {
+        serverCache.record(for: recordID)
+    }
+
     func didSave(_ record: CKRecord) {
-        serverCache[record.recordID.recordName] = record
+        serverCache.store(record)
         pending.removeValue(forKey: record.recordID.recordName)
+    }
+
+    /// Self-heal: stash the server's copy of the record (from a
+    /// `serverRecordChanged` failure) WITHOUT clearing `pending`, so the next
+    /// batch rebuilds against the fresh etag and the save becomes an UPDATE.
+    func noteServerRecord(_ record: CKRecord) {
+        serverCache.store(record)
+    }
+
+    /// The record was deleted server-side (`unknownItem`) — drop the stale etag
+    /// so the next save INSERTs cleanly.
+    func forgetServerRecord(name: String) {
+        serverCache.remove(name: name)
+    }
+
+    /// Clear on account switch / dev zone-wipe (mirrors the Mac side).
+    func clear() {
+        pending.removeAll()
+        serverCache.clear()
     }
 }

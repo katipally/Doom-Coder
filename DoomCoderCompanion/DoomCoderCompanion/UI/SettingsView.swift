@@ -10,7 +10,8 @@ import DoomCoderCore
 struct SettingsView: View {
     @State private var macStore = MacStatusStore.shared
     @State private var sync = CompanionSyncEngine.shared
-    @State private var testSent = false
+    enum TestResult { case idle, sent, failed }
+    @State private var testResult: TestResult = .idle
     @State private var isForceSyncing = false
     @State private var forceSyncDone = false
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
@@ -315,15 +316,19 @@ struct SettingsView: View {
             Section {
                 Button {
                     Task {
-                        await sync.sendTestNotification()
-                        testSent = true
+                        let ok = await sync.sendTestNotification()
+                        testResult = ok ? .sent : .failed
                         try? await Task.sleep(for: .seconds(3))
-                        testSent = false
+                        testResult = .idle
                     }
                 } label: {
-                    Label(testSent ? "Sent ✓" : "Send Test Push", systemImage: "bell.badge")
+                    switch testResult {
+                    case .idle:   Label("Send Test Push", systemImage: "bell.badge")
+                    case .sent:   Label("Sent ✓", systemImage: "checkmark.circle")
+                    case .failed: Label("Failed — check iCloud", systemImage: "exclamationmark.triangle")
+                    }
                 }
-                .disabled(testSent)
+                .disabled(testResult != .idle)
             } footer: {
                 Text("Sends a test notification through CloudKit to your connected Mac.")
             }

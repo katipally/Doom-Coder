@@ -6,6 +6,8 @@ import DoomCoderCore
 
 struct AgentLogsView: View {
     let agent: TrackedAgent
+    /// When set (multi-Mac switcher), only this Mac's logs are shown.
+    var macId: String? = nil
 
     @State private var logs: [NotificationLogRecord] = []
     @State private var isLoading = true
@@ -128,7 +130,7 @@ struct AgentLogsView: View {
 
     private func loadLogs() async {
         isLoading = true
-        logs = await NotificationLogStore.shared.fetchLogs(forAgent: agent)
+        logs = await NotificationLogStore.shared.fetchLogs(forAgent: agent, macId: macId)
         isLoading = false
     }
 

@@ -23,18 +23,16 @@ public enum CloudKitConstants {
         /// DoomCoderZone and receives an APNs silent push within 1–3s,
         /// giving us instant cross-device pairing-state sync.
         public static let connectionStateChange = "ConnectionStateChange"
-        /// v5.1: public-DB record type. The Mac publishes one of these
-        /// per device, and the iOS companion subscribes to a
-        /// CKQuerySubscription to render a "discoverable Macs" list
-        /// in the Add Mac sheet's "Same iCloud" tab. Mac is the
-        /// source of truth; iPhones are passive. Records live in the
-        /// public DB so they don't require an iCloud account on the
-        /// iOS side to read — only to verify same-iCloud via the
-        /// creatorUserRecordID on the resulting CSC.
-        public static let discoverableMac    = "DiscoverableMac"
         /// Public-DB only. Temporary record keyed by 6-char pairing code.
         /// TTL matches PairingCode.lifetime (10 min). Mac writes it, iOS reads it.
         public static let pairingCode       = "DCPairingCode"
+        /// v6: public-DB record published by the iOS companion so the Mac can
+        /// list this account's iPhones in its Add-Device "Same iCloud" tab.
+        /// Mirrors DiscoverableMac but in the opposite direction — the Mac is
+        /// now the initiator of same-iCloud pairing, the iPhone the acceptor.
+        /// Keyed by the iPhone's iosDeviceId; carries the publisher's
+        /// userRecordID so the Mac can verify same-iCloud before requesting.
+        public static let discoverableDevice = "DiscoverableDevice"
     }
 
     /// Current schema version published to CloudKit. Bump together with field
@@ -63,5 +61,12 @@ public enum CloudKitConstants {
     ///       `pairingOrigin`, `stateChangeCounter`, `removedAt`,
     ///       `shareAcceptedAt`. Old clients ignore the new record type
     ///       and the new fields.
-    public static let schemaVersion = 5
+    ///   6 - Mac-initiates-everywhere rebuild. Additive only:
+    ///       ConnectionStateChange gains `state = "requested"` and a
+    ///       `macUserRecordID` field; PeerStatus/MacStatus gain
+    ///       `accountFullName`/`accountEmail` (CloudKit discoverability
+    ///       identity); new `DiscoverableDevice` public-DB record type
+    ///       (iPhone presence the Mac discovers). Old clients ignore the
+    ///       new state/fields/record type.
+    public static let schemaVersion = 6
 }

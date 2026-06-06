@@ -24,22 +24,16 @@
 //   • out-of-order APNs replays
 //   • the rare case where a CSC and a PeerStatus heart-beat race
 //
-// Three "channels" are involved:
-//   1. Private DB engine (CompanionSyncEngine on iOS,
-//      CloudKitPusher on Mac) — for same-Apple-ID writes.
-//   2. Per-share engine (ShareSyncEngineRegistry on iOS) — for
-//      cross-account CKShare writes where the iOS app needs to
-//      write into the Mac's shared zone.
-//   3. Direct `CKModifyRecordsOperation` against the Mac's
-//      shared DB — for cross-account writes from iOS, used as a
-//      fallback when the per-share engine isn't ready yet (the
-//      "fast path" that makes the "forever to acknowledge" bug
-//      disappear — the CSC lands in 1-3s instead of waiting for
-//      the engine to spin up).
+// Two write paths are involved (v6):
+//   1. Private DB engine (CompanionSyncEngine on iOS, CloudKitPusher on
+//      Mac) — for same-Apple-ID writes.
+//   2. Direct `CKModifyRecordsOperation` against the Mac's shared DB —
+//      for cross-account (CKShare) writes from iOS into the Mac's shared
+//      zone. (The single shared-DB engine, SharedDatabaseSync, only
+//      READS; it doesn't manage these writes.)
 //
-// Routing is per-Connection: same-account connections go through
-// the private engine; cross-account connections go through the
-// shared DB.
+// Routing is per-Connection: same-account connections go through the
+// private engine; cross-account connections write to the shared DB.
 
 import Foundation
 import CloudKit
@@ -175,19 +169,42 @@ final class ConnectionStateChanges {
     /// and re-stamps the liveness timestamp.
     public func ingest(_ record: CKRecord) {
         guard let csc = ConnectionStateChangeRecord(record) else { return }
-        ingest(csc)
+        // v7: the counter is a record FIELD (record names are now unique per
+        // send), decoded into `csc.counter` — no more name parsing.
+        ingest(csc, counter: csc.counter)
     }
 
-    public func ingest(_ csc: ConnectionStateChangeRecord) {
-        let counter = ConnectionStateChangeRecord
-            .counterFromRecordName(csc.recordName(counter: 0))
-            // counter is embedded in the record name, but we use the
-            // full recordName we already have. Fall back to 0 if we
-            // can't parse (forward-compat: a v6 client may have a
-            // different naming scheme).
-            ?? 0
+    public func ingest(_ csc: ConnectionStateChangeRecord, counter overrideCounter: Int? = nil) {
+        let counter = overrideCounter ?? csc.counter
         let macId = csc.macId
         let iosId = csc.iosDeviceId
+
+        // v7: promptless same-iCloud connect. The Mac tapped this iPhone in the
+        // picker and published CSC{accepted, origin:mac}. Connect directly — no
+        // prompt — by creating/activating the local row, then echo
+        // CSC{accepted, origin:ios} so the Mac stays confirmed. Handle before
+        // the "existing connection" guard so a brand-new connection isn't dropped.
+        if (csc.state == ConnectionStateChangeRecord.State.accepted.rawValue
+            || csc.state == ConnectionStateChangeRecord.State.active.rawValue),
+           csc.origin == ConnectionStateChangeRecord.Origin.mac.rawValue,
+           csc.shareURLString == nil,            // same-iCloud (no CKShare)
+           iosId == IosDeviceId.current,
+           !ConnectionStore.shared.connections.contains(where: {
+               $0.macDeviceId == macId && $0.iosDeviceId == iosId && $0.status == .active
+           }) {
+            IOSPairingCoordinator.shared.connectFromMacInitiated(macId: macId, counter: counter)
+            return
+        }
+
+        // v6 legacy: inbound same-iCloud pairing REQUEST from a Mac (prompt
+        // flow). Retained for older Macs; v7 Macs send `.accepted` directly.
+        if csc.state == ConnectionStateChangeRecord.State.requested.rawValue,
+           csc.origin == ConnectionStateChangeRecord.Origin.mac.rawValue,
+           iosId == IosDeviceId.current {
+            let macName = MacStatusStore.shared.byMacId[macId]?.name ?? "Mac"
+            IOSPairingCoordinator.shared.ingestInboundRequest(macId: macId, macName: macName)
+            return
+        }
 
         // Reinstall reconciliation: if the inbound iosDeviceId is
         // different from a Connection we already have for this Mac,
@@ -210,7 +227,8 @@ final class ConnectionStateChanges {
             // Unknown connection — this can happen if the iOS app is
             // brand-new and a CSC from the Mac's perspective arrived
             // before any MacStatus heart-beat. Drop silently; the
-            // next heart-beat will re-attach via AutoPairDiscovery.
+            // (v6: no auto-attach — a connection only exists after an
+            // explicit Mac-initiated request + iPhone accept.)
             logger.debug("csc: no matching Connection for mac=\(macId, privacy: .public) ios=\(iosId, privacy: .public) — dropping")
             return
         }
@@ -257,15 +275,14 @@ final class ConnectionStateChanges {
             // "row resurrects on refresh" bug. Mirror the Mac's
             // hard-delete locally.
             let toDelete = connection
-            // Persist + drop the local row. We must post
-            // .connectionsChanged first so any engine listening
-            // tears down the per-Mac CKSyncEngine, THEN do the
-            // hardRemove (which posts again — both notifications
-            // are idempotent).
+            // v7: no suppression — the Mac stays discoverable for an explicit re-pair.
+            // Drop the local row; the single shared-DB engine needs no
+            // per-connection teardown (v6 consolidation).
             ConnectionStore.shared.remove(id: toDelete.id)
-            ShareSyncEngineRegistry.shared.unregister(connectionId: toDelete.id)
-            AutoPairDiscovery.shared.markRecentlyRemoved(macId: toDelete.macDeviceId)
             Task { await LocalStore.shared.clearMacData(macId: toDelete.macDeviceId) }
+            ConnectionNotifier.shared.notifyDisconnected(
+                macName: MacStatusStore.shared.byMacId[toDelete.macDeviceId]?.name
+            )
             return
         case .reinstallDetected:
             // Handled above via the oldIosDeviceId path.
@@ -283,14 +300,20 @@ final class ConnectionStateChanges {
             // semantics as .removed.
             let toDelete = connection
             ConnectionStore.shared.remove(id: toDelete.id)
-            ShareSyncEngineRegistry.shared.unregister(connectionId: toDelete.id)
-            AutoPairDiscovery.shared.markRecentlyRemoved(macId: toDelete.macDeviceId)
             Task { await LocalStore.shared.clearMacData(macId: toDelete.macDeviceId) }
             NotificationCenter.default.post(
                 name: .connectionPairDenied,
                 object: nil,
                 userInfo: ["macId": macId, "iosId": iosId]
             )
+            return
+        case .requested:
+            // v6: a Mac is requesting to pair (same-iCloud flow). Inbound
+            // requests for NEW rows are handled by `ingestInboundRequest`
+            // before this point; if we reach here with an existing row,
+            // mark it pending-on-phone so the Accept prompt re-surfaces.
+            connection.status = .pendingOnPhone
+            ConnectionStore.shared.upsert(connection)
             return
         }
         // If we're the iOS side and the inbound is from the Mac, the
@@ -328,5 +351,19 @@ final class CSCPendingCache {
 
     func didSave(_ record: CKRecord) {
         pending.removeValue(forKey: record.recordID.recordName)
+    }
+
+    /// Self-heal for a `serverRecordChanged` failure: merge our pending field
+    /// values onto the server's copy (which carries the live etag) so the
+    /// re-enqueued save is a clean UPDATE. (CSC names include a monotonic
+    /// counter, so this is rare, but keep parity with the PeerStatus path.)
+    func applyServerRecord(_ server: CKRecord) {
+        let name = server.recordID.recordName
+        if let (pendingRecord, route) = pending[name] {
+            for key in pendingRecord.allKeys() { server[key] = pendingRecord[key] }
+            pending[name] = (server, route)
+        } else {
+            pending[name] = (server, .privateDB)
+        }
     }
 }

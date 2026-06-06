@@ -178,7 +178,9 @@ final class V5SchemaTests: XCTestCase {
     // MARK: - CloudKitConstants
 
     func testSchemaVersionIs5() {
-        XCTAssertEqual(CloudKitConstants.schemaVersion, 5)
+        // v6: Mac-initiates rebuild bumped the schema (additive fields +
+        // DiscoverableDevice record + CSC `requested` state).
+        XCTAssertEqual(CloudKitConstants.schemaVersion, 6)
     }
 
     func testConnectionStateChangeRecordTypeIsRegistered() {

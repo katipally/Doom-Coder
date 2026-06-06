@@ -27,21 +27,8 @@ struct DeviceRow: View {
                 HStack(spacing: 6) {
                     Text(displayName)
                         .font(.headline)
-                    if connection.pairingOrigin == .auto {
-                        Text("Auto")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.blue.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.blue)
-                    } else if connection.pairingOrigin == .reinstall {
-                        Text("Reconnected")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.orange.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.orange)
-                    }
+                    originBadge
+                    routeBadge
                 }
                 Text(subtitleText)
                     .font(.subheadline)
@@ -54,6 +41,29 @@ struct DeviceRow: View {
         .onTapGesture { onSelect?() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(displayName), \(connection.route.shortLabel), \(connection.status.displayName)")
+    }
+
+    @ViewBuilder private func badge(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    /// v7: every connection is manual (picker+accept, or code/QR/link). Legacy
+    /// `.auto` rows from earlier builds fold into "Manual" too.
+    @ViewBuilder private var originBadge: some View {
+        switch connection.pairingOrigin {
+        case .reinstall: badge("Reconnected", .orange)
+        default:         badge("Manual", .purple)
+        }
+    }
+
+    @ViewBuilder private var routeBadge: some View {
+        if connection.route.isCrossAppleID { badge("Different iCloud", .green) }
+        else { badge("Same iCloud", .teal) }
     }
 
     /// v2.7: prefer the iOS-side display name from the PeerStatus
@@ -74,10 +84,21 @@ struct DeviceRow: View {
     }
 
     private var subtitleText: String {
-        var parts: [String] = [connection.route.shortLabel]
-        if let profile = IosDeviceProfileCache.shared.byId[connection.iosDeviceId],
-           !profile.model.isEmpty {
-            parts.append(profile.model)
+        var parts: [String] = []
+        let profile = IosDeviceProfileCache.shared.byId[connection.iosDeviceId]
+        let name = connection.peerAccountName ?? profile?.accountName
+        let email = connection.peerAccountEmail ?? profile?.accountEmail
+        // Account identity: prefer real name, then email, else the route label.
+        if let name, !name.isEmpty {
+            parts.append(name)
+            if let email, !email.isEmpty { parts.append(email) }
+        } else if let email, !email.isEmpty {
+            parts.append(email)
+        } else {
+            parts.append(connection.route.shortLabel)
+        }
+        if let model = profile?.model, !model.isEmpty {
+            parts.append(model)
         }
         return parts.joined(separator: " · ")
     }
@@ -93,10 +114,12 @@ struct DeviceRow: View {
 
     private var badgeColor: Color {
         switch connection.status {
-        case .active:    return .green
-        case .pending:   return .orange
-        case .suspended: return .yellow
-        case .removed:   return .red
+        case .active:         return .green
+        case .pending:        return .orange
+        case .suspended:      return .yellow
+        case .removed:        return .red
+        case .awaitingAccept: return .blue
+        case .pendingOnPhone: return .blue
         }
     }
 }

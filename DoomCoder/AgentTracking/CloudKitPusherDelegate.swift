@@ -37,17 +37,50 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
         case .sentRecordZoneChanges(let sent):
             for saved in sent.savedRecords {
-                // Lesson #1 — persist server-known CKRecord for singletons
+                let name = saved.recordID.recordName
                 await MainActor.run {
-                    self.pusher?.serverRecords.store(saved)
-                    self.pusher?.clearPending(for: saved.recordID)
+                    if name.hasPrefix("CSC-") {
+                        // CSC names are unique per send — just clear the pending
+                        // entry once delivered. No etag needed.
+                        CSCMacPendingCache.shared.didSave(saved)
+                    } else {
+                        // Lesson #1 — persist server-known CKRecord for singletons.
+                        self.pusher?.serverRecords.store(saved)
+                        self.pusher?.clearPending(for: saved.recordID)
+                    }
+                    self.pusher?.resolveSend(name: name, success: true)
                 }
             }
             for failed in sent.failedRecordSaves {
                 let code = failed.error.code
-                logger.error("ckpusher.delegate: failed save \(failed.record.recordID.recordName, privacy: .public) code=\(String(describing: code), privacy: .public)")
-                if let serverRec = failed.error.serverRecord {
-                    await MainActor.run { self.pusher?.serverRecords.store(serverRec) }
+                let name = failed.record.recordID.recordName
+                logger.error("ckpusher.delegate: failed save \(name, privacy: .public) code=\(String(describing: code), privacy: .public)")
+                await MainActor.run {
+                    self.pusher?.resolveSend(name: name, success: false)
+                }
+                if name.hasPrefix("CSC-") {
+                    // v7: CSC names are unique, so a 14/2004 here means this is a
+                    // STALE leftover from a pre-v7 build (reused counter name).
+                    // Drop it from the cache and DON'T re-enqueue — retrying a
+                    // colliding insert is the infinite-loop bug we're fixing.
+                    await MainActor.run { CSCMacPendingCache.shared.didSave(failed.record) }
+                    continue
+                }
+                // Non-CSC singletons (MacStatus, AgentConfig, …): stash the server
+                // etag and re-enqueue so the next batch rebuilds as an UPDATE
+                // (Apple requires resolving serverRecordChanged ourselves).
+                await MainActor.run {
+                    if let serverRec = failed.error.serverRecord {
+                        self.pusher?.serverRecords.store(serverRec)
+                    }
+                }
+                if code == .serverRecordChanged || code == .unknownItem {
+                    if code == .unknownItem {
+                        await MainActor.run {
+                            self.pusher?.serverRecords.remove(id: failed.record.recordID)
+                        }
+                    }
+                    syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(failed.record.recordID)])
                 }
             }
 

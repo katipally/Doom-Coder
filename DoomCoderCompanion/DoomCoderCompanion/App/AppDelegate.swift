@@ -129,7 +129,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         Task { @MainActor in
             await CompanionSyncEngine.shared.handleRemoteNotification()
-            await DiscoverableMacSubscription.shared.refresh()
             completionHandler(.newData)
         }
     }
