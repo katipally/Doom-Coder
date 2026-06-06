@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreImage
 import UserNotifications
+import DoomCoderCore
 
 // v2 configure window — NavigationSplitView with Agents + Channels + Logs tabs.
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
@@ -140,7 +141,18 @@ struct ConfigureAgentsViewV2: View {
                         selected = nil
                     }
                 } label: {
-                    Label("Connections", systemImage: "antenna.radiowaves.left.and.right")
+                    HStack {
+                        Label("Connections", systemImage: "antenna.radiowaves.left.and.right")
+                        Spacer()
+                        if !shareCoordinator.participants.isEmpty {
+                            Text("\(shareCoordinator.participants.count)")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Color.accentColor.opacity(0.18), in: Capsule())
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel("\(shareCoordinator.participants.count) participants")
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(tab == .channels ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -551,130 +563,250 @@ struct ConfigureAgentsViewV2: View {
 
     private var channelsDetail: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Connections").font(.title.bold())
-                Text("Where alerts get delivered, and the devices connected to this Mac.")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Connections").font(.title2.bold())
+                    Text("Where alerts get delivered, and the devices connected to this Mac.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
 
                 connectedDevicesSection
 
                 sharedWithSection
 
-                // Permission Status
-                GroupBox {
-                    HStack(spacing: 8) {
-                        let disp = NotificationDispatcher.shared
-                        switch disp.permissionStatus {
-                        case .authorized, .provisional, .ephemeral:
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                .accessibilityHidden(true)
-                            Text("Notifications allowed").font(.callout)
-                        case .denied:
-                            Image(systemName: "lock.circle.fill").foregroundStyle(.orange)
-                                .accessibilityHidden(true)
-                            Text("Enable notifications in System Settings").font(.callout)
-                            Spacer()
-                            Button {
-                                disp.openSystemSettings()
-                            } label: {
-                                Label("Open Settings", systemImage: "gear")
-                            }
-                            .controlSize(.small)
-                        case .notDetermined:
-                            Image(systemName: "bell.badge.circle").foregroundStyle(.blue)
-                                .accessibilityHidden(true)
-                            Text("Grant permission to receive notifications").font(.callout)
-                            Spacer()
-                            Button("Allow Notifications") {
-                                disp.requestPermission { _ in refreshPermStatus() }
-                            }
-                            .controlSize(.small)
-                        @unknown default:
-                            Text("Unknown").font(.callout)
-                        }
-                        Spacer()
-                    }
-                } label: {
-                    Label("Permission Status", systemImage: "lock.shield")
-                }
+                permissionsCard
 
-                // macOS Notification
-                GroupBox {
-                    HStack {
-                        Toggle("macOS Notification", isOn: Binding(
-                            get: { channelConfig.global.macNotification },
-                            set: { v in
-                                channelConfig.global.macNotification = v
-                                ChannelStore.setGlobal(channelConfig.global)
-                                if v { NotificationDispatcher.shared.requestPermission() }
-                            }
-                        ))
-                        Spacer()
-                        Button("Test") {
-                            ChannelTester.sendTest(channel: .macNotification) { ok, msg in
-                                testResult = (ok, msg)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("macOS", systemImage: "bell.fill")
-                }
+                channelsCard
 
-                // iPhone / iPad (iCloud)
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Toggle("iPhone / iPad", isOn: Binding(
-                                get: { channelConfig.global.cloudkit },
-                                set: { v in
-                                    channelConfig.global.cloudkit = v
-                                    ChannelStore.setGlobal(channelConfig.global)
-                                }
-                            ))
-                            Spacer()
-                            Button("Test") {
-                                ChannelTester.sendTest(channel: .cloudKit) { ok, msg in
-                                    testResult = (ok, msg)
-                                }
-                            }
-                        }
-
-                        Text("Mirror notifications to the DoomCoder companion app on your iPhone or iPad via iCloud. Sign in to the same iCloud account on both devices — no servers, no tokens.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack {
-                            Image(systemName: CloudKitPusher.shared.isReady ? "checkmark.icloud.fill" : "icloud.slash")
-                                .foregroundStyle(CloudKitPusher.shared.isReady ? .green : .secondary)
-                                .accessibilityHidden(true)
-                            Text(CloudKitPusher.shared.isReady
-                                 ? "Connected to iCloud as \(CloudKitPusher.shared.macName)"
-                                 : "Connecting to iCloud…")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            HelpTip("Must show green for iPhone mirroring to work. If it stays grey, make sure you're signed in to iCloud in System Settings and that iCloud Drive is enabled.")
-                            Spacer()
-                        }
-                    }
-                } label: {
-                    Label("iPhone / iPad", systemImage: "iphone.gen3")
-                }
-
-                // Test result
-                if let (ok, msg) = testResult {
-                    HStack {
-                        Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(ok ? .green : .red)
-                            .accessibilityHidden(true)
-                        Text(msg).font(.callout)
-                    }
-                    .padding(.top, 4)
-                }
+                Spacer(minLength: 8)
             }
             .padding(20)
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAddDevice = true
+                } label: {
+                    Label("Add Device…", systemImage: "plus.circle.fill")
+                }
+                .help("Pair a new iPhone or iPad via QR code or invite link")
+                .accessibilityLabel("Add Device")
+            }
+        }
+        .sheet(isPresented: $showAddDevice) {
+            AddDeviceSheet()
+        }
         .task { await shareCoordinator.refresh() }
+    }
+
+    // MARK: - Permissions card (merged "Permission Status" + iCloud readiness)
+
+    private var permissionsCard: some View {
+        ConnectionsCard(
+            title: "Permissions",
+            symbol: "lock.shield"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                permissionsRow(
+                    symbol: "bell.badge.fill",
+                    title: "macOS Notifications",
+                    status: notificationPermissionStatus()
+                ) {
+                    notificationPermissionAction()
+                }
+                Divider().opacity(0.4)
+                permissionsRow(
+                    symbol: "iphone.gen3",
+                    title: "Mirror to iPhone / iPad",
+                    status: iCloudMirrorStatus()
+                ) {
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    private func notificationPermissionStatus() -> (symbol: String, tint: Color, text: String) {
+        switch NotificationDispatcher.shared.permissionStatus {
+        case .authorized, .provisional, .ephemeral:
+            return ("checkmark.circle.fill", .green, "Allowed")
+        case .denied:
+            return ("bell.slash.fill", .orange, "Off — open System Settings")
+        case .notDetermined:
+            return ("questionmark.circle", .blue, "Not asked yet")
+        @unknown default:
+            return ("questionmark.circle", .secondary, "Unknown")
+        }
+    }
+
+    @ViewBuilder
+    private func notificationPermissionAction() -> some View {
+        let status = NotificationDispatcher.shared.permissionStatus
+        switch status {
+        case .denied:
+            Button("Open Settings") { NotificationDispatcher.shared.openSystemSettings() }
+                .controlSize(.small)
+        case .notDetermined:
+            Button("Allow") {
+                NotificationDispatcher.shared.requestPermission { _ in refreshPermStatus() }
+            }
+            .controlSize(.small)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func iCloudMirrorStatus() -> (symbol: String, tint: Color, text: String) {
+        if CloudKitPusher.shared.isReady {
+            return ("checkmark.icloud.fill", .green, "Ready as \(CloudKitPusher.shared.macName)")
+        }
+        return ("icloud.slash", .secondary, "Connecting to iCloud…")
+    }
+
+    @ViewBuilder
+    private func permissionsRow(
+        symbol: String,
+        title: String,
+        status: (symbol: String, tint: Color, text: String),
+        @ViewBuilder action: () -> some View
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(.tint)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                HStack(spacing: 5) {
+                    Image(systemName: status.symbol)
+                        .font(.caption2)
+                        .foregroundStyle(status.tint)
+                        .accessibilityHidden(true)
+                    Text(status.text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            action()
+        }
+    }
+
+    // MARK: - Channels card (per-channel toggles + inline test results)
+
+    private var channelsCard: some View {
+        ConnectionsCard(
+            title: "Notification channels",
+            symbol: "bell.fill"
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                channelRow(
+                    label: "macOS Notification",
+                    symbol: "bell.fill",
+                    binding: Binding(
+                        get: { channelConfig.global.macNotification },
+                        set: { v in
+                            channelConfig.global.macNotification = v
+                            ChannelStore.setGlobal(channelConfig.global)
+                            if v { NotificationDispatcher.shared.requestPermission() }
+                        }
+                    ),
+                    lastTest: macLastTest,
+                    onTest: {
+                        ChannelTester.sendTest(channel: .macNotification) { ok, msg in
+                            recordTest(.macNotification, ok: ok, msg: msg)
+                        }
+                    }
+                )
+                Divider().opacity(0.4)
+                channelRow(
+                    label: "iPhone / iPad (iCloud)",
+                    symbol: "iphone.gen3",
+                    binding: Binding(
+                        get: { channelConfig.global.cloudkit },
+                        set: { v in
+                            channelConfig.global.cloudkit = v
+                            ChannelStore.setGlobal(channelConfig.global)
+                        }
+                    ),
+                    lastTest: cloudkitLastTest,
+                    onTest: {
+                        ChannelTester.sendTest(channel: .cloudKit) { ok, msg in
+                            recordTest(.cloudKit, ok: ok, msg: msg)
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    @State private var macLastTest: TestRecord?
+    @State private var cloudkitLastTest: TestRecord?
+
+    struct TestRecord: Equatable {
+        let ok: Bool
+        let msg: String
+        let ts: Date
+    }
+
+    private func recordTest(_ channel: ChannelTester.Channel, ok: Bool, msg: String) {
+        let rec = TestRecord(ok: ok, msg: msg, ts: Date())
+        withAnimation(DCAnim.micro) {
+            switch channel {
+            case .macNotification: macLastTest = rec
+            case .cloudKit:        cloudkitLastTest = rec
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func channelRow(
+        label: String,
+        symbol: String,
+        binding: Binding<Bool>,
+        lastTest: TestRecord?,
+        onTest: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.body)
+                    .foregroundStyle(.tint)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                Text(label)
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Toggle("", isOn: binding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .accessibilityLabel(label)
+                Button("Send test", action: onTest)
+                    .controlSize(.small)
+            }
+            if let lastTest {
+                HStack(spacing: 6) {
+                    Image(systemName: lastTest.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(lastTest.ok ? .green : .red)
+                        .accessibilityHidden(true)
+                    Text(lastTest.msg)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(lastTest.ts, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.leading, 34)  // aligns with the label column
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.vertical, 8)
     }
 
     // MARK: - Shared with (CKShare participants — different iCloud accounts)
@@ -682,42 +814,69 @@ struct ConfigureAgentsViewV2: View {
     @ViewBuilder
     private var sharedWithSection: some View {
         if !shareCoordinator.participants.isEmpty {
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
+            ConnectionsCard(
+                title: "Shared with (different iCloud)",
+                symbol: "person.2.badge.gearshape"
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(shareCoordinator.participants) { p in
-                        HStack(spacing: 10) {
-                            Image(systemName: "person.crop.circle.badge.checkmark")
-                                .foregroundStyle(.tint)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(p.displayName).font(.callout.weight(.medium))
-                                let sub = [p.email, p.acceptanceStatus]
-                                    .compactMap { $0 }.filter { !$0.isEmpty }
-                                    .joined(separator: " · ")
-                                if !sub.isEmpty {
-                                    Text(sub).font(.caption2).foregroundStyle(.tertiary)
-                                }
-                            }
-                            Spacer()
-                            Button(role: .destructive) {
-                                Task { await shareCoordinator.removeParticipant(id: p.id) }
-                            } label: {
-                                Text("Remove")
-                            }
-                            .controlSize(.small)
-                            .help("Revoke this iCloud account's access")
-                        }
+                        participantRow(p)
                     }
                     Text("People on a different iCloud account who accepted your invite. Removing one revokes their access immediately.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } label: {
-                Label("Shared With", systemImage: "person.2.badge.gearshape")
             }
         }
+    }
+
+    @ViewBuilder
+    private func participantRow(_ p: ShareParticipantInfo) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(p.displayName).font(.callout.weight(.medium))
+                HStack(spacing: 6) {
+                    if let email = p.email, !email.isEmpty {
+                        Text(email).font(.caption).foregroundStyle(.secondary)
+                    }
+                    let status = p.acceptanceStatus
+                    if !status.isEmpty {
+                        participantStatusPill(status)
+                    }
+                }
+            }
+            Spacer()
+            Button(role: .destructive) {
+                Task { await shareCoordinator.removeParticipant(id: p.id) }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Revoke this iCloud account's access")
+            .accessibilityLabel("Remove \(p.displayName)")
+        }
+    }
+
+    @ViewBuilder
+    private func participantStatusPill(_ status: String) -> some View {
+        let isPending = status.lowercased().contains("pending")
+        let tint: Color = isPending ? .orange : .green
+        Text(status.capitalized)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(tint.opacity(0.15), in: Capsule())
+            .foregroundStyle(tint)
+            .overlay(
+                Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 0.5)
+            )
     }
 
     // MARK: - Connected devices (companion presence)
@@ -729,106 +888,112 @@ struct ConfigureAgentsViewV2: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let store = CompanionStatusStore.shared
             let devices = store.devices
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
-                    if devices.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: "iphone.slash")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            Text("No iPhone or iPad connected yet")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 10) {
-                            Button {
-                                if let url = URL(string: Self.companionAppStoreURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Label("Set up iPhone or iPad", systemImage: "arrow.down.app.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-
-                            Button {
-                                if let url = URL(string: Self.companionHelpURL) {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            } label: {
-                                Text("How it works")
-                            }
-                            .buttonStyle(.link)
-                            .controlSize(.small)
-                        }
-                    } else {
+            ConnectionsCard(
+                title: "Devices on your iCloud",
+                symbol: "iphone.gen3"
+            ) {
+                if devices.isEmpty {
+                    emptyDevicesState
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(devices, id: \.deviceId) { device in
-                            let connected = context.date.timeIntervalSince(device.lastSeen) < CompanionStatusStore.connectedThreshold
-                            HStack(spacing: 10) {
-                                Image(systemName: connected ? "circle.fill" : "circle")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(connected ? Color.green : .secondary)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(device.displayName.isEmpty ? "iPhone or iPad" : device.displayName)
-                                        .font(.callout.weight(.medium))
-                                    let detail = [device.model, device.systemVersion]
-                                        .filter { !$0.isEmpty }
-                                        .joined(separator: " · ")
-                                    if !detail.isEmpty {
-                                        Text(detail)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                                Spacer()
-                                Text(connected ? "Connected" : "Last seen \(Self.relativeTime(device.lastSeen, now: context.date))")
-                                    .font(.caption)
-                                    .foregroundStyle(connected ? Color.green : .secondary)
-                                if !connected {
-                                    Button {
-                                        forgetDevice(device.deviceId)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Forget this device")
-                                    .accessibilityLabel("Forget \(device.name.isEmpty ? "device" : device.name)")
-                                }
-                            }
-                            .contentShape(Rectangle())
-                            .contextMenu {
-                                Button("Forget Device", systemImage: "trash") {
-                                    forgetDevice(device.deviceId)
-                                }
-                            }
+                            deviceRow(device, now: context.date)
                         }
                     }
-                    Divider().padding(.vertical, 2)
-                    Button {
-                        showAddDevice = true
-                    } label: {
-                        Label("Add Device…", systemImage: "plus.circle.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    Text("Connect an iPhone or iPad — even on a different iCloud account — by scanning a QR code or opening a share link.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } label: {
-                Label("Connected Devices", systemImage: "iphone.gen3")
             }
-            .sheet(isPresented: $showAddDevice) {
-                AddDeviceSheet()
+        }
+    }
+
+    @ViewBuilder
+    private var emptyDevicesState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "iphone.slash")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text("No iPhone or iPad connected yet")
+                    .font(.callout.weight(.medium))
+                Spacer()
+            }
+            Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button {
+                    if let url = URL(string: Self.companionAppStoreURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Label("Set up iPhone or iPad", systemImage: "arrow.down.app.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button {
+                    if let url = URL(string: Self.companionHelpURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Text("How it works")
+                }
+                .buttonStyle(.link)
+                .controlSize(.small)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func deviceRow(_ device: CompanionStatusRecord, now: Date) -> some View {
+        let connected = now.timeIntervalSince(device.lastSeen) < CompanionStatusStore.connectedThreshold
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: connected ? "circle.fill" : "circle")
+                .font(.system(size: 9))
+                .foregroundStyle(connected ? .green : .secondary)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.displayName.isEmpty ? "iPhone or iPad" : device.displayName)
+                    .font(.callout.weight(.medium))
+                let detail = [device.model, device.systemVersion]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " · ")
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+            if connected {
+                Label("Connected", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            } else {
+                Text("Last seen \(Self.relativeTime(device.lastSeen, now: now))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !connected {
+                Button {
+                    forgetDevice(device.deviceId)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Forget this device")
+                .accessibilityLabel("Forget \(device.displayName.isEmpty ? "device" : device.displayName)")
+            }
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Forget Device", systemImage: "trash") {
+                forgetDevice(device.deviceId)
             }
         }
     }
@@ -1517,75 +1682,203 @@ private final class EnvelopeBox: @unchecked Sendable {
     }
 }
 
+// MARK: - ConnectionsCard (iOS 26-style grouped card)
+
+/// A single grouped section used in the Connections tab. Title + symbol header,
+/// then a thin-material body. Matches the macOS 26 Settings aesthetic (similar
+/// to `InnerCard` in `PanelRootView` but with a labeled header).
+struct ConnectionsCard<Content: View>: View {
+    let title: String
+    let symbol: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 4)
+
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+            )
+        }
+    }
+}
+
 // MARK: - Add Device (CKShare pairing)
 
 /// Sheet shown from Connections ▸ Add Device. Creates/fetches the Mac's
 /// zone-wide CKShare and presents a QR code + copy-link so an iPhone/iPad — on
 /// the SAME or a DIFFERENT iCloud account — can join. The link is a secret;
 /// participants can be revoked from the Connections list.
+///
+/// macOS 26 design: native window toolbar (Cancel / Share menu) and a thin-
+/// material body. QR is wrapped in a concentric rounded rectangle frame.
 private struct AddDeviceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var coordinator = MacShareCoordinator.shared
     @State private var copied = false
+    @State private var showParticipants = false
 
     var body: some View {
-        VStack(spacing: 16) {
-            Label("Add Device", systemImage: "qrcode")
-                .font(.title2.bold())
-                .labelStyle(.titleAndIcon)
+        VStack(spacing: 0) {
+            content
+                .padding(24)
+                .frame(minWidth: 360, idealWidth: 400, minHeight: 480)
+        }
+        .background(.regularMaterial)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                if let url = coordinator.shareURL {
+                    ShareLink(item: url) {
+                        Label("Share…", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share the invite link via AirDrop, Messages, Mail, etc.")
+                }
+            }
+        }
+        .task { await coordinator.ensureShare() }
+    }
 
-            if coordinator.isWorking && coordinator.shareURL == nil {
-                ProgressView("Preparing invite…")
-                    .frame(maxWidth: .infinity, minHeight: 220)
-            } else if let url = coordinator.shareURL {
+    @ViewBuilder
+    private var content: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 10) {
+                Image(systemName: "qrcode")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Device")
+                        .font(.title2.bold())
+                    Text("Scan with iPhone or iPad")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            qrBlock
+
+            if !coordinator.participants.isEmpty {
+                participantsDisclosure
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var qrBlock: some View {
+        if coordinator.isWorking && coordinator.shareURL == nil {
+            VStack(spacing: 10) {
+                ProgressView()
+                Text("Preparing invite…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 240)
+        } else if let url = coordinator.shareURL {
+            VStack(spacing: 12) {
                 if let qr = Self.qrImage(from: url.absoluteString) {
                     Image(nsImage: qr)
                         .interpolation(.none)
                         .resizable()
                         .frame(width: 220, height: 220)
+                        .padding(8)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
+                        )
                         .accessibilityLabel("Pairing QR code")
                 }
                 Text("On your iPhone or iPad: Dashboard ▸ Add Device ▸ Different iCloud ▸ Scan QR Code. Or send the link below. Works even if the device uses a different iCloud account.")
-                    .font(.callout)
+                    .font(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack {
-                    Button {
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(url.absoluteString, forType: .string)
-                        copied = true
-                    } label: {
-                        Label(copied ? "Link Copied" : "Copy Invite Link",
-                              systemImage: copied ? "checkmark" : "doc.on.doc")
+                Button {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(url.absoluteString, forType: .string)
+                    HapticsTap()
+                    withAnimation(DCAnim.micro) { copied = true }
+                    Task {
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation(DCAnim.micro) { copied = false }
                     }
-                    ShareLink(item: url) {
-                        Label("Share…", systemImage: "square.and.arrow.up")
-                    }
+                } label: {
+                    Label(copied ? "Link Copied" : "Copy Invite Link",
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .frame(maxWidth: .infinity)
                 }
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.icloud")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(coordinator.lastError ?? "Couldn't prepare the invite.")
-                        .font(.callout)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                    Button("Try Again") { Task { await coordinator.ensureShare() } }
-                }
-                .frame(maxWidth: .infinity, minHeight: 220)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-
-            Divider()
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: "exclamationmark.icloud")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text(coordinator.lastError ?? "Couldn't prepare the invite.")
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                Button("Try Again") { Task { await coordinator.ensureShare() } }
+            }
+            .frame(maxWidth: .infinity, minHeight: 240)
         }
-        .padding(24)
-        .frame(width: 360)
-        .task { await coordinator.ensureShare() }
+    }
+
+    @ViewBuilder
+    private var participantsDisclosure: some View {
+        DisclosureGroup(isExpanded: $showParticipants) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(coordinator.participants) { p in
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.crop.circle")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Text(p.displayName)
+                            .font(.callout)
+                        let status = p.acceptanceStatus
+                        if !status.isEmpty {
+                            Text(status.capitalized)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Label("Participants (\(coordinator.participants.count))", systemImage: "person.2")
+                .font(.callout.weight(.medium))
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     /// Generates a crisp QR code NSImage for `string` using CoreImage.
@@ -1601,4 +1894,10 @@ private struct AddDeviceSheet: View {
         return NSImage(cgImage: cg, size: NSSize(width: scaled.extent.width,
                                                  height: scaled.extent.height))
     }
+}
+
+/// Tiny wrapper for system tap feedback. NSE-only haptics not used here; we
+/// rely on the system sound + button visual change.
+private func HapticsTap() {
+    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
 }

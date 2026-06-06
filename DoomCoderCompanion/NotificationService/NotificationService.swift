@@ -43,13 +43,14 @@ class NotificationService: UNNotificationServiceExtension {
             return val
         }
 
-        // v8 desiredKeys: agent, title, body, sessionKey, phase
+        // v8 desiredKeys: agent, title, body, sessionKey, phase, macName
         // title + body are pre-computed by the Mac via NotificationCopy.
         let richTitle  = field("title")
         let richBody   = field("body")
         let agentRaw   = field("agent")
         let phaseRaw   = field("phase")
         let sessionKey = field("sessionKey")
+        let macName    = field("macName")
 
         // ── Title / body resolution ─────────────────────────────────────────
         // With v8 subscriptions APNs delivers the Mac-rendered title and body
@@ -92,7 +93,14 @@ class NotificationService: UNNotificationServiceExtension {
             }
         }
 
-        // Subtitle is intentionally NOT set — users found "On <MacName>" noisy.
+        // ── Subtitle ("On <MacName>") ────────────────────────────────────────
+        // Restored per user request. Helps disambiguate when more than one Mac
+        // is paired. Set when we have a macName AND the system didn't already
+        // pre-populate a subtitle (e.g. via aps.alert.subtitle or a previous
+        // local-notification pass through the same device).
+        if let mac = macName, !mac.isEmpty, mutable.subtitle.isEmpty {
+            mutable.subtitle = "On \(mac)"
+        }
 
         // ── Thread identifier ────────────────────────────────────────────────
         if let sk = sessionKey { mutable.threadIdentifier = sk }

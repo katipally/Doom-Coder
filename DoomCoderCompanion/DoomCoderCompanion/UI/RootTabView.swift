@@ -14,6 +14,7 @@ struct RootTabView: View {
     @State private var showWelcome: Bool = {
         AppGroupCache.defaults.object(forKey: WelcomeView.shownKey) == nil
     }()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -41,5 +42,23 @@ struct RootTabView: View {
                 showWelcome = false
             }
         }
+        .task {
+            // Cold-launch check: surface a non-blocking hint on Dashboard if the
+            // user previously denied notifications. We never re-prompt the iOS
+            // dialog (Apple disallows it) — the banner deep-links to Settings.
+            await refreshNotificationHint()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // When the user returns from System Settings, re-check and hide
+            // the banner if they re-enabled notifications.
+            if newPhase == .active {
+                Task { await refreshNotificationHint() }
+            }
+        }
+    }
+
+    private func refreshNotificationHint() async {
+        let denied = await NotificationPermissionCenter.isDenied()
+        router.showsNotificationDeniedHint = denied
     }
 }

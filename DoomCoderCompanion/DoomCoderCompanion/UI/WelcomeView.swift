@@ -43,7 +43,16 @@ struct WelcomeView: View {
                 }
                 .padding(.horizontal, 4)
 
-                Button(action: onDismiss) {
+                Button {
+                    Haptics.tap()
+                    onDismiss()
+                    // Trigger the iOS permission prompt from this user-initiated
+                    // moment. Safe to call — the helper no-ops if already
+                    // determined, and never blocks the dismiss.
+                    Task {
+                        await NotificationPermissionCenter.requestIfNeeded()
+                    }
+                } label: {
                     Text("Get Started")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
