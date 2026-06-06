@@ -1,7 +1,13 @@
 // CompanionSyncEngine.swift — DoomCoder Companion
-// Stripped-down read-only CloudKit sync engine for iOS companion.
-// Fetches: NotificationLog, MacStatus, AgentConfig, AgentIcon.
-// One write capability: Send Test notification.
+// Full bidirectional CloudKit sync engine for the iOS companion, running two
+// CKSyncEngines (private DB = same-Apple-ID Macs, shared DB = cross-account
+// Macs after CKShare accept).
+//   Fetches:  MacStatus, NotificationLog, AgentConfig, AgentIcon.
+//   Produces: ControlCommand (sleep options, master toggle, snooze, .check),
+//             CompanionStatus (device-presence heartbeat).
+// All writes flow through the engines via state.add(pendingRecordZoneChanges:)
+// + nextRecordZoneChangeBatch — never raw CKModifyRecordsOperation — so the
+// engine owns change tags, batching, and retries.
 
 import Foundation
 import CloudKit
@@ -54,6 +60,88 @@ final class CompanionSyncEngine: NSObject {
     /// The database to WRITE a record into for a given Mac (presence, commands).
     private func database(forMacId macId: String) -> CKDatabase {
         (macScopes[macId] == .sharedDB) ? sharedDB : privateDB
+    }
+
+    /// The CKSyncEngine that drives a given Mac's zone. All companion writes
+    /// (ControlCommand, CompanionStatus presence) flow through the engine —
+    /// never raw `CKModifyRecordsOperation` — so the engine owns change tags,
+    /// batching, and retries. Same-Apple-ID Macs live in our PRIVATE database
+    /// (we are the same iCloud owner); cross-account Macs live in the SHARED
+    /// database after we accept their CKShare (participant with .readWrite).
+    private func engine(forMacId macId: String) -> CKSyncEngine? {
+        (macScopes[macId] == .sharedDB) ? sharedEngine : privateEngine
+    }
+
+    // MARK: - Outbound payloads (read by the engine's batch builder)
+
+    /// In-flight ControlCommand payloads, keyed by recordName (unique per
+    /// commandId). Mirrors the Mac's `pendingNotificationLogs`/`buildRecord`.
+    @ObservationIgnored private var pendingCommands: [String: (rec: ControlCommandRecord, zid: CKRecordZone.ID)] = [:]
+    /// In-flight CompanionStatus presence payloads. Keyed by
+    /// "<zoneName>|<recordName>" because the SAME recordName
+    /// ("CompanionStatus-<deviceId>") fans out to every connected Mac's zone.
+    @ObservationIgnored private var pendingPresence: [String: (rec: CompanionStatusRecord, zid: CKRecordZone.ID)] = [:]
+    /// Latest known SERVER CKRecord for each presence record (composite-keyed).
+    /// CompanionStatus is a per-device singleton that already exists on the
+    /// server (created by an earlier run / the pre-engine raw-write path), so a
+    /// fresh engine state would otherwise try to INSERT it and hit
+    /// "record to insert already exists" (CKError 14/2004) forever. We rebuild
+    /// presence on this base so the recordChangeTag is preserved — mirroring the
+    /// Mac's `ServerRecordCache`. Populated from fetches, successful saves, and
+    /// the serverRecord returned on a conflict.
+    @ObservationIgnored private var presenceServerRecords: [String: CKRecord] = [:]
+    /// Bounded per-record conflict-retry counter (reset on success) so a
+    /// pathological repeated serverRecordChanged can never spin forever.
+    @ObservationIgnored private var presenceConflictAttempts: [String: Int] = [:]
+    private static let maxPresenceConflictRetries = 3
+
+    private static func presenceKey(zoneName: String, recordName: String) -> String {
+        "\(zoneName)|\(recordName)"
+    }
+
+    /// Builds the CKRecord for a queued save. Commands are unique creates (no
+    /// base). Presence is a singleton rebuilt on its last known server record so
+    /// the change tag is preserved across saves and engine-state wipes.
+    @MainActor
+    private func buildRecord(for recordID: CKRecord.ID) -> CKRecord? {
+        let name = recordID.recordName
+        if name.hasPrefix("ControlCommand-") {
+            return pendingCommands[name]?.rec.toCKRecord(in: recordID.zoneID)
+        }
+        if name.hasPrefix("CompanionStatus-") {
+            let key = Self.presenceKey(zoneName: recordID.zoneID.zoneName, recordName: name)
+            return pendingPresence[key]?.rec.toCKRecord(in: recordID.zoneID, base: presenceServerRecords[key])
+        }
+        return nil
+    }
+
+    /// Caches the latest server record for a presence singleton so the next
+    /// publish carries the correct change tag.
+    @MainActor
+    private func notePresenceServerRecord(_ record: CKRecord) {
+        guard record.recordType == CompanionStatusRecord.recordType else { return }
+        let key = Self.presenceKey(zoneName: record.recordID.zoneID.zoneName,
+                                   recordName: record.recordID.recordName)
+        presenceServerRecords[key] = record
+    }
+
+    /// Drops the cached server base for a presence record so the next send is a
+    /// fresh INSERT (used when the server reports the record no longer exists).
+    @MainActor
+    private func dropPresenceBase(for recordID: CKRecord.ID) {
+        let key = Self.presenceKey(zoneName: recordID.zoneID.zoneName,
+                                   recordName: recordID.recordName)
+        presenceServerRecords[key] = nil
+    }
+
+    /// Drops an in-flight payload once the engine confirms the save.
+    @MainActor
+    private func clearPending(for recordID: CKRecord.ID) {
+        let name = recordID.recordName
+        pendingCommands.removeValue(forKey: name)
+        let key = Self.presenceKey(zoneName: recordID.zoneID.zoneName, recordName: name)
+        pendingPresence.removeValue(forKey: key)
+        presenceConflictAttempts[key] = nil
     }
 
     /// Repeating fetch while the app is foregrounded. Silent CloudKit pushes are
@@ -194,8 +282,11 @@ final class CompanionSyncEngine: NSObject {
     }
 
     func persistEngineStateNow() {
-        sharedDefaults.synchronize()
-        print("[CompanionSyncEngine] persistEngineStateNow: shared defaults synchronized")
+        // No-op kept for call-site compatibility. The engine persists its state
+        // serialization to the app-group defaults on every `.stateUpdate`, and
+        // UserDefaults flushes on its own. We must NOT call `synchronize()` — on
+        // an app-group suite it triggers the "kCFPreferencesAnyUser with a
+        // container ... detaching from cfprefsd" error and is a deprecated no-op.
     }
 
     // MARK: - Mac zone cache (participant addressing)
@@ -230,9 +321,17 @@ final class CompanionSyncEngine: NSObject {
     /// addressed back into the correct database/zone.
     private func noteMacZone(macId: String, zoneID: CKRecordZone.ID, scope: DBScope) {
         guard macZones[macId] != zoneID || macScopes[macId] != scope else { return }
+        let isNewlyDiscovered = (macZones[macId] == nil)
         macZones[macId] = zoneID
         macScopes[macId] = scope
         saveMacZones()
+        // Device acknowledgment, fast: the moment we learn a Mac's zone, push our
+        // presence so the Mac shows this device as connected within seconds —
+        // instead of waiting for the next 240 s heartbeat. The 240 s heartbeat
+        // remains the steady-state keep-alive (inside the Mac's 600 s window).
+        if isNewlyDiscovered {
+            Task { @MainActor [weak self] in await self?.publishCompanionStatus() }
+        }
     }
 
     /// The shared-zone ID for a given Mac, if known.
@@ -310,14 +409,25 @@ final class CompanionSyncEngine: NSObject {
         #endif
         let envKey = "ck.ios.environment.v2"
         let previousEnv = sharedDefaults.string(forKey: envKey)
-        if previousEnv != currentEnv {
-            print("[CompanionSyncEngine] env migration: wiping stale state (\(previousEnv ?? "nil") → \(currentEnv))")
+        // Local-state reset generation (server-reset recovery): after a CloudKit
+        // "Reset Development Environment" or any server-side wipe, the persisted
+        // per-scope engine state + serverRecords go stale (deleted zones/records,
+        // expired tokens). Bumping this generation forces ONE clean local wipe so
+        // both engines re-fetch from zero — without requiring a reinstall.
+        let resetGenKey = "ck.ios.localResetGeneration"
+        let currentResetGen = 2
+        let needsGenWipe = sharedDefaults.integer(forKey: resetGenKey) != currentResetGen
+
+        if previousEnv != currentEnv || needsGenWipe {
+            let reason = needsGenWipe ? "reset-gen \(currentResetGen)" : "env \(previousEnv ?? "nil") → \(currentEnv)"
+            print("[CompanionSyncEngine] wiping stale local sync state (\(reason))")
             sharedDefaults.removeObject(forKey: Self.engineStateKey(.privateDB))
             sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
             serverRecords.clear()
             MacStatusStore.shared.clear()
             sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
             sharedDefaults.set(currentEnv, forKey: envKey)
+            sharedDefaults.set(currentResetGen, forKey: resetGenKey)
         }
 
         func restore(_ scope: DBScope) -> CKSyncEngine.State.Serialization? {
@@ -379,7 +489,6 @@ final class CompanionSyncEngine: NSObject {
     func forceFetchAll() async {
         sharedDefaults.removeObject(forKey: Self.engineStateKey(.privateDB))
         sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
-        sharedDefaults.synchronize()
         privateEngine = nil
         sharedEngine = nil
         zoneReady = false
@@ -473,51 +582,16 @@ final class CompanionSyncEngine: NSObject {
         await fetchChanges()
     }
 
-    // MARK: - Send Test Notification
+    // MARK: - Connection check (diagnostic)
 
-    func sendTestNotification() async {
-        guard let primary = MacStatusStore.shared.primary else {
-            print("[CompanionSyncEngine] sendTestNotification: no primary Mac found")
-            return
-        }
-        guard let zid = zoneID(forMacId: primary.macId) else {
-            print("[CompanionSyncEngine] sendTestNotification: no zone for \(primary.macId)")
-            return
-        }
-
-        let testRecord = NotificationLogRecord(
-            notifId: UUID().uuidString,
-            sessionKey: "test-\(UUID().uuidString)",
-            macId: primary.macId,
-            macName: primary.name,
-            agent: "claude",
-            phase: NormalizedEventPhase.permissionNeeded.rawValue,
-            rawEvent: "test",
-            title: "Test Notification",
-            body: "Sent from DoomCoder Companion iOS",
-            channel: "iOS",
-            success: true,
-            ts: Date()
-        )
-        
-        let ckRecord = testRecord.toCKRecord(in: zid)
-
-        let op = CKModifyRecordsOperation(recordsToSave: [ckRecord], recordIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        op.savePolicy = .allKeys
-        
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            op.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    print("[CompanionSyncEngine] Test notification sent successfully")
-                case .failure(let error):
-                    print("[CompanionSyncEngine] Test notification failed: \(error)")
-                }
-                cont.resume()
-            }
-            database(forMacId: primary.macId).add(op)
-        }
+    /// Fires a `.check` ControlCommand at the primary Mac, which rings a local
+    /// notification ON THE MAC and acks via MacStatus — proving the iOS→Mac link
+    /// end-to-end. Returns the commandId (for ack reconciliation) or nil. Unlike
+    /// the old "test notification" (a NotificationLog that rang the iPhone itself),
+    /// this is a real iOS→Mac message.
+    @discardableResult
+    func sendConnectionCheck() async -> String? {
+        await sendControlCommand(verb: .check, value: "")
     }
 
     // MARK: - Remote control (iOS → Mac)
@@ -577,6 +651,10 @@ final class CompanionSyncEngine: NSObject {
             print("[CompanionSyncEngine] sendControlCommand: no zone for \(primary.macId)")
             return nil
         }
+        guard let eng = engine(forMacId: primary.macId) else {
+            print("[CompanionSyncEngine] sendControlCommand: no engine for \(primary.macId)")
+            return nil
+        }
         let command = ControlCommandRecord(
             targetMacId: primary.macId,
             issuerDeviceId: Self.issuerDeviceId,
@@ -584,26 +662,22 @@ final class CompanionSyncEngine: NSObject {
             value: value,
             clientVersion: Self.clientVersion
         )
-        let op = CKModifyRecordsOperation(recordsToSave: [command.toCKRecord(in: zid)],
-                                          recordIDsToDelete: nil)
-        op.qualityOfService = .userInitiated
-        op.savePolicy = .allKeys
+        // Route through the engine: queue the payload, register the pending
+        // change, and flush. The returned commandId means "queued" (not yet
+        // server-acked) — callers (MacControlView) reconcile via the Mac's
+        // MacStatus.lastAppliedCommandId ack-poll + timeout. A genuine send
+        // failure surfaces in handleEvent(.sentRecordZoneChanges).
+        let id = command.recordID(in: zid)
+        pendingCommands[id.recordName] = (command, zid)
+        eng.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
         SyncTelemetry.shared.record(.localEdit, side: .ios,
                                     recordType: ControlCommandRecord.recordType,
                                     detail: "\(verb.rawValue)=\(value)")
-        return await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
-            op.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    print("[CompanionSyncEngine] control command sent: \(verb.rawValue)=\(value)")
-                    cont.resume(returning: command.commandId)
-                case .failure(let error):
-                    print("[CompanionSyncEngine] control command failed: \(error)")
-                    cont.resume(returning: nil)
-                }
-            }
-            database(forMacId: primary.macId).add(op)
-        }
+        // Task.detached so a kick reached from any delegate-callback context can
+        // never await re-entrantly into CKSyncEngine.
+        Task.detached { try? await eng.sendChanges() }
+        print("[CompanionSyncEngine] control command queued: \(verb.rawValue)=\(value)")
+        return command.commandId
     }
 
     // MARK: - Presence heartbeat (iOS → Mac)
@@ -632,38 +706,20 @@ final class CompanionSyncEngine: NSObject {
     /// Re-entrancy guard: only one presence save is in-flight at a time.
     @ObservationIgnored private var isPublishingPresence = false
 
-    /// Writes a `CompanionStatusRecord` describing this device. Uses a direct
-    /// `CKModifyRecordsOperation` (like `sendControlCommand`) rather than the
-    /// sync engine, since the companion is a read-only sync peer
-    /// (`nextRecordZoneChangeBatch` returns nil). The cached server record is
-    /// reused so the change tag is preserved (avoids CKError 14/2004). On a
-    /// tag conflict the server record is cached and a single retry is scheduled,
-    /// so a wiped cache (e.g. after env migration) self-heals.
-    ///
-    /// The retry is now inline (not a spawned Task) so the re-entrancy guard
-    /// remains held during the retry window — eliminating the race where two
-    /// concurrent failure-paths each spawned their own 3-second retry Task.
-    func publishCompanionStatus(allowRetry: Bool = true) async {
+    /// Publishes a `CompanionStatusRecord` describing this device into every
+    /// connected Mac's zone, through the CKSyncEngine (the companion is a full
+    /// producer). The engine owns change tags, batching, and retries; a
+    /// stale/missing tag surfaces once as serverRecordChanged and is re-queued in
+    /// handleEvent(.sentRecordZoneChanges). The `isPublishingPresence` guard keeps
+    /// one publish in flight at a time.
+    func publishCompanionStatus() async {
         guard accountAvailable, !isPublishingPresence else { return }
         isPublishingPresence = true
-        let ok = await performPresenceSave()
-        if !ok && allowRetry {
-            // Single inline retry after 5 s — flag stays set, no concurrent saves.
-            try? await Task.sleep(for: .seconds(5))
-            if !Task.isCancelled {
-                _ = await performPresenceSave()
-            }
-        }
+        await performPresenceSave()
         isPublishingPresence = false
     }
 
-    /// Per-zone server CompanionStatus record (keyed by zone name, which is
-    /// unique per Mac). Preserves recordChangeTag across the multiple Macs we
-    /// publish presence to — the shared `serverRecords` cache keys by recordName
-    /// only, which would collide across zones (same "CompanionStatus-<id>").
-    @ObservationIgnored private var presenceBaseByZone: [String: CKRecord] = [:]
-
-    private func performPresenceSave() async -> Bool {
+    private func performPresenceSave() async {
         // Publish presence into EVERY connected Mac's zone so each Mac shows this
         // device as connected — not just the active one. Until a Mac is known
         // (share accepted / MacStatus fetched), there's nowhere to write.
@@ -671,7 +727,7 @@ final class CompanionSyncEngine: NSObject {
             guard let zid = zoneID(forMacId: macId) else { return nil }
             return (macId, zid)
         }
-        guard !targets.isEmpty else { return true }
+        guard !targets.isEmpty else { return }
 
         let device = UIDevice.current
         // `device.name` is generic ("iPhone") since iOS 16 without an
@@ -690,41 +746,23 @@ final class CompanionSyncEngine: NSObject {
         SyncTelemetry.shared.record(.localEdit, side: .ios,
                                     recordType: CompanionStatusRecord.recordType,
                                     detail: "presence heartbeat ×\(targets.count)")
-        var allOK = true
-        for (macId, zid) in targets {
-            let ok = await savePresence(status, macId: macId, zid: zid)
-            if !ok { allOK = false }
-        }
-        return allOK
-    }
 
-    private func savePresence(_ status: CompanionStatusRecord,
-                              macId: String, zid: CKRecordZone.ID) async -> Bool {
-        let zoneName = zid.zoneName
-        let base = presenceBaseByZone[zoneName]
-        let op = CKModifyRecordsOperation(recordsToSave: [status.toCKRecord(in: zid, base: base)],
-                                          recordIDsToDelete: nil)
-        op.qualityOfService = .utility
-        op.savePolicy = .allKeys
-        op.perRecordSaveBlock = { [weak self] _, result in
-            switch result {
-            case .success(let saved):
-                Task { @MainActor [weak self] in self?.presenceBaseByZone[zoneName] = saved }
-            case .failure(let error):
-                // Cache the server's record so the next write rebuilds on the
-                // correct change tag instead of looping on 14/2004.
-                if let server = (error as? CKError)?.serverRecord {
-                    Task { @MainActor [weak self] in self?.presenceBaseByZone[zoneName] = server }
-                }
-            }
+        // Route each zone's save through its Mac's engine. The engine owns the
+        // change tag (no manual base) — a stale/missing tag surfaces once as
+        // serverRecordChanged in handleEvent(.sentRecordZoneChanges) and is
+        // re-queued there. Flush each distinct engine once.
+        var flushPrivate = false
+        var flushShared = false
+        for (macId, zid) in targets {
+            guard let eng = engine(forMacId: macId) else { continue }
+            let id = status.recordID(in: zid)
+            pendingPresence[Self.presenceKey(zoneName: zid.zoneName, recordName: id.recordName)] = (status, zid)
+            eng.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
+            if eng === sharedEngine { flushShared = true } else { flushPrivate = true }
         }
-        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            op.modifyRecordsResultBlock = { result in
-                if case .success = result { cont.resume(returning: true) }
-                else { cont.resume(returning: false) }
-            }
-            database(forMacId: macId).add(op)
-        }
+        if flushPrivate, let eng = privateEngine { Task.detached { try? await eng.sendChanges() } }
+        if flushShared, let eng = sharedEngine { Task.detached { try? await eng.sendChanges() } }
+        // Queued through the engine; delivery + retry are the engine's job.
     }
 
     func resetLocalSyncState() async {
@@ -742,8 +780,7 @@ final class CompanionSyncEngine: NSObject {
         sharedDefaults.removeObject(forKey: Self.engineStateKey(.sharedDB))
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v1")
         sharedDefaults.removeObject(forKey: "ck.ios.environment.v2")
-        sharedDefaults.synchronize()
-        
+
         await setupSyncEngine()
         print("[CompanionSyncEngine] resetLocalSyncState: done")
     }
@@ -804,13 +841,12 @@ final class CompanionSyncEngine: NSObject {
                 }
 
             case CompanionStatusRecord.recordType:
-                // Our own heartbeat fetched back — cache its server record (keyed
-                // per zone) so the next publish to that Mac carries the correct
-                // change tag even after a local cache wipe.
-                if record.recordID.recordName == "CompanionStatus-\(Self.issuerDeviceId)" {
-                    self.presenceBaseByZone[record.recordID.zoneID.zoneName] = record
-                }
-                
+                // Our own heartbeat fetched back — cache its server record so the
+                // next presence publish to that zone carries the correct change
+                // tag (avoids the insert-vs-update 14/2004 conflict after an
+                // engine-state wipe).
+                self.notePresenceServerRecord(record)
+
             case "AgentConfig":
                 // Custom record type: { macId, agents, installedAgents, statuses, updatedAt, schemaVersion }
                 guard let r = AgentConfigRecord(record) else { return }
@@ -958,6 +994,12 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         case .sentRecordZoneChanges(let e):
             for save in e.savedRecords {
                 SyncTelemetry.shared.record(.sent, side: .ios, recordType: save.recordType)
+                await MainActor.run {
+                    // Cache the just-saved server record (carries the fresh tag)
+                    // so the next presence heartbeat updates instead of inserts.
+                    self.notePresenceServerRecord(save)
+                    self.clearPending(for: save.recordID)
+                }
             }
             for fail in e.failedRecordSaves {
                 let cke = fail.error
@@ -965,6 +1007,27 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
                                             recordType: fail.record.recordType,
                                             detail: "\(cke.code.rawValue): \(cke.localizedDescription)")
                 print("[CompanionSyncEngine] save failed on \(fail.record.recordID.recordName): \(cke.localizedDescription)")
+                let recordID = fail.record.recordID
+                switch cke.code {
+                case .serverRecordChanged:
+                    // "record to insert already exists" (14/2004): the record
+                    // exists server-side but this engine doesn't know its tag
+                    // (fresh engine state). Adopt the server record so the rebuild
+                    // carries the right tag, then re-queue (bounded).
+                    if let server = cke.serverRecord {
+                        await MainActor.run { self.notePresenceServerRecord(server) }
+                    }
+                    await self.requeueAfterConflict(recordID, on: syncEngine)
+                case .unknownItem:
+                    // "recordChangeTag specified, but record not found" (11/2003):
+                    // our cached base points at a record the server no longer has
+                    // (e.g. after a dev-environment reset). Drop the stale base so
+                    // the next send is a fresh insert, then re-queue.
+                    await MainActor.run { self.dropPresenceBase(for: recordID) }
+                    await self.requeueAfterConflict(recordID, on: syncEngine)
+                default:
+                    break
+                }
             }
 
         default:
@@ -972,11 +1035,44 @@ extension CompanionSyncEngine: CKSyncEngineDelegate {
         }
     }
 
+    /// Re-adds a failed-on-conflict record to the engine's pending set and kicks
+    /// a flush. MUST detach the kick — this runs inside a delegate callback and
+    /// awaiting into the engine from there is a fatal CloudKit misuse.
+    nonisolated private func requeueAfterConflict(_ recordID: CKRecord.ID, on engine: CKSyncEngine) async {
+        let shouldRequeue = await MainActor.run { () -> Bool in
+            let name = recordID.recordName
+            // Commands are unique creates (UUID commandId) — a create-conflict is
+            // effectively impossible, so never re-queue them (avoids any loop).
+            if name.hasPrefix("ControlCommand-") { return false }
+            let key = Self.presenceKey(zoneName: recordID.zoneID.zoneName, recordName: name)
+            guard self.pendingPresence[key] != nil else { return false }
+            // We just cached the server record, so the rebuild will carry the
+            // correct tag and the retry should land. Bound the attempts so an
+            // unexpected repeated conflict can't spin; the 240 s heartbeat is the
+            // ultimate backstop. Counter resets on a successful save.
+            let attempts = self.presenceConflictAttempts[key, default: 0]
+            guard attempts < Self.maxPresenceConflictRetries else { return false }
+            self.presenceConflictAttempts[key] = attempts + 1
+            return true
+        }
+        guard shouldRequeue else { return }
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+        Task.detached { try? await engine.sendChanges() }
+    }
+
     nonisolated func nextRecordZoneChangeBatch(
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
-        // Read-only companion: no pending changes
-        return nil
+        // Companion is a full producer now: ControlCommand + CompanionStatus
+        // presence are sent through the engine. Each engine pulls only its own
+        // scoped pending changes; the batch closure serializes the matching
+        // in-flight payload (built fresh — the engine owns the change tag).
+        let scope = context.options.scope
+        let pending = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
+        guard !pending.isEmpty else { return nil }
+        return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+            await self.buildRecord(for: recordID)
+        }
     }
 }

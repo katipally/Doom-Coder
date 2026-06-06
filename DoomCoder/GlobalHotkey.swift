@@ -161,7 +161,6 @@ final class GlobalHotkey {
         } else {
             conflictDetected = false
         }
-        _ = hkID
     }
 
     func unregister() {

@@ -20,7 +20,8 @@
 //   7. didEnterBackground / willTerminate → force UserDefaults.synchronize.
 //   8. NSWorkspace.didWakeNotification → trigger fetchChanges (just for
 //      catching any stale state — we are mostly write-only here).
-//   9. 30s safety-net timer (sendChanges keeps pending writes flowing).
+//   9. 5s safety-net timer (sendChanges keeps pending writes flowing) +
+//      lifetime App-Nap opt-out so the timer fires reliably while idle.
 
 import Foundation
 import CloudKit
@@ -47,6 +48,8 @@ final class CloudKitPusher {
     private var safetyTimer: Timer?
     private var sleepObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    /// Lifetime App-Nap opt-out for the sync layer (see `start()`).
+    private var appNapAssertion: NSObjectProtocol?
 
     /// Stable identifier for this Mac, derived from IOPlatformUUID. Used as
     /// the `macId` field on every record we publish.
@@ -77,6 +80,23 @@ final class CloudKitPusher {
 
     /// Start the pusher. Safe to call multiple times — internally guarded.
     func start() {
+        // Keep the sync layer responsive even when keep-awake is Off. A menu-bar
+        // (LSUIElement) app is App-Napped while idle, which throttles the poll
+        // timer below to minutes — and APNs separately throttles content-available
+        // pushes — so iOS→Mac commands could take minutes to land. Hold a lifetime
+        // App-Nap opt-out so the poll + push handling stay prompt whenever the Mac
+        // is awake. `.userInitiatedAllowingIdleSystemSleep` defeats App Nap but
+        // does NOT disable system sleep — the Mac still sleeps normally (and
+        // CloudKit can't reach a sleeping Mac regardless; commands apply on wake).
+        // SleepManager's separate, stronger assertion (`.idleSystemSleepDisabled`)
+        // still governs the actual keep-awake feature.
+        if appNapAssertion == nil {
+            appNapAssertion = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiatedAllowingIdleSystemSleep],
+                reason: "DoomCoder CloudKit sync responsiveness"
+            )
+        }
+
         Task { await setupSyncEngine() }
 
         // App lifecycle hooks (lessons #6, #7, #8, #9)
@@ -131,7 +151,7 @@ final class CloudKitPusher {
         // tracking). That stalled the only reliable fetch trigger exactly when
         // the user has the panel open watching for an update — the source of the
         // "iOS commands take forever to land while the Mac is visible" bug.
-        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.kickEngine()
                 self?.fetchNow()
@@ -170,7 +190,7 @@ final class CloudKitPusher {
     /// `sendChanges()`, because `touchLastSeen` runs from inside the
     /// `CKSyncEngine` fetch delegate callback — awaiting back into the engine
     /// from a delegate callback is a fatal CloudKit misuse. `automaticallySync`
-    /// plus the 30s safety timer flush the queued change for us.
+    /// plus the 5s safety timer flush the queued change for us.
     func touchLastSeen(force: Bool = false) {
         let now = Date()
         if !force, now.timeIntervalSince(lastTouchAt) < 25 { return }
@@ -233,6 +253,26 @@ final class CloudKitPusher {
             UserDefaults.standard.set(true, forKey: v3Key)
         }
 
+        // ── Local-state reset generation (server-reset recovery) ──────────
+        // The persisted CKSyncEngine state + ServerRecordCache hold change tokens,
+        // recordChangeTags, and PENDING record-zone changes. After a CloudKit
+        // "Reset Development Environment" (or any server-side wipe) these go
+        // stale: the engine keeps retrying writes into a deleted zone
+        // ("Zone Not Found" 26/2036) or with a tag for a deleted record
+        // ("Unknown Item" 11/2003) — and may even retry a pending change that
+        // targets the OLD single "DoomCoderZone". Reinstalling the Mac app does
+        // NOT clear this (it lives in ~/Library/Preferences). Bumping this
+        // generation forces ONE clean local wipe so the engine starts from zero,
+        // recreates the per-Mac zone, and re-inserts every record fresh.
+        let resetGenKey = "doomcoder.ckpusher.localResetGeneration"
+        let currentResetGen = 2
+        if UserDefaults.standard.integer(forKey: resetGenKey) != currentResetGen {
+            logger.notice("ckpusher: local-state reset gen \(currentResetGen, privacy: .public) → wiping engine state + server cache for a clean re-sync")
+            serverRecords.clear()
+            UserDefaults.standard.removeObject(forKey: "doomcoder.ckpusher.engineState.v1")
+            UserDefaults.standard.set(currentResetGen, forKey: resetGenKey)
+        }
+
         let stateKey = "doomcoder.ckpusher.engineState.v1"
         let state: CKSyncEngine.State.Serialization?
         if let data = UserDefaults.standard.data(forKey: stateKey),
@@ -258,7 +298,7 @@ final class CloudKitPusher {
         self.didSetup = true
         self.isReady = true
 
-        logger.notice("ckpusher: ready (macId=\(self.macId, privacy: .public), zone=\(CloudKitConstants.zoneName, privacy: .public))")
+        logger.notice("ckpusher: ready (macId=\(self.macId, privacy: .public), zone=\(CloudKitConstants.zoneName(forMacId: self.macId), privacy: .public))")
         NotificationCenter.default.post(name: .cloudKitPusherReady, object: nil)
 
         // Pull any ControlCommand records written by iOS before we launched.
@@ -486,6 +526,30 @@ final class CloudKitPusher {
         if name.hasPrefix("MacStatus-")   { pendingMacStatus = nil }
         if name.hasPrefix("AgentConfig-") { pendingAgentConfig = nil }
         pendingAgentIcons.removeValue(forKey: name)
+    }
+
+    // MARK: - Failure recovery (server-reset / stale-tag self-heal)
+
+    /// A save failed with `.unknownItem` (11/2003 "recordChangeTag specified,
+    /// but record not found") — our cached base tag points at a record the
+    /// server no longer has (e.g. after a CloudKit dev-environment reset). Drop
+    /// the stale base so the next send is a fresh INSERT, then re-queue.
+    func recoverUnknownItem(_ recordID: CKRecord.ID) {
+        guard recordID.zoneID == zoneID, let engine else { return }
+        serverRecords.remove(id: recordID)
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+    }
+
+    /// A save failed with `.zoneNotFound` / `.userDeletedZone` (26/2036) — our
+    /// per-Mac zone is gone. Re-assert ONLY our own zone (never a stale legacy
+    /// zone a leftover pending change might reference), drop the stale base, and
+    /// re-queue the record so it re-inserts once the zone is recreated.
+    func recoverZoneNotFound(_ recordID: CKRecord.ID) {
+        guard let engine else { return }
+        engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))])
+        guard recordID.zoneID == zoneID else { return }
+        serverRecords.remove(id: recordID)
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
     }
 
     // MARK: - macId

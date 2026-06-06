@@ -304,6 +304,16 @@ final class NotificationDispatcher {
         }
     }
 
+    /// Rings a local macOS notification for an incoming iOS→Mac connectivity
+    /// check (the `.check` ControlCommand verb). Lets the user confirm the
+    /// iPhone can reach this Mac end-to-end. Grouped under its own thread so it
+    /// never mingles with agent-event notifications.
+    func postCheckNotification() {
+        postLocal(title: "DoomCoder",
+                  body: "Connection check from your iPhone ✨",
+                  threadID: "check")
+    }
+
     // MARK: - CloudKit (iOS companion push)
 
     private func postCloudKit(ev: Event?, title: String, body: String) {

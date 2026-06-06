@@ -112,7 +112,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         NotificationDispatcher.shared.requestPermission()
 
         // Register for remote notifications so CloudKit zone pushes trigger
-        // an immediate fetchNow() instead of waiting for the 15s safety-net poll.
+        // an immediate fetchNow() instead of waiting for the 5s safety-net poll.
         // Requires aps-environment entitlement. No-op if already registered.
         NSApplication.shared.registerForRemoteNotifications()
 
