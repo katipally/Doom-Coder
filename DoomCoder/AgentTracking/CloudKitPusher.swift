@@ -111,8 +111,13 @@ final class CloudKitPusher {
         nc.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
             // Cancel any in-flight engine tasks so we don't race with the
-            // process tear-down (audit 2026-06 fix).
-            CloudKitPusher.shared.stop()
+            // process tear-down (audit 2026-06 fix). The observer closure
+            // is `Sendable` (NotificationCenter requires it), so we
+            // hop to the main actor before touching the @MainActor-isolated
+            // CloudKitPusher.
+            Task { @MainActor in
+                CloudKitPusher.shared.stop()
+            }
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
