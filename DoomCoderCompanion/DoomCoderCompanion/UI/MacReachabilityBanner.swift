@@ -17,6 +17,10 @@ struct MacReachabilityBanner: View {
     @State private var macStore = MacStatusStore.shared
     @State private var engine = CompanionSyncEngine.shared
     @State private var isRefreshing = false
+    // Audit 2026-06: use a solid fill in Increase Contrast mode so the
+    // banner is still legible. The 10% / 35% opacity backgrounds wash
+    // out for users who have opted into high contrast.
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     /// Threshold after which we surface a warning. Mac heartbeats every 60s.
     /// 5 minutes = 4 missed heartbeats before showing stale — avoids false
@@ -98,10 +102,18 @@ struct MacReachabilityBanner: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            colorSchemeContrast == .increased
+                ? AnyShapeStyle(tint.opacity(0.25))
+                : AnyShapeStyle(tint.opacity(0.10)),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(tint.opacity(0.35), lineWidth: 1)
+                .strokeBorder(
+                    colorSchemeContrast == .increased ? tint : tint.opacity(0.35),
+                    lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
+                )
         )
         .accessibilityElement(children: .combine)
     }

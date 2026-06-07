@@ -145,6 +145,15 @@ struct AgentLogsView: View {
 struct LogRow: View {
     let log: NotificationLogRecord
 
+    // Audit 2026-06: cached `Date.FormatStyle` so the row does not
+    // allocate a new formatter on every render. Using `Date.FormatStyle`
+    // (the modern Foundation API) means the format respects the user's
+    // locale + calendar at format time, and the row can later adopt
+    // a relative-time style without restructuring.
+    private static let timeFmt: Date.FormatStyle = .dateTime
+        .hour(.twoDigits(amPM: .abbreviated))
+        .minute(.twoDigits)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -179,22 +188,34 @@ struct LogRow: View {
             }
         }
         .padding(.vertical, 12)
+        // Audit 2026-06: VoiceOver previously read four separate elements
+        // in a confusing order ("time", "title", "body", "tool"). Combine
+        // into a single accessibility element and synthesize a label so
+        // VoiceOver reads one coherent sentence.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// Synthesized VoiceOver label: "<phase>, <title>, <body> — <relative time>".
+    private var accessibilityLabel: String {
+        var parts: [String] = []
+        parts.append(log.phase.replacingOccurrences(of: "_", with: " "))
+        parts.append(log.title)
+        if !log.body.isEmpty {
+            parts.append(log.body)
+        }
+        let ts = log.ts.formatted(.relative(presentation: .named))
+        return parts.joined(separator: ", ") + " — " + ts
     }
 
     private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
         let calendar = Calendar.current
-
         if calendar.isDateInToday(date) {
-            formatter.timeStyle = .short
-            return formatter.string(from: date)
+            return date.formatted(Self.timeFmt)
         } else if calendar.isDateInYesterday(date) {
-            formatter.timeStyle = .short
-            return "Yesterday " + formatter.string(from: date)
+            return "Yesterday " + date.formatted(Self.timeFmt)
         } else {
-            formatter.dateStyle = .short
-            formatter.timeStyle = .short
-            return formatter.string(from: date)
+            return date.formatted(.dateTime.day().month().hour().minute())
         }
     }
 }

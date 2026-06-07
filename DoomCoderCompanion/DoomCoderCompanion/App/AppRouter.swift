@@ -31,10 +31,23 @@ final class AppRouter {
     /// the user re-enables notifications there.
     var showsNotificationDeniedHint: Bool = false
 
+    /// Bumped to force RootTabView to re-present the welcome sheet.
+    /// Audit 2026-06: previously the welcome sheet was a one-way
+    /// switch (dismiss sets a UserDefaults flag, never shown again).
+    /// The new entry in SettingsView increments this counter; the
+    /// RootTabView observes it via `onChange` and re-presents.
+    var welcomeRequestCount: Int = 0
+
     /// Switches to the Prompts tab and seeds the composer with `text`.
     func composePrompt(seededWith text: String) {
         pendingPromptSeed = text
         selectedTab = .prompts
+    }
+
+    /// Re-present the welcome sheet. Bumps `welcomeRequestCount` so
+    /// `RootTabView` re-evaluates.
+    func showWelcome() {
+        welcomeRequestCount += 1
     }
 
     /// Selects the Dashboard tab and pushes the given agent's logs.
