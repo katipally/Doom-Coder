@@ -344,10 +344,13 @@ struct MacControlCard: View {
 // MARK: - Live wrapper
 
 struct MacControlView: View {
+    // Optimistic-UI state, ack polling, and timeout handling live as
+    // local @State + private methods here. Originally we planned to
+    // extract to `MacControlViewModel`, but the local helper closures
+    // reference the @State vars directly, and unwiring the @State /
+    // helper entanglement is more disruptive than the model extraction
+    // is worth. The 921-line file is being slimmed in other commits.
     @State private var macStore = MacStatusStore.shared
-    // Audit 2026-06: gate the segmented pill + opacity animations on
-    // Reduce Motion so users who opted out don't see the snappy
-    // 0.15-0.22s transitions.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Optimistic local selections; reconciled against the live MacStatus.
@@ -393,16 +396,15 @@ struct MacControlView: View {
         .onAppear {
             // Don't clobber an optimistic selection that's still awaiting a Mac
             // ack — the section can re-appear (list virtualization) mid-flight.
-            if let mac = macStore.primary, waitingCommandId == nil, desiredMaster == nil {
-                syncFromMac(mac)
+            if !isWaiting {
+                syncFromMac(macStore.primary!)
             }
         }
         .onChange(of: macStore.primary) { _, newMac in
             if let newMac { reconcile(newMac) }
         }
         .onDisappear {
-            ackPoll?.cancel()
-            ackPoll = nil
+            ackPoll?.cancel(); ackPoll = nil; waitTimeout?.cancel(); waitTimeout = nil; masterTimeout?.cancel(); masterTimeout = nil
         }
     }
 
@@ -813,7 +815,7 @@ struct MacControlView: View {
         }
         // Re-sync local selections to the Mac's truth only when nothing pending.
         if waitingCommandId == nil && desiredMaster == nil {
-            syncFromMac(mac)
+            syncFromMac(macStore.primary!)
         }
     }
 
