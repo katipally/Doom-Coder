@@ -15,13 +15,20 @@ struct DoomCoderApp: App {
         // 4th tab inside Configure (see ConfigureSettingsPane). The
         // floating panel's Settings button routes through
         // WindowOpener.openSettings() to Configure with Settings focused.
+        //
+        // All auxiliary windows are .floating + .auxiliary so they sit
+        // above other apps (and full-screen apps), can join all Spaces,
+        // and behave like the floating panel. macOS 26 native scene
+        // modifier; replaces the legacy `FloatingWindowConfigurator`
+        // NSViewRepresentable + per-window level = .floating dance.
 
-        Window("About Doom Coder", id: "about") {
+        Window("About DoomCoder", id: "about") {
             AboutView()
                 .background(WindowOpenerBridge())
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
+        .windowLevel(.floating)
 
         Window("Configure Agents", id: "configureAgents") {
             ConfigureAgentsViewV2()
@@ -29,6 +36,7 @@ struct DoomCoderApp: App {
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
+        .windowLevel(.floating)
 
         // Floating toolkit surfaces — each its own window (above all apps,
         // incl. full-screen), with a native traffic-light close button.
@@ -43,6 +51,7 @@ struct DoomCoderApp: App {
         .defaultSize(width: 1080, height: 700)
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
+        .windowLevel(.floating)
 
         Window("Notes", id: "notes") {
             NavigationStack { MacNotesPane() }
@@ -53,6 +62,18 @@ struct DoomCoderApp: App {
         .defaultSize(width: 1000, height: 660)
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
+        .windowLevel(.floating)
+
+        // What's New — single SwiftUI scene; replaces the four legacy
+        // showWhatsNew* methods. `WhatsNewHost` picks the highest-version
+        // unseen sheet and advances to the next on dismiss.
+        Window("What's New", id: "whatsNew") {
+            WhatsNewHost()
+                .background(WindowOpenerBridge())
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .windowLevel(.floating)
     }
 }
 
