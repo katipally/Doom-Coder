@@ -77,6 +77,27 @@ final class SleepManager {
     /// signal alongside agent hooks.
     private(set) var isUserActive: Bool = false
 
+    /// Single source of truth for the master suspend gate. When `false` the
+    /// app is fully idle — no sleep blocker, no agent notifications. When
+    /// `true` everything is active.
+    ///
+    /// This replaces the previous pattern where `PanelRootView` used
+    /// `@AppStorage("doomcoder.masterEnabled")` and `StatusItemController`
+    /// read the same UserDefaults key directly. Both consumers now bind
+    /// here; the menu-bar icon observes via `withObservationTracking` and
+    /// the panel binds via `@Bindable`.
+    var masterEnabled: Bool = true {
+        didSet {
+            guard oldValue != masterEnabled else { return }
+            UserDefaults.standard.set(masterEnabled, forKey: "doomcoder.masterEnabled")
+            // Turning the master OFF releases any keep-awake assertion.
+            // Turning it ON does NOT force keep-awake — the Keep Awake
+            // card's Off/On/Auto selector owns that intent.
+            if !masterEnabled { disable() }
+            notifyStateChanged()
+        }
+    }
+
     /// While non-nil in Auto mode, the sleep assertion is held until this
     /// time regardless of agent or user activity. `nil` = no snooze.
     /// Snooze is also persisted across launches while Auto is selected
@@ -190,6 +211,12 @@ final class SleepManager {
     // MARK: - Init
 
     init() {
+        // Master suspend gate — restored from UserDefaults so the app
+        // remembers whether the user left it suspended across launches.
+        // Default to `true` (active) for first-run users; the pre-2.7
+        // @AppStorage key in `PanelRootView` used the same default.
+        self.masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
+
         let saved = UserDefaults.standard.string(forKey: "doomcoder.mode") ?? DoomCoderMode.screenOn.rawValue
         // v1.8 migration: legacy "full" → "screenOn" (same behaviour, new name).
         let resolved = (saved == "full") ? .screenOn : (DoomCoderMode(rawValue: saved) ?? .screenOn)
