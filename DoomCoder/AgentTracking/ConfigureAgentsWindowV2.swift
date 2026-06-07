@@ -618,7 +618,7 @@ struct ConfigureAgentsViewV2: View {
                 Divider().opacity(0.4)
                 permissionsRow(
                     symbol: "iphone.gen3",
-                    title: "Mirror to iPhone / iPad",
+                    title: "Mirror to iPhone and iPad",
                     status: iCloudMirrorStatus()
                 ) {
                     EmptyView()
@@ -704,7 +704,7 @@ struct ConfigureAgentsViewV2: View {
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 channelRow(
-                    label: "macOS Notification",
+                    label: "Mac notifications",
                     symbol: "bell.fill",
                     binding: Binding(
                         get: { channelConfig.global.macNotification },
@@ -723,7 +723,7 @@ struct ConfigureAgentsViewV2: View {
                 )
                 Divider().opacity(0.4)
                 channelRow(
-                    label: "iPhone / iPad (iCloud)",
+                    label: "iPhone and iPad (iCloud)",
                     symbol: "iphone.gen3",
                     binding: Binding(
                         get: { channelConfig.global.cloudkit },
@@ -890,7 +890,20 @@ struct ConfigureAgentsViewV2: View {
             let devices = store.devices
             ConnectionsCard(
                 title: "Devices on your iCloud",
-                symbol: "iphone.gen3"
+                symbol: "iphone.gen3",
+                trailingAction: {
+                    AnyView(
+                        Button {
+                            showAddDevice = true
+                        } label: {
+                            Label("Add Device", systemImage: "plus.circle")
+                                .labelStyle(.titleAndIcon)
+                                .font(.caption.weight(.medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Pair a new iPhone or iPad")
+                    )
+                }
             ) {
                 if devices.isEmpty {
                     emptyDevicesState
@@ -917,20 +930,35 @@ struct ConfigureAgentsViewV2: View {
                     .font(.callout.weight(.medium))
                 Spacer()
             }
-            Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically.")
+            Text("Install DoomCoder on your iPhone or iPad and sign in to the same iCloud account. It will appear here automatically. Or pair an existing device with a QR code or invite link.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
+                // Inline primary CTA — the user's complaint was that the
+                // toolbar's `+` icon was not discoverable. This prominent
+                // button in the body of the section makes pairing
+                // reachable without scanning for a tiny toolbar glyph.
+                Button {
+                    showAddDevice = true
+                } label: {
+                    Label("Add Device", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityLabel("Add Device")
+                .help("Pair a new iPhone or iPad via QR code or invite link")
+
                 Button {
                     if let url = URL(string: Self.companionAppStoreURL) {
                         NSWorkspace.shared.open(url)
                     }
                 } label: {
-                    Label("Set up iPhone or iPad", systemImage: "arrow.down.app.fill")
+                    Label("Get the app", systemImage: "arrow.down.app.fill")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .help("Open the App Store to download DoomCoder on an iPhone or iPad")
 
                 Button {
                     if let url = URL(string: Self.companionHelpURL) {
@@ -1283,621 +1311,12 @@ struct ConfigureAgentsViewV2: View {
 }
 
 // MARK: - LiveEventRow
+//
+// Moved to its own file: `DoomCoder/AgentTracking/LiveEventRow.swift`.
 
-private struct LiveEventRow: View {
-    let event: LiveEvent
-    @State private var expanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(DCAnim.snap) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(event.timeLabel)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 56, alignment: .leading)
-
-                    Text(event.event)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(event.synthetic ? .purple : .primary)
-
-                    if !event.shortCwd.isEmpty {
-                        Text(event.shortCwd)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-
-                    Spacer()
-
-                    if event.payloadJSON != nil {
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
-
-            if expanded, let json = event.payloadJSON {
-                PayloadRendererView(json: json)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            Divider().opacity(0.4)
-        }
-    }
-}
-
-// MARK: - Connection Doctor
-
-/// Inline step-wizard that replaces the old Test Helper / Run Demo /
-/// Watch Live / liveEventsSection Test button row. Runs a fixed sequence
-/// of checks that trace the full path from the dc-hook binary through
-/// the unix socket into a macOS local notification. Each step renders
-/// with a status pill (pending/running/ok/warn/fail) and an optional
-/// Fix CTA so the user can act on the specific failure.
-struct ConnectionDoctorSection: View {
-    let agent: TrackedAgent
-
-    enum StepStatus: Equatable {
-        case pending
-        case running
-        case ok
-        case warn
-        case fail
-    }
-
-    struct DoctorStep: Identifiable, Equatable {
-        let id: Int
-        let title: String
-        var detail: String
-        var status: StepStatus
-        var fixTitle: String?
-    }
-
-    @State private var steps: [DoctorStep] = Self.initialSteps()
-    @State private var running = false
-    @State private var summary: String? = nil
-    @State private var summaryIsGood: Bool = false
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Button {
-                        Task { await runDoctor() }
-                    } label: {
-                        if running {
-                            Label("Running…", systemImage: "stopwatch")
-                        } else {
-                            Label("Run Doctor", systemImage: "stethoscope")
-                        }
-                    }
-                    .disabled(running)
-
-                    Spacer()
-
-                    if let summary {
-                        HStack(spacing: 6) {
-                            Image(systemName: summaryIsGood ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                .foregroundStyle(summaryIsGood ? .green : .orange)
-                                .accessibilityHidden(true)
-                            Text(summary)
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                    }
-                }
-
-                Divider().opacity(0.4)
-
-                ForEach(steps) { step in
-                    stepRow(step)
-                }
-            }
-            .animation(DCAnim.smooth, value: steps)
-            .animation(DCAnim.fade, value: summary)
-        } label: {
-            Label("Connection Doctor", systemImage: "waveform.path.ecg")
-        }
-    }
-
-    @ViewBuilder
-    private func stepRow(_ step: DoctorStep) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            statusPill(step.status)
-                .frame(width: 70, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(step.title)
-                    .font(.callout.weight(.medium))
-                if !step.detail.isEmpty {
-                    Text(step.detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Spacer()
-
-            if (step.status == .fail || step.status == .warn), let fix = step.fixTitle {
-                Button(fix) {
-                    Task { await applyFix(for: step) }
-                }
-                .controlSize(.small)
-                .disabled(running)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private func statusPill(_ status: StepStatus) -> some View {
-        switch status {
-        case .pending:
-            Label("pending", systemImage: "circle")
-                .foregroundStyle(.tertiary)
-                .font(.caption2)
-                .labelStyle(.titleAndIcon)
-        case .running:
-            HStack(spacing: 4) {
-                ProgressView().controlSize(.mini)
-                Text("running").font(.caption2).foregroundStyle(.secondary)
-            }
-        case .ok:
-            Label("ok", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.caption2)
-        case .warn:
-            Label("warn", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .font(.caption2)
-        case .fail:
-            Label("fail", systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-                .font(.caption2)
-        }
-    }
-
-    // MARK: - Steps
-
-    private static func initialSteps() -> [DoctorStep] {
-        [
-            DoctorStep(id: 0, title: "Helper binary present",
-                       detail: "Checks dc-hook exists at its stable path and is executable.",
-                       status: .pending, fixTitle: "Reinstall helper"),
-            DoctorStep(id: 1, title: "Socket listening",
-                       detail: "Confirms the in-app unix socket is bound and accepting connections.",
-                       status: .pending, fixTitle: "Restart listener"),
-            DoctorStep(id: 2, title: "Config parsed & events mapped",
-                       detail: "Verifies every expected hook event is mapped to the correct binary.",
-                       status: .pending, fixTitle: "Repair"),
-            DoctorStep(id: 3, title: "End-to-end ping round-trip",
-                       detail: "Sends dc-hook --ping and waits for the envelope to arrive over the socket.",
-                       status: .pending, fixTitle: "Check helper permissions"),
-            DoctorStep(id: 4, title: "Notification dispatch",
-                       detail: "Posts a local test notification via macOS Notification Center.",
-                       status: .pending, fixTitle: "Open notification settings")
-        ]
-    }
-
-    // MARK: - Run
-
-    private func runDoctor() async {
-        running = true
-        summary = nil
-        steps = Self.initialSteps()
-        var failures = 0
-        var firstFailedIndex: Int? = nil
-
-        for idx in steps.indices {
-            if firstFailedIndex != nil { break }
-            setStatus(idx, .running)
-            let outcome = await runStep(idx)
-            setStatus(idx, outcome.status, detail: outcome.detail)
-            if outcome.status == .fail || outcome.status == .warn {
-                failures += 1
-                if firstFailedIndex == nil { firstFailedIndex = idx }
-            }
-        }
-
-        running = false
-        if failures == 0 {
-            summary = "Connected ✨"
-            summaryIsGood = true
-        } else {
-            summary = "\(failures) issue\(failures == 1 ? "" : "s") found"
-            summaryIsGood = false
-        }
-    }
-
-    private struct StepOutcome {
-        let status: StepStatus
-        let detail: String
-    }
-
-    private func runStep(_ idx: Int) async -> StepOutcome {
-        switch idx {
-        case 0: return checkHelperBinary()
-        case 1: return checkSocketListening()
-        case 2: return checkConfigMapping()
-        case 3: return await checkEndToEndPing()
-        case 4: return await checkNotificationDispatch()
-        default: return StepOutcome(status: .ok, detail: "")
-        }
-    }
-
-    private func setStatus(_ idx: Int, _ status: StepStatus, detail: String? = nil) {
-        guard idx < steps.count else { return }
-        var step = steps[idx]
-        step.status = status
-        if let detail { step.detail = detail }
-        steps[idx] = step
-    }
-
-    // MARK: - Step implementations
-
-    private func checkHelperBinary() -> StepOutcome {
-        let path = AgentInstallerV2.helperBinaryPath()
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: path) {
-            return StepOutcome(status: .fail, detail: "Not found at \(path).")
-        }
-        if !fm.isExecutableFile(atPath: path) {
-            return StepOutcome(status: .fail, detail: "Not executable: \(path).")
-        }
-        return StepOutcome(status: .ok, detail: "Found at \(path).")
-    }
-
-    private func checkSocketListening() -> StepOutcome {
-        if HookSocketListener.shared.isRunning {
-            return StepOutcome(status: .ok, detail: "Listener bound and accepting connections.")
-        }
-        return StepOutcome(status: .fail, detail: "In-app unix socket listener is not running.")
-    }
-
-    private func checkConfigMapping() -> StepOutcome {
-        switch AgentInstallerV2.verifyInstalled(agent) {
-        case .success:
-            return StepOutcome(status: .ok, detail: "All expected hook events mapped.")
-        case .failure(let err):
-            return StepOutcome(status: .fail, detail: err.localizedDescription)
-        }
-    }
-
-    private func checkEndToEndPing() async -> StepOutcome {
-        // Register a one-shot observer on the shared socket listener so
-        // we can confirm the envelope actually made the round-trip.
-        let listener = HookSocketListener.shared
-        let pidStr = String(ProcessInfo.processInfo.processIdentifier)
-        let box = EnvelopeBox()
-        listener.setTestObserver { env in
-            if env.event.lowercased() == "unknown" || env.event.lowercased().contains("ping") {
-                box.signal(env)
-            }
-        }
-        defer { listener.setTestObserver(nil) }
-
-        let helperPath = AgentInstallerV2.helperBinaryPath()
-        guard FileManager.default.isExecutableFile(atPath: helperPath) else {
-            return StepOutcome(status: .fail, detail: "Helper binary missing or not executable.")
-        }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: helperPath)
-        proc.arguments = ["--ping"]
-        do {
-            try proc.run()
-        } catch {
-            return StepOutcome(status: .fail, detail: "Failed to launch dc-hook --ping: \(error.localizedDescription)")
-        }
-        proc.waitUntilExit()
-        if proc.terminationStatus != 0 {
-            return StepOutcome(status: .fail, detail: "dc-hook --ping exited with status \(proc.terminationStatus). Host pid: \(pidStr).")
-        }
-
-        // Wait up to 5s for an envelope to arrive via the socket.
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline {
-            if box.received { break }
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
-        if box.received {
-            return StepOutcome(status: .ok, detail: "Ping envelope received on socket within 5s.")
-        }
-        return StepOutcome(status: .fail, detail: "dc-hook --ping exited 0 but no envelope arrived on the socket within 5s.")
-    }
-
-    private func checkNotificationDispatch() async -> StepOutcome {
-        let disp = NotificationDispatcher.shared
-        let granted: Bool = await withCheckedContinuation { cont in
-            disp.requestPermission { ok in cont.resume(returning: ok) }
-        }
-        if !granted {
-            return StepOutcome(status: .fail, detail: "macOS notifications are not authorized for DoomCoder.")
-        }
-        let content = UNMutableNotificationContent()
-        content.title = "DoomCoder · Doctor"
-        content.body = "Connection Doctor test — this is not a real agent event."
-        content.categoryIdentifier = "doomcoder.doctor"
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        do {
-            try await UNUserNotificationCenter.current().add(req)
-            return StepOutcome(status: .ok, detail: "Test notification posted. You should see a banner momentarily.")
-        } catch {
-            return StepOutcome(status: .fail, detail: "Failed to post notification: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Fixes
-
-    private func applyFix(for step: DoctorStep) async {
-        switch step.id {
-        case 0:
-            _ = AgentInstallerV2.ensureStableHelper()
-        case 1:
-            // Restart listener in-place. The primary callback is owned by
-            // the AppDelegate, so stop+start without a new callback is
-            // deliberately skipped — we ping again instead.
-            HookSocketListener.shared.stop()
-            // Give the raw fd time to close + rebind via AppDelegate
-            // lifecycle. We don't re-subscribe the primary callback from
-            // here. The user can relaunch if the listener is wedged.
-            try? await Task.sleep(nanoseconds: 400_000_000)
-        case 2:
-            _ = AgentInstallerV2.install(agent)
-        case 3:
-            // Nothing we can do programmatically — point user at perms.
-            NSWorkspace.shared.selectFile(AgentInstallerV2.helperBinaryPath(),
-                                          inFileViewerRootedAtPath: "")
-        case 4:
-            NotificationDispatcher.shared.openSystemSettings()
-        default:
-            break
-        }
-        await runDoctor()
-    }
-}
-
-/// Thread-safe one-shot flag used by the end-to-end ping step to signal
-/// when the expected envelope arrives from the socket listener.
-private final class EnvelopeBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _received = false
-    var received: Bool { lock.lock(); defer { lock.unlock() }; return _received }
-    func signal(_ env: HookEnvelope) {
-        lock.lock(); _received = true; lock.unlock()
-    }
-}
-
-// MARK: - ConnectionsCard (iOS 26-style grouped card)
-
-/// A single grouped section used in the Connections tab. Title + symbol header,
-/// then a thin-material body. Matches the macOS 26 Settings aesthetic (similar
-/// to `InnerCard` in `PanelRootView` but with a labeled header).
-struct ConnectionsCard<Content: View>: View {
-    let title: String
-    let symbol: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Text(title.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 4)
-
-            VStack(alignment: .leading, spacing: 10) {
-                content
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-            )
-        }
-    }
-}
-
-// MARK: - Add Device (CKShare pairing)
-
-/// Sheet shown from Connections ▸ Add Device. Creates/fetches the Mac's
-/// zone-wide CKShare and presents a QR code + copy-link so an iPhone/iPad — on
-/// the SAME or a DIFFERENT iCloud account — can join. The link is a secret;
-/// participants can be revoked from the Connections list.
-///
-/// macOS 26 design: native window toolbar (Cancel / Share menu) and a thin-
-/// material body. QR is wrapped in a concentric rounded rectangle frame.
-private struct AddDeviceSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var coordinator = MacShareCoordinator.shared
-    @State private var copied = false
-    @State private var showParticipants = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            content
-                .padding(24)
-                .frame(minWidth: 360, idealWidth: 400, minHeight: 480)
-        }
-        .background(.regularMaterial)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                if let url = coordinator.shareURL {
-                    ShareLink(item: url) {
-                        Label("Share…", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share the invite link via AirDrop, Messages, Mail, etc.")
-                }
-            }
-        }
-        .task { await coordinator.ensureShare() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        VStack(spacing: 18) {
-            HStack(spacing: 10) {
-                Image(systemName: "qrcode")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Device")
-                        .font(.title2.bold())
-                    Text("Scan with iPhone or iPad")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            qrBlock
-
-            if !coordinator.participants.isEmpty {
-                participantsDisclosure
-            }
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    @ViewBuilder
-    private var qrBlock: some View {
-        if coordinator.isWorking && coordinator.shareURL == nil {
-            VStack(spacing: 10) {
-                ProgressView()
-                Text("Preparing invite…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 240)
-        } else if let url = coordinator.shareURL {
-            VStack(spacing: 12) {
-                if let qr = Self.qrImage(from: url.absoluteString) {
-                    Image(nsImage: qr)
-                        .interpolation(.none)
-                        .resizable()
-                        .frame(width: 220, height: 220)
-                        .padding(8)
-                        .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
-                        )
-                        .accessibilityLabel("Pairing QR code")
-                }
-                Text("On your iPhone or iPad: Dashboard ▸ Add Device ▸ Different iCloud ▸ Scan QR Code. Or send the link below. Works even if the device uses a different iCloud account.")
-                    .font(.caption)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(url.absoluteString, forType: .string)
-                    HapticsTap()
-                    withAnimation(DCAnim.micro) { copied = true }
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        withAnimation(DCAnim.micro) { copied = false }
-                    }
-                } label: {
-                    Label(copied ? "Link Copied" : "Copy Invite Link",
-                          systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-        } else {
-            VStack(spacing: 10) {
-                Image(systemName: "exclamationmark.icloud")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text(coordinator.lastError ?? "Couldn't prepare the invite.")
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                Button("Try Again") { Task { await coordinator.ensureShare() } }
-            }
-            .frame(maxWidth: .infinity, minHeight: 240)
-        }
-    }
-
-    @ViewBuilder
-    private var participantsDisclosure: some View {
-        DisclosureGroup(isExpanded: $showParticipants) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(coordinator.participants) { p in
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.crop.circle")
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(p.displayName)
-                            .font(.callout)
-                        let status = p.acceptanceStatus
-                        if !status.isEmpty {
-                            Text(status.capitalized)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                    }
-                }
-            }
-            .padding(.top, 4)
-        } label: {
-            Label("Participants (\(coordinator.participants.count))", systemImage: "person.2")
-                .font(.callout.weight(.medium))
-        }
-        .padding(12)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    /// Generates a crisp QR code NSImage for `string` using CoreImage.
-    static func qrImage(from string: String) -> NSImage? {
-        let data = Data(string.utf8)
-        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
-        filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("M", forKey: "inputCorrectionLevel")
-        guard let output = filter.outputImage else { return nil }
-        let scaled = output.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
-        let context = CIContext()
-        guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: scaled.extent.width,
-                                                 height: scaled.extent.height))
-    }
-}
-
-/// Tiny wrapper for system tap feedback. NSE-only haptics not used here; we
-/// rely on the system sound + button visual change.
-private func HapticsTap() {
-    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-}
+// MARK: - Connection Doctor / ConnectionsCard / AddDeviceSheet
+//
+// All three have been moved to their own files in `DoomCoder/AgentTracking/`:
+// - ConnectionDoctorSection.swift
+// - ConnectionsCard.swift
+// - AddDeviceSheet.swift

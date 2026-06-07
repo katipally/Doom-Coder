@@ -17,6 +17,10 @@
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
 		DC0000000000002000000052 /* ToolsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000052 /* ToolsWindow.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
+		DC0000000000002000000F10 /* LiveEventRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F10 /* LiveEventRow.swift */; };
+		DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F11 /* ConnectionsCard.swift */; };
+		DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F12 /* AddDeviceSheet.swift */; };
+		DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F13 /* ConnectionDoctorSection.swift */; };
 		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
 		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
 		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
@@ -83,6 +87,10 @@
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000052 /* ToolsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsWindow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F10 /* LiveEventRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventRow.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F11 /* ConnectionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsCard.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F12 /* AddDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceSheet.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F13 /* ConnectionDoctorSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDoctorSection.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
@@ -218,6 +226,10 @@
 				DC0000000000001000000201 /* AgentNotificationPrefs.swift */,
 				DC0000000000001000000202 /* AgentNotificationCatalog.swift */,
 				DC0000000000001000000203 /* NotifyAboutCard.swift */,
+				DC0000000000001000000F10 /* LiveEventRow.swift */,
+				DC0000000000001000000F11 /* ConnectionsCard.swift */,
+				DC0000000000001000000F12 /* AddDeviceSheet.swift */,
+				DC0000000000001000000F13 /* ConnectionDoctorSection.swift */,
 				DC0000000000001000000034 /* AgentIconProvider.swift */,
 				DC0000000000001000000122 /* AgentIconView.swift */,
 				DC0000000000001000000035 /* DeepLink.swift */,
@@ -353,6 +365,10 @@
 				DC0000000000002000000003 /* SleepManager.swift in Sources */,
 				DC0000000000002000000052 /* ToolsWindow.swift in Sources */,
 				DC0000000000002000000005 /* AboutView.swift in Sources */,
+				DC0000000000002000000F10 /* LiveEventRow.swift in Sources */,
+				DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */,
+				DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */,
+				DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */,
 				DC0000000000002000000F01 /* GlassCard.swift in Sources */,
 				DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */,
 				DC0000000000002000000F03 /* AppRouter.swift in Sources */,
