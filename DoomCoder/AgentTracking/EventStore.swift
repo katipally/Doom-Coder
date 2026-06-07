@@ -458,12 +458,51 @@ final class EventStore {
 
     // MARK: - Purge
 
+    /// Hard row caps, audit 2026-06. The time-based retention in
+    /// `retentionDays` is the primary control, but a fast event source
+    /// (Claude Code firing PreToolUse for every file edit) can still
+    /// produce tens of thousands of rows per hour. The caps below are
+    /// the belt-and-braces ceiling; we keep the most-recent N rows
+    /// regardless of age.
+    static let maxEventsRows: Int = 50_000
+    static let maxNotificationsRows: Int = 5_000
+    static let maxSessionHistoryRows: Int = 5_000
+
     func purgeOld(olderThan seconds: TimeInterval? = nil) {
         let secs = seconds ?? TimeInterval(Self.retentionDays) * 24 * 3600
         let cutoff = Date().timeIntervalSince1970 - secs
         exec("DELETE FROM events WHERE ts < \(cutoff);")
         exec("DELETE FROM notifications WHERE ts < \(cutoff);")
         exec("DELETE FROM session_history WHERE ended_at < \(cutoff);")
+        enforceRowCaps()
+    }
+
+    /// Caps the row count of each table to the configured maximums.
+    /// Keeps the most-recent rows; deletes the oldest. Safe to call
+    /// alongside the time-based purge; the two are independent safety
+    /// nets.
+    func enforceRowCaps() {
+        // events
+        exec("""
+            DELETE FROM events WHERE id IN (
+                SELECT id FROM events ORDER BY id DESC
+                LIMIT -1 OFFSET \(Self.maxEventsRows)
+            );
+        """)
+        // notifications
+        exec("""
+            DELETE FROM notifications WHERE id IN (
+                SELECT id FROM notifications ORDER BY id DESC
+                LIMIT -1 OFFSET \(Self.maxNotificationsRows)
+            );
+        """)
+        // session_history
+        exec("""
+            DELETE FROM session_history WHERE id IN (
+                SELECT id FROM session_history ORDER BY id DESC
+                LIMIT -1 OFFSET \(Self.maxSessionHistoryRows)
+            );
+        """)
     }
 
     // MARK: - Internals

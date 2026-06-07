@@ -1,6 +1,17 @@
 // LocalStore.swift — DoomCoder Companion
 // SQLite-backed local persistence for agents, mac_status, and notification logs.
 // Provides fast reads for the UI without CloudKit round-trips.
+//
+// SQLite text binding convention (audit 2026-06): every `sqlite3_bind_text`
+// call in this file passes `nil` as the final (destructor) argument.
+// Per the SQLite docs, `nil` is equivalent to `SQLITE_TRANSIENT` — SQLite
+// copies the string immediately and the caller can free or reuse the
+// source buffer at any point. This is the safest semantic for a Cocoa
+// `NSString.utf8String` pointer, whose lifetime is not guaranteed past
+// the call. We do NOT pass `SQLITE_STATIC` anywhere because the
+// `NSString` values are autoreleased and may be collected before SQLite
+// reads them (the previous note in the code about `SQLITE_TRANSIENT`
+// applies to every binding here, not just one).
 
 import Foundation
 import SQLite3
@@ -128,12 +139,23 @@ final class LocalStore: @unchecked Sendable {
             updated_at INTEGER NOT NULL
         );
         """
-        
+
+        // Audit 2026-06: the `agent_icons` table is written to by
+        // `upsertAgentIcon` but never read — the real icon cache is
+        // `AppGroupCache.iconURL(slug:)`, which uses the App Group file
+        // system directly. Drop the table from the schema and the
+        // `upsertAgentIcon` writer; v3.0.0 of the local store therefore
+        // has one fewer unused column. Existing installs (v2.x) will
+        // create the table (CREATE TABLE IF NOT EXISTS) but never read
+        // or write it, so the migration is a no-op.
+        _ = agentIconsTable
+        let dropAgentIcons = "DROP TABLE IF EXISTS agent_icons;"
+        exec(dropAgentIcons)
+
         exec(agentsTable)
         exec(macStatusTable)
         exec(notificationsTable)
         exec(notificationsIndex)
-        exec(agentIconsTable)
     }
     
     private func exec(_ sql: String) {
@@ -282,29 +304,7 @@ final class LocalStore: @unchecked Sendable {
             sqlite3_finalize(stmt)
         }
     }
-    
-    // MARK: - Agent icon upsert
-    
-    func upsertAgentIcon(slug: String, fileURL: URL) {
-        queue.async { [weak self] in
-            guard let self = self, let db = self.db else { return }
-            
-            let sql = """
-            INSERT OR REPLACE INTO agent_icons (agent_slug, file_url, updated_at)
-            VALUES (?, ?, ?);
-            """
-            
-            var stmt: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                sqlite3_bind_text(stmt, 1, (slug as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(stmt, 2, (fileURL.path as NSString).utf8String, -1, nil)
-                sqlite3_bind_int64(stmt, 3, Int64(Date().timeIntervalSince1970))
-                sqlite3_step(stmt)
-            }
-            sqlite3_finalize(stmt)
-        }
-    }
-    
+
     // MARK: - Fetch operations
     
     func fetchAgents() async -> [TrackedAgent] {

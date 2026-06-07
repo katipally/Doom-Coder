@@ -70,6 +70,14 @@ final class ApprovalArbiter {
     /// pending alert for the same session (a session blocks on one permission
     /// at a time). `fire` is invoked on the main actor if the window elapses
     /// without cancelling evidence.
+    ///
+    /// Audit 2026-06: this method is `@MainActor` and the `pending` map
+    /// is only touched on the main actor, so there is no race between
+    /// the `pending[sessionKey]?.task.cancel()` line and the body of
+    /// the just-scheduled `Task` (the task's body is itself
+    /// `@MainActor`-isolated). The two safety nets — cancel-before-
+    /// schedule, and the `cur.seq == seq` check inside the fire path —
+    /// are sufficient and idiomatic.
     func scheduleDeferred(sessionKey: String,
                           agent: TrackedAgent,
                           seq: Int,

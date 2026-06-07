@@ -17,30 +17,35 @@ struct MacReachabilityBanner: View {
     @State private var macStore = MacStatusStore.shared
     @State private var engine = CompanionSyncEngine.shared
     @State private var isRefreshing = false
-    @State private var now = Date()
 
     /// Threshold after which we surface a warning. Mac heartbeats every 60s.
     /// 5 minutes = 4 missed heartbeats before showing stale — avoids false
     /// alarms from routine CloudKit push delays.
     private let staleAfter: TimeInterval = 300
 
-    private let timer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
-
     var body: some View {
-        Group {
-            if let mac = macStore.primary,
-               let level = staleness(for: mac) {
-                banner(for: mac, level: level)
+        // Audit 2026-06: replaced a `Timer.publish(every: 15)` that
+        // kept firing even when the banner was off-screen (the view
+        // hides itself when the Mac is fresh, but the timer kept
+        // ticking and triggering `body` re-renders). `TimelineView`
+        // is the modern, visibility-aware alternative: SwiftUI pauses
+        // its cadence when the view is not in the hierarchy, and the
+        // `context.date` is read on demand.
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            Group {
+                if let mac = macStore.primary,
+                   let level = staleness(for: mac, now: context.date) {
+                    banner(for: mac, level: level, now: context.date)
+                }
             }
         }
-        .onReceive(timer) { now = $0 }
     }
 
     // MARK: - Staleness classification
 
     private enum Level { case stale, offline }
 
-    private func staleness(for mac: MacStatusRecord) -> Level? {
+    private func staleness(for mac: MacStatusRecord, now: Date = Date()) -> Level? {
         let age = now.timeIntervalSince(mac.lastSeen)
         if age >= 900 { return .offline }
         if age >= staleAfter { return .stale }
@@ -50,13 +55,13 @@ struct MacReachabilityBanner: View {
     // MARK: - Banner
 
     @ViewBuilder
-    private func banner(for mac: MacStatusRecord, level: Level) -> some View {
+    private func banner(for mac: MacStatusRecord, level: Level, now: Date) -> some View {
         let tint: Color = (level == .offline) ? .red : .orange
         let symbol = (level == .offline) ? "wifi.exclamationmark" : "exclamationmark.triangle.fill"
         let title = (level == .offline) ? "\(mac.name) not reachable" : "\(mac.name) may be out of date"
         let detail = (level == .offline)
             ? "We haven't heard from your Mac in over 15 minutes. Open DoomCoder on your Mac, or check your network and iCloud sign-in. New data and notifications won't arrive until it reconnects."
-            : "Last sync was \(relativeAge(mac.lastSeen)). The status below may not reflect what's happening on your Mac right now."
+            : "Last sync was \(relativeAge(mac.lastSeen, now: now)). The status below may not reflect what's happening on your Mac right now."
 
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
@@ -115,11 +120,10 @@ struct MacReachabilityBanner: View {
         } else {
             await engine.fetchChanges()
         }
-        now = Date()
         isRefreshing = false
     }
 
-    private func relativeAge(_ date: Date) -> String {
+    private func relativeAge(_ date: Date, now: Date = Date()) -> String {
         let secs = Int(now.timeIntervalSince(date))
         if secs < 60 { return "just now" }
         if secs < 3600 { return "\(secs / 60) minutes ago" }

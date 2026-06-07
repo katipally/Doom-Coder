@@ -13,9 +13,16 @@ struct SyncDiagnosticsView: View {
     @State private var lastLatencyMs: Int? = SyncTelemetry.shared.lastRoundTripLatencyMs()
     @State private var isForceSyncing = false
 
-    private let eventStream = NotificationCenter.default
+    // Audit 2026-06: the publisher properties used to be `let`
+    // (re-evaluated on every body re-render). `NotificationCenter`
+    // publishers are class-based, so a fresh `let` produces a fresh
+    // identity and `onReceive` re-subscribes on every render — wasting
+    // work and briefly missing events during the swap. Promote to
+    // `@State` so the publisher is constructed once and `.onReceive`
+    // can use the same identity across renders.
+    @State private var eventStream = NotificationCenter.default
         .publisher(for: SyncTelemetry.eventRecordedNotification)
-    private let rtStream = NotificationCenter.default
+    @State private var rtStream = NotificationCenter.default
         .publisher(for: SyncTelemetry.roundTripCompletedNotification)
 
     var body: some View {
