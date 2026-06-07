@@ -79,7 +79,6 @@ struct DoomCoderApp: App {
 
 // MARK: - AppDelegate
 final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private var whatsNewWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prepare support dirs + SQLite store on main (cheap).
@@ -164,15 +163,14 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             _ = SleepManager.shared
         }
 
-        // Show the most recent What's New sheet (checked newest-first).
-        if !UserDefaults.standard.bool(forKey: WhatsNewSheet230.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew230() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet220.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew220() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheetV2.defaultsKey) {
-            Task { @MainActor in self.showWhatsNewV2() }
-        } else if !UserDefaults.standard.bool(forKey: WhatsNewSheet.defaultsKey) {
-            Task { @MainActor in self.showWhatsNew() }
+        // Show the highest-version unseen What's New sheet (if any).
+        // `WhatsNewHost` picks the right one and advances on dismiss.
+        // The Window scene is `.defaultLaunchBehavior(.suppressed)` so it
+        // never auto-opens — we open it explicitly here.
+        if WhatsNewVersion.highestUnseen() != nil {
+            Task { @MainActor in
+                WindowOpener.open(.whatsNew)
+            }
         }
     }
 
@@ -220,118 +218,6 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         }
     }
 
-    @MainActor
-    func showWhatsNew230() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet230(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 460)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Mark every older sheet as seen so users don't see them next launch.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet220.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNew220() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet220(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 420)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Mark older sheets as seen so users don't see them on the next launch.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheetV2.defaultsKey)
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNewV2() {
-        let hosting = NSHostingController(rootView: WhatsNewSheetV2(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 460)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        // Also mark v1.9 as seen — users upgrading past v2 shouldn't see the
-        // older sheet on their next launch after dismissing this one.
-        UserDefaults.standard.set(true, forKey: WhatsNewSheet.defaultsKey)
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
-
-    @MainActor
-    func showWhatsNew() {
-        let hosting = NSHostingController(rootView: WhatsNewSheet(onDismiss: { [weak self] in
-            self?.whatsNewWindow?.close()
-            self?.whatsNewWindow = nil
-        }))
-        // Empty sizingOptions disables ALL SwiftUI → window size coupling
-        // (no preferredContentSize getter, no min/max extrema). This breaks
-        // the infinite updateConstraints → sizeThatFits → setNeedsUpdate loop.
-        hosting.sizingOptions = []
-        let contentSize = NSSize(width: 520, height: 440)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentViewController = hosting
-        window.setContentSize(contentSize)
-        window.title = "What's New in DoomCoder"
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.level = .floating
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        whatsNewWindow = window
-    }
 }
 
 

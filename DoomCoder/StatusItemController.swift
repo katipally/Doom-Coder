@@ -177,6 +177,7 @@ enum WindowOpener {
         case configureAgents
         case prompts
         case notes
+        case whatsNew
     }
 
     static func open(_ target: Target) {
@@ -186,9 +187,11 @@ enum WindowOpener {
     /// Settings now lives inside the Configure window. Open Configure and focus
     /// the Settings tab — works whether or not the window is already open.
     static func openSettings() {
-        ConfigureAgentsViewV2.pendingTab = .settings
+        // Set the router's tab first so the window can read it on
+        // appear (or via onChange while it's already open), then open
+        // the window. No more racy pendingTab static.
+        AppRouter.shared.requestOpenSettings()
         open(.configureAgents)
-        NotificationCenter.default.post(name: .dcSelectConfigureTab, object: "settings")
     }
 }
 
