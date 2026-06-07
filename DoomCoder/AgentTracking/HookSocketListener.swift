@@ -9,7 +9,14 @@ final class HookSocketListener: @unchecked Sendable {
     static let shared = HookSocketListener()
 
     private let logger = Logger(subsystem: "com.doomcoder", category: "socket")
-    private let queue = DispatchQueue(label: "com.doomcoder.socket", qos: .utility)
+    // Concurrent queue (audit 2026-06): the listener reads `onEnvelope` and
+    // `onTestEnvelope` from the `DispatchQueue.global(qos: .utility)` worker
+    // thread inside `handleClient`, and writes them from `start()` /
+    // `setTestObserver()` / `stop()`. A serial queue would force the reads
+    // to be funneled through it (latency), so we use a concurrent queue with
+    // `.barrier` on writes to guarantee that a write completes before any
+    // subsequent read.
+    private let queue = DispatchQueue(label: "com.doomcoder.socket", qos: .utility, attributes: .concurrent)
     private var onEnvelope: (@Sendable (HookEnvelope) -> Void)?
     private var onTestEnvelope: (@Sendable (HookEnvelope) -> Void)?
 
@@ -23,13 +30,13 @@ final class HookSocketListener: @unchecked Sendable {
     /// the Connection Doctor for end-to-end ping verification. Not a
     /// general pub-sub — only one observer at a time.
     func setTestObserver(_ cb: (@Sendable (HookEnvelope) -> Void)?) {
-        queue.async { [weak self] in self?.onTestEnvelope = cb }
+        queue.async(flags: .barrier) { [weak self] in self?.onTestEnvelope = cb }
     }
 
     private init() {}
 
     func start(onEnvelope: @escaping @Sendable (HookEnvelope) -> Void) {
-        queue.async { [weak self] in
+        queue.async(flags: .barrier) { [weak self] in
             guard let self else { return }
             self.onEnvelope = onEnvelope
             AgentSupportDir.ensure()
@@ -42,7 +49,7 @@ final class HookSocketListener: @unchecked Sendable {
     }
 
     func stop() {
-        queue.async { [weak self] in self?.stopRawUnixListener() }
+        queue.async(flags: .barrier) { [weak self] in self?.stopRawUnixListener() }
     }
 
     // MARK: - Raw POSIX listener (NWListener doesn't cover unix path sockets directly).
@@ -121,13 +128,24 @@ final class HookSocketListener: @unchecked Sendable {
             guard readExactly(fd, into: &payload, count: Int(length)) else { return }
             let data = Data(payload)
             guard let env = HookEnvelope.decode(data) else { return }
-            let cb = self?.onEnvelope
-            let testCb = self?.onTestEnvelope
+            // Snapshot the two closures under a barrier read so we don't
+            // race with a concurrent `setTestObserver` (audit 2026-06).
+            // We use a sync barrier on the concurrent queue; this is the
+            // only sync call in the listener and only happens on the
+            // per-connection worker thread (low frequency).
+            let (cb, testCb) = self?.snapshotCallbacks() ?? (nil, nil)
             DispatchQueue.main.async {
                 cb?(env)
                 testCb?(env)
             }
         }
+    }
+
+    /// Atomically reads the two callback slots. Caller may then dispatch
+    /// the closures to any queue without re-racing the writes.
+    private func snapshotCallbacks() -> (primary: (@Sendable (HookEnvelope) -> Void)?,
+                                          test: (@Sendable (HookEnvelope) -> Void)?) {
+        queue.sync(flags: .barrier) { (onEnvelope, onTestEnvelope) }
     }
 }
 

@@ -29,6 +29,39 @@ final class SleepManager {
     // Shared instance for SwiftUI scenes.
     static let shared = SleepManager()
 
+    // MARK: - Threading model (audit 2026-06)
+
+    // This class is `@MainActor` and ALL public and internal state is
+    // mutated only on the main actor. Several stored properties are
+    // marked `@ObservationIgnored nonisolated(unsafe)` because the Swift
+    // 6 strict-concurrency checker does not understand the legacy
+    // C-handle + Timer/Observer interaction patterns:
+    //
+    //   - `assertionID`  : IOPMAssertionID, an Int32 C handle. Only
+    //                      read/written on the main actor (via
+    //                      `createAssertion()` and `releaseAssertion()`).
+    //   - `activityToken`: `NSObjectProtocol?` returned by
+    //                      `ProcessInfo.beginActivity`. Only touched on
+    //                      the main actor; passed to
+    //                      `ProcessInfo.endActivity` from
+    //                      `releaseAssertion()`.
+    //   - All `Timer` properties: their callbacks are scheduled on the
+    //                      main `RunLoop` (`.main` + `.common` mode) and
+    //                      hop back to the main actor via
+    //                      `MainActor.assumeIsolated`. The Timer objects
+    //                      themselves are only invalidated on the main
+    //                      actor.
+    //   - All `NotificationCenter` observers: registered with
+    //                      `queue: .main` and route through
+    //                      `MainActor.assumeIsolated` to call back into
+    //                      the actor.
+    //
+    // If you ever see a `Sendable` warning on these properties, the
+    // fix is NOT to remove `nonisolated(unsafe)` — that would silently
+    // break the threading model. The fix is to either (a) move the
+    // property to a separate `@unchecked Sendable` holder, or (b) wrap
+    // the C handle in an `actor`. Both are tracked in Phase 2.
+
     // MARK: - Public state
 
     private(set) var isActive = false

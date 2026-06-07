@@ -535,8 +535,7 @@ struct QRScannerSheet: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(onScan: onScan) }
 
     func makeUIViewController(context: Context) -> ScannerController {
-        let vc = ScannerController()
-        vc.coordinator = context.coordinator
+        let vc = ScannerController(coordinator: context.coordinator)
         vc.onCancel = onCancel
         return vc
     }
@@ -571,17 +570,33 @@ struct QRScannerSheet: UIViewControllerRepresentable {
     }
 
     final class ScannerController: UIViewController {
-        weak var coordinator: Coordinator?
+        // `let` (audit 2026-06 fix): previously `weak var coordinator` was
+        // assigned in `makeUIViewController` *after* `viewDidLoad` ran, so
+        // the first metadata emission found a nil delegate and the QR
+        // scanner silently dropped its first scan. Moving the assignment
+        // into `init` makes the coordinator available before any UIKit
+        // lifecycle callback fires.
+        let coordinator: Coordinator
         var onCancel: (() -> Void)?
         private let session = AVCaptureSession()
         private let sessionQueue = DispatchQueue(label: "doomcoder.qr.session")
         private var preview: AVCaptureVideoPreviewLayer?
         private var torchOn = false
+        /// Set during permission denial so the SwiftUI sheet can render a
+        /// "Settings → Camera" deep-link instead of a black screen
+        /// (audit 2026-06).
+        private var permissionDenied = false
+
+        init(coordinator: Coordinator) {
+            self.coordinator = coordinator
+            super.init(nibName: nil, bundle: nil)
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
         override func viewDidLoad() {
             super.viewDidLoad()
             view.backgroundColor = .black
-            configureSession()
+            requestCameraPermissionAndConfigure()
 
             // Liquid Glass viewfinder cutout (system material on top of camera).
             let cutout = UIView()
@@ -657,6 +672,34 @@ struct QRScannerSheet: UIViewControllerRepresentable {
             }
         }
 
+        private func requestCameraPermissionAndConfigure() {
+            // AVFoundation's AVCaptureSession silently fails to start when
+            // the user has previously denied camera access. The previous
+            // code called `configureSession()` directly, which produced a
+            // black screen with no feedback. Audit 2026-06: explicitly
+            // request access first; on denial, render a "Settings → Camera"
+            // message with a deep-link to the app's permission pane.
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                configureSession()
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        if granted {
+                            self.configureSession()
+                        } else {
+                            self.showPermissionDeniedOverlay()
+                        }
+                    }
+                }
+            case .denied, .restricted:
+                showPermissionDeniedOverlay()
+            @unknown default:
+                showPermissionDeniedOverlay()
+            }
+        }
+
         private func configureSession() {
             guard let device = AVCaptureDevice.default(for: .video),
                   let input = try? AVCaptureDeviceInput(device: device),
@@ -674,6 +717,41 @@ struct QRScannerSheet: UIViewControllerRepresentable {
             self.preview = layer
             let box = SessionBox(session: session)
             sessionQueue.async { box.start() }
+        }
+
+        private func showPermissionDeniedOverlay() {
+            permissionDenied = true
+            let label = UILabel()
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.text = "Camera access is required to scan the QR code.\nEnable it in Settings → DoomCoder."
+            label.numberOfLines = 0
+            label.textAlignment = .center
+            label.textColor = .white
+            label.font = .preferredFont(forTextStyle: .callout)
+            label.accessibilityLabel = "Camera access is required to scan the QR code. Enable it in Settings, DoomCoder."
+            view.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                label.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.8)
+            ])
+
+            let openSettings = UIButton(type: .system)
+            openSettings.translatesAutoresizingMaskIntoConstraints = false
+            openSettings.setTitle("Open Settings", for: .normal)
+            openSettings.setTitleColor(.white, for: .normal)
+            openSettings.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+            openSettings.accessibilityLabel = "Open Settings to enable camera"
+            openSettings.addAction(UIAction { _ in
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }, for: .touchUpInside)
+            view.addSubview(openSettings)
+            NSLayoutConstraint.activate([
+                openSettings.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                openSettings.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 16)
+            ])
         }
 
         override func viewDidLayoutSubviews() {

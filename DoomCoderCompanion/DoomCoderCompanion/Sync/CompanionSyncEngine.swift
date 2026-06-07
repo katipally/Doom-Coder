@@ -57,6 +57,63 @@ final class CompanionSyncEngine: NSObject {
     private var setupInProgress = false
     private var fetchInProgress = false
 
+    // MARK: - Posted-notification dedup (in-memory mirror)
+
+    /// Bounded ring of already-posted `notifId`s so a re-fetch (incremental
+    /// sync replay) doesn't double-post. We hold a `Set<String>` in memory for
+    /// O(1) lookups and appends, and persist the same set as JSON-encoded
+    /// `Data` in the App Group `UserDefaults` so it survives a relaunch.
+    /// v2 introduces the JSON-encoded format; v1 (a `[String]`) is read on
+    /// first launch and migrated forward.
+    private var postedNotifIds: Set<String> = []
+    private var postedNotifIdsLoaded = false
+    private static let postedNotifKeyV2 = "ck.ios.postedNotifIds.v2"
+    private static let postedNotifKeyV1 = "ck.ios.postedNotifIds.v1"
+    private static let postedNotifCap = 400
+
+    /// Loads the posted-notif dedup set from `UserDefaults`, migrating the v1
+    /// `[String]` format forward on first read. Idempotent.
+    private func loadPostedNotifIdsIfNeeded() {
+        guard !postedNotifIdsLoaded else { return }
+        postedNotifIdsLoaded = true
+        let defaults = sharedDefaults
+
+        // v2: JSON-encoded Set
+        if let data = defaults.data(forKey: Self.postedNotifKeyV2),
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            postedNotifIds = decoded
+            return
+        }
+
+        // v1: plain string array — migrate forward, then remove the legacy key.
+        if let legacy = defaults.stringArray(forKey: Self.postedNotifKeyV1) {
+            postedNotifIds = Set(legacy)
+            savePostedNotifIds()
+            defaults.removeObject(forKey: Self.postedNotifKeyV1)
+        }
+    }
+
+    /// Persists the current in-memory set. Called on every append and on
+    /// successful migration from v1.
+    private func savePostedNotifIds() {
+        // Bound the set: if we exceed the cap, evict the oldest. We don't
+        // track insertion order, so we evict a random member when the cap
+        // is exceeded (FIFO approximation is not meaningful for dedup —
+        // we only care that the set is bounded).
+        if postedNotifIds.count > Self.postedNotifCap {
+            // Drop ~10% at a time to amortize the eviction cost.
+            let toDrop = postedNotifIds.count - Int(Double(Self.postedNotifCap) * 0.9)
+            for _ in 0..<toDrop {
+                if let first = postedNotifIds.first {
+                    postedNotifIds.remove(first)
+                }
+            }
+        }
+        if let data = try? JSONEncoder().encode(postedNotifIds) {
+            sharedDefaults.set(data, forKey: Self.postedNotifKeyV2)
+        }
+    }
+
     /// The database to WRITE a record into for a given Mac (presence, commands).
     private func database(forMacId macId: String) -> CKDatabase {
         (macScopes[macId] == .sharedDB) ? sharedDB : privateDB
@@ -888,10 +945,6 @@ final class CompanionSyncEngine: NSObject {
 
     // MARK: - Local notifications (shared-DB delivery)
 
-    /// Tracks already-posted notifIds so a re-fetch (incremental sync replay)
-    /// doesn't double-post. Bounded ring persisted in the App Group.
-    private static let postedNotifKey = "ck.ios.postedNotifIds.v1"
-
     /// Resolves a per-agent icon URL for a local notification. Order:
     ///   1. Bundled image (the iOS app target's asset catalog or the NSE
     ///      target's resources). Works on a fresh install before any
@@ -917,11 +970,11 @@ final class CompanionSyncEngine: NSObject {
         // Only surface recent events (avoid a banner storm on first full sync).
         guard Date().timeIntervalSince(r.ts) < 600 else { return }
 
-        var posted = sharedDefaults.stringArray(forKey: Self.postedNotifKey) ?? []
-        guard !posted.contains(r.notifId) else { return }
-        posted.append(r.notifId)
-        if posted.count > 400 { posted.removeFirst(posted.count - 400) }
-        sharedDefaults.set(posted, forKey: Self.postedNotifKey)
+        // O(1) dedup via in-memory Set; persisted to UserDefaults for next launch.
+        loadPostedNotifIdsIfNeeded()
+        guard !postedNotifIds.contains(r.notifId) else { return }
+        postedNotifIds.insert(r.notifId)
+        savePostedNotifIds()
 
         let content = UNMutableNotificationContent()
         content.title = r.title.isEmpty ? r.macName : r.title
