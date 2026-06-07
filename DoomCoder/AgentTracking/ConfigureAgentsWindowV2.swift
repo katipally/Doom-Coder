@@ -7,12 +7,8 @@ import DoomCoderCore
 // Replaces the v1 wizard with accordion-style detail pane and per-agent
 // actions (install, uninstall, reveal, open-in-IDE, demo, verify).
 struct ConfigureAgentsViewV2: View {
-    enum Tab: Hashable { case agents, channels, logs, settings }
-    /// Set by `WindowOpener.openSettings()` before the window is created so a
-    /// cold-opened Configure window lands on the right tab (the
-    /// `.dcSelectConfigureTab` notification only reaches an already-live view).
-    @MainActor static var pendingTab: Tab?
-    @State private var tab: Tab = .agents
+    @State private var router = AppRouter.shared
+    @State private var tab: AppRouter.ConfigTab = .agents
     @State private var selected: TrackedAgent? = .claude
     @State private var advancedExpanded = false
     @State private var detections: [TrackedAgent: AgentDetection] = [:]
@@ -65,11 +61,12 @@ struct ConfigureAgentsViewV2: View {
         }
         .frame(minWidth: 820, minHeight: 580)
         .onAppear {
-            if let pending = Self.pendingTab {
-                Self.pendingTab = nil
-                tab = pending
-                if pending != .agents { selected = nil }
-            }
+            // Sync from `AppRouter.shared.configureTab` so a cold-opened
+            // Configure window lands on the right tab. This replaces the
+            // racy `Self.pendingTab` static + `dcSelectConfigureTab`
+            // notification pattern.
+            tab = router.configureTab
+            if router.configureTab != .agents { selected = nil }
         }
         .task {
             await detectAllAsync()
@@ -86,17 +83,14 @@ struct ConfigureAgentsViewV2: View {
         .onReceive(NotificationCenter.default.publisher(for: .doomCoderIconsRefreshed)) { _ in
             detectAll()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .dcSelectConfigureTab)) { note in
-            guard let id = note.object as? String else { return }
+        .onChange(of: router.configureTab) { _, newValue in
+            // React to live router updates (e.g. when the user opens
+            // Settings from the menu bar while the Configure window is
+            // already open). `withAnimation(DCAnim.fade)` smooths the
+            // tab swap.
             withAnimation(DCAnim.fade) {
-                switch id {
-                case "settings":  tab = .settings; selected = nil
-                case "ai":        tab = .settings; selected = nil
-                case "channels":  tab = .channels; selected = nil
-                case "logs":      tab = .logs;     selected = nil
-                case "agents":    tab = .agents
-                default: break
-                }
+                tab = newValue
+                if newValue != .agents { selected = nil }
             }
         }
         .alert("Update Hook Configs", isPresented: $showMigrationAlert) {

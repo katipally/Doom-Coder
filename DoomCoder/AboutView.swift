@@ -1,37 +1,71 @@
 import SwiftUI
+import AppKit
 
+// MARK: - AboutView
+//
+// About window for DoomCoder. macOS 26 look: brand mark + app name +
+// tagline, a Form (grouped style) for version/build/website, and inline
+// links to GitHub, the App Store, and the privacy policy. The window
+// is sized to the content and is the same liquid glass-tinted style
+// as the rest of the app.
 struct AboutView: View {
-    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    private let version: String
+    private let build: String
+
+    private var appIcon: NSImage {
+        if let named = NSImage(named: "AppIcon") { return named }
+        return NSApplication.shared.applicationIconImage
+    }
+
+    init() {
+        let info = Bundle.main.infoDictionary
+        self.version = (info?["CFBundleShortVersionString"] as? String) ?? "1.0"
+        self.build = (info?["CFBundleVersion"] as? String) ?? "—"
+    }
 
     var body: some View {
-        VStack(spacing: 14) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
+        VStack(spacing: 18) {
+            Image(nsImage: appIcon)
                 .resizable()
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .interpolation(.high)
+                .frame(width: 96, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .accessibilityHidden(true)
 
-            Text("Doom Coder")
-                .font(.title.bold())
+            VStack(spacing: 4) {
+                Text("DoomCoder")
+                    .font(.largeTitle.bold())
+                Text("Keep your Mac awake. Track your AI agents.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
-            Text("Version \(version)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Form {
+                LabeledContent("Version", value: version)
+                LabeledContent("Build", value: build)
+                LabeledContent("Website", value: "github.com/katipally/Doom-Coder")
+            }
+            .formStyle(.grouped)
+            .frame(width: 360)
 
-            Text("Keep your Mac awake. Track your AI agents.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            HStack(spacing: 16) {
+                Link(destination: URL(string: "https://github.com/katipally/Doom-Coder")!) {
+                    Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                Link(destination: URL(string: "https://apps.apple.com/app/doomcoder-companion/id6772514212")!) {
+                    Label("Companion", systemImage: "iphone.gen3")
+                }
+                Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
+                    Label("Privacy", systemImage: "hand.raised")
+                }
+            }
+            .font(.subheadline)
 
-            Divider()
-
-            Text("A lightweight menu bar utility that prevents macOS from sleeping and tracks AI agent sessions. Pick Screen On or Screen Off for sleep blocking, and configure hooks for Claude Code, Cursor, VS Code Copilot, and Copilot CLI to get real-time notifications.")
+            Text("© 2026 DoomCoder. All rights reserved.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
         }
         .padding(28)
-        .frame(width: 320)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 460)
     }
 }
