@@ -41,7 +41,13 @@ struct RootTabView: View {
                 AppGroupCache.defaults.set(Date(), forKey: WelcomeView.shownKey)
                 showWelcome = false
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
+        // iPad sidebar layout: on regular width the tab bar collapses to
+        // a macOS-style sidebar with the four tabs as a section. iPhone
+        // keeps the bottom tab bar.
+        .tabViewStyle(.sidebarAdaptable)
         // Audit 2026-06: allow SettingsView to re-trigger the welcome
         // sheet via `AppRouter.showWelcome()`. We observe the router's
         // `welcomeRequestCount` and flip `showWelcome` to true. We do
