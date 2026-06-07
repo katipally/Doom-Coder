@@ -95,6 +95,10 @@ struct SettingsView: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .onSubmit { commitDeviceName() }
+                // Audit 2026-06: the placeholder is the model's default
+                // name; add an explicit accessibility label so VoiceOver
+                // announces "Device name" instead of the placeholder.
+                .accessibilityLabel("Device name")
             if !deviceNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button {
                     deviceNameInput = ""
@@ -248,6 +252,11 @@ struct SettingsView: View {
             SecureField(ai.provider.keyHint, text: $aiKeyInput)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                // Audit 2026-06: the placeholder is a hint about the
+                // expected key format ("sk-...") but VoiceOver reads it
+                // as the field's label, which is wrong. Add a real
+                // accessibility label.
+                .accessibilityLabel("AI provider API key")
             Button {
                 let entered = aiKeyInput
                 aiKeyInput = ""
@@ -450,6 +459,15 @@ struct SettingsView: View {
             }
 
             // (Connected Macs are managed in the Dashboard switcher + Add Device.)
+
+            // Audit 2026-06: provide a way to re-show the first-run
+            // welcome sheet. The original flag was a one-way switch.
+            Button {
+                AppRouter.shared.showWelcome()
+                Haptics.selection()
+            } label: {
+                Label("Show welcome again", systemImage: "hand.wave")
+            }
 
             Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
                 Label("Privacy Policy", systemImage: "hand.raised")
