@@ -40,6 +40,12 @@ func positionalArgs() -> (agent: String, event: String)? {
 }
 
 // Frame: 4-byte big-endian length || UTF-8 JSON bytes
+//
+// Refactored (audit 2026-06): the O_NONBLOCK flag is now always cleared
+// before the function returns, on every path. The previous code skipped
+// the clear on the connect-timeout early-return; the `defer { close(fd) }`
+// masked the bug, but the path was dead-on-error and confusing for future
+// readers.
 func sendFrame(_ data: Data) -> Bool {
     let path = socketPath()
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -64,32 +70,15 @@ func sendFrame(_ data: Data) -> Bool {
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
-    let flags = fcntl(fd, F_GETFL, 0)
-    _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
-
-    let sz = socklen_t(MemoryLayout<sockaddr_un>.size)
-    let connRC = withUnsafePointer(to: &addr) { p -> Int32 in
-        p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in connect(fd, sp, sz) }
-    }
-    if connRC != 0 {
-        if errno != EINPROGRESS { return false }
-        var wfds = fd_set()
-        let wfdsPtr = withUnsafeMutablePointer(to: &wfds) { $0 }
-        memset(wfdsPtr, 0, MemoryLayout<fd_set>.size)
-        let idx = Int(fd / 32)
-        let bit = Int32(1) << (fd % 32)
-        withUnsafeMutableBytes(of: &wfds) { raw in
-            let p = raw.baseAddress!.assumingMemoryBound(to: Int32.self)
-            p[idx] |= bit
-        }
-        var ctv = timeval(tv_sec: 0, tv_usec: 50_000)
-        let nr = select(fd + 1, nil, &wfds, nil, &ctv)
-        if nr <= 0 { return false }
-        var soErr: Int32 = 0
-        var soLen = socklen_t(MemoryLayout<Int32>.size)
-        if getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &soLen) != 0 || soErr != 0 { return false }
-    }
-    _ = fcntl(fd, F_SETFL, flags)
+    let originalFlags = fcntl(fd, F_GETFL, 0)
+    // Set the fd non-blocking for connect(), then restore the original
+    // flags before any send/recv so the SO_SNDTIMEO/SO_RCVTIMEO above
+    // are honored (a non-blocking send returns EAGAIN immediately on
+    // backpressure, bypassing the per-call timeout).
+    _ = fcntl(fd, F_SETFL, originalFlags | O_NONBLOCK)
+    let connected = connectNonBlocking(fd: fd, addr: &addr, timeoutUs: 50_000)
+    _ = fcntl(fd, F_SETFL, originalFlags)
+    guard connected else { return false }
 
     var lenBE = UInt32(data.count).bigEndian
     var ok = true
@@ -99,6 +88,34 @@ func sendFrame(_ data: Data) -> Bool {
     if !ok { return false }
     let written = data.withUnsafeBytes { buf -> Int in send(fd, buf.baseAddress, data.count, 0) }
     return written == data.count
+}
+
+/// Performs a non-blocking `connect` to the given sockaddr, waiting up to
+/// `timeoutUs` microseconds for the socket to become writable. Returns
+/// `true` iff the connection succeeded.
+private func connectNonBlocking(fd: Int32, addr: inout sockaddr_un, timeoutUs: Int32) -> Bool {
+    let sz = socklen_t(MemoryLayout<sockaddr_un>.size)
+    let connRC = withUnsafePointer(to: &addr) { p -> Int32 in
+        p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in connect(fd, sp, sz) }
+    }
+    if connRC == 0 { return true }
+    if errno != EINPROGRESS { return false }
+    var wfds = fd_set()
+    let wfdsPtr = withUnsafeMutablePointer(to: &wfds) { $0 }
+    memset(wfdsPtr, 0, MemoryLayout<fd_set>.size)
+    let idx = Int(fd / 32)
+    let bit = Int32(1) << (fd % 32)
+    withUnsafeMutableBytes(of: &wfds) { raw in
+        let p = raw.baseAddress!.assumingMemoryBound(to: Int32.self)
+        p[idx] |= bit
+    }
+    var ctv = timeval(tv_sec: 0, tv_usec: timeoutUs)
+    let nr = select(fd + 1, nil, &wfds, nil, &ctv)
+    if nr <= 0 { return false }
+    var soErr: Int32 = 0
+    var soLen = socklen_t(MemoryLayout<Int32>.size)
+    if getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &soLen) != 0 || soErr != 0 { return false }
+    return true
 }
 
 func sendEnvelope(agent: String, event: String, payload: Any = [:] as [String: Any], synthetic: Bool = false) -> Bool {
@@ -166,6 +183,18 @@ private func procShortInfo(_ pid: Int32) -> DCProcBSDShortInfo? {
     let size = Int32(MemoryLayout<DCProcBSDShortInfo>.size)
     let rc = withUnsafeMutablePointer(to: &info) { ptr -> Int32 in
         proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 0, UnsafeMutableRawPointer(ptr), size)
+    }
+    // Future-proofing (audit 2026-06): the C `proc_bsdshortinfo` struct
+    // may grow in a future macOS release. If `proc_pidinfo` returns a
+    // size larger than our local struct, the trailing fields would be
+    // silently truncated and every offset would be wrong, so we refuse
+    // the result. Callers (`parentPID`, `psComm`) will then return `nil`
+    // for that PID, which makes the ancestor chain empty; `shouldSkip`
+    // treats an empty chain as "don't skip, defer to app-layer dedup".
+    // This is the same graceful-degradation path the code already
+    // follows on `ENOENT` / race conditions.
+    if rc > size {
+        return nil
     }
     guard rc == size else { return nil }
     return info
@@ -431,10 +460,31 @@ func replayDemo(agent: String) -> Int32 {
     return 0
 }
 
+// MARK: - Signal handlers
+//
+// IMPORTANT (audit 2026-06): a C signal handler must be a `@convention(c)`
+// function that captures NOTHING from its enclosing scope. The previous
+// code used a Swift closure `signal(SIGALRM) { _ in _exit(0) }`; this
+// happens to compile and work as long as the closure has no captures
+// (Swift lowers it to a static function pointer). If a future refactor
+// adds even a single captured variable, the closure becomes a heap
+// object and the call traps at runtime inside the signal context, which
+// is undefined behavior on most POSIX systems.
+//
+// We declare the handler explicitly as `@convention(c)` so the contract
+// is locked in at compile time.
+
+// SIGNAL-SAFE: do not add captures. Do not call into Swift runtime APIs.
+// `_exit` is async-signal-safe per POSIX.1-2017.
+@_cdecl("dcHookSigalrmHandler")
+private func dcHookSigalrmHandler(_ sig: Int32) {
+    _exit(0)
+}
+
 func runMain() -> Int32 {
     // Don't use hard alarm for demos (they take 30s)
     if !flagPresent("replay-demo") {
-        signal(SIGALRM) { _ in _exit(0) }
+        signal(SIGALRM, dcHookSigalrmHandler)
         alarm(kHardTimeoutSeconds)
     }
 

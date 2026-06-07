@@ -14,6 +14,13 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
     private weak var pusher: CloudKitPusher?
     private let stateKey: String
 
+    /// Audit 2026-06: the brief 300ms delay before re-kicking the engine
+    /// after a recovery (see `handleEvent` below) is named here so a
+    /// future reader can understand the trade-off. The delay gives the
+    /// engine time to finish its current send cycle so our re-queue
+    /// doesn't race the in-flight save.
+    private static let engineRecoveryKickDelay: Duration = .milliseconds(300)
+
     init(pusher: CloudKitPusher, stateKey: String) {
         self.pusher = pusher
         self.stateKey = stateKey
@@ -75,7 +82,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 // delegate callback. The brief delay lets the engine finish the
                 // current send before we re-queue the recovered changes.
                 Task { @MainActor [weak pusher] in
-                    try? await Task.sleep(for: .milliseconds(300))
+                    try? await Task.sleep(for: Self.engineRecoveryKickDelay)
                     pusher?.kickEngine()
                 }
             }
@@ -249,7 +256,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
         // callback is a CloudKit misuse). The brief delay lets the engine
         // finish processing the current fetch before we trigger a send.
         Task { @MainActor [weak pusher] in
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: Self.engineRecoveryKickDelay)
             pusher?.kickEngine()
         }
     }

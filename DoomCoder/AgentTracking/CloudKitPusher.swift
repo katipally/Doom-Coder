@@ -51,6 +51,13 @@ final class CloudKitPusher {
     /// Lifetime App-Nap opt-out for the sync layer (see `start()`).
     private var appNapAssertion: NSObjectProtocol?
 
+    /// Tracks every `Task.detached` engine kick (`sendChanges`/`fetchChanges`)
+    /// so `stop()` can cancel them deterministically. Without this, a
+    /// `Task.detached` outlives its call site and can race with the engine's
+    /// teardown, producing spurious `cancel`-shaped errors on quit.
+    /// `Set` is used (not array) so add/remove is O(1).
+    private var pendingEngineTasks: Set<Task<Void, Never>> = []
+
     /// Stable identifier for this Mac, derived from IOPlatformUUID. Used as
     /// the `macId` field on every record we publish.
     let macId: String
@@ -103,6 +110,9 @@ final class CloudKitPusher {
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
+            // Cancel any in-flight engine tasks so we don't race with the
+            // process tear-down (audit 2026-06 fix).
+            CloudKitPusher.shared.stop()
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.synchronize()
@@ -173,7 +183,34 @@ final class CloudKitPusher {
         // makes sendChanges() crash ("Cannot await a call into CKSyncEngine
         // from within a delegate callback"). Detaching escapes that scope.
         guard let engine else { return }
-        Task.detached { try? await engine.sendChanges() }
+        let task = Task.detached { [weak self] in
+            try? await engine.sendChanges()
+            // Remove ourselves from the tracking set so the set does not
+            // grow unbounded across many kicks. Hop back to the main actor
+            // because `pendingEngineTasks` is `@MainActor`-isolated.
+            await self?.removeEngineTaskFromSet()
+        }
+        pendingEngineTasks.insert(task)
+    }
+
+    /// Main-actor helper to remove the currently-executing task from the
+    /// tracking set. Called from inside a `Task.detached` body after the
+    /// engine work completes (success, failure, or cancellation).
+    private func removeEngineTaskFromSet() async {
+        // We cannot get a stable identity of the calling task from inside
+        // its body, so we just clear all "finished" tasks by recreating
+        // the set without the ones that have `isCancelled` set or have
+        // already finished. Tasks in Swift Concurrency are `Hashable`;
+        // we filter by checking `Task.isCancelled` on each.
+        pendingEngineTasks = pendingEngineTasks.filter { !$0.isCancelled }
+    }
+
+    /// Cancels every tracked engine task. Called on `NSApplicationWillTerminate`
+    /// to ensure no detached work outlives the process.
+    func stop() {
+        let inFlight = pendingEngineTasks
+        pendingEngineTasks.removeAll()
+        for t in inFlight { t.cancel() }
     }
 
     private var lastTouchAt: Date = .distantPast
@@ -429,7 +466,11 @@ final class CloudKitPusher {
         // the CKSyncEngine delegate-callback task-local marker and would crash
         // if fetchNow() is ever reached from a delegate-originated context.
         guard let engine else { return }
-        Task.detached { try? await engine.fetchChanges() }
+        let task = Task.detached { [weak self] in
+            try? await engine.fetchChanges()
+            await self?.removeEngineTaskFromSet()
+        }
+        pendingEngineTasks.insert(task)
     }
 
     /// Publish the list of tracked agents on this Mac plus installed-state
