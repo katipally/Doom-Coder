@@ -24,6 +24,7 @@
 		55ED3C044EED519BD2F5E236 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2D99D6FC3BBAEA7BBB4377 /* AppRouter.swift */; };
 		5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989306766B1ED48EB7EF7A00 /* DemoView.swift */; };
 		653506D5B5B8468A7E91F1EB /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = 577E6F8848446B47EA914860 /* Stores.swift */; };
+		66E7BBA66AD8FB8B1671207C /* SharedUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9732DDBB2D1FDCE3277BD74E /* SharedUI.swift */; };
 		67B76C43DEBEB404BC71B115 /* AgentLogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD9392DB3081F0376202563D /* AgentLogsView.swift */; };
 		7FCDC44AB94F26BDBFC10638 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D9CEB3C8428B662C6D8FDA /* NotesView.swift */; };
 		8203D5C8E27A07CCA8A80CA4 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F39E1FCBF696C55142140DC /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
@@ -103,6 +104,7 @@
 		8522051EBB94D0FAC89D4D85 /* PromptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptStore.swift; sourceTree = "<group>"; };
 		8F2D99D6FC3BBAEA7BBB4377 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		92946470387A0FC606BDBF2B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		9732DDBB2D1FDCE3277BD74E /* SharedUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUI.swift; sourceTree = "<group>"; };
 		97C9DB6533B760A3ED679723 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		989306766B1ED48EB7EF7A00 /* DemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoView.swift; sourceTree = "<group>"; };
 		9FB9C264096018D7F1530EB0 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -219,6 +221,7 @@
 				15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
 				D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */,
+				9732DDBB2D1FDCE3277BD74E /* SharedUI.swift */,
 				E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */,
 				92946470387A0FC606BDBF2B /* WelcomeView.swift */,
 			);
@@ -478,6 +481,7 @@
 				3139E5D1B91CCAD0DF7B082F /* RootTabView.swift in Sources */,
 				AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */,
 				D0BB7E1FE80FDC66B216818A /* SharedToolUI.swift in Sources */,
+				66E7BBA66AD8FB8B1671207C /* SharedUI.swift in Sources */,
 				653506D5B5B8468A7E91F1EB /* Stores.swift in Sources */,
 				C82290D0589BA1DAF39B2912 /* SyncDiagnosticsView.swift in Sources */,
 				895632B1F3DC7257766878BA /* WelcomeView.swift in Sources */,
@@ -572,6 +576,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -588,6 +593,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
 			};
 			name = Release;
@@ -660,6 +666,7 @@
 					"$(inherited)",
 					"DEBUG=1",
 				);
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -677,6 +684,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
 			};
 			name = Debug;
