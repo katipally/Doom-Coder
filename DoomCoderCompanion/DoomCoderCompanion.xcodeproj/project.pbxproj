@@ -22,6 +22,7 @@
 		530E653C39D0A0103CDD6D9E /* AppGroupCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662F77F68847FCD3D1555C97 /* AppGroupCache.swift */; };
 		55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */; };
 		55ED3C044EED519BD2F5E236 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2D99D6FC3BBAEA7BBB4377 /* AppRouter.swift */; };
+		55F0194C9549FA2800AE8F47 /* MacControlViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD7CCE54DA64EABCC67CA9 /* MacControlViewModel.swift */; };
 		5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989306766B1ED48EB7EF7A00 /* DemoView.swift */; };
 		653506D5B5B8468A7E91F1EB /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = 577E6F8848446B47EA914860 /* Stores.swift */; };
 		66E7BBA66AD8FB8B1671207C /* SharedUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9732DDBB2D1FDCE3277BD74E /* SharedUI.swift */; };
@@ -110,6 +111,7 @@
 		9FB9C264096018D7F1530EB0 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		A001013B397C1A86AA65F66F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A0025197E0D983F81144F468 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
+		ABDD7CCE54DA64EABCC67CA9 /* MacControlViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacControlViewModel.swift; sourceTree = "<group>"; };
 		AD9392DB3081F0376202563D /* AgentLogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogsView.swift; sourceTree = "<group>"; };
 		B4CCC40290EB871ECB7D9D14 /* DoomCoderCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DoomCoderCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1FD10F71AB58F8526779A2D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 				53232581AADB8C337671BB09 /* EmptyStateView.swift */,
 				D8DEE8563E810CC992559FA8 /* Haptics.swift */,
 				C5B9DE90A2213084C9D99462 /* MacControlView.swift */,
+				ABDD7CCE54DA64EABCC67CA9 /* MacControlViewModel.swift */,
 				15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */,
 				16A67B01FA77C05717991E37 /* RootTabView.swift */,
 				D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */,
@@ -471,6 +474,7 @@
 				4B93311EB1D4E57AD4EFFAE4 /* JSONFileStore.swift in Sources */,
 				92DC98D7E394C60ED12FBDBA /* LocalStore.swift in Sources */,
 				BFC889543E4CBE92A36E2B75 /* MacControlView.swift in Sources */,
+				55F0194C9549FA2800AE8F47 /* MacControlViewModel.swift in Sources */,
 				1B52116D11655D1CABC1D3AE /* MacReachabilityBanner.swift in Sources */,
 				0F1D20AD22DF41A54B9332A6 /* NoteReminderScheduler.swift in Sources */,
 				82C002BB8A77FBCC3C1F21F1 /* NotesStore.swift in Sources */,
