@@ -104,3 +104,17 @@ If this policy changes materially, we will update the "Last updated" date above 
 
 Questions about this policy? Open an issue at [github.com/katipally/Doom-Coder](https://github.com/katipally/Doom-Coder) or email via the contact information on the App Store listing.
 
+---
+
+## 11. Why the Mac app is not sandboxed (audit 2026-06)
+
+The macOS app is intentionally shipped with `com.apple.security.app-sandbox = false`. This is a deliberate, audited choice required for the following features that would otherwise be unavailable or severely degraded under the App Sandbox:
+
+- **Global hotkey (⌥ Space)** — registering a global event tap requires Accessibility permission, which the sandbox restricts.
+- **IOPMAssertion / Power Assertions** — the keep-awake feature uses `IOPMAssertionCreateWithName`, which is callable under the sandbox but is more reliable when the process is not sandboxed. The app reads the assertion status via `pmset` for diagnostics.
+- **Shell-out to `dc-hook`** — the Mac launches a small companion binary (`dc-hook`) into the user's `~/Library/Application Support/DoomCoder/` directory, which is not writable from a sandboxed app.
+- **Editing `~/.claude/settings.json`, `~/.codeium/windsurf/hooks.json`, etc.** — agent hook files live in the user's home directory, which the sandbox forbids without an explicit `com.apple.security.files.user-selected.read-write` entitlement (impractical at scale across six agent CLIs).
+- **Reading the Mac's IOPlatformUUID for the stable Mac ID** — the sandbox replaces the real UUID with a synthetic one that resets on every launch, breaking the iCloud pair key.
+
+The app is signed with an Apple Developer ID, notarized by Apple, and uses only the standard system frameworks (no third-party SDKs that would justify additional hardening). The Mac App Store distribution channel, which mandates sandboxing, is not used; the app is distributed via Sparkle auto-update direct from this website and via a Mac App Store companion (the iOS `DoomCoder Companion`, which is fully sandboxed and uses the same iCloud container for sync).
+
