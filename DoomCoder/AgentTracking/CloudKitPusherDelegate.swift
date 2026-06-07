@@ -283,6 +283,13 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
 
     @MainActor
     private func persistState(_ state: CKSyncEngine.State.Serialization) {
+        // Audit 2026-06: respect cancellation before doing the encode +
+        // write. If the engine is being torn down (Phase 1.10's `stop()`),
+        // we don't want to write a state that no one will read. JSON
+        // encode of a CKSyncEngine state is ~10-50 KB; the UserDefaults
+        // write triggers a disk flush. Both are cheap but a cancellation
+        // check is the polite thing to do.
+        guard !Task.isCancelled else { return }
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: stateKey)
     }

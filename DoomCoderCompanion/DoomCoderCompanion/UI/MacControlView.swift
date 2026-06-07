@@ -8,6 +8,14 @@
 // MacStatusRecord.lastAppliedCommandId / masterEnabled — we reconcile optimistic
 // UI against that. CloudKit cannot wake a sleeping Mac, so copy never implies the
 // change is instant; we show "waiting for your Mac to check in" until it lands.
+//
+// Audit 2026-06: this view is 894 lines and holds optimistic-ack state
+// (`waitingCommandId`, `desiredMaster`, `waitingMasterCommandId`, the
+// timeout Tasks, the ack-poll loop) as `@State` properties. A proper
+// view-model extraction was deferred to Phase 3 because the view body
+// is too tangled to refactor in a single PR without dedicated review.
+// The properties below are documented as the migration surface for that
+// future PR.
 
 import SwiftUI
 import DoomCoderCore
