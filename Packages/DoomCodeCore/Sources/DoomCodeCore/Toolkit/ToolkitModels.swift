@@ -1,4 +1,4 @@
-// ToolkitModels.swift — DoomCoderCore
+// ToolkitModels.swift — DoomCodeCore
 // Shared, local-only toolkit models used by BOTH the macOS app and the iOS
 // companion. These power the standalone Tools experience (Prompt Composer,
 // Smart Notes). They are pure-Foundation, Codable & Sendable value types with

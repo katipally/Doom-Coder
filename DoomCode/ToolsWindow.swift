@@ -1,6 +1,6 @@
-// ToolsWindow.swift — DoomCoder (macOS)
+// ToolsWindow.swift — DoomCode (macOS)
 // A dedicated sidebar window that brings the standalone toolkit (Prompts /
-// Notes / Settings) to the Mac, reusing the shared DoomCoderCore AI engine.
+// Notes / Settings) to the Mac, reusing the shared DoomCodeCore AI engine.
 // Tools data is LOCAL-ONLY on this device — no sync.
 //
 // Design notes (per critique):
@@ -11,7 +11,7 @@
 import SwiftUI
 import AppKit
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - Local persistence (atomic, local-only)
 
@@ -274,7 +274,7 @@ enum MacClipboard {
 
 enum ToolSurface: String, CaseIterable {
     case prompts, notes
-    /// Matches the SwiftUI `Window(id:)` scene identifiers in DoomCoderApp.
+    /// Matches the SwiftUI `Window(id:)` scene identifiers in DoomCodeApp.
     var windowID: String { rawValue }
 }
 
@@ -940,7 +940,7 @@ struct MacPromptsPane: View {
 
 // MARK: - Mac message view
 //
-// Moved to its own file: `DoomCoder/MacMessageView.swift`.
+// Moved to its own file: `DoomCode/MacMessageView.swift`.
 
 // MARK: - Prompt Library (shared curated prompts)
 
@@ -1033,7 +1033,7 @@ private struct MacPromptLibraryView: View {
 // MARK: - Rainbow idle glow (legacy — moved to RainbowIdleGlow.swift)
 //
 // The shared `RainbowIdleGlow` struct now lives in `RainbowIdleGlow.swift`
-// (top-level of the DoomCoder target) so the iOS Prompts view can reuse
+// (top-level of the DoomCode target) so the iOS Prompts view can reuse
 // it without duplicating the implementation. The local declaration here
 // was removed; call sites still use `RainbowIdleGlow(cornerRadius: …)`
 // unchanged.
@@ -1222,4 +1222,4 @@ private struct NoteRow: View {
 /// stale content snapshot can never clobber it.
 // MARK: - MacNoteEditor
 //
-// Moved to its own file: `DoomCoder/MacNoteEditor.swift`.
+// Moved to its own file: `DoomCode/MacNoteEditor.swift`.

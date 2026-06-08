@@ -1,10 +1,10 @@
 import SwiftUI
 
-// MARK: - DoomCoder iOS Liquid Glass card
+// MARK: - DoomCode iOS Liquid Glass card
 //
-// iOS-side mirror of `DoomCoder/GlassCard.swift` (mac side). Two copies
+// iOS-side mirror of `DoomCode/GlassCard.swift` (mac side). Two copies
 // because they live in different targets and the SwiftPM module
-// `DoomCoderCore` doesn't import SwiftUI. If a third target is added,
+// `DoomCodeCore` doesn't import SwiftUI. If a third target is added,
 // promote this to the package.
 //
 // Usage:
@@ -79,7 +79,7 @@ private extension View {
 }
 
 extension View {
-    /// Applies the canonical DoomCoder Liquid Glass card chrome (iOS).
+    /// Applies the canonical DoomCode Liquid Glass card chrome (iOS).
     func doomGlassCard(cornerRadius: CGFloat = 14) -> some View {
         modifier(GlassCardBackground(cornerRadius: cornerRadius, tint: .clear))
     }

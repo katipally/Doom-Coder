@@ -1,14 +1,14 @@
-// DashboardView.swift — DoomCoder Companion
+// DashboardView.swift — DoomCode Companion
 // The optional, Mac-dependent tab. Clearly labeled so users understand the Tools
 // tab works without a Mac and this one adds live monitoring + remote control when
-// the free DoomCoder Mac app is connected.
+// the free DoomCode Mac app is connected.
 //
 //   • Connected:     live agents (AgentList) + keep-awake remote control.
 //   • Not connected: a clear explainer that this needs the Mac app, plus Connect,
 //                    the interactive demo, and the Mac download.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct DashboardView: View {
     @State private var macStore = MacStatusStore.shared
@@ -16,7 +16,7 @@ struct DashboardView: View {
     @State private var router = AppRouter.shared
     @State private var showConnect = false
 
-    private let downloadURL = URL(string: "https://github.com/katipally/Doom-Coder/releases")!
+    private let downloadURL = URL(string: "https://github.com/katipally/Doom-Code/releases")!
 
     var body: some View {
         Group {
@@ -166,7 +166,7 @@ struct DashboardView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Notifications are off. Tap to enable in System Settings.")
-        .accessibilityHint("Opens Settings to allow notifications for DoomCoder")
+        .accessibilityHint("Opens Settings to allow notifications for DoomCode")
     }
 
     @ViewBuilder
@@ -215,7 +215,7 @@ struct DashboardView: View {
                     VStack(spacing: 8) {
                         Text("Connect your Mac")
                             .font(.title2.bold())
-                        Text("The Dashboard monitors the AI coding agents running on your Mac and lets you control keep-awake remotely. It needs the free DoomCoder Mac app.")
+                        Text("The Dashboard monitors the AI coding agents running on your Mac and lets you control keep-awake remotely. It needs the free DoomCode Mac app.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -248,7 +248,7 @@ struct DashboardView: View {
                 tryStandalone
 
                 Link(destination: downloadURL) {
-                    Label("Download DoomCoder for Mac", systemImage: "arrow.down.circle.fill")
+                    Label("Download DoomCode for Mac", systemImage: "arrow.down.circle.fill")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)

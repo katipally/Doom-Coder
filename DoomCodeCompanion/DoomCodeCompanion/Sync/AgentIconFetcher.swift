@@ -8,7 +8,7 @@
 
 import Foundation
 import UIKit
-import DoomCoderCore
+import DoomCodeCore
 
 enum AgentIconFetcher {
     /// Seed bundled agent PNGs into the shared App Group cache so the NSE

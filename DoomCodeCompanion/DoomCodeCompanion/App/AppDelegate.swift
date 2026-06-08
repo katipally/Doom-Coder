@@ -1,4 +1,4 @@
-// AppDelegate.swift — DoomCoder Companion
+// AppDelegate.swift — DoomCode Companion
 // UIApplicationDelegate shim wired into CompanionApp via @UIApplicationDelegateAdaptor.
 // Handles remote-notification registration, silent-push delivery, and
 // foreground notification presentation policy.
@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     // MARK: - CloudKit share acceptance (pairing via link)
 
-    /// Invoked when the user opens a DoomCoder iCloud share link (the Mac's
+    /// Invoked when the user opens a DoomCode iCloud share link (the Mac's
     /// "Copy Invite Link" / Share). The app has no scene manifest, so the share
     /// callback lands here on `UIApplicationDelegate` (which also fires on cold
     /// launch, avoiding the SwiftUI SceneDelegate caveat). The QR-scan path

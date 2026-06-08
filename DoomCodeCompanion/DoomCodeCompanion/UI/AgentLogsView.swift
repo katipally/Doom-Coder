@@ -1,8 +1,8 @@
-// AgentLogsView.swift — DoomCoder Companion
+// AgentLogsView.swift — DoomCode Companion
 // Per-agent view: capability card at top, full-height notification log below.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct AgentLogsView: View {
     let agent: TrackedAgent

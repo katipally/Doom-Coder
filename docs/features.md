@@ -1,12 +1,12 @@
-# DoomCoder — Full Feature Reference
+# Doom Code — Full Feature Reference
 
-This document covers every feature, setting, and behavior in DoomCoder. Each section maps to a place in the UI. Hover the **ⓘ** icons in the app for inline summaries.
+This document covers every feature, setting, and behavior in DoomCode. Each section maps to a place in the UI. Hover the **ⓘ** icons in the app for inline summaries.
 
 ---
 
 ## Menu bar panel
 
-The panel opens when you click the DoomCoder icon in the menu bar, or by pressing the global hotkey (default **⌥ Space**).
+The panel opens when you click the Doom Code icon in the menu bar, or by pressing the global hotkey (default **⌥ Space**).
 
 ### Master toggle
 
@@ -25,7 +25,7 @@ Turning the master back on resumes exactly where it left off.
 
 | Mode | Behavior |
 |---|---|
-| **Off** | macOS manages sleep normally. DoomCoder holds no IOPMAssertion. |
+| **Off** | macOS manages sleep normally. Doom Code holds no IOPMAssertion. |
 | **On** | Always holds the sleep assertion. Choose a screen mode and optional session timer below. |
 | **Auto** | Holds the assertion while any tracked agent is actively working (running, waiting for input, or waiting for approval). Releases after a 5-minute grace once all agents are idle. Respects per-agent tracking toggles — agents toggled off are excluded. |
 
@@ -34,7 +34,7 @@ Turning the master back on resumes exactly where it left off.
 | Mode | Behavior |
 |---|---|
 | **Screen On** | Display stays fully lit the whole time. Mac never sleeps. |
-| **Screen Off** | Display sleeps after a short delay; Mac CPU stays awake. Saves power and reduces screen burn. When you move the mouse the display wakes; DoomCoder re-sleeps it after the re-arm interval. |
+| **Screen Off** | Display sleeps after a short delay; Mac CPU stays awake. Saves power and reduces screen burn. When you move the mouse the display wakes; Doom Code re-sleeps it after the re-arm interval. |
 
 #### Duration / session timer (when Keep-Awake is On)
 
@@ -63,7 +63,7 @@ Open from the panel → Configure, or from the footer Settings button.
 Each agent has:
 - **Name and detected version** (or "not found" if the app isn't installed).
 - **Health dot** — green if at least one hook event was received in the last hour; grey otherwise.
-- **⚠ warning badge** — appears if DoomCoder detects that the installed hook config has drifted from what it wrote (e.g. another tool edited it). Select the agent and click **Repair**.
+- **⚠ warning badge** — appears if Doom Code detects that the installed hook config has drifted from what it wrote (e.g. another tool edited it). Select the agent and click **Repair**.
 - **✓ checkmark** — confirms hooks are installed.
 
 ### Agent detail pane
@@ -84,7 +84,7 @@ The card lists the notification categories this agent can emit, grouped for clar
 
 The approval/permission categories expand into a per-tool palette (shell, file edits, MCP, etc.) so you can be alerted before some tool types but not others.
 
-**Auto-accept handling.** Copilot CLI, Cursor, and Windsurf fire a permission hook *before* their own allowlist auto-approves. DoomCoder waits an **approval debounce window** (default 0.8s, adjustable 0.5-3s in the Settings tab) for proof the tool ran before alerting, so auto-approved actions never spam you. Live status stays instant; only the alert is deferred. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately.
+**Auto-accept handling.** Copilot CLI, Cursor, and Windsurf fire a permission hook *before* their own allowlist auto-approves. Doom Code waits an **approval debounce window** (default 0.8s, adjustable 0.5-3s in the Settings tab) for proof the tool ran before alerting, so auto-approved actions never spam you. Live status stays instant; only the alert is deferred. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately.
 
 #### Health
 
@@ -121,7 +121,7 @@ Per-agent checklist of requirements. Each item shows whether it's met and a fix 
 
 #### Connection Doctor
 
-Sends a synthetic test event through the full hook pipeline and waits for DoomCoder to receive it. If the round-trip succeeds, the doctor shows the event in the Live Events panel. If it times out, the doctor reports where the pipeline broke.
+Sends a synthetic test event through the full hook pipeline and waits for Doom Code to receive it. If the round-trip succeeds, the doctor shows the event in the Live Events panel. If it times out, the doctor reports where the pipeline broke.
 
 #### Live Events
 
@@ -135,7 +135,7 @@ Where notifications get delivered, and the devices connected to this Mac. One gl
 
 #### Connected Devices
 
-Real, symmetric presence for your companion devices — mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the DoomCoder Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
+Real, symmetric presence for your companion devices — mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the Doom Code Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
 
 #### Permission Status
 
@@ -147,13 +147,13 @@ Toggle on to receive banner notifications on your Mac. Click **Test** to send a 
 
 #### iPhone / iPad (iCloud)
 
-Toggle on to mirror notifications to the DoomCoder Companion iOS app via your private iCloud container.
+Toggle on to mirror notifications to the Doom Code Companion iOS app via your private iCloud container.
 
 **iCloud status indicator** — must show green ("Connected to iCloud as…") for iPhone mirroring to work. If it stays grey, check that you're signed into iCloud in System Settings and that iCloud Drive is enabled.
 
 Click **Test** to send a test push to your iPhone.
 
-[Get DoomCoder Companion on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
+[Get Doom Code Companion on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
 #### Notify me when…
 
@@ -188,14 +188,14 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 | Setting | Description |
 |---|---|
-| **Launch at Login** | Registers DoomCoder as a login item via `SMAppService`. |
-| **Open DoomCoder shortcut** | The global hotkey that opens the panel from anywhere. Default: ⌥ Space. Displayed read-only; change it in the field (coming soon: in-UI rebinding). |
+| **Launch at Login** | Registers Doom Code as a login item via `SMAppService`. |
+| **Open Doom Code shortcut** | The global hotkey that opens the panel from anywhere. Default: ⌥ Space. Displayed read-only; change it in the field (coming soon: in-UI rebinding). |
 
 #### Screen Off
 
 | Setting | Default | Description |
 |---|---|---|
-| **Re-sleep display after** | 5 min | After moving the mouse wakes the display in Screen Off mode, DoomCoder re-sleeps it after this many idle minutes. Range: 1–60 minutes. |
+| **Re-sleep display after** | 5 min | After moving the mouse wakes the display in Screen Off mode, Doom Code re-sleeps it after this many idle minutes. Range: 1–60 minutes. |
 
 #### Session Lifecycle
 
@@ -211,7 +211,7 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 #### Diagnostics
 
-**Reveal Logs** — opens `~/Library/Logs/DoomCoder/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
+**Reveal Logs** — opens `~/Library/Logs/DoomCode/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
 
 #### AI
 
@@ -259,7 +259,7 @@ Search matches titles, body, and task text.
 Accessible from the Agent Tracking card in the main panel.
 
 - **Per-agent toggle** — disable notifications for a specific agent without uninstalling its hooks. Events still land in the event store.
-- **Paused** — pauses all agent notifications immediately. This is an **in-memory flag** — it resets every time DoomCoder is relaunched. The sleep blocker keeps running while paused.
+- **Paused** — pauses all agent notifications immediately. This is an **in-memory flag** — it resets every time Doom Code is relaunched. The sleep blocker keeps running while paused.
 - **Reveal logs** — opens the log directory in Finder.
 
 ---
@@ -274,7 +274,7 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 
 ## iPhone and iPad companion
 
-**DoomCoder Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** -- no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
+**Doom Code Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** -- no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
 
 ### Works with zero setup (no Mac, no key)
 
@@ -304,7 +304,7 @@ With a Mac paired you also get the **Dashboard tab**: the live agent list with s
 
 ### dc-hook binary
 
-A small helper binary (`dc-hook`) is installed into `~/Library/Application Support/DoomCoder/dc-hook`. It is copied from the app bundle on every launch so it stays in sync with the running DoomCoder version. Hook configs always reference this stable path so they survive app relocations.
+A small helper binary (`dc-hook`) is installed into `~/Library/Application Support/DoomCoder/dc-hook`. It is copied from the app bundle on every launch so it stays in sync with the running Doom Code version. Hook configs always reference this stable path so they survive app relocations.
 
 ### Hook config formats
 
@@ -323,7 +323,7 @@ A small helper binary (`dc-hook`) is installed into `~/Library/Application Suppo
 Agent fires hook
   → dc-hook binary runs
     → writes JSON envelope to Unix socket at ~/Library/Application Support/DoomCoder/hook.sock
-      → DoomCoder receives envelope
+      → Doom Code receives envelope
         → normalizes event → writes to SQLite (events.sqlite)
           → dispatches macOS notification
             → pushes to CloudKit (→ iPhone companion)
@@ -335,10 +335,10 @@ Agent fires hook
 |---|---|---|
 | Hook events (SQLite) | `~/Library/Application Support/DoomCoder/events.sqlite` | 7 days |
 | Notification history | Same database | 7 days |
-| Log files | `~/Library/Logs/DoomCoder/` | 7 days |
+| Log files | `~/Library/Logs/DoomCode/` | 7 days |
 | User preferences | `UserDefaults` (standard) | Persistent |
 | CloudKit sync state | Private iCloud container | Persistent |
 
 ### Privacy
 
-DoomCoder collects no analytics, sends no data to any server, and has no telemetry. All data stays on your Mac and in your private iCloud container. See [privacy.md](privacy.md) for the full policy.
+Doom Code collects no analytics, sends no data to any server, and has no telemetry. All data stays on your Mac and in your private iCloud container. See [privacy.md](privacy.md) for the full policy.

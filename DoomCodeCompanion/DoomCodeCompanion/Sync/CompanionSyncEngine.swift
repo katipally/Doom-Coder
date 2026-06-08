@@ -1,4 +1,4 @@
-// CompanionSyncEngine.swift — DoomCoder Companion
+// CompanionSyncEngine.swift — DoomCode Companion
 // Full bidirectional CloudKit sync engine for the iOS companion, running two
 // CKSyncEngines (private DB = same-Apple-ID Macs, shared DB = cross-account
 // Macs after CKShare accept).
@@ -14,7 +14,7 @@ import CloudKit
 import os
 import UIKit
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 @MainActor
 @Observable
@@ -303,7 +303,7 @@ final class CompanionSyncEngine: NSObject {
             var id: UIBackgroundTaskIdentifier = .invalid
         }
         let holder = TaskHolder()
-        holder.id = UIApplication.shared.beginBackgroundTask(withName: "DoomCoder.sync") {
+        holder.id = UIApplication.shared.beginBackgroundTask(withName: "DoomCode.sync") {
             UIApplication.shared.endBackgroundTask(holder.id)
         }
         Task { @MainActor [weak self] in

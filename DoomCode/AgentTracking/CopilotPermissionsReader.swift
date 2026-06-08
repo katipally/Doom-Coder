@@ -2,7 +2,7 @@ import Foundation
 
 // Reads ~/.copilot/permissions-config.json and tells the Copilot CLI normalizer
 // whether a permissionRequest hook event would be auto-approved by Copilot's
-// built-in allowlist. When auto-approved, Copilot shows no UI, so DoomCoder
+// built-in allowlist. When auto-approved, Copilot shows no UI, so DoomCode
 // suppresses the notification to avoid phantom alerts.
 //
 // nonisolated(unsafe) is intentional: this singleton is only ever accessed

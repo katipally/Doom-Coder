@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Doom Coder" width="400" />
+<img src="assets/logo.png" alt="Doom Code" width="400" />
 
-# DoomCoder
+# Doom Code
 
 **Keep your Mac awake. Track your AI agents. Get notified on your iPhone.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square)](https://github.com/katipally/Doom-Coder/releases/latest)
+[![Release](https://img.shields.io/github/v/release/katipally/Doom-Code?style=flat-square)](https://github.com/katipally/Doom-Code/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-blue?style=flat-square)](#)
 [![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](#)
@@ -15,16 +15,16 @@
 
 ---
 
-## What is DoomCoder?
+## What is Doom Code?
 
 A macOS menu bar app that does two things:
 
 1. **Keeps your Mac awake** while long-running jobs (builds, downloads, agents) finish, without changing any system settings.
-2. **Tracks coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention, on your Mac and on your iPhone via the free **DoomCoder Companion** iOS app.
+2. **Tracks coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention, on your Mac and on your iPhone via the free **Doom Code Companion** iOS app.
 
 No accounts, no servers, no telemetry. Notifications travel through your own private iCloud container.
 
-> **New to DoomCoder?** Every control in the app has a hover tooltip (the ⓘ icon) explaining what it does. See [docs/features.md](docs/features.md) for the full reference.
+> **New to Doom Code?** Every control in the app has a hover tooltip (the ⓘ icon) explaining what it does. See [docs/features.md](docs/features.md) for the full reference.
 
 ---
 
@@ -34,7 +34,7 @@ No accounts, no servers, no telemetry. Notifications travel through your own pri
 
 | Mode | What it does |
 |---|---|
-| **Off** | macOS manages sleep normally. DoomCoder is running but holds no assertion. |
+| **Off** | macOS manages sleep normally. Doom Code is running but holds no assertion. |
 | **On** | Always holds the sleep assertion. Sub-option: **Screen On** (display stays lit) or **Screen Off** (display dims; CPU stays awake). |
 | **Auto** | Caffeine-style smart mode. Holds the sleep assertion while **either** a tracked agent is actively working **or** you are at the keyboard/mouse. Releases 10 minutes after both signals go silent. Also supports **Snooze** (15 min / 1 hour / until you turn it off) for cases where you want to override Auto temporarily. Respects per-agent tracking toggles. |
 
@@ -53,7 +53,7 @@ Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it runnin
 
 ### Screen Off re-arm
 
-When using Screen Off mode, the display wakes when you move the mouse. DoomCoder will put it back to sleep automatically after a configurable idle interval (default: **10 minutes**). Adjust in **Configure > Settings > Screen Off**.
+When using Screen Off mode, the display wakes when you move the mouse. Doom Code will put it back to sleep automatically after a configurable idle interval (default: **10 minutes**). Adjust in **Configure > Settings > Screen Off**.
 
 ### Auto mode snooze (v2.6+)
 
@@ -69,7 +69,7 @@ While snoozed, the panel shows a countdown badge and the menu-bar icon swaps to 
 
 ## How the sleep blocker works
 
-DoomCoder holds an `IOPMAssertion`, the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
+Doom Code holds an `IOPMAssertion`, the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
 
 - Zero CPU / less than 10 MB RAM -- one flag in the kernel, no polling
 - Auto-released on crash, quit, or disable
@@ -98,7 +98,7 @@ VS Code hooks support multiple variants simultaneously: VS Code Stable, VS Code 
 
 ### How hooks work
 
-DoomCoder installs a lightweight `dc-hook` binary into each agent's hook configuration. When an agent fires a hook event, `dc-hook` writes a JSON envelope to a Unix socket that DoomCoder is listening on. The binary is stored in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app relocations and Xcode rebuilds.
+Doom Code installs a lightweight `dc-hook` binary into each agent's hook configuration. When an agent fires a hook event, `dc-hook` writes a JSON envelope to a Unix socket that Doom Code is listening on. The binary is stored in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app relocations and Xcode rebuilds.
 
 ### Setting up hooks
 
@@ -108,13 +108,13 @@ DoomCoder installs a lightweight `dc-hook` binary into each agent's hook configu
 4. Check prerequisites, then click **Install**.
 5. The green health dot in the sidebar confirms events are flowing.
 
-DoomCoder backs up your config before writing and can **Repair** hooks if they drift out of sync.
+Doom Code backs up your config before writing and can **Repair** hooks if they drift out of sync.
 
 ### Tracking toggles
 
 Use **Track Agents** (accessible from the main panel) to:
 - Enable or disable notifications per agent without uninstalling hooks.
-- **Pause all notifications** temporarily (the Pause toggle resets when DoomCoder quits -- it is in-memory only).
+- **Pause all notifications** temporarily (the Pause toggle resets when Doom Code quits -- it is in-memory only).
 
 Events are still recorded in the local log even when an agent is paused or disabled.
 
@@ -126,7 +126,7 @@ The **Connections** tab (Configure window) is where notifications get delivered 
 
 ### Connected devices
 
-Each iPhone or iPad running the DoomCoder Companion publishes a periodic presence heartbeat to your private iCloud container. The Mac shows each device as **Connected** when seen within the last 10 minutes, or **Last seen X ago** otherwise — symmetric to how the companion shows your Mac's status. When nothing has checked in, a **Set up iPhone or iPad** button links to the App Store.
+Each iPhone or iPad running the Doom Code Companion publishes a periodic presence heartbeat to your private iCloud container. The Mac shows each device as **Connected** when seen within the last 10 minutes, or **Last seen X ago** otherwise — symmetric to how the companion shows your Mac's status. When nothing has checked in, a **Set up iPhone or iPad** button links to the App Store.
 
 ### macOS notifications
 
@@ -134,7 +134,7 @@ Standard macOS notification banners. Grant permission once; they work system-wid
 
 ### iPhone and iPad (iCloud)
 
-Requires the free **DoomCoder Companion** iOS app. Notifications mirror to your phone in 1-5 seconds via your private iCloud container -- no third-party server, no tokens, no QR codes. Sign in to the same iCloud account on both devices.
+Requires the free **Doom Code Companion** iOS app. Notifications mirror to your phone in 1-5 seconds via your private iCloud container -- no third-party server, no tokens, no QR codes. Sign in to the same iCloud account on both devices.
 
 ### Notification event preferences
 
@@ -150,7 +150,7 @@ Only the categories an agent actually emits are shown, so you never see a toggle
 
 ### No more auto-accept spam
 
-Copilot CLI, Cursor, and Windsurf emit a *permission* hook **before** their own allowlist decides to auto-approve an action — so a naive watcher would alert you for tools that were never actually blocked. DoomCoder waits a short **approval debounce window** (default 0.8s, adjustable 0.5-3s under **Configure > Settings**) for proof the tool ran; only genuinely-blocking requests produce an alert. Live status in the menu bar and Dynamic Island is unaffected and always instant. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately with no added latency.
+Copilot CLI, Cursor, and Windsurf emit a *permission* hook **before** their own allowlist decides to auto-approve an action — so a naive watcher would alert you for tools that were never actually blocked. Doom Code waits a short **approval debounce window** (default 0.8s, adjustable 0.5-3s under **Configure > Settings**) for proof the tool ran; only genuinely-blocking requests produce an alert. Live status in the menu bar and Dynamic Island is unaffected and always instant. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately with no added latency.
 
 ### Connections are global
 
@@ -160,7 +160,7 @@ One global **mac + iPhone** channel setting applies to every agent. (Per-agent c
 
 ## iPhone and iPad companion
 
-**DoomCoder Companion** (iOS 26+) is a standalone app, fully usable on first launch with no setup required. No Mac connection, no API key, no account.
+**Doom Code Companion** (iOS 26+) is a standalone app, fully usable on first launch with no setup required. No Mac connection, no API key, no account.
 
 ### What works with zero setup
 
@@ -201,16 +201,16 @@ Full details: [docs/features.md](docs/features.md)
 
 - **Live Events** -- real-time event stream per agent in the Configure window.
 - **Logs view** -- browsable, filterable history of all hook events and notifications. Export to JSON or CSV. Accessible in Configure > Logs.
-- **Raw log files** -- stored in `~/Library/Logs/DoomCoder/`, retained for 7 days. Click **Reveal Logs** in Configure > Settings > Diagnostics.
+- **Raw log files** -- stored in `~/Library/Logs/DoomCode/`, retained for 7 days. Click **Reveal Logs** in Configure > Settings > Diagnostics.
 - **Connection Doctor** -- runs a synthetic test event end-to-end to verify the hook pipeline works.
 
 ---
 
 ## Install
 
-Download the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip, drag `DoomCoder.app` to `/Applications`, and double-click to open.
+Download the latest `.zip` from [Releases](https://github.com/katipally/Doom-Code/releases/latest), unzip, drag `DoomCode.app` to `/Applications`, and double-click to open.
 
-DoomCoder is signed with an Apple Developer ID and notarized by Apple -- no Gatekeeper prompts, no extra steps.
+Doom Code is signed with an Apple Developer ID and notarized by Apple -- no Gatekeeper prompts, no extra steps.
 
 First launch: macOS may ask for Accessibility permission -- only needed for the **Option Space** global shortcut. You can skip it if you do not need the hotkey.
 
@@ -219,9 +219,9 @@ First launch: macOS may ask for Accessibility permission -- only needed for the 
 ## Build from source
 
 ```bash
-git clone https://github.com/katipally/Doom-Coder.git
-cd Doom-Coder
-open DoomCoder.xcworkspace
+git clone https://github.com/katipally/Doom-Code.git
+cd Doom-Code
+open DoomCode.xcworkspace
 ```
 
 Requires Xcode 26, macOS 26, Swift 6. Sparkle is pulled via SPM.
@@ -230,7 +230,7 @@ Requires Xcode 26, macOS 26, Swift 6. Sparkle is pulled via SPM.
 
 ## Privacy
 
-DoomCoder collects no analytics, sends no data to any server, and has no telemetry. See [docs/privacy.md](docs/privacy.md) for the full policy.
+Doom Code collects no analytics, sends no data to any server, and has no telemetry. See [docs/privacy.md](docs/privacy.md) for the full policy.
 
 ---
 

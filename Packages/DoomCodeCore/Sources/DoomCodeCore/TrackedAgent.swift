@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared TrackedAgent enum (mirror of the Mac-side enum in
-/// DoomCoder/AgentTracking/HookEnvelope.swift). Both definitions must stay in
+/// DoomCode/AgentTracking/HookEnvelope.swift). Both definitions must stay in
 /// lock-step; the CloudKit `agent` field is the raw String value.
 public enum TrackedAgent: String, CaseIterable, Sendable, Codable {
     case claude

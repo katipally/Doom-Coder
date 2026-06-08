@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "DoomCoderCore",
+    name: "DoomCodeCore",
     platforms: [
         // Audit 2026-06: raised the macOS floor from .v14 to .v26 to
-        // match the actual deployment targets of both apps (DoomCoder.app
-        // and DoomCoderCompanion both target macOS 26 / iOS 26). The
+        // match the actual deployment targets of both apps (DoomCode.app
+        // and DoomCodeCompanion both target macOS 26 / iOS 26). The
         // old .v14 floor was a holdover from a transitional period and
         // hid the fact that several types (CKSyncEngine wrappers,
         // TimelineView, .glassEffect, FoundationModels) require newer
@@ -15,12 +15,12 @@ let package = Package(
         .iOS(.v26),
     ],
     products: [
-        .library(name: "DoomCoderCore", targets: ["DoomCoderCore"]),
+        .library(name: "DoomCodeCore", targets: ["DoomCodeCore"]),
     ],
     targets: [
         .target(
-            name: "DoomCoderCore"
+            name: "DoomCodeCore"
         ),
-        .testTarget(name: "DoomCoderCoreTests", dependencies: ["DoomCoderCore"]),
+        .testTarget(name: "DoomCodeCoreTests", dependencies: ["DoomCodeCore"]),
     ]
 )

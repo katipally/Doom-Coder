@@ -66,8 +66,8 @@ Examples
 *~
 
 # Build artifacts (never commit)
-DoomCoder.app/
-DoomCoder-*.zip
+DoomCode.app/
+DoomCode-*.zip
 build/
 
 Doom-Coder-old/

@@ -37,7 +37,7 @@ actor HookConfigBackend {
         logger.info("transaction path=\(path, privacy: .public) backup=\(backupPath ?? "none", privacy: .public)")
     }
 
-    /// Strips only DoomCoder-owned entries for a specific agent token, then
+    /// Strips only DoomCode-owned entries for a specific agent token, then
     /// prunes empty containers. Pass `nil` to strip ALL dc-hook entries.
     func stripEntries(path: String, agentToken: String?) throws {
         guard fm.fileExists(atPath: path) else { return }

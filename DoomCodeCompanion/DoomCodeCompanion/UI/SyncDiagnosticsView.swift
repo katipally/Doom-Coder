@@ -4,7 +4,7 @@
 // time. Mirrors the Mac-side diagnostics view 1:1.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 struct SyncDiagnosticsView: View {
 

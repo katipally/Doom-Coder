@@ -1,6 +1,6 @@
 import SwiftUI
 import AppKit
-import DoomCoderCore
+import DoomCodeCore
 
 // Root SwiftUI view for the floating panel.
 //
@@ -177,7 +177,7 @@ struct PanelRootView: View {
                     .opacity(masterEnabled ? 1.0 : 0.5)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("DoomCoder")
+                    Text("Doom Code")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
                     Text(masterSubtitle)
@@ -203,7 +203,7 @@ struct PanelRootView: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
-                .accessibilityLabel("DoomCoder")
+                .accessibilityLabel("Doom Code")
                 .accessibilityValue(masterEnabled ? "On" : "Off")
             }
             .padding(14)
@@ -862,7 +862,7 @@ struct PanelRootView: View {
 // MARK: - Mode segmented control (Apple-style)
 
 private struct ModeSegmentedControl: View {
-    @Binding var mode: DoomCoderMode
+    @Binding var mode: DoomCodeMode
     var isActive: Bool
 
     var body: some View {
@@ -878,7 +878,7 @@ private struct ModeSegmentedControl: View {
     }
 
     @ViewBuilder
-    private func segment(_ target: DoomCoderMode, label: String, icon: String) -> some View {
+    private func segment(_ target: DoomCodeMode, label: String, icon: String) -> some View {
         let selected = mode == target
         Button {
             mode = target

@@ -1,10 +1,10 @@
-// AppGroupCache.swift — DoomCoder Companion
+// AppGroupCache.swift — DoomCode Companion
 // Shared storage layer accessible by both the main app and the Notification
 // Service Extension via the App Group container. Provides typed JSON helpers
 // and a file-system URL for binary blobs (agent icons).
 
 import Foundation
-import DoomCoderCore
+import DoomCodeCore
 
 enum AppGroupCache {
 

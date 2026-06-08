@@ -1,4 +1,4 @@
-// DemoView.swift — DoomCoder Companion
+// DemoView.swift — DoomCode Companion
 // An interactive, clearly-labeled preview that works with NO Mac, NO iCloud and
 // NO notifications. This demonstrates the app's real functionality on its own,
 // which is what App Store Guideline 4.2.3(i) requires — a purely static
@@ -8,7 +8,7 @@
 
 import SwiftUI
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 struct DemoView: View {
     @State private var showNotificationPreview = false
@@ -250,7 +250,7 @@ struct NotificationPreviewSheet: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text("DoomCoder").font(.subheadline.weight(.semibold))
+                        Text("Doom Code").font(.subheadline.weight(.semibold))
                         Spacer()
                         Text("now").font(.caption).foregroundStyle(.secondary)
                     }

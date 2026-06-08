@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Doom Coder will be documented in this file.
+All notable changes to Doom Code will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
@@ -61,9 +61,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `button.contentTintColor = .secondaryLabelColor` (macOS 26 pattern)
   instead of `button.alphaValue = 0.55` (which would dim the badge
   title).
-- **DoomCoder naming consistency** — Info.plist `CFBundleName`,
+- **Doom Code naming consistency** — Info.plist `CFBundleName`,
   `NSHumanReadableCopyright`, and `AboutView.swift` title all
-  updated from "Doom Coder" to "DoomCoder".
+  updated from "Doom Code" to "DoomCode".
 - **Other naming** — "macOS Notification" → "Mac notifications",
   "iPhone / iPad (iCloud)" → "iPhone and iPad (iCloud)", "Mirror to
   iPhone / iPad" → "Mirror to iPhone and iPad".
@@ -118,7 +118,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 - **Per-agent channel overrides.** Channels are now a single global mac + iPhone setting; a one-time migration clears any stored overrides. Per-agent control lives in the categories card instead.
-- Duplicate "DoomCoder for iPhone & iPad" banner in Settings (companion setup now lives only in the Connections tab).
+- Duplicate "DoomCode for iPhone & iPad" banner in Settings (companion setup now lives only in the Connections tab).
 - Obsolete CloudKit record types (`Settings`, `Session`, `Event`, `WoLProfile`) dropped from the shared schema constants -- leftovers from earlier sync designs that no longer ship.
 
 ### Migration
@@ -136,7 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Setup banner covers both AI modes** -- the existing banner only showed when a remote API key was missing. It now also shows when on-device AI is unavailable, with mode-specific text and icon.
 - **Browse prompt library button** added to the Prompts empty state. The library works with zero AI and zero Mac setup, giving reviewers and new users clear standalone value from their first interaction.
 - **Test Push section hidden when no Mac is paired** -- the "Send Test Push" button was always visible but disabled without a connected Mac, making the app look incomplete. It now only appears once a Mac has been paired.
-- **Display name updated to "DoomCoder Companion"** -- the iOS home screen icon previously read "DoomCoder" (same as the Mac app). It now reads "DoomCoder Companion" to clearly identify the companion app.
+- **Display name updated to "DoomCode Companion"** -- the iOS home screen icon previously read "DoomCode" (same as the Mac app). It now reads "DoomCode Companion" to clearly identify the companion app.
 
 ### Changed -- Documentation
 
@@ -176,7 +176,7 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - **AI naming cleanup** — engine options are limited to **On-device** and **My API key (BYOK)**; legacy "automatic"/"built-in offline" wording removed.
 
 ### Changed — iOS Dashboard parity
-- The Dashboard is now **three titled sections that mirror the Mac panel**: a **DoomCoder** master on/off toggle, a **Keep Awake** sleep-control section, and an **Agents** list — using the same SF Symbols, tints, and status states as the Mac.
+- The Dashboard is now **three titled sections that mirror the Mac panel**: a **Doom Code** master on/off toggle, a **Keep Awake** sleep-control section, and an **Agents** list — using the same SF Symbols, tints, and status states as the Mac.
 - The paired **Mac device info** (name, last-seen, live status) moved out of the dashboard card into **Settings → Connection**.
 
 ### Changed — iOS sleep card / remote control
@@ -207,15 +207,15 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - Settings connection section now uses a header + footer pattern that explains what Disconnect does and what stays in iCloud.
 
 ### Fixed
-- Stale `com.katipally.DoomCoder` fallback bundle ID in the Mac notification dispatcher replaced with the current `com.doomcoder.app`. The fallback only fires if `Bundle.main.bundleIdentifier` is nil at runtime (which does not happen on shipped builds), but the constant is now correct.
+- Stale `com.katipally.DoomCode` fallback bundle ID in the Mac notification dispatcher replaced with the current `com.doomcoder.app`. The fallback only fires if `Bundle.main.bundleIdentifier` is nil at runtime (which does not happen on shipped builds), but the constant is now correct.
 
 ---
 
 ## [2.5.0] - 2026-05-28
 
 ### Added — macOS
-- **Auto keep-awake mode** — new third mode (Off / On / **Auto**). When set to Auto, DoomCoder holds the sleep assertion only while at least one tracked agent is actively working, then releases it (with a 5-minute grace) once all agents are idle. Respects per-agent tracking toggles: agents with tracking disabled are excluded from the Auto count.
-- **PID-aware agent detection** — CLI agents (Claude Code, Copilot CLI, Codex CLI) are tracked by OS process ID. DoomCoder detects process exit instantly via `DISPATCH_SOURCE_TYPE_PROC` and verifies liveness with a `kill(pid, 0)` signal — no hook events required. Long-running silent CLI operations no longer lose keep-awake after 30 minutes.
+- **Auto keep-awake mode** — new third mode (Off / On / **Auto**). When set to Auto, Doom Code holds the sleep assertion only while at least one tracked agent is actively working, then releases it (with a 5-minute grace) once all agents are idle. Respects per-agent tracking toggles: agents with tracking disabled are excluded from the Auto count.
+- **PID-aware agent detection** — CLI agents (Claude Code, Copilot CLI, Codex CLI) are tracked by OS process ID. Doom Code detects process exit instantly via `DISPATCH_SOURCE_TYPE_PROC` and verifies liveness with a `kill(pid, 0)` signal — no hook events required. Long-running silent CLI operations no longer lose keep-awake after 30 minutes.
 - **Per-agent toggle awareness in Auto** — toggling an agent's tracking switch off immediately removes it from the Auto active count; toggling it back on re-evaluates immediately.
 
 ### Changed — macOS
@@ -224,7 +224,7 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - **Sleep icons updated** — replaced deprecated symbols with SF Symbols that ship in macOS 26.
 - **Session eviction guard** — a live CLI agent whose process is still running is never swept by the 30-minute idle eviction timer, preventing premature keep-awake release during long silent operations.
 
-### Added — iOS (DoomCoder Companion 2.5.0, build 5)
+### Added — iOS (Doom Code Companion 2.5.0, build 5)
 - **Foreground sync polling** — the companion now fetches CloudKit changes every 30 seconds while foregrounded, eliminating stale data that previously required a manual refresh.
 - **Fetch coalescing** — concurrent fetch requests (timer + push notification + pull-to-refresh) are coalesced so only one CKSyncEngine fetch runs at a time.
 - **Self-healing sync engine** — if the CKSyncEngine failed to initialise at launch, any subsequent fetch attempt (timer, push, or manual) automatically retries setup.
@@ -247,15 +247,15 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 ## [2.4.x] — 2026 (Companion launch series)
 
 ### Added
-- **DoomCoder Companion for iPhone & iPad** — a read-only mirror that shows every agent configured on your Mac and renders the exact same notifications (title, body, agent icon) the Mac would display. Built on Apple's CloudKit + APNs stack; no third-party servers, no tokens, no QR codes.
+- **Doom Code Companion for iPhone & iPad** — a read-only mirror that shows every agent configured on your Mac and renders the exact same notifications (title, body, agent icon) the Mac would display. Built on Apple's CloudKit + APNs stack; no third-party servers, no tokens, no QR codes.
 - **iCloud push channel** on the Mac, replacing the ntfy channel. Notifications are written to the user's private CloudKit database (`iCloud.com.doomcoder.app`) and delivered to the companion app via a `CKQuerySubscription`. The Notification Service Extension renders the alert before the OS shows the banner.
-- `CloudKitPusher` (`DoomCoder/AgentTracking/CloudKitPusher.swift`) — push-only `CKSyncEngine` wrapper that publishes:
+- `CloudKitPusher` (`DoomCode/AgentTracking/CloudKitPusher.swift`) — push-only `CKSyncEngine` wrapper that publishes:
   - `NotificationLog` (one per dispatched notification)
   - `MacStatus` (per-Mac heartbeat singleton, 60s + sleep/wake)
   - `AgentConfig` (the list of tracked agents on this Mac)
   - `AgentIcon` (CKAsset PNGs, hash-gated, one upload per launch)
 - `CloudKitPusherLifecycle` glues runtime events to the pusher: re-publishes AgentConfig on Tracking pane toggles, runs an hourly reaper that deletes `NotificationLog` records older than 7 days.
-- `DoomCoderCore` Swift package (`Packages/DoomCoderCore/`) — shared models (`TrackedAgent`, `NormalizedEventPhase`, `NotificationCopy`, record types, `CloudKitConstants`, `ServerRecordCache`, `SyncTelemetry`). Linked by both the Mac app and the iOS companion + NSE.
+- `DoomCodeCore` Swift package (`Packages/DoomCodeCore/`) — shared models (`TrackedAgent`, `NormalizedEventPhase`, `NotificationCopy`, record types, `CloudKitConstants`, `ServerRecordCache`, `SyncTelemetry`). Linked by both the Mac app and the iOS companion + NSE.
 
 ### Changed
 - `ChannelStore.ChannelConfig.ntfy` → `.cloudkit`. A custom `Decodable` transparently reads the legacy `ntfy` key on upgrade, so users keep their channel preference without any migration prompt.
@@ -265,7 +265,7 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - Entitlements: `com.apple.developer.icloud-services`, `com.apple.developer.icloud-container-identifiers = iCloud.com.doomcoder.app`, `aps-environment` (development + production variants), and `com.apple.security.application-groups = group.com.doomcoder.app.companion`. The app remains unsandboxed (`com.apple.security.app-sandbox = false`).
 
 ### Removed
-- `DoomCoder/AgentTracking/NtfyTopic.swift` and all ntfy QR-code / topic-management UI.
+- `DoomCode/AgentTracking/NtfyTopic.swift` and all ntfy QR-code / topic-management UI.
 - ntfy POST path in `NotificationDispatcher`.
 
 ### Polish (post-Phase-2)
@@ -277,10 +277,10 @@ This release makes the iOS companion a **genuinely standalone app** that is full
 - **TestFlight CI workflow** (`.github/workflows/ios-testflight.yml`) — triggered by `ios-vX.Y.Z` tags or `workflow_dispatch`. Uses an App Store Connect API key, a temporary keychain for the Apple Distribution cert, and `xcodebuild -exportArchive` with `destination=upload` to push directly to TestFlight.
 
 ### 2.4.0 polish round 2
-- **DoomCoder logo on the iOS onboarding screen** — replaced the generic `moon.zzz.fill` symbol with the bundled app icon so the notification-permission step is immediately recognisable as DoomCoder.
+- **Doom Code logo on the iOS onboarding screen** — replaced the generic `moon.zzz.fill` symbol with the bundled app icon so the notification-permission step is immediately recognisable as DoomCode.
 - **Cursor capability copy fix** — Cursor cannot emit waiting-for-input events, so it has been removed from Cursor's capability list in both Mac (`AgentCapabilities.swift`) and iOS (`AgentCapabilityCatalog`) surfaces.
 - **`assets/Agent-logos/` is now the single source of truth** for all agent icons. The new `scripts/sync-agent-icons.sh` regenerates both the Mac and iOS imagesets from these files (webp/svg/png all supported). Drop a replacement file with the same name and re-run the script.
-- **Repository hygiene** — removed the tracked `DoomCoder-2.2.0.dmg` / `DoomCoder-2.3.0.dmg` (GitHub Releases is the canonical archive), removed tracked `certificate.p12`, removed tracked `Ref/` vendor docs. Added `*.dmg`, `*.p12`, `*.cer`, `*.mobileprovision`, and `Ref/` to `.gitignore`.
+- **Repository hygiene** — removed the tracked `DoomCode-2.2.0.dmg` / `DoomCode-2.3.0.dmg` (GitHub Releases is the canonical archive), removed tracked `certificate.p12`, removed tracked `Ref/` vendor docs. Added `*.dmg`, `*.p12`, `*.cer`, `*.mobileprovision`, and `Ref/` to `.gitignore`.
 - **Docs** — `README.md` rewritten to describe the actual app (sleep blocker + agent tracker + iPhone companion). `RELEASING.md` extended with a full first-time iOS App Store walkthrough (App Store Connect record, privacy nutrition label, screenshots, certificates, API key, CloudKit production deploy, submission notes).
 
 ### Migration
@@ -291,9 +291,9 @@ Existing v2.3 users who had `ntfy = true` in their channel preference are migrat
 ## [2.2.0] - 2025-05-13
 
 ### Added
-- **Official signing & notarization**: DoomCoder is now signed with a Developer ID Application certificate and notarized by Apple. Users can double-click to install with no Gatekeeper prompts or Terminal workarounds.
+- **Official signing & notarization**: Doom Code is now signed with a Developer ID Application certificate and notarized by Apple. Users can double-click to install with no Gatekeeper prompts or Terminal workarounds.
 - **Bundled agent icons**: Claude Code, Codex CLI, and Copilot CLI icons are embedded in the app bundle via `Assets.xcassets`. They appear instantly in notifications and the menu without an internet connection.
-- **Privacy manifest** (`PrivacyInfo.xcprivacy`): Declares the two system APIs DoomCoder uses (UserDefaults, FileTimestamp) and confirms no user data is collected or shared.
+- **Privacy manifest** (`PrivacyInfo.xcprivacy`): Declares the two system APIs Doom Code uses (UserDefaults, FileTimestamp) and confirms no user data is collected or shared.
 - **v2.2.0 What's New sheet**: Shown once on first launch after upgrade.
 
 ### Changed
@@ -304,7 +304,7 @@ Existing v2.3 users who had `ntfy = true` in their channel preference are migrat
 - Icon priority for CLI agents (claude, codexCLI, copilotCLI): bundled xcassets image used first; CDN cache used as optional fallback/update path.
 
 ### Removed
-- `DoomCoderiOS/` — empty directory with only `.DS_Store`
+- `DoomCodeiOS/` — empty directory with only `.DS_Store`
 - `Ref/Windsurf/` — saved reference HTML and vendor assets
 - 49 `.doomcoder-backup-*` files from `.github/hooks/`
 
@@ -315,7 +315,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.0] - 2026-05-11 — New logo in header
 
 ### Added
-- DoomCoder logo now appears in the menu bar panel header beside the app name,
+- Doom Code logo now appears in the menu bar panel header beside the app name,
   giving the UI a friendlier, more branded look.
 
 ---
@@ -323,9 +323,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.2] - 2026-05-11 — Remove speculative "may need your attention" notifications
 
 ### Changed
-- Removed the inference timer entirely. DoomCoder now only sends notifications
+- Removed the inference timer entirely. Doom Code now only sends notifications
   for confirmed hook events (session start/end, permission needed, errors).
-  The "DoomCoder · check in — may need your attention" banner, which fired after
+  The "DoomCode · check in — may need your attention" banner, which fired after
   a configurable timeout when a tool hadn't resolved, has been removed.
   No more false positives from long compilations, test runs, or background work.
 
@@ -411,13 +411,13 @@ inside a Cursor or VS Code terminal was misidentified as VS Code Copilot is fixe
 
 ## [1.9.0] - 2026-04-20 — Bento grid UI + always-awake behavior
 
-**Major UI redesign and behavioral fix.** DoomCoder now keeps your Mac awake
+**Major UI redesign and behavioral fix.** Doom Code now keeps your Mac awake
 the moment you turn it on — no extra tap required. The floating panel switches
 to a bento grid layout (wider, two cards side-by-side) that eliminates the
 persistent clipping bug that affected the previous single-column design.
 
 ### Fixed
-- **Always-awake on launch** — when DoomCoder is enabled, sleep prevention
+- **Always-awake on launch** — when Doom Code is enabled, sleep prevention
   starts automatically at app launch and whenever the master toggle is turned
   on. Mode (Screen On / Screen Off) and Duration are now pure configuration —
   the Mac stays awake without any additional tap required.
@@ -470,7 +470,7 @@ consistent rhythm.
 
 
 **Complete hooks architecture overhaul and smooth UI transitions.** This release
-reworks how DoomCoder installs, normalizes, and notifies on AI agent hook
+reworks how Doom Code installs, normalizes, and notifies on AI agent hook
 events — plus adds spring animations, a Live Events panel, and visual polish
 throughout.
 
@@ -519,7 +519,7 @@ throughout.
 - Pre-flight install checks — verifies dc-hook binary exists and config
   directory is writable before attempting installation
 - Improved error messages with recovery suggestions (e.g., "Try using the
-  Repair button to reset hooks" or "Reinstall DoomCoder from the latest
+  Repair button to reset hooks" or "Reinstall Doom Code from the latest
   release")
 
 ### Fixed
@@ -614,7 +614,7 @@ repair, and comprehensive notification channel improvements.
 
 ## [1.8.5] - 2026-04-19 — End-to-end agent tracking pipeline
 
-**Agent tracking via native hooks.** DoomCoder now tracks AI-agent sessions
+**Agent tracking via native hooks.** Doom Code now tracks AI-agent sessions
 (Claude Code, Cursor, VS Code Copilot, Copilot CLI) through each agent's
 built-in hook system. A single bundled helper (`dc-hook`) pipes lifecycle
 events through a per-user Unix socket into the app, which drives the sleep
@@ -639,7 +639,7 @@ blocker automatically and fires notifications when your attention is needed.
   (`VSCODE_PID`, `CLAUDE_CODE_SESSION`) and silently exits if invoked by the
   wrong agent, preventing duplicate events from the shared `settings.json`.
 - **Foreground notification delegate** — `UNUserNotificationCenterDelegate`
-  ensures macOS banners display even when DoomCoder (LSUIElement app) is
+  ensures macOS banners display even when Doom Code (LSUIElement app) is
   foreground.
 
 ### Fixed
@@ -677,7 +677,7 @@ blocker automatically and fires notifications when your attention is needed.
 ## [1.8.4] - Unreleased
 
 **Strip-down release.** Everything except the core "keep Mac awake"
-functionality has been removed. Doom Coder is now a single-purpose
+functionality has been removed. Doom Code is now a single-purpose
 menu bar utility with two modes and a session timer. That's it.
 
 ### Removed
@@ -715,7 +715,7 @@ even when an agent ignores the tone of the rules file.
   makes "one `d` per reply" the *only* rule and marks `w` optional. Drops
   all "REQUIRED / EXACTLY ONCE" language that agents were treating as a
   formal protocol to trigger on every tool iteration.
-- **Agent-level debounce in DoomCoder**: second `dc(d)` within 30 s is
+- **Agent-level debounce in Doom Code**: second `dc(d)` within 30 s is
   dropped; second `dc(w)` within 15 s is dropped; `dc(w)` is *also*
   dropped when the user has touched keyboard/mouse in the last 30 s
   (if you're at the Mac, the "needs input" ping is noise). Drops are
@@ -798,7 +798,7 @@ the menu bar Track submenu + Doctor.
   replacing the single-select ✓-prefix list.
 - Removed the `moon.zzz.fill` 💤 toolbar chip from Configure Agents;
   replaced with a neutral "Idle" / "N live sessions" pill.
-- "About Doom Coder…" → "About…". Removed the placeholder icon before
+- "About Doom Code…" → "About…". Removed the placeholder icon before
   "Configure Agents" that some users read as a warning symbol.
 - Row action button renamed from `eye`/`eye.fill` to `bell`/`bell.fill`
   (matches notification semantics).
@@ -806,7 +806,7 @@ the menu bar Track submenu + Doctor.
 ### Doctor
 - Each MCP-agent probe row now includes the timestamp of the **last `dc`
   call** ("last dc 12 m") so you can instantly see whether the agent is
-  actively talking to DoomCoder.
+  actively talking to DoomCode.
 - Per-agent **Self-test** button inline on each row — runs the mcp.py
   round-trip and shows pass/fail + duration without waiting on the real
   agent.
@@ -825,14 +825,14 @@ the menu bar Track submenu + Doctor.
 Follow-up patch to the v1.8.0 overhaul. Fixes the duplicated "waiting for handshake"
 step users reported, replaces the mysterious 30-minute "timed out" banner with a
 gentler every-2h informational ping, surfaces a live Doctor dashboard, and adds a
-welcome page explaining how DoomCoder actually works.
+welcome page explaining how Doom Code actually works.
 
 ### Setup sheet
 - **Collapsed 3 steps → 2.** Explain → Install-and-Verify. The old separate Verify
   step duplicated the 30-second handshake wait that Install was already doing;
   it's now a single streaming log.
 - Added an inline "Waiting for [Agent] — restart it, then start any chat" strip
-  so users know what DoomCoder is actually waiting for.
+  so users know what Doom Code is actually waiting for.
 - Added a Mac ↔ Socket ↔ Agent diagram and a "What's happening?" disclosure with
   plain-English explanation of MCP + rules snippet handshake.
 - Cursor gets a prominent **Copy snippet** action with toast feedback and a direct
@@ -843,7 +843,7 @@ welcome page explaining how DoomCoder actually works.
 ### Stale-session rework
 - Idle threshold raised 30 min → 2 hours, and the session is **no longer
   auto-closed**. A big task that genuinely runs for 6 hours stays tracked.
-- Instead of a single "timed out" banner, DoomCoder now sends an informational
+- Instead of a single "timed out" banner, Doom Code now sends an informational
   "[Agent] — session inactive 2h+" banner every 2 hours with an interactive
   **End session** action. Click the action to stop watching without opening the
   app.
@@ -857,7 +857,7 @@ welcome page explaining how DoomCoder actually works.
   "Fix" link that opens the Setup sheet for that agent.
 
 ### Onboarding
-- Added a **"How DoomCoder works"** welcome page (page 1) with the
+- Added a **"How Doom Code works"** welcome page (page 1) with the
   Mac ↔ Socket ↔ Agent diagram and a 20-second explainer so first-run users
   understand why they're pasting rules and what MCP is before they're asked
   to configure anything.
@@ -867,7 +867,7 @@ welcome page explaining how DoomCoder actually works.
 ## [1.8.0] - 2026-04-20
 
 **Full UX overhaul — naming, tracking, Cursor, and transport cleanup.**
-DoomCoder v1.8 is the polish release: every window, menu, and setup flow
+Doom Code v1.8 is the polish release: every window, menu, and setup flow
 has been renamed for clarity; Tracking is now per-agent toggles instead
 of a single radio selection; Cursor has a dedicated paste-to-User-Rules
 workflow so it fires globally instead of only on direct mention; and the
@@ -879,7 +879,7 @@ MCP.
 - **"Full" mode → "Screen On"** (display stays on, Mac awake). "Screen Off"
   mode keeps its name (display sleeps, Mac stays awake). Persisted
   mode value `"full"` auto-migrates to `"screenOn"`.
-- **"DoomCoder Doctor" window → "Doctor"**.
+- **"DoomCode Doctor" window → "Doctor"**.
 - **"Agents & Channels" window → "Configure Agents"**.
 - Menu item copy polished throughout the menubar popover.
 
@@ -956,7 +956,7 @@ single letter and planting rules in the documented *global* instruction
 files for every supported host.
 
 ### Changed
-- **Canonical notification bodies.** DoomCoder no longer forwards the
+- **Canonical notification bodies.** Doom Code no longer forwards the
   agent's `message` field into ntfy or the mac banner. The body is now
   derived deterministically from the status letter:
   - `s` → *"Agent started working"* (silent — attention=false)
@@ -979,8 +979,8 @@ files for every supported host.
   where most models would only invoke the protocol after an explicit
   prompt. Old `v2` blocks are rewritten in place on next install (the
   sentinel regex already matched any version).
-- **Copilot CLI: dual global rules paths.** DoomCoder now writes the
-  snippet to both `~/.copilot/AGENTS.md` (the file DoomCoder used in
+- **Copilot CLI: dual global rules paths.** Doom Code now writes the
+  snippet to both `~/.copilot/AGENTS.md` (the file Doom Code used in
   v1.4–1.6; kept for backward compat) *and* `~/.copilot/copilot-instructions.md`
   (Copilot CLI's documented global instructions file). No migration, no
   deletion — both files get the sentinel block, uninstall strips both,
@@ -1007,7 +1007,7 @@ files for every supported host.
 **Configure vs. Track — clean separation of setup and live selection.**
 The old "Agent Tracking" window was doing too much (install, live status,
 channels, tests) and the "Watch this agent" submenu listed every random
-running IDE/CLI DoomCoder couldn't actually talk to. v1.5 splits them:
+running IDE/CLI Doom Code couldn't actually talk to. v1.5 splits them:
 the window is **setup only**, and the menubar submenu shows **only
 agents the user has verified** end-to-end.
 
@@ -1031,7 +1031,7 @@ agents the user has verified** end-to-end.
 - `WatchTarget` enum (`.none` / `.all` / `.agentType(id)`) replacing
   the legacy `watchedSessionKey: String`. "Track none (silent)" is now
   an explicit menu row for muting all notifications without disabling
-  DoomCoder.
+  DoomCode.
 - `AgentStatusManager.isAgentConfigured(_:)` and `configuredAgents()`
   helpers, feeding the Track submenu and the new Track buttons from
   one source of truth.
@@ -1087,14 +1087,14 @@ round-trip hook tests, and introduces a diagnostics panel.
   per-instance details (folder, tty, elapsed) and one-click pinning. Only
   pinned sessions appear in the sidebar and fire notifications.
 - **Install Anywhere** pane — marketplace-style page with a copy-pastable
-  DoomCoder MCP snippet, per-client instructions (Cursor, Windsurf, Codex,
+  Doom Code MCP snippet, per-client instructions (Cursor, Windsurf, Codex,
   Claude Desktop, VS Code, Zed, Custom), and a Verify button that waits up
   to 2 min for any MCP client to hand-shake.
 - **Real round-trip hook test** — spawns `~/.doomcoder/hook.sh`, times how
   long the event takes to reach our socket, reports `✓ 12 ms` or a
   diagnostic (`socket not listening`, `script missing`, `silent`). Replaces
   the animated 4.5 s staged test.
-- **DoomCoder Doctor** (menubar → *DoomCoder Doctor…*) — one-click probes
+- **Doom Code Doctor** (menubar → *Doom Code Doctor…*) — one-click probes
   for every agent's hook script / MCP sentinel / live hello TTL plus system
   checks (socket listening, python3, Accessibility, notifications, ntfy,
   `~/.doomcoder`, macOS version). Includes a **Copy report** button.
@@ -1117,7 +1117,7 @@ round-trip hook tests, and introduces a diagnostics panel.
   every force-unwrap in `SocketServer.swift` and the event decoder;
   partial writes, oversized lines, non-UTF8 bytes, and unknown JSON
   schemas are all logged and dropped instead of crashing.
-- **Cursor project-shadow configs.** When installing, DoomCoder now warns
+- **Cursor project-shadow configs.** When installing, Doom Code now warns
   about any `.cursor/mcp.json` in recent-workspaces that would silently
   shadow the global install.
 - **Codex TOML CRLF** handling — replaced regex-based merge with a
@@ -1244,11 +1244,11 @@ couldn't be made reliable, and rebuilds the ntfy onboarding UX so it works
 without needing QR-to-Safari workarounds.
 
 ### Added
-- **Calendar channel (primary iPhone delivery).** DoomCoder now creates a short
-  `EKEvent` with a 3-second `EKAlarm` on a dedicated **DoomCoder** calendar
+- **Calendar channel (primary iPhone delivery).** Doom Code now creates a short
+  `EKEvent` with a 3-second `EKAlarm` on a dedicated **Doom Code** calendar
   stored in iCloud. The alarm fires locally on every device signed into the
   same iCloud account — iPhone, iPad, Apple Watch — within seconds, regardless
-  of Focus mode, and without ever landing in Recently Deleted. Old DoomCoder
+  of Focus mode, and without ever landing in Recently Deleted. Old Doom Code
   events auto-clean after 15 minutes so the calendar stays empty.
 - **Real iCloud round-trip test for Calendar.** The Verify step and the
   SYSTEM → iCloud pane both run a deterministic round-trip: write a probe
@@ -1299,7 +1299,7 @@ Hotfix for iPhone delivery channels shipped in 1.0.0.
   ever fired. 1.0.1 writes an **uncompleted** reminder with a due-date alarm
   set to `now`, which is what the Reminders app consumes to trigger an
   iPhone notification. A sentinel tag (`[dc-reminder/v1]`) in the note field
-  lets DoomCoder auto-complete its own reminders older than an hour so the
+  lets Doom Code auto-complete its own reminders older than an hour so the
   list stays tidy. Cleanup runs opportunistically on app launch and before
   each delivery.
 - **iMessage delivery is far more resilient.** Handles are now normalized to
@@ -1316,7 +1316,7 @@ Hotfix for iPhone delivery channels shipped in 1.0.0.
 - **Test notifications from a session now deliver.** SessionDetailPane's
   Test button used `.info` status which the relay's `isAttention` guard
   silently dropped. Now uses `.wait` so the test actually fires.
-- **Sparkle gentle-reminders warning silenced.** DoomCoder now advertises
+- **Sparkle gentle-reminders warning silenced.** Doom Code now advertises
   `supportsGentleScheduledUpdateReminders = true` via its Sparkle user
   driver delegate — required for menu-bar background apps to surface
   scheduled update alerts correctly.
@@ -1365,7 +1365,7 @@ round-trip test for Reminders delivery.
   writes a unique marker reminder, polls a fresh `EKEventStore` for
   propagation, confirms, then cleans up — returning observed latency.
   The only way to deterministically verify iPhone delivery will work.
-- **DoomCoder Focus Filter** — New `SetFocusFilterIntent` that DoomCoder
+- **Doom Code Focus Filter** — New `SetFocusFilterIntent` that Doom Code
   donates on every `AgentStatusManager.anyWorking` flip. Map it to any
   Focus mode in System Settings → Focus → [mode] → Focus Filters, and
   your iPhone will silence other apps while a coding agent is actively
@@ -1402,7 +1402,7 @@ round-trip test for Reminders delivery.
 - **Heuristic detection stack.** `WorkingStateDetector.swift`,
   `AppDetector.swift`, `ActiveAppsView.swift`, and
   `DynamicAppDiscovery.swift` are deleted. If an agent isn't hooked or
-  MCP-connected, DoomCoder doesn't track it — and the Agent Tracking
+  MCP-connected, Doom Code doesn't track it — and the Agent Tracking
   window tells the user exactly how to fix that with one click.
 - **Legacy UserDefaults keys** — `customCLIBinaries`, `customGUIBundles`,
   `detectedApps.*`. `LegacyDefaults.migrate()` runs once on first v1.0
@@ -1432,15 +1432,15 @@ existing agent hook configs. No user action required.
 
 ### Added — iPhone Relay (Phase C)
 - **Triple-redundant iPhone notifications** — every attention-grabbing event (wait for input / error / done) now fans out in parallel to three independent channels, so a slow iCloud sync or denied permission never costs you the alert:
-  - **iCloud Reminders** — drops a completed reminder into your default Reminders list; Apple's own sync pushes it to your iPhone in seconds. Zero network calls from DoomCoder itself.
+  - **iCloud Reminders** — drops a completed reminder into your default Reminders list; Apple's own sync pushes it to your iPhone in seconds. Zero network calls from Doom Code itself.
   - **iMessage to yourself** — sends an iMessage via Messages.app to a handle you configure. Fastest of the three. Uses AppleScript; no API keys, no accounts.
-  - **ntfy.sh** — opt-in push via ntfy's free public server. DoomCoder generates an unguessable topic (`doom-<22 hex>`); install the ntfy iOS app, subscribe to the URL, done.
+  - **ntfy.sh** — opt-in push via ntfy's free public server. Doom Code generates an unguessable topic (`doom-<22 hex>`); install the ntfy iOS app, subscribe to the URL, done.
 - **Settings → iPhone tab** — per-channel cards with toggles, Grant Access buttons, live Ready/Off/Needs-permission status dots, and a Send Test button per channel.
 - **Delivery log** — every attempt (success or failure, with latency detail) is recorded in-app so you can confirm the path works end-to-end.
 - **`NSRemindersUsageDescription`** and **`NSAppleEventsUsageDescription`** added to Info.plist for the first-run permission prompts.
 
 ### Added — Agent Bridge MCP (Phase B)
-- **`~/.doomcoder/mcp.py` runner** — self-deployed Python 3 MCP server bundled into DoomCoder (stamped with `DC_MCP_VERSION` so updates auto-refresh). Exposes a single `dc` tool with a one-character `s` param (`s/w/i/e/d` for start/wait/info/error/done), keeping per-session token cost to roughly 140 tokens.
+- **`~/.doomcoder/mcp.py` runner** — self-deployed Python 3 MCP server bundled into Doom Code (stamped with `DC_MCP_VERSION` so updates auto-refresh). Exposes a single `dc` tool with a one-character `s` param (`s/w/i/e/d` for start/wait/info/error/done), keeping per-session token cost to roughly 140 tokens.
 - **Five-agent installer** — Cursor, Windsurf, VS Code, Gemini CLI, Codex. JSON-merge for the first four (writes `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`, `~/Library/Application Support/Code/User/mcp.json`, `~/.gemini/settings.json`); TOML-section editor for Codex (`~/.codex/config.toml`). All entries tagged with a `doomcoder-managed` sentinel so Uninstall cleanly removes only our section.
 - **Agent Bridge tab** now shows the MCP-based agents alongside hook-based ones with matching Setup / Uninstall / Restore / Send Test controls.
 
@@ -1448,7 +1448,7 @@ existing agent hook configs. No user action required.
 - **Unix-socket transport** at `~/.doomcoder/dc.sock` — deterministic, per-event, zero-polling bridge for AI agent status. Replaces heuristic detection for any agent that speaks to us directly. Mode `0600`, owner-only.
 - **`AgentStatusManager`** — central state machine that dedups events in a 10-second window per session, auto-finalises stale sessions after 10 minutes, and exposes a live `sessions` list to the UI.
 - **Claude Code hook installer** — one-click **Agent Bridge → Set Up** writes eight managed hook commands (`SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Notification`, `UserPromptSubmit`, `Stop`, `SubagentStop`) into `~/.claude/settings.json`, preserving every existing user entry via merge + timestamped backup. Idempotent re-install, clean Uninstall, Restore-Backup buttons.
-- **Copilot CLI extension installer** — installs a tiny `~/.copilot/extensions/doomcoder/hook.sh` shim that forwards lifecycle events to the DoomCoder bridge. No impact on Copilot tokens or behavior.
+- **Copilot CLI extension installer** — installs a tiny `~/.copilot/extensions/doomcoder/hook.sh` shim that forwards lifecycle events to the Doom Code bridge. No impact on Copilot tokens or behavior.
 - **`hook.sh` runner** — POSIX shell script auto-deployed to `~/.doomcoder/hook.sh` on every launch; reads hook JSON from stdin, emits one line of compact JSON to the socket via `nc -U` (Python 3 fallback), never blocks the agent (exits 0 on any failure).
 - **Settings → Agent Bridge tab** — per-agent cards with live status badges (Connected / Partial / Not set up), plain-English setup copy, "What we changed" disclosure with Reveal-in-Finder and Restore-Backup, and a "Send Test Notification" button that injects a synthetic event through the full pipeline.
 - **Rich agent notifications** — notifications driven by hook events now carry the agent name (Claude Code / Copilot CLI), repo name, and elapsed time; attention-only (wait / error / done) so no spam during normal tool use.
@@ -1479,7 +1479,7 @@ existing agent hook configs. No user action required.
 ### Changed
 - Active Apps window expanded to 460 × 340 to accommodate the Signal column.
 - Settings window converted to a `TabView` (General + Tools tabs), height 480 px.
-- `DoomCoderApp` passes `appDetector` to `SettingsView` so the Tools tab can trigger rescans.
+- `DoomCodeApp` passes `appDetector` to `SettingsView` so the Tools tab can trigger rescans.
 - `Info.plist` adds `NSUserNotificationsUsageDescription` for notification permission.
 
 ---
@@ -1505,7 +1505,7 @@ existing agent hook configs. No user action required.
 ### Added
 - **Active Apps window** — dedicated window (App | Status | CPU%) replacing the old inline menu list. Opens via "Active Apps…" menu item; includes a Scan button and thermal status footer.
 - **Settings window** — clean Form-based window with Launch at Login toggle and Accessibility permission status/grant button for the global hotkey.
-- **⌥ Space global hotkey** — replaces the old Fn+F1 shortcut. Toggles Doom Coder on/off from anywhere. Requires Accessibility permission; a "Grant Access" button in Settings opens System Preferences and polls for permission automatically (no relaunch needed).
+- **⌥ Space global hotkey** — replaces the old Fn+F1 shortcut. Toggles Doom Code on/off from anywhere. Requires Accessibility permission; a "Grant Access" button in Settings opens System Preferences and polls for permission automatically (no relaunch needed).
 - **Smooth screen-off fade** — Screen Off mode now uses `CGDisplayFade` for a 0.8-second cinematic fade to black before sleeping the display (no jarring instant-off).
 - **Dynamic PATH detection** — `AppDetector` now reads `/etc/paths` and `/etc/paths.d/` to discover system-defined binary paths at runtime (Homebrew, npm, etc.) instead of relying on a hardcoded list.
 - **Gemini CLI detection** — added `gemini` to tracked CLI tools.
@@ -1542,9 +1542,9 @@ existing agent hook configs. No user action required.
   - Only shows apps actually installed on your device
   - Updates running state every 10 seconds
 - **Live CPU% for Running Apps** — Each running tracked app shows its current CPU usage, sampled asynchronously using `ps` (zero overhead).
-- **Task Completion Notifications** — When a tracked AI tool's CPU drops below 2% for ~2 minutes, Doom Coder sends a system notification: "🤖 [App] has gone idle — your task may be complete." Counter resets if CPU rises again.
-- **Launch at Login** — Toggle in the menu to enable/disable launching Doom Coder at login (uses `SMAppService`, no helper process).
-- **Global Hotkey Fn+F1** — Toggle Doom Coder on/off from anywhere without clicking the menu bar icon. Requires Accessibility permission (prompted when first used). A "Grant Accessibility Access" button appears in the menu if permission is not yet granted.
+- **Task Completion Notifications** — When a tracked AI tool's CPU drops below 2% for ~2 minutes, Doom Code sends a system notification: "🤖 [App] has gone idle — your task may be complete." Counter resets if CPU rises again.
+- **Launch at Login** — Toggle in the menu to enable/disable launching Doom Code at login (uses `SMAppService`, no helper process).
+- **Global Hotkey Fn+F1** — Toggle Doom Code on/off from anywhere without clicking the menu bar icon. Requires Accessibility permission (prompted when first used). A "Grant Accessibility Access" button appears in the menu if permission is not yet granted.
 - **Settings Persistence** — Screen-Off re-arm timeout is now persisted across restarts.
 
 ### Changed
@@ -1568,7 +1568,7 @@ existing agent hook configs. No user action required.
 - **Configurable dim level** — choose minimum brightness: 5%, 10%, or 20% when auto-dim activates.
 - **Thermal monitoring** — real-time system thermal state displayed in the menu (🟢 Normal / 🟡 Fair / 🟠 Serious / 🔴 Critical). Zero overhead — notification-driven via `ProcessInfo.thermalState`.
 - **Session timer** — optional auto-disable after 1, 2, 4, or 8 hours with countdown display in the menu. Prevents accidentally leaving the Mac awake overnight.
-- **Custom app icon** — Doom Coder now has its own logo (skeleton vibe-coding with headphones).
+- **Custom app icon** — Doom Code now has its own logo (skeleton vibe-coding with headphones).
 - **Mode picker in menu** — switch between Full Mode (screen always on at full brightness) and Auto-Dim Mode.
 - **Settings persist** across app restarts via UserDefaults (mode, idle timeout, dim level, session timer).
 
@@ -1596,16 +1596,16 @@ existing agent hook configs. No user action required.
 - Initial release 🎉
 - Menu bar icon (`⚡` when active, `⚡/` when inactive) — no Dock icon, lives purely in the menu bar
 - Toggle to enable/disable sleep prevention with a single click
-- Elapsed time display ("Active for 2h 34m") when Doom Coder is running
+- Elapsed time display ("Active for 2h 34m") when Doom Code is running
 - Prevents both **display sleep** and **system sleep** using `IOPMAssertionTypePreventUserIdleDisplaySleep` — zero CPU overhead, kernel-level flag
 - Sparkle auto-update support — "Check for Updates..." in the menu
 - About window with version info
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
-[1.8.4]: https://github.com/katipally/Doom-Coder/compare/v1.8.3...v1.8.4
-[0.2.1]: https://github.com/katipally/Doom-Coder/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/katipally/Doom-Coder/compare/v0.1.2...v0.2.0
-[0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0
+[1.8.4]: https://github.com/katipally/Doom-Code/compare/v1.8.3...v1.8.4
+[0.2.1]: https://github.com/katipally/Doom-Code/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/katipally/Doom-Code/compare/v0.1.2...v0.2.0
+[0.1.2]: https://github.com/katipally/Doom-Code/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/katipally/Doom-Code/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/katipally/Doom-Code/releases/tag/v0.1.0

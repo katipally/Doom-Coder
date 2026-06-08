@@ -57,7 +57,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func refreshIcon() {
         guard let button = statusItem?.button else { return }
-        // Icon tracks the master toggle (DoomCoder on/off), not the sleep
+        // Icon tracks the master toggle (DoomCode on/off), not the sleep
         // assertion. When master is OFF the app is fully idle — bolt.slash.
         // When master is on AND a snooze is active, swap to moon.zzz.fill so
         // the user can spot the override at a glance in the menu bar.
@@ -67,13 +67,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         if !master { name = "bolt.slash.fill" }
         else if snoozed { name = "moon.zzz.fill" }
         else { name = "bolt.fill" }
-        let img = NSImage(systemSymbolName: name, accessibilityDescription: "DoomCoder")
+        let img = NSImage(systemSymbolName: name, accessibilityDescription: "Doom Code")
         img?.isTemplate = true
         button.image = img
 
         let liveCount = AgentTrackingManager.shared.hookFreshAgents.count
         button.title = liveCount > 0 ? " \(liveCount)" : ""
-        // VoiceOver label: "DoomCoder — 2 agents active" or "DoomCoder — idle"
+        // VoiceOver label: "Doom Code — 2 agents active" or "Doom Code — idle"
         let countLabel: String
         if snoozed {
             countLabel = "snoozed"
@@ -82,8 +82,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } else {
             countLabel = master ? "idle" : "suspended"
         }
-        button.toolTip = "DoomCoder — \(countLabel)"
-        button.setAccessibilityLabel("DoomCoder — \(countLabel)")
+        button.toolTip = "Doom Code — \(countLabel)"
+        button.setAccessibilityLabel("Doom Code — \(countLabel)")
         // macOS 26 menu-bar pattern: dim the icon via contentTintColor
         // (not alphaValue, which would dim the badge title too).
         button.contentTintColor = master ? nil : .secondaryLabelColor
@@ -106,7 +106,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        let open = NSMenuItem(title: "Open DoomCoder", action: #selector(openPanel), keyEquivalent: "")
+        let open = NSMenuItem(title: "Open Doom Code", action: #selector(openPanel), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
 
@@ -120,13 +120,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         settings.target = self
         menu.addItem(settings)
 
-        let about = NSMenuItem(title: "About DoomCoder", action: #selector(openAbout), keyEquivalent: "")
+        let about = NSMenuItem(title: "About Doom Code", action: #selector(openAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
 
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit DoomCoder", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit DoomCode", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 

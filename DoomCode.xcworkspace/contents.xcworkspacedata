@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Workspace version = "1.0">
-   <FileRef location = "group:DoomCoder.xcodeproj"></FileRef>
-   <FileRef location = "group:DoomCoderCompanion/DoomCoderCompanion.xcodeproj"></FileRef>
-   <FileRef location = "group:Packages/DoomCoderCore"></FileRef>
+   <FileRef location = "group:DoomCode.xcodeproj"></FileRef>
+   <FileRef location = "group:DoomCodeCompanion/DoomCodeCompanion.xcodeproj"></FileRef>
+   <FileRef location = "group:Packages/DoomCodeCore"></FileRef>
 </Workspace>

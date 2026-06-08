@@ -1,7 +1,7 @@
-# XcodeGen spec for DoomCoder Companion (iOS) + NotificationService extension.
+# XcodeGen spec for DoomCode Companion (iOS) + NotificationService extension.
 # Generate the project with:
-#   cd DoomCoderCompanion && xcodegen generate
-name: DoomCoderCompanion
+#   cd DoomCodeCompanion && xcodegen generate
+name: DoomCodeCompanion
 options:
   bundleIdPrefix: com.doomcoder.app
   deploymentTarget:
@@ -30,30 +30,30 @@ settings:
     GCC_TREAT_WARNINGS_AS_ERRORS: YES
 
 packages:
-  DoomCoderCore:
-    path: ../Packages/DoomCoderCore
+  DoomCodeCore:
+    path: ../Packages/DoomCodeCore
 
 targets:
-  DoomCoderCompanion:
+  DoomCodeCompanion:
     type: application
     platform: iOS
     sources:
-      - path: DoomCoderCompanion
+      - path: DoomCodeCompanion
         excludes:
           - "Resources/Info.plist"
-          - "Resources/DoomCoderCompanion.entitlements"
-          - "Resources/DoomCoderCompanion.Release.entitlements"
+          - "Resources/DoomCodeCompanion.entitlements"
+          - "Resources/DoomCodeCompanion.Release.entitlements"
       - path: SharedCache
     resources:
-      - DoomCoderCompanion/Resources/Assets.xcassets
+      - DoomCodeCompanion/Resources/Assets.xcassets
     info:
-      path: DoomCoderCompanion/Resources/Info.plist
+      path: DoomCodeCompanion/Resources/Info.plist
       properties:
-        CFBundleName: DoomCoder Companion
-        CFBundleDisplayName: DoomCoder Companion
+        CFBundleName: Doom Code Companion
+        CFBundleDisplayName: Doom Code Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSCameraUsageDescription: DoomCoder uses the camera to scan the QR code shown on your Mac so you can connect your devices.
+        NSCameraUsageDescription: Doom Code uses the camera to scan the QR code shown on your Mac so you can connect your devices.
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIBackgroundModes:
@@ -81,14 +81,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.doomcoder.app.companion
-        CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.entitlements
+        CODE_SIGN_ENTITLEMENTS: DoomCodeCompanion/Resources/DoomCodeCompanion.entitlements
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
       configs:
         Release:
-          CODE_SIGN_ENTITLEMENTS: DoomCoderCompanion/Resources/DoomCoderCompanion.Release.entitlements
+          CODE_SIGN_ENTITLEMENTS: DoomCodeCompanion/Resources/DoomCodeCompanion.Release.entitlements
           PROVISIONING_PROFILE_SPECIFIER: "DoomCoder Companion AppStore"
     dependencies:
-      - package: DoomCoderCore
+      - package: DoomCodeCore
       - target: NotificationService
         embed: true
       - sdk: FoundationModels.framework
@@ -122,13 +122,13 @@ targets:
         Release:
           PROVISIONING_PROFILE_SPECIFIER: "DoomCoder Companion NS AppStore"
     dependencies:
-      - package: DoomCoderCore
+      - package: DoomCodeCore
 
 schemes:
-  DoomCoderCompanion:
+  DoomCodeCompanion:
     build:
       targets:
-        DoomCoderCompanion: all
+        DoomCodeCompanion: all
         NotificationService: all
     run:
       config: Debug

@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import UserNotifications
 import OSLog
-import DoomCoderCore
+import DoomCodeCore
 
 // Fires a real test notification to a single channel, bypassing dedupe logic.
 enum ChannelTester {
@@ -52,13 +52,13 @@ enum ChannelTester {
             }
             guard granted else {
                 Task { @MainActor in
-                    completion(false, "Notification permission not granted. Enable in System Settings → Notifications → DoomCoder.")
+                    completion(false, "Notification permission not granted. Enable in System Settings → Notifications → DoomCode.")
                 }
                 return
             }
 
             let content = UNMutableNotificationContent()
-            content.title = "DoomCoder — Test"
+            content.title = "Doom Code — Test"
             content.body = "✅ macOS notifications are working! You'll see agent alerts like this."
             content.sound = .default
             content.categoryIdentifier = "DOOMCODER_TEST"
@@ -82,7 +82,7 @@ enum ChannelTester {
     private static func sendCloudKitTest(completion: @MainActor @Sendable @escaping (Bool, String) -> Void) {
         let pusher = CloudKitPusher.shared
         guard pusher.isReady else {
-            completion(false, "iCloud sync isn't ready yet. Make sure you're signed in to iCloud and the DoomCoder iPhone app is installed.")
+            completion(false, "iCloud sync isn't ready yet. Make sure you're signed in to iCloud and the DoomCode iPhone app is installed.")
             return
         }
         let rec = NotificationLogRecord(
@@ -92,7 +92,7 @@ enum ChannelTester {
             agent: "doomcoder",
             phase: "test",
             rawEvent: "test",
-            title: "DoomCoder — Test",
+            title: "Doom Code — Test",
             body: "✅ iPhone push channel is working! You'll see agent alerts on your iOS device.",
             channel: "iOS",
             success: true,

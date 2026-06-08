@@ -1,11 +1,11 @@
-// ApprovalArbiter.swift — DoomCoder (Mac)
+// ApprovalArbiter.swift — DoomCode (Mac)
 //
 // The universal auto-accept spam fix.
 //
 // Problem: some agents (Copilot CLI, Cursor, Windsurf — see
 // `TrackedAgent.permissionHookReliability == .preDecision`) fire a "permission
 // needed" hook BEFORE their own allow-list / auto-approve decision runs. When
-// the action is auto-approved the agent never actually blocks, yet DoomCoder
+// the action is auto-approved the agent never actually blocks, yet DoomCode
 // would have already fired a "needs you" alert — pure spam.
 //
 // Fix: for pre-decision agents we DEFER the alert by a short, user-tunable

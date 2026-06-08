@@ -6,7 +6,7 @@ import Foundation
 // the auto-revert path, and no "disconnected" state is shown).
 //
 // Requirements:
-// - App must NOT be sandboxed (DoomCoder.entitlements: app-sandbox = false) — satisfied.
+// - App must NOT be sandboxed (DoomCode.entitlements: app-sandbox = false) — satisfied.
 // - Sources must be held strongly or they auto-cancel before firing.
 // - All methods must be called on the main actor.
 @MainActor

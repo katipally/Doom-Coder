@@ -1,4 +1,4 @@
-// AgentDeliverable.swift — DoomCoderCore
+// AgentDeliverable.swift — DoomCodeCore
 //
 // A single, fully-rendered "what you'll be notified about" row, synced
 // Mac → iOS inside `AgentConfigRecord`. The Mac is the single source of

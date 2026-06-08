@@ -1,11 +1,11 @@
-// PromptStore.swift — DoomCoder Companion (Tools)
+// PromptStore.swift — DoomCode Companion (Tools)
 // On-device store for the user's saved prompt drafts. Pure composer model: the
 // user writes a draft, optionally enhances it with AI, and saves it here. No
 // curated examples, no templates — just the user's own drafts. Local-only.
 
 import Foundation
 import Observation
-import DoomCoderCore
+import DoomCodeCore
 
 @MainActor
 @Observable

@@ -1,4 +1,4 @@
-// AppleFoundationEngine.swift — DoomCoderCore
+// AppleFoundationEngine.swift — DoomCodeCore
 // Apple FoundationModels on-device engine. Free, offline, private, no account.
 // Fully gated: compiles only where the framework exists, runs only on iOS 26 /
 // macOS 26 with an eligible device that has Apple Intelligence ready. Never

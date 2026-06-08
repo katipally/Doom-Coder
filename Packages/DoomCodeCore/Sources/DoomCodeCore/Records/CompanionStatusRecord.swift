@@ -54,7 +54,7 @@ public struct CompanionStatusRecord: Sendable, Codable, Equatable {
 
     /// True when the last heartbeat is within the live-connection window.
     /// Callers in the app pass `CompanionStatusStore.connectedThreshold`; the
-    /// default (600s) mirrors that constant so DoomCoderCore stays dependency-light.
+    /// default (600s) mirrors that constant so DoomCodeCore stays dependency-light.
     public func isConnected(now: Date = Date(), threshold: TimeInterval = 600) -> Bool {
         now.timeIntervalSince(lastSeen) < threshold
     }

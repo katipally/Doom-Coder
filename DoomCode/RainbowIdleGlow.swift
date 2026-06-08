@@ -9,7 +9,7 @@ import SwiftUI
 //
 // Shared between the Mac floating panel / Prompts / Notes panes
 // (`ToolsWindow.swift`) and the iOS Prompts view
-// (`DoomCoderCompanion/.../PromptsView.swift`). The two copies are
+// (`DoomCodeCompanion/.../PromptsView.swift`). The two copies are
 // identical; the only reason for two is that they live in different
 // targets. Any change should be applied to both.
 
