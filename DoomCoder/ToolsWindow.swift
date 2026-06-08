@@ -1144,17 +1144,22 @@ struct MacNotesPane: View {
                     Label(note.isPinned ? "Unpin" : "Pin",
                           systemImage: note.isPinned ? "pin.slash" : "pin")
                 }
+                .help(note.isPinned ? "Remove this note from the top of the list"
+                                    : "Keep this note pinned to the top of the list")
                 Button { MacClipboard.copy(note.body) } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                 }
                 .disabled(empty)
+                .help("Copy the note's text to the clipboard")
                 Button { turnIntoPrompt(note) } label: {
                     Label("To Prompt", systemImage: "text.alignleft")
                 }
                 .disabled(empty)
+                .help("Send this note to the Prompts tool to refine it into a structured AI prompt")
                 Button(role: .destructive) { delete(note.id) } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .help("Delete this note")
 
                 Spacer()
             }

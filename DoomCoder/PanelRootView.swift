@@ -682,6 +682,7 @@ struct PanelRootView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    HelpTip("Watches your configured AI coding agents and alerts you when one finishes, fails, or needs approval. Turn an agent on or off below, or open Configure to install hooks.")
                     Spacer()
                     if !tracking.hookFreshAgents.isEmpty {
                         Text("\(tracking.hookFreshAgents.count)")
