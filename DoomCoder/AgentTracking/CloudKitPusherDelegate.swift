@@ -262,9 +262,14 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 }
                 ud.set(on, forKey: Self.masterEnabledKey)
                 ud.set(cmd.issuedAt, forKey: Self.masterChangedAtKey)
-                // Turning OFF releases any keep-awake assertion. Turning ON does
-                // NOT force keep-awake — the Off/On/Auto selector owns that.
-                if !on { sm.disable() }
+                // CRITICAL: also set the in-memory `SleepManager.masterEnabled`
+                // so its `didSet` runs (releases keep-awake on OFF, fires
+                // `notifyStateChanged` for the menu-bar icon / panel). Writing
+                // to UserDefaults alone is not enough — there is no cross-
+                // process KVO on UserDefaults, and the same-process readers
+                // (SleepManager, StatusItemController, PanelRootView) all
+                // observe the in-memory property.
+                sm.masterEnabled = on
                 ud.set(cmd.commandId, forKey: CloudKitPusher.lastAppliedCommandIdKey)
                 changed = true
                 logger.notice("ckpusher.delegate: applied setMasterEnabled=\(on, privacy: .public)")

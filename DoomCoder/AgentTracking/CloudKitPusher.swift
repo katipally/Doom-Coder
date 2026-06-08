@@ -243,6 +243,7 @@ final class CloudKitPusher {
 
         _ = try? await database.deleteSubscription(withID: "mac-zone-push-v1")
         _ = try? await database.deleteSubscription(withID: "mac-controlcmd-query-v1")
+        _ = try? await database.deleteSubscription(withID: "mac-controlcmd-query-v2")
 
         if let zones = try? await database.allRecordZones() {
             let ids = zones.map(\.zoneID)
@@ -403,6 +404,16 @@ final class CloudKitPusher {
         // this same private-DB zone → this one subscription covers both same-account
         // and cross-account commands.
         Task { await self.ensureControlCommandQuerySubscription() }
+
+        // AND a CompanionStatus query subscription so the Mac sees iPhone
+        // presence heartbeats within ~1-2s of the iPhone publishing them.
+        // Without this, presence only arrives via the zone subscription's
+        // silent push (throttled to a few per hour) or the 5s safety poll,
+        // which is what made the iPhone's presence-indicator in the Mac's
+        // Connections list lag for minutes at a time. The Mac runs an
+        // always-on menu-bar app with a lifetime App-Nap opt-out, so the
+        // content-available push reliably lands in `didReceiveRemoteNotification`.
+        Task { await self.ensureCompanionStatusQuerySubscription() }
     }
 
     private func ensureZoneSubscription() async {
@@ -425,15 +436,20 @@ final class CloudKitPusher {
 
     /// High-priority push channel for iOS→Mac commands, mirroring the iOS
     /// NotificationLog query subscription that makes Mac→iOS instant. A
-    /// `firesOnRecordCreation` query subscription on ControlCommand is delivered
-    /// promptly (unlike the throttled zone silent push) and is content-available
-    /// only (no alert body), so it wakes a fetch on this always-running Mac without
-    /// ever showing a banner. `NSPredicate(value: true)` requires no queryable index
-    /// (same as the iOS NotificationLog subscription). Not scoped to `zoneID`: a
-    /// database-wide query subscription fires across the Mac's private-DB zone for
-    /// commands from both same-account and cross-account (shared-zone) phones.
+    /// `firesOnRecordCreation` query subscription on ControlCommand carries an
+    /// alert payload so APNs delivers it at priority 10 (immediate) instead of the
+    /// throttled priority-5 silent path. The Mac suppresses the banner in
+    /// `willPresent` (always-running menu-bar app) and just fetches+applies.
+    /// `NSPredicate(value: true)` requires no queryable index (same as the iOS
+    /// NotificationLog subscription). Not scoped to `zoneID`: a database-wide query
+    /// subscription fires across the Mac's private-DB zone for commands from both
+    /// same-account and cross-account (shared-zone) phones.
     private func ensureControlCommandQuerySubscription() async {
-        let subID = "mac-controlcmd-query-v1"
+        // v2: upgraded from content-available (priority 5, throttled) to an alert
+        // push (priority 10). CloudKit can't mutate an existing subscription's
+        // NotificationInfo, so we use a NEW id and delete the old v1.
+        _ = try? await database.deleteSubscription(withID: "mac-controlcmd-query-v1")
+        let subID = "mac-controlcmd-query-v2"
         let sub = CKQuerySubscription(
             recordType: ControlCommandRecord.recordType,
             predicate: NSPredicate(value: true),
@@ -441,7 +457,17 @@ final class CloudKitPusher {
             options: .firesOnRecordCreation
         )
         let info = CKSubscription.NotificationInfo()
-        info.shouldSendContentAvailable = true   // silent — no alert/sound/badge, no Mac banner
+        // HIGH-PRIORITY (apns-priority 10) push, mirroring the Mac→iOS
+        // NotificationLog subscription. A content-available-only push is
+        // apns-priority 5, which APNs throttles into hourly bursts — that was the
+        // root cause of iOS→Mac commands landing 1min+ late. An alert payload
+        // forces immediate, un-throttled delivery (and arrives even if the Mac app
+        // is relaunching). The Mac is an always-running menu-bar app, so it
+        // SUPPRESSES this banner in `userNotificationCenter(_:willPresent:)` and
+        // just triggers an instant fetch+apply — the user never sees it.
+        info.title = "Doom Coder"
+        info.alertBody = "Remote command received"
+        info.shouldSendContentAvailable = true   // also wake the silent path as a backup
         sub.notificationInfo = info
         do {
             try await database.save(sub)
@@ -452,6 +478,41 @@ final class CloudKitPusher {
             logger.error("ckpusher: controlcommand query subscription permission failure — check aps-environment entitlement")
         } catch {
             logger.error("ckpusher: controlcommand query subscription failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// High-priority (priority 10) silent push for iPhone presence heartbeats.
+    /// The iPhone writes `CompanionStatus-<deviceId>` into this Mac's zone on
+    /// a 240s timer (and immediately on first-touch discovery). Without this
+    /// query subscription, presence only arrives via the zone subscription's
+    /// coalesced silent push (throttled to a few per hour) or the 5s safety
+    /// poll, so the iPhone's row in the Mac's Connections list was frequently
+    /// stale by 5-15 minutes. A `firesOnRecordCreation` query subscription
+    /// (presence is created-once + UPDATEd in place) gets us the FIRST
+    /// presence within ~1-2s, and subsequent UPDATEs land via the zone
+    /// subscription (which already works for the data-sync side).
+    private func ensureCompanionStatusQuerySubscription() async {
+        let subID = "mac-companionstatus-query-v1"
+        let sub = CKQuerySubscription(
+            recordType: CompanionStatusRecord.recordType,
+            predicate: NSPredicate(value: true),
+            subscriptionID: subID,
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
+        )
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        // No alert body — the Mac is an always-running menu-bar app and
+        // would never want a banner every time an iPhone heartbeats.
+        sub.notificationInfo = info
+        do {
+            try await database.save(sub)
+            logger.notice("ckpusher: companionstatus query subscription saved (id=\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            logger.notice("ckpusher: companionstatus query subscription already exists (\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .permissionFailure {
+            logger.error("ckpusher: companionstatus query subscription permission failure — check aps-environment entitlement")
+        } catch {
+            logger.error("ckpusher: companionstatus query subscription failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -527,7 +588,7 @@ final class CloudKitPusher {
             elapsedSeconds: sm.elapsedSeconds,
             lastAppliedCommandId: ud.string(forKey: Self.lastAppliedCommandIdKey),
             lastAppliedAt: ud.object(forKey: Self.lastAppliedAtKey) as? Date,
-            masterEnabled: ud.object(forKey: CloudKitPusherDelegate.masterEnabledKey) as? Bool ?? true,
+            masterEnabled: sm.masterEnabled,
             agentStatusJSON: agentJSON,
             autoGraceEndsAt: nil,
             // v2.6 — auto-mode redesign fields. Always populated for iOS to

@@ -84,16 +84,33 @@ public final class SyncTelemetry: @unchecked Sendable {
         }
         lock.unlock()
 
+        // DEBUG-ONLY signposts and `logger.debug` lines. The per-record
+        // emission is what made the Console unreadable on a 200-record
+        // backlog drain: 200 signposts + 200 `logger.debug` lines + 200
+        // `NotificationCenter` posts, all from the CKSyncEngine worker
+        // thread. Production builds keep ONLY the round-trip-completed
+        // `logger.info` line so a user-facing `Console.app` tail is usable.
+        // The buffer + `eventRecordedNotification` post remain in DEBUG so
+        // the in-app Sync Diagnostics view still has data.
+        #if DEBUG
         signposter.emitEvent("sync", "\(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public)")
         if let latencyMs {
             logger.info("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) latency=\(latencyMs)ms")
         } else {
             logger.debug("sync \(kind.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) \(detail ?? "", privacy: .public)")
         }
+        #else
+        if let latencyMs {
+            logger.info("sync applied side=\(side.rawValue, privacy: .public) rt=\(recordType ?? "-", privacy: .public) latency=\(latencyMs)ms")
+        }
+        #endif
         // Hop NotificationCenter posts to the main queue so SwiftUI @Observable
         // and @State listeners never receive updates on the CKSyncEngine
         // worker thread (which triggers
         // "Publishing changes from background threads is not allowed").
+        // Production builds only post the round-trip-completed event (which
+        // is the high-signal one — every other `eventRecordedNotification`
+        // post is just for the in-app Diagnostics view, which is debug-only).
         let capturedLatency = latencyMs
         let capturedRecordType = recordType
         DispatchQueue.main.async {
@@ -103,7 +120,9 @@ public final class SyncTelemetry: @unchecked Sendable {
                                                 userInfo: ["latencyMs": ms,
                                                            "recordType": capturedRecordType ?? ""])
             }
+            #if DEBUG
             NotificationCenter.default.post(name: SyncTelemetry.eventRecordedNotification, object: event)
+            #endif
         }
     }
 

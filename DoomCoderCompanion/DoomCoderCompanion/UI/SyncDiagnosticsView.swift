@@ -4,6 +4,7 @@
 // time. Mirrors the Mac-side diagnostics view 1:1.
 
 import SwiftUI
+import Combine
 import DoomCoderCore
 
 struct SyncDiagnosticsView: View {
@@ -33,7 +34,12 @@ struct SyncDiagnosticsView: View {
         }
         .navigationTitle("Sync Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
-        .onReceive(eventStream) { _ in
+        // Throttled re-snapshot at 4Hz. A 200-record backlog drain used
+        // to call `snapshot()` and reload the events list 200 times in
+        // <2s — each one a full `List` diff and a `NSLock` acquire inside
+        // the buffer. Throttling coalesces to 4 view updates per second
+        // while still feeling live.
+        .onReceive(eventStream.throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)) { _ in
             events = SyncTelemetry.shared.snapshot()
         }
         .onReceive(rtStream) { note in

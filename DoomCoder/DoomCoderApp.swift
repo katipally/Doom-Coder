@@ -183,7 +183,18 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        // Remote CloudKit pushes (an iPhone ControlCommand arriving via the
+        // high-priority `mac-controlcmd-query-v2` subscription) carry an alert
+        // ONLY to earn apns-priority 10 (instant) delivery — they must NEVER show
+        // a banner on the Mac. Suppress the display and kick an immediate fetch so
+        // the command applies in ~1s. Local notifications (agent events, the
+        // connectivity "check" ring) are not push-triggered, so they display
+        // normally.
+        if notification.request.trigger is UNPushNotificationTrigger {
+            await MainActor.run { CloudKitPusher.shared.fetchNow() }
+            return []
+        }
+        return [.banner, .sound, .list]
     }
 
     /// Handle the user tapping a notification banner.

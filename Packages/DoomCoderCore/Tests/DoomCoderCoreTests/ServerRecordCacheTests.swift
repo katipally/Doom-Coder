@@ -31,6 +31,43 @@ struct ServerRecordCacheTests {
         #expect(fetched != nil)
     }
 
+    /// Regression for the 2026-06 crash: a `store` then `record(forName:)`
+    /// cycle must round-trip a real CKRecord's system fields through
+    /// NSKeyedArchiver → UserDefaults → NSKeyedUnarchiver → CKRecord.
+    /// The previous iOS-side `PresenceServerRecordCache` called
+    /// `CKRecord(coder:).encodeSystemFields(with: NSKeyedUnarchiver)`,
+    /// which is the ENCODER direction (not the decoder) — the call
+    /// crashed with `encodeObject:forKey: only defined for abstract class`.
+    /// The fix is to use `CKRecord(coder:)` for decoding, exactly as
+    /// `ServerRecordCache.loadIfNeeded` does. This test asserts that the
+    /// shared `ServerRecordCache` round-trips correctly so the same
+    /// pattern (which `PresenceServerRecordCache` now mirrors) is proven
+    /// sound.
+    @Test func storeThenFetchSurvivesADiskRoundTrip() {
+        let suite = "DoomCoderCoreTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let cache = ServerRecordCache(defaults: defaults, key: "rt-test")
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let original = makeRecord(name: "RT-1")
+        cache.store(original)
+
+        // Construct a fresh cache against the SAME defaults suite.
+        // This forces a real UserDefaults → NSKeyedUnarchiver → CKRecord
+        // decode cycle, which is the path that used to crash. The
+        // decoded record must carry the original `recordID` (which is
+        // what `CKRecord(coder:)` reconstructs from the encoded
+        // system fields).
+        let fresh = ServerRecordCache(defaults: defaults, key: "rt-test")
+        let decoded = fresh.record(forName: "RT-1")
+        #expect(decoded != nil)
+        #expect(decoded?.recordID.recordName == "RT-1")
+        // The recordID's zone is reconstructed too (proving the
+        // encoded system fields included it, and that the decode
+        // path is real, not a no-op).
+        #expect(decoded?.recordID.zoneID.zoneName == "Z")
+    }
+
     @Test func clearWipesMemoryAndDisk() {
         let (cache, defaults) = makeCache()
         cache.store(makeRecord(name: "A"))
