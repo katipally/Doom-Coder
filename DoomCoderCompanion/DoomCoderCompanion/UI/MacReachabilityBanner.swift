@@ -16,6 +16,10 @@ import DoomCoderCore
 struct MacReachabilityBanner: View {
     @State private var macStore = MacStatusStore.shared
     @State private var engine = CompanionSyncEngine.shared
+    // Observe the notification log so the banner re-evaluates when a new
+    // notification arrives — fresh notifications are proof the Mac is reachable
+    // even when its MacStatus heartbeat hasn't been re-fetched yet.
+    @State private var notifStore = NotificationLogStore.shared
     @State private var isRefreshing = false
     // Audit 2026-06: use a solid fill in Increase Contrast mode so the
     // banner is still legible. The 10% / 35% opacity backgrounds wash
@@ -49,8 +53,26 @@ struct MacReachabilityBanner: View {
 
     private enum Level { case stale, offline }
 
+    /// Freshest *proof of contact* with this Mac, not just its heartbeat.
+    /// The "not reachable" banner used to fire purely off `MacStatus.lastSeen`,
+    /// which only refreshes when the app fetches (throttled silent push / 30s
+    /// foreground poll). But user-visible notifications arrive on an independent,
+    /// reliable query-subscription channel and never refresh `lastSeen` — so the
+    /// banner falsely said "not reachable" while notifications were actively landing.
+    /// We now take the most recent of three real signals:
+    ///   1. the MacStatus heartbeat (`lastSeen`),
+    ///   2. the newest NotificationLog received from THIS Mac (proves the push
+    ///      channel is live),
+    ///   3. the last successful CloudKit fetch (`lastSyncAt`, proves we're reaching iCloud).
+    static func effectiveLastSeen(for mac: MacStatusRecord) -> Date {
+        let latestNotif = NotificationLogStore.shared.entries
+            .first(where: { $0.macId == mac.macId })?.ts ?? .distantPast
+        let lastSync = CompanionSyncEngine.shared.lastSyncAt ?? .distantPast
+        return max(mac.lastSeen, latestNotif, lastSync)
+    }
+
     private func staleness(for mac: MacStatusRecord, now: Date = Date()) -> Level? {
-        let age = now.timeIntervalSince(mac.lastSeen)
+        let age = now.timeIntervalSince(Self.effectiveLastSeen(for: mac))
         if age >= 900 { return .offline }
         if age >= staleAfter { return .stale }
         return nil
@@ -61,7 +83,7 @@ struct MacReachabilityBanner: View {
     /// banner as a list row at all, so a healthy Mac leaves no empty row behind
     /// (which otherwise reserves height inside the card and looks "cut in half").
     static func hasContent(for mac: MacStatusRecord, now: Date = Date()) -> Bool {
-        now.timeIntervalSince(mac.lastSeen) >= 300
+        now.timeIntervalSince(effectiveLastSeen(for: mac)) >= 300
     }
 
     // MARK: - Banner

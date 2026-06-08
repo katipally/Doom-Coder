@@ -90,7 +90,7 @@
 		15BA134FFD25DB4659BAE24C /* MacReachabilityBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReachabilityBanner.swift; sourceTree = "<group>"; };
 		16A67B01FA77C05717991E37 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		1C662A3110C402306A4D04C5 /* DoomCoderCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DoomCoderCore; path = ../Packages/DoomCoderCore; sourceTree = SOURCE_ROOT; };
-		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		243D6369BF4BE9F7FDB95F20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2856CC3CE02D862C486B495A /* agent-vscode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "agent-vscode.png"; sourceTree = "<group>"; };
 		470093697F24E3D64AA4301B /* agent-claude.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "agent-claude.png"; sourceTree = "<group>"; };
 		4A8607336CA377C7808F0A44 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -116,7 +116,7 @@
 		A0025197E0D983F81144F468 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
 		ABDD7CCE54DA64EABCC67CA9 /* MacControlViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacControlViewModel.swift; sourceTree = "<group>"; };
 		AD9392DB3081F0376202563D /* AgentLogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogsView.swift; sourceTree = "<group>"; };
-		B4CCC40290EB871ECB7D9D14 /* DoomCoderCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DoomCoderCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4CCC40290EB871ECB7D9D14 /* DoomCoderCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoderCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1FD10F71AB58F8526779A2D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C5B9DE90A2213084C9D99462 /* MacControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacControlView.swift; sourceTree = "<group>"; };
 		D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -126,11 +126,11 @@
 		DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectFlowView.swift; sourceTree = "<group>"; };
 		E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsView.swift; sourceTree = "<group>"; };
 		E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionApp.swift; sourceTree = "<group>"; };
-		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EFFE28F57668A40F442C291F /* CompanionDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDataManager.swift; sourceTree = "<group>"; };
 		F2A6A15B1B99782A1B051D4F /* agent-cursor.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "agent-cursor.png"; sourceTree = "<group>"; };
 		F5E5EA84FEC8E064AC203824 /* SharedToolUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedToolUI.swift; sourceTree = "<group>"; };
-		F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -389,16 +389,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-					600AA6DF4FC227DACD8A3A97 = {
-						DevelopmentTeam = A9P2388PHM;
-						ProvisioningStyle = Automatic;
-					};
-					A0BC412897681E06A3545048 = {
-						DevelopmentTeam = A9P2388PHM;
-						ProvisioningStyle = Automatic;
-					};
-				};
 			};
 			buildConfigurationList = DC80DAA0E4B233AEA3F8D54D /* Build configuration list for PBXProject "DoomCoderCompanion" */;
 			developmentRegion = en;
@@ -599,7 +589,10 @@
 				MARKETING_VERSION = 2.7.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				OTHER_LDFLAGS = "$(inherited) -ObjC";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -615,7 +608,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = DoomCoderCompanion/Resources/DoomCoderCompanion.Release.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				INFOPLIST_FILE = DoomCoderCompanion/Resources/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -623,7 +618,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.companion;
-				PROVISIONING_PROFILE_SPECIFIER = "DoomCoder Companion AppStore";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -690,7 +685,10 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = "$(inherited) -ObjC";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -705,6 +703,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = A9P2388PHM;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -712,7 +713,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app.companion.NotificationService;
-				PROVISIONING_PROFILE_SPECIFIER = "DoomCoder Companion NS AppStore";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

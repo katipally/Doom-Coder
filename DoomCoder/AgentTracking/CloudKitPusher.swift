@@ -188,8 +188,13 @@ final class CloudKitPusher {
         // makes sendChanges() crash ("Cannot await a call into CKSyncEngine
         // from within a delegate callback"). Detaching escapes that scope.
         guard let engine else { return }
+        let log = logger
         let task = Task.detached { [weak self] in
-            try? await engine.sendChanges()
+            do {
+                try await engine.sendChanges()
+            } catch {
+                log.error("ckpusher: sendChanges error \(error.localizedDescription, privacy: .public)")
+            }
             // Remove ourselves from the tracking set so the set does not
             // grow unbounded across many kicks. Hop back to the main actor
             // because `pendingEngineTasks` is `@MainActor`-isolated.
@@ -237,6 +242,7 @@ final class CloudKitPusher {
         }
 
         _ = try? await database.deleteSubscription(withID: "mac-zone-push-v1")
+        _ = try? await database.deleteSubscription(withID: "mac-controlcmd-query-v1")
 
         if let zones = try? await database.allRecordZones() {
             let ids = zones.map(\.zoneID)
@@ -383,6 +389,20 @@ final class CloudKitPusher {
         // APNs push to this Mac — reducing worst-case latency from 15s to <3s.
         // Fire-and-forget: a slow or failing subscription never blocks the fetch.
         Task { await self.ensureZoneSubscription() }
+
+        // ALSO subscribe to ControlCommand creations via a CKQuerySubscription.
+        // This mirrors the iOS-side NotificationLog query subscription that makes
+        // Mac→iOS instant: a `firesOnRecordCreation` query subscription is delivered
+        // far more promptly/reliably than the zone subscription's coalesced silent
+        // push (which APNs throttles "to a few per hour"). The Mac runs persistently
+        // with a lifetime App-Nap opt-out, so this content-available push lands in
+        // `didReceiveRemoteNotification` → `fetchNow()` in ~1-2s instead of waiting
+        // for the 5s safety poll — closing the iOS→Mac latency gap. No alert body, so
+        // it never surfaces a banner on the Mac. The Mac owns this zone in its private
+        // DB and shares it zone-wide, so a different-Apple-ID phone's command lands in
+        // this same private-DB zone → this one subscription covers both same-account
+        // and cross-account commands.
+        Task { await self.ensureControlCommandQuerySubscription() }
     }
 
     private func ensureZoneSubscription() async {
@@ -400,6 +420,38 @@ final class CloudKitPusher {
             logger.error("ckpusher: zone subscription permission failure — check aps-environment entitlement")
         } catch {
             logger.error("ckpusher: zone subscription failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// High-priority push channel for iOS→Mac commands, mirroring the iOS
+    /// NotificationLog query subscription that makes Mac→iOS instant. A
+    /// `firesOnRecordCreation` query subscription on ControlCommand is delivered
+    /// promptly (unlike the throttled zone silent push) and is content-available
+    /// only (no alert body), so it wakes a fetch on this always-running Mac without
+    /// ever showing a banner. `NSPredicate(value: true)` requires no queryable index
+    /// (same as the iOS NotificationLog subscription). Not scoped to `zoneID`: a
+    /// database-wide query subscription fires across the Mac's private-DB zone for
+    /// commands from both same-account and cross-account (shared-zone) phones.
+    private func ensureControlCommandQuerySubscription() async {
+        let subID = "mac-controlcmd-query-v1"
+        let sub = CKQuerySubscription(
+            recordType: ControlCommandRecord.recordType,
+            predicate: NSPredicate(value: true),
+            subscriptionID: subID,
+            options: .firesOnRecordCreation
+        )
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true   // silent — no alert/sound/badge, no Mac banner
+        sub.notificationInfo = info
+        do {
+            try await database.save(sub)
+            logger.notice("ckpusher: controlcommand query subscription saved (id=\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            logger.notice("ckpusher: controlcommand query subscription already exists (\(subID, privacy: .public))")
+        } catch let e as CKError where e.code == .permissionFailure {
+            logger.error("ckpusher: controlcommand query subscription permission failure — check aps-environment entitlement")
+        } catch {
+            logger.error("ckpusher: controlcommand query subscription failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -502,11 +554,44 @@ final class CloudKitPusher {
         // the CKSyncEngine delegate-callback task-local marker and would crash
         // if fetchNow() is ever reached from a delegate-originated context.
         guard let engine else { return }
+        // Audit 2026-06: the iOS→Mac receive path is poll-driven (the Mac's APNs
+        // push can fail to register, e.g. OSStatus 13 on a locally-run build), so
+        // this fetch is the ONLY way ControlCommands land. Errors used to be
+        // swallowed by `try?`, which hid every failure while sends kept working —
+        // making "commands never apply" undebuggable. Log the outcome and attempt
+        // recovery on a wedged-fetch error so the poll can self-heal.
+        let log = logger
         let task = Task.detached { [weak self] in
-            try? await engine.fetchChanges()
+            do {
+                try await engine.fetchChanges()
+                log.debug("ckpusher: fetchChanges ok")
+            } catch let e as CKError {
+                log.error("ckpusher: fetchChanges CKError code=\(e.code.rawValue, privacy: .public) \(e.localizedDescription, privacy: .public)")
+                await self?.recoverFromFetchError(e)
+            } catch {
+                log.error("ckpusher: fetchChanges error \(error.localizedDescription, privacy: .public)")
+            }
             await self?.removeEngineTaskFromSet()
         }
         pendingEngineTasks.insert(task)
+    }
+
+    /// Self-heal a wedged poll fetch. The Mac SENDS fine (Mac→iOS works) but a
+    /// fetch can fail independently (stale change token, deleted/missing zone)
+    /// and — because errors were silently swallowed — stay wedged forever while
+    /// iOS→Mac commands pile up unfetched. On a recoverable error, re-assert the
+    /// zone so the engine rebuilds its fetch state, then kick + fetch again.
+    @MainActor
+    func recoverFromFetchError(_ error: CKError) {
+        switch error.code {
+        case .changeTokenExpired, .zoneNotFound, .userDeletedZone:
+            guard let engine else { return }
+            logger.notice("ckpusher: recovering from fetch error \(error.code.rawValue, privacy: .public) — re-asserting zone")
+            engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))])
+            kickEngine()
+        default:
+            break
+        }
     }
 
     /// Publish the list of tracked agents on this Mac plus installed-state
@@ -561,6 +646,17 @@ final class CloudKitPusher {
     /// Delete a notification log record (used by reaper).
     func deleteNotificationLogs(recordIDs: [CKRecord.ID]) {
         guard let engine else { return }
+        engine.state.add(pendingRecordZoneChanges: recordIDs.map { .deleteRecord($0) })
+    }
+
+    /// Deletes ControlCommand records this Mac has finished with (applied OR
+    /// expired). Commands are a one-shot queue: once consumed the record is dead
+    /// weight. Leaving them behind makes them accumulate, re-fetch on every sync
+    /// token reset, and re-run the apply filter every launch (we observed a
+    /// growing pile of stale "expired" commands re-dropped on each fetch). The
+    /// Mac owns the zone, so it removes them; the deletion syncs to every device.
+    func deleteControlCommands(recordIDs: [CKRecord.ID]) {
+        guard let engine, !recordIDs.isEmpty else { return }
         engine.state.add(pendingRecordZoneChanges: recordIDs.map { .deleteRecord($0) })
     }
 

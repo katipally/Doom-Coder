@@ -868,7 +868,12 @@ struct MacControlView: View {
         startAckPoll()
         waitTimeout?.cancel()
         waitTimeout = Task {
-            try? await Task.sleep(for: .seconds(30))
+            // 45s (was 30s): the Mac applies commands within ~1s, but its MacStatus
+            // ack can be delayed behind a large NotificationLog backlog drain on
+            // first sync. A too-tight timeout false-reverts a command the Mac
+            // already applied. Paired with prioritizing the ack over the backlog
+            // in CompanionSyncEngine, acks normally land in a few seconds.
+            try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { return }
             showTimeoutError = true
             clearWaiting(fromTimeout: true)
@@ -887,7 +892,10 @@ struct MacControlView: View {
         startAckPoll()
         masterTimeout?.cancel()
         masterTimeout = Task {
-            try? await Task.sleep(for: .seconds(30))
+            // 45s (was 30s) — see startWaitTimeout: avoid false-reverting a master
+            // toggle the Mac already applied while its ack is delayed behind a
+            // first-sync NotificationLog backlog.
+            try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { return }
             showTimeoutError = true
             clearMasterWaiting(fromTimeout: true)
