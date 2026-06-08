@@ -1,8 +1,9 @@
 // RootTabView.swift — DoomCoder Companion
-// Four-tab structure (Prompts / Notes / Dashboard / Settings), launching on
-// Prompts. Prompts and Notes are 100% standalone — they work with no Mac, no
-// account, and no internet (App Store 4.2.3 standalone functionality).
-// Dashboard adds live Mac monitoring when connected.
+// Four-tab structure (Dashboard / Prompts / Notes / Settings), launching on
+// Dashboard — the app's headline feature (live Mac monitoring + remote control).
+// Prompts and Notes are 100% standalone — they work with no Mac, no account, and
+// no internet (App Store 4.2.3 standalone functionality), and the Dashboard's
+// no-Mac state surfaces them so the app is fully usable without a Mac.
 // On iOS 26 the tab bar renders with the system Liquid Glass material.
 
 import SwiftUI
@@ -18,12 +19,6 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
-            Tab("Prompts", systemImage: "text.alignleft", value: RootTab.prompts) {
-                NavigationStack { PromptsView() }
-            }
-            Tab("Notes", systemImage: "note.text", value: RootTab.notes) {
-                NavigationStack { NotesView() }
-            }
             Tab("Dashboard", systemImage: "macbook.and.iphone", value: RootTab.dashboard) {
                 NavigationStack(path: $router.agentPath) {
                     DashboardView()
@@ -31,6 +26,12 @@ struct RootTabView: View {
                             AgentLogsView(agent: agent, macId: MacStatusStore.shared.primary?.macId)
                         }
                 }
+            }
+            Tab("Prompts", systemImage: "text.alignleft", value: RootTab.prompts) {
+                NavigationStack { PromptsView() }
+            }
+            Tab("Notes", systemImage: "note.text", value: RootTab.notes) {
+                NavigationStack { NotesView() }
             }
             Tab("Settings", systemImage: "gearshape", value: RootTab.settings) {
                 NavigationStack { SettingsView() }

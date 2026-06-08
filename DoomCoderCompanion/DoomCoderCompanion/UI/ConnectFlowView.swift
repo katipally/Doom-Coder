@@ -235,6 +235,13 @@ struct ConnectFlowView: View {
                         }
                     }
                 }
+
+                ConnectionGuide(title: "How do I connect?", steps: [
+                    "On your Mac, open **DoomCoder** and sign in to the **same iCloud account** (the same Apple ID as this iPhone).",
+                    "Click the **DoomCoder icon** in the Mac menu bar ▸ **Configure Agents…** ▸ **Connections**.",
+                    "Wait until it shows **“Ready as [your Mac]”**.",
+                    "Your Mac appears above — tap **Connect**."
+                ])
             }
         }
     }
@@ -293,10 +300,17 @@ struct ConnectFlowView: View {
                 Label("Different iCloud", systemImage: "qrcode.viewfinder")
                     .font(.headline)
 
-                Text("Connect a Mac on another Apple ID (e.g. a work laptop). On that Mac: DoomCoder ▸ Connections ▸ Add Device.")
+                Text("Connect a Mac on another Apple ID (e.g. a work laptop) using a QR code or invite link.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                ConnectionGuide(title: "How do I get the QR code?", steps: [
+                    "On your Mac, click the **DoomCoder icon** in the menu bar ▸ **Configure Agents…**",
+                    "Open the **Connections** tab, then click **Add Device…**",
+                    "A **QR code** and **invite link** appear on your Mac.",
+                    "**Scan** the QR below, or **paste** the link."
+                ])
 
                 Button {
                     Haptics.tap()
@@ -382,7 +396,7 @@ struct ConnectFlowView: View {
         guard let url = URL(string: trimmed),
               (url.scheme == "https" || url.scheme == "http"),
               (url.host?.contains("icloud.com") == true) else {
-            pairingError = "That doesn't look like a DoomCoder invite link. Copy the link (or scan the QR) shown on your Mac under Connections ▸ Add Device."
+            pairingError = "That doesn't look like a DoomCoder invite link. Copy the link (or scan the QR) shown on your Mac under Configure Agents ▸ Connections ▸ Add Device."
             step = .chooser
             return
         }
@@ -412,6 +426,41 @@ struct ConnectFlowView: View {
     private func finish() {
         onFinished()
         dismiss()
+    }
+}
+
+// MARK: - Connection guide
+
+/// A collapsible, numbered step-by-step guide shown inside a pairing card.
+/// Collapsed by default to keep the sheet compact; step strings accept simple
+/// `**bold**` markdown (rendered via `Text(.init:)`).
+private struct ConnectionGuide: View {
+    let title: String
+    let steps: [String]
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(i + 1).")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tint)
+                        Text(.init(step))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
+        } label: {
+            Label(title, systemImage: "questionmark.circle")
+                .font(.caption.weight(.medium))
+        }
+        .tint(.secondary)
     }
 }
 

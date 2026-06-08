@@ -210,13 +210,15 @@ private struct NoteEditorView: View {
                     }
                     .accessibilityLabel("More options")
                 }
-                // Keyboard dismiss — appears in the native iOS keyboard accessory bar.
+                // Keyboard dismiss — appears in the native iOS keyboard accessory bar,
+                // centered (Spacer on both sides) above the keyboard.
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button { focusedField = nil } label: {
                         Image(systemName: "keyboard.chevron.compact.down")
                     }
                     .accessibilityLabel("Dismiss keyboard")
+                    Spacer()
                 }
             }
             .onAppear { if text.isEmpty && checklist.isEmpty { focusedField = .body } }
