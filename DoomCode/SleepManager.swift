@@ -1,3 +1,15 @@
+// SleepManager.swift
+//
+// The keep-awake engine. This is the core of Doom Code: it holds an
+// IOPMAssertion (the same kernel flag caffeinate and Amphetamine use) so
+// the Mac never falls asleep mid-task and kills a long agent run.
+//
+// Three modes drive it: Off (no assertion), On (always held, Screen On or
+// Screen Off), and Auto (held only while a tracked agent is working or you
+// are at the keyboard, released after a grace period once both go quiet).
+// It also owns the session timer, the Screen Off re-arm loop, and the
+// master on/off gate. State is the single source of truth that the menu bar
+// panel and the iOS companion both read from.
 import Foundation
 import IOKit.pwr_mgt
 import CoreGraphics

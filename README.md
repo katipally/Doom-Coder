@@ -4,141 +4,179 @@
 
 # Doom Code
 
-**Keep your Mac awake. Track your AI agents. Get notified on your iPhone.**
+**Keep your Mac awake. Watch your AI agents. Get pinged on your iPhone the second they need you.**
 
 [![Release](https://img.shields.io/github/v/release/katipally/Doom-Code?style=flat-square)](https://github.com/katipally/Doom-Code/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-blue?style=flat-square)](#)
 [![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](#)
 
+<br/>
+
+[![Download for Mac](https://img.shields.io/badge/Download%20for%20Mac-Latest%20Release-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/katipally/Doom-Code/releases/latest)
+&nbsp;
+[![Download on the App Store](https://img.shields.io/badge/iPhone%20%26%20iPad-App%20Store-0D96F6?style=for-the-badge&logo=appstore&logoColor=white)](https://apps.apple.com/app/doomcoder-companion/id6772514212)
+
+<sub>Mac app is a signed, notarized `.zip` from GitHub Releases. The iPhone and iPad companion is free on the App Store.</sub>
+
 </div>
 
 ---
 
-## What is Doom Code?
+## Why I built this
 
-A macOS menu bar app that does two things:
+I kept running into the same dumb problem.
 
-1. **Keeps your Mac awake** while long-running jobs (builds, downloads, agents) finish, without changing any system settings.
-2. **Tracks coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI) and notifies you the moment they finish, fail, or need your attention, on your Mac and on your iPhone via the free **Doom Code Companion** iOS app.
+I would kick off a long agent run, Claude Code or Codex chewing through a real task, and then go make coffee or look at my phone. Two things kept happening:
 
-No accounts, no servers, no telemetry. Notifications travel through your own private iCloud container.
+1. My Mac would fall asleep halfway through and the whole run would just die. Come back, screen's black, agent's gone, progress lost.
+2. Or the agent would hit a permission prompt thirty seconds after I walked away and then just sit there. Frozen. Waiting on a single yes/no that I had no idea it was asking for. I'd come back ten minutes later to find it had done nothing the entire time.
 
-> **New to Doom Code?** Every control in the app has a hover tooltip (the ⓘ icon) explaining what it does. See [docs/features.md](docs/features.md) for the full reference.
+So I was basically stuck babysitting the screen. I couldn't go do other work, couldn't leave the room, couldn't trust the run to survive without me staring at it. Which kind of defeats the point of having an agent do the work in the first place.
+
+Doom Code is the fix. It keeps the Mac awake so runs never die mid-task, and it watches your agents and sends a notification straight to your phone the moment one of them finishes, fails, or needs you to approve something. Now I can actually walk away. My phone buzzes when the agent needs a human, I tab back, unblock it, done.
+
+The endgame I'm building toward: drive the whole thing from my phone. Send prompts, approve actions, steer the agent, all from my pocket so I don't even need to be at the laptop. We're not all the way there yet, but the foundation is shipping.
+
+No accounts. No servers. No telemetry. Notifications travel through your own private iCloud container and nowhere else.
+
+> **First time here?** Every control in the app has a hover tooltip (the ⓘ icon) that explains what it does. The full reference lives in [docs/features.md](docs/features.md).
 
 ---
 
-## Sleep Prevention
+## What it actually does
 
-### Three keep-awake modes
+Two jobs, done well.
+
+**1. Keeps your Mac awake** while long-running stuff (builds, downloads, agent runs) finishes, without touching a single system setting. Nothing to clean up after.
+
+**2. Watches your coding agents** (Claude Code, Cursor, VS Code Copilot, Copilot CLI, Windsurf, Codex CLI, and opencode) and notifies you the instant they finish, fail, or need your attention. On your Mac and on your iPhone, through the free **Doom Code Companion** app.
+
+---
+
+## Keeping the Mac awake
+
+### Three modes
 
 | Mode | What it does |
 |---|---|
-| **Off** | macOS manages sleep normally. Doom Code is running but holds no assertion. |
-| **On** | Always holds the sleep assertion. Sub-option: **Screen On** (display stays lit) or **Screen Off** (display dims; CPU stays awake). |
-| **Auto** | Caffeine-style smart mode. Holds the sleep assertion while **either** a tracked agent is actively working **or** you are at the keyboard/mouse. Releases 10 minutes after both signals go silent. Also supports **Snooze** (15 min / 1 hour / until you turn it off) for cases where you want to override Auto temporarily. Respects per-agent tracking toggles. |
+| **Off** | macOS handles sleep like normal. Doom Code is running but holding nothing. |
+| **On** | Always keeps the Mac awake. Pick **Screen On** (display stays lit) or **Screen Off** (display dims, CPU keeps going). |
+| **Auto** | The smart one, Caffeine style. Stays awake while a tracked agent is actually working **or** while you're at the keyboard. Lets go 10 minutes after both go quiet. You can **Snooze** it (15 min, 1 hour, or until you turn it off) when you want to override that. Honors your per-agent tracking toggles. |
 
-Switch modes from the menu bar panel. **Option Space** opens the panel.
+Switch modes from the menu bar panel. **Option Space** pops it open from anywhere.
 
 ### Screen modes (when Keep-Awake is On)
 
 | Mode | What it does |
 |---|---|
 | **Screen On** | Display stays fully lit. Mac never sleeps. Good for glancing at progress. |
-| **Screen Off** | Display sleeps after a short delay; Mac CPU stays awake. Saves power and reduces screen burn. |
+| **Screen Off** | Display sleeps after a short delay, Mac CPU stays awake. Saves power, less screen burn. |
 
 ### Session timer (when Keep-Awake is On)
 
-Auto-disable the sleep blocker after **1 / 2 / 4 / 8 hours** (or leave it running indefinitely). Tap a duration tile in the panel to set it.
+Auto-shutoff after **1, 2, 4, or 8 hours**, or leave it running forever. Tap a duration tile in the panel to set it.
 
 ### Screen Off re-arm
 
-When using Screen Off mode, the display wakes when you move the mouse. Doom Code will put it back to sleep automatically after a configurable idle interval (default: **10 minutes**). Adjust in **Configure > Settings > Screen Off**.
+In Screen Off mode, moving the mouse wakes the display. Doom Code puts it back to sleep automatically after an idle gap you choose (default **10 minutes**). Tune it in **Configure > Settings > Screen Off**.
 
-### Auto mode snooze (v2.6+)
+### Auto mode snooze
 
-When Auto is the active mode, a **Snooze** pill appears below the Off/On/Auto segmented control. Tap it to override Auto and hold the Mac awake for:
+When Auto is active, a **Snooze** pill shows up under the Off/On/Auto control. Tap it to force the Mac awake for:
 
-- **15 minutes** — a quick coffee break
-- **1 hour** — a meeting or phone call
-- **Until I turn it off** — indefinite, like Caffeine
+- **15 minutes** for a quick coffee break
+- **1 hour** for a meeting or a call
+- **Until I turn it off** for an open-ended hold, like Caffeine
 
-While snoozed, the panel shows a countdown badge and the menu-bar icon swaps to a `moon.zzz.fill`. Cancel the snooze any time from the same menu or from the iOS companion. The iOS companion mirrors the snooze state with a live countdown banner.
+While snoozed, the panel shows a countdown and the menu bar icon swaps to a `moon.zzz.fill`. Cancel any time from the same menu or from your phone. The iOS app mirrors the snooze with a live countdown too.
 
 ---
 
 ## How the sleep blocker works
 
-Doom Code holds an `IOPMAssertion`, the same kernel-level flag used by Amphetamine, Lungo, and `caffeinate`.
+Doom Code holds an `IOPMAssertion`, the exact same kernel flag that Amphetamine, Lungo, and `caffeinate` use.
 
-- Zero CPU / less than 10 MB RAM -- one flag in the kernel, no polling
-- Auto-released on crash, quit, or disable
-- No system settings modified -- nothing to clean up
-- Session timer -- auto-disable after 1 / 2 / 4 / 8 hours
-- Launch at Login (optional)
-- Sparkle auto-updates
-- Global hotkey (Option Space, rebindable)
+- Basically zero CPU and under 10 MB RAM. It's one flag in the kernel, no polling loop.
+- Released automatically on crash, quit, or disable.
+- No system settings changed, so there's nothing to undo.
+- Session timer to auto-disable after 1, 2, 4, or 8 hours.
+- Launch at Login if you want it.
+- Sparkle auto-updates.
+- Global hotkey (Option Space, rebindable).
 
 ---
 
-## Agent tracking
+## Watching your agents
 
 ### Supported agents
 
-| Agent | Notification events | Config location |
+Each agent emits a different set of events. The headline ones (done, failed, waiting on you) are below. On top of these, most agents also emit quieter activity events (tool calls, file edits, sub-agents, thinking, context compaction) that you can opt into per agent.
+
+| Agent | Key events | Config location |
 |---|---|---|
-| **Claude Code** | Completed, failed, waiting approval, session start, tool calls | `~/.claude/settings.json` |
-| **Cursor** | Completed, failed, session start | `~/.cursor/hooks.json` |
-| **VS Code Copilot** | Completed, failed, waiting input, session start | `~/.copilot/vscode-hooks/doomcoder.json` |
-| **Copilot CLI** | Completed, failed, waiting approval, session start, tool calls | `~/.copilot/hooks/doomcoder.json` |
-| **Windsurf** | Completed, failed, waiting input, session start | `~/.codeium/windsurf/hooks.json` |
-| **Codex CLI** | Completed, failed, session start, tool calls | `~/.codex/hooks.json` |
+| **Claude Code** | Completed, failed, waiting approval, waiting input, session start | `~/.claude/settings.json` |
+| **Cursor** | Completed, failed, waiting approval, waiting input, session start | `~/.cursor/hooks.json` |
+| **VS Code Copilot** | Completed, failed, waiting approval, session start | `~/.copilot/vscode-hooks/doomcoder.json` |
+| **Copilot CLI** | Completed, failed, waiting approval, session start | `~/.copilot/hooks/doomcoder.json` |
+| **Windsurf** | Completed, waiting approval, waiting input | `~/.codeium/windsurf/hooks.json` |
+| **Codex CLI** | Completed, waiting approval, session start | `~/.codex/hooks.json` |
+| **opencode** | Completed, failed, waiting approval, session start | `~/.config/opencode/plugin/doomcoder.js` |
 
-VS Code hooks support multiple variants simultaneously: VS Code Stable, VS Code Insiders, VSCodium, Cursor, and Windsurf -- choose which `settings.json` files to patch in **Configure > VS Code**.
+VS Code hooks cover multiple variants at once: VS Code Stable, VS Code Insiders, VSCodium, Cursor, and Windsurf. Pick which `settings.json` files to patch in **Configure > VS Code**.
 
-### How hooks work
+### How the hooks work
 
-Doom Code installs a lightweight `dc-hook` binary into each agent's hook configuration. When an agent fires a hook event, `dc-hook` writes a JSON envelope to a Unix socket that Doom Code is listening on. The binary is stored in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app relocations and Xcode rebuilds.
+Doom Code drops a tiny `dc-hook` binary into each agent's hook config. When an agent fires a hook event, `dc-hook` writes a small JSON envelope to a Unix socket that Doom Code is listening on. The binary lives in `~/Library/Application Support/DoomCoder/dc-hook` so it survives app moves and Xcode rebuilds.
 
-### Setting up hooks
+opencode is the one exception in how it's wired: instead of a hooks JSON file, Doom Code installs a small JavaScript plugin (`doomcoder.js`) that opencode auto-loads. The plugin still calls the same `dc-hook` over the same socket, so it lands in exactly the same place as every other agent.
 
-1. Open the panel (click the menu bar icon or press **Option Space**).
+That's the whole trick. No polling, no guessing, no scraping logs. The agent tells you exactly when something happens, and you find out in real time.
+
+### Setting it up
+
+1. Open the panel (click the menu bar icon or hit **Option Space**).
 2. Click **Configure** in the Agent Tracking card.
-3. Select an agent in the sidebar.
-4. Check prerequisites, then click **Install**.
-5. The green health dot in the sidebar confirms events are flowing.
+3. Pick an agent in the sidebar.
+4. Check the prerequisites, then click **Install**.
+5. The green health dot in the sidebar means events are flowing.
 
-Doom Code backs up your config before writing and can **Repair** hooks if they drift out of sync.
+Doom Code backs up your config before it writes anything, and it can **Repair** hooks if they ever drift out of sync.
 
-### Tracking toggles
+### Per-agent toggles
 
-Use **Track Agents** (accessible from the main panel) to:
-- Enable or disable notifications per agent without uninstalling hooks.
-- **Pause all notifications** temporarily (the Pause toggle resets when Doom Code quits -- it is in-memory only).
+Open **Track Agents** from the main panel to:
+- Turn notifications on or off per agent without uninstalling the hooks.
+- **Pause everything** for a bit. The Pause toggle is in-memory only, so it resets when Doom Code quits.
 
-Events are still recorded in the local log even when an agent is paused or disabled.
+Events still get logged locally even while an agent is paused or off.
 
 ---
 
 ## Connections
 
-The **Connections** tab (Configure window) is where notifications get delivered and where you see the devices connected to this Mac.
+The **Connections** tab (in the Configure window) is where notifications get delivered and where you see every device paired to this Mac.
 
 ### Connected devices
 
-Each iPhone or iPad running the Doom Code Companion publishes a periodic presence heartbeat to your private iCloud container. The Mac shows each device as **Connected** when seen within the last 10 minutes, or **Last seen X ago** otherwise — symmetric to how the companion shows your Mac's status. When nothing has checked in, a **Set up iPhone or iPad** button links to the App Store.
+Each iPhone or iPad running the companion sends a quiet presence heartbeat to your private iCloud container. The Mac marks a device **Connected** if it checked in within the last 10 minutes, or **Last seen X ago** otherwise. It's symmetric with how the phone shows your Mac's status. If nothing has checked in, a **Set up iPhone or iPad** button links you to the App Store.
 
 ### macOS notifications
 
-Standard macOS notification banners. Grant permission once; they work system-wide.
+Plain old macOS banners. Grant permission once and they work everywhere.
 
 ### iPhone and iPad (iCloud)
 
-Requires the free **Doom Code Companion** iOS app. Notifications mirror to your phone in 1-5 seconds via your private iCloud container -- no third-party server, no tokens, no QR codes. Sign in to the same iCloud account on both devices.
+Needs the free **Doom Code Companion** app. Notifications hit your phone in 1 to 5 seconds through your private iCloud container. No third-party server, no tokens.
 
-### Notification event preferences
+Pairing is dead simple and works two ways:
 
-Each agent's detail pane has a **"What you'll be notified about"** card. Tap **Edit** to choose exactly which events alert you, grouped for clarity:
+- **Same Apple ID on both devices?** Nothing to do. Open the companion signed into the same iCloud account and your Mac shows up automatically under the Dashboard tab.
+- **Different Apple ID?** (your phone is on a work or personal account that's separate from the Mac) Open **Add Device** on the Mac, then scan the QR code with your phone's camera or send yourself the invite link. This shares just this Mac's notifications to that device through a private CloudKit share.
+
+### Picking which events alert you
+
+Each agent's detail pane has a **"What you'll be notified about"** card. Tap **Edit** to choose exactly which events ping you, grouped so it stays readable:
 
 | Group | Categories | Default |
 |---|---|---|
@@ -146,40 +184,44 @@ Each agent's detail pane has a **"What you'll be notified about"** card. Tap **E
 | **Activity** | Session started, Tool calls, Sub-agent activity, File edits, Thinking, Prompt sent | Off |
 | **Housekeeping** | Context compaction, Background tasks | Off |
 
-Only the categories an agent actually emits are shown, so you never see a toggle that can't fire. Permission/approval categories expand to a per-tool palette so you can, for example, be alerted before shell commands but not before file reads.
+You only see toggles for events an agent can actually emit, so nothing on screen is dead weight. The permission categories expand into a per-tool list, so you can get pinged before a shell command runs but stay quiet for file reads.
 
 ### No more auto-accept spam
 
-Copilot CLI, Cursor, and Windsurf emit a *permission* hook **before** their own allowlist decides to auto-approve an action — so a naive watcher would alert you for tools that were never actually blocked. Doom Code waits a short **approval debounce window** (default 0.8s, adjustable 0.5-3s under **Configure > Settings**) for proof the tool ran; only genuinely-blocking requests produce an alert. Live status in the menu bar and Dynamic Island is unaffected and always instant. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert immediately with no added latency.
+Copilot CLI, Cursor, and Windsurf fire a *permission* hook **before** their own allowlist decides to auto-approve something. A naive watcher would ping you for tools that were never actually blocked. Doom Code waits out a short **approval debounce window** (default 0.8s, adjustable 0.5 to 3s under **Configure > Settings**) for proof the tool actually ran, so only genuinely-blocking requests make a sound. Live status in the menu bar and Dynamic Island is never delayed. Agents with reliable hooks (Claude Code, VS Code Copilot, Codex) alert instantly with zero added lag.
 
 ### Connections are global
 
-One global **mac + iPhone** channel setting applies to every agent. (Per-agent channel overrides were removed — they added complexity without clear benefit. Per-agent control now lives in the *categories* card above.)
+One **mac + iPhone** channel setting covers every agent. Per-agent channel overrides got removed because they added complexity without paying for it. Per-agent control now lives in the *categories* card above.
 
 ---
 
-## iPhone and iPad companion
+## The iPhone and iPad companion
 
-**Doom Code Companion** (iOS 26+) is a standalone app, fully usable on first launch with no setup required. No Mac connection, no API key, no account.
+**Doom Code Companion** (iOS 26+) is a real standalone app, not just a notification mirror. Fully usable the second you open it, no setup. No Mac connection, no API key, no account needed.
 
-### What works with zero setup
+It has four tabs: **Dashboard**, **Prompts**, **Notes**, and **Settings**. Prompts and Notes work fully on-device with nothing else set up. Dashboard is where your Mac shows up once you pair one.
 
-**Prompts tab** -- a chat-style prompt workspace. Type a prompt, hit send, and the AI rewrites it into a clear, structured version. Conversation history is saved automatically; use the History button in the toolbar to switch between sessions. The Library button opens a curated collection of ready-made development prompts (write tests, refactor, explain errors, code review, debug, docstrings, commit messages, SQL, API design, security review, and more) that you can copy or open in the chat.
+### Works with zero setup
 
-**Notes tab** -- on-device notes with title, body, inline task checklists, reminders (local notifications), pinning, and search. Notes can be turned into a prompt with one tap. Works entirely on-device, no network required.
+**Prompts tab.** A prompt refiner, not a chatbot. You type a rough, half-formed request and the AI rewrites it into a clean, structured prompt you can paste into your actual agent. It streams the rewrite back in an iMessage-style thread, and you can keep refining over follow-up turns. Every session auto-saves, and the History button up top lets you jump between past ones. The Library button opens a stack of ready-made dev prompts grouped by category (Refactor, Tests, Debug, Review, Explain, Git, Docs, Scaffold). Tap any one to drop it into the composer or copy it. The library works with zero AI and zero Mac.
 
-**Prompt Enhance (AI)** -- rewrites your draft prompt using Apple's on-device model (no text leaves your device) or your own API key from OpenAI, Anthropic, or similar providers (BYOK). Enhance is optional; the rest of the app works without it.
+**Notes tab.** On-device notes with a title, body, inline task checklists, reminders (local notifications), pinning, and search. Turn any note into a prompt with one tap, which seeds a fresh refine session over in the Prompts tab. Runs fully on-device, no network.
 
-### What you get when connected to a Mac
+**Prompt Enhance (AI).** The rewrite engine runs on Apple's on-device model (nothing leaves your phone) or, if you'd rather, your own API key from **OpenAI or Anthropic** (bring your own key, stored in the device Keychain). If on-device AI isn't available on your device, the app says so up front and points you at Settings. Enhance is optional. Browsing the library, writing notes, and copying prompts never need it.
 
-Pair by signing into the same iCloud account on both devices. Once paired, the **Dashboard** tab mirrors the Mac panel in real time:
-- Live agent list with status (running, waiting, idle, failed)
-- Master on/off and keep-awake controls you can change from your phone
-- 7-day notification log with full event detail
+### What you get once you pair a Mac
 
-Notifications arrive on your iPhone within 1-5 seconds of the agent event, via your private iCloud container.
+Pair it (same Apple ID is automatic, different Apple ID uses the QR or invite link from the Mac's Add Device sheet). Then the **Dashboard** tab mirrors the Mac panel live:
+- The agent list with status (running, waiting, idle, failed), tap any one for its notification log
+- Master on/off and the full keep-awake controls (Off / On / Auto, Screen On / Off, the auto-off timer, and Snooze) all drivable from your phone
+- A notification log per agent with full event detail
 
-[Get on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
+Commands you send from the phone are confirmed back by the Mac, so the controls reflect what actually happened, not just what you tapped. If your Mac stops checking in, the app tells you it might be out of date instead of showing stale state.
+
+Notifications land on your phone within 1 to 5 seconds of the agent event, through your private iCloud container.
+
+[Get it on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
 ---
 
@@ -189,7 +231,7 @@ Notifications arrive on your iPhone within 1-5 seconds of the agent event, via y
 |---|---|---|
 | Launch at Login | Off | Configure > Settings > General |
 | Global hotkey | Option Space | Configure > Settings > General |
-| Screen Off re-arm interval | 5 min | Configure > Settings > Screen Off |
+| Screen Off re-arm interval | 10 min | Configure > Settings > Screen Off |
 | Auto-revert completed sessions | 30 s | Configure > Settings > Session Lifecycle |
 | Redact prompt text in local history | On | Configure > Settings > Notifications & Privacy |
 
@@ -199,20 +241,22 @@ Full details: [docs/features.md](docs/features.md)
 
 ## Logs and diagnostics
 
-- **Live Events** -- real-time event stream per agent in the Configure window.
-- **Logs view** -- browsable, filterable history of all hook events and notifications. Export to JSON or CSV. Accessible in Configure > Logs.
-- **Raw log files** -- stored in `~/Library/Logs/DoomCode/`, retained for 7 days. Click **Reveal Logs** in Configure > Settings > Diagnostics.
-- **Connection Doctor** -- runs a synthetic test event end-to-end to verify the hook pipeline works.
+All of this lives in the **Activity** tab of the Configure window.
+
+- **Live events.** A real-time stream of hook events per agent, with a Sessions view (grouped by agent and date), a Raw firehose, and a Notifications view.
+- **Browse and export.** Filter by agent, expand any row to see the full JSON payload, and export the current view to JSON or CSV. Retention is adjustable (1, 7, or 30 days, default 7).
+- **Raw log files.** Stored in `~/Library/Logs/DoomCode/`, kept for 7 days. Hit **Reveal Logs** in Configure > Settings > Diagnostics.
+- **Connection Doctor.** Fires a fake test event through the whole pipeline end to end to prove your hooks actually work.
 
 ---
 
 ## Install
 
-Download the latest `.zip` from [Releases](https://github.com/katipally/Doom-Code/releases/latest), unzip, drag `DoomCode.app` to `/Applications`, and double-click to open.
+Grab the latest `.zip` from [Releases](https://github.com/katipally/Doom-Code/releases/latest), unzip it, drag `DoomCode.app` into `/Applications`, and double-click to open.
 
-Doom Code is signed with an Apple Developer ID and notarized by Apple -- no Gatekeeper prompts, no extra steps.
+Doom Code is signed with an Apple Developer ID and notarized by Apple, so there are no Gatekeeper prompts and no Terminal workarounds.
 
-First launch: macOS may ask for Accessibility permission -- only needed for the **Option Space** global shortcut. You can skip it if you do not need the hotkey.
+On first launch, macOS might ask for Accessibility permission. That's only for the **Option Space** global shortcut. Skip it if you don't care about the hotkey.
 
 ---
 
@@ -224,17 +268,40 @@ cd Doom-Code
 open DoomCode.xcworkspace
 ```
 
-Requires Xcode 26, macOS 26, Swift 6. Sparkle is pulled via SPM.
+Needs Xcode 26, macOS 26, Swift 6. Sparkle is pulled in over SPM.
+
+The iOS companion lives in `DoomCodeCompanion/` and is generated from a spec file. Run `cd DoomCodeCompanion && xcodegen generate` (install it with `brew install xcodegen`) before opening it.
+
+---
+
+## Contributing
+
+This is an open-source project and contributions are genuinely welcome, whether that's a bug report, a feature idea, or code.
+
+- **Found a bug?** [Open a bug report.](https://github.com/katipally/Doom-Code/issues/new?template=bug_report.yml)
+- **Have an idea?** [Open a feature request.](https://github.com/katipally/Doom-Code/issues/new?template=feature_request.yml) Adding support for a new agent is always interesting.
+- **Want to write code?** Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the project layout, and how to open a PR.
+- **Found a security hole?** Don't post it publicly. See [SECURITY.md](SECURITY.md).
+
+Every pull request runs through CI automatically: it builds the Mac app, builds the iOS companion, and runs SwiftLint. All three need to pass. Be kind to each other, the [Code of Conduct](CODE_OF_CONDUCT.md) is short.
 
 ---
 
 ## Privacy
 
-Doom Code collects no analytics, sends no data to any server, and has no telemetry. See [docs/privacy.md](docs/privacy.md) for the full policy.
+Doom Code collects no analytics, sends nothing to any server, and runs no telemetry. The full policy is in [docs/privacy.md](docs/privacy.md).
+
+---
+
+## Contact
+
+Built by Yashwanth Reddy Katipally.
+
+- Email: yashwanthreddykatipally@gmail.com
+- LinkedIn: [linkedin.com/in/yashwanth-katipally](https://linkedin.com/in/yashwanth-katipally)
 
 ---
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

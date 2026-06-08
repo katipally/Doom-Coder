@@ -1,5 +1,10 @@
 name: CI
 
+# Runs on every pull request and on pushes to main.
+# Three jobs: build the Mac app, build the iOS companion, and lint the Swift.
+# All of them must pass before a PR can merge. None of them sign anything, so
+# they run fine on a fork with no secrets.
+
 on:
   pull_request:
     branches: [main]
@@ -10,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build (Debug)
+  build-mac:
+    name: Build Mac (Debug)
     runs-on: macos-26
 
     steps:
@@ -38,3 +43,48 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             build
+
+  build-ios:
+    name: Build iOS Companion (Debug)
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Regenerate Xcode project from project.yml
+        working-directory: DoomCodeCompanion
+        run: xcodegen generate
+
+      - name: Build for Simulator (unsigned)
+        working-directory: DoomCodeCompanion
+        run: |
+          xcodebuild \
+            -project DoomCodeCompanion.xcodeproj \
+            -scheme DoomCodeCompanion \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        run: swiftlint lint --reporter github-actions-logging

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/katipally/Doom-Code/security/advisories/new
+    about: Do not file security holes as public issues. Open a private advisory here.
+  - name: Ask a question or reach out
+    url: mailto:yashwanthreddykatipally@gmail.com
+    about: Not a bug or feature request? Email instead.
