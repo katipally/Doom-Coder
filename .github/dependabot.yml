@@ -11,9 +11,9 @@ updates:
     commit-message:
       prefix: "ci"
 
-  # Swift packages declared by the shared DoomCodeCore package.
+  # Swift packages declared by the shared DoomCoderCore package.
   - package-ecosystem: "swift"
-    directory: "/Packages/DoomCodeCore"
+    directory: "/Packages/DoomCoderCore"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5

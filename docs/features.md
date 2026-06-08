@@ -1,6 +1,6 @@
 # Doom Coder: Full Feature Reference
 
-This document covers every feature, setting, and behavior in DoomCode. Each section maps to a place in the UI. Hover the **ⓘ** icons in the app for inline summaries.
+This document covers every feature, setting, and behavior in DoomCoder. Each section maps to a place in the UI. Hover the **ⓘ** icons in the app for inline summaries.
 
 ---
 
@@ -208,7 +208,7 @@ Plus:
 
 #### Diagnostics
 
-**Reveal Logs.** Opens `~/Library/Logs/DoomCode/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
+**Reveal Logs.** Opens `~/Library/Logs/DoomCoder/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
 
 #### AI
 
@@ -335,7 +335,7 @@ Agent fires hook
 |---|---|---|
 | Hook events (SQLite) | `~/Library/Application Support/DoomCoder/events.sqlite` | 7 days |
 | Notification history | Same database | 7 days |
-| Log files | `~/Library/Logs/DoomCode/` | 7 days |
+| Log files | `~/Library/Logs/DoomCoder/` | 7 days |
 | User preferences | `UserDefaults` (standard) | Persistent |
 | CloudKit sync state | Private iCloud container | Persistent |
 
