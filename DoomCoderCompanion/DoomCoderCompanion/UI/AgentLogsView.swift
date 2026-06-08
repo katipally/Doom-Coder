@@ -42,25 +42,34 @@ struct AgentLogsView: View {
 
     private var capabilityCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("What this agent delivers")
+            Text("What you'll be notified about")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            let caps = AgentCapabilityCatalog.capabilities(for: agent)
-            if caps.isEmpty {
-                Text("No capability info available.")
+            // Prefer the read-only list the user customized on the Mac (synced
+            // via AgentConfig). Fall back to the static capability catalog when
+            // the owning Mac hasn't published deliverables yet.
+            let synced = AgentListStore.shared.deliverables(forAgent: agent, macId: macId)
+            let rows: [AgentDeliverable] = synced.isEmpty
+                ? AgentCapabilityCatalog.capabilities(for: agent).map {
+                    AgentDeliverable(title: $0.title, symbol: $0.symbolName, detail: $0.detail)
+                  }
+                : synced
+
+            if rows.isEmpty {
+                Text("No notification categories enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(caps) { cap in
+                ForEach(rows) { row in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Image(systemName: cap.symbolName)
+                        Image(systemName: row.symbol)
                             .foregroundStyle(.tint)
                             .frame(width: 20)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(cap.title).font(.callout.weight(.medium))
-                            Text(cap.detail)
+                            Text(row.title).font(.callout.weight(.medium))
+                            Text(row.detail)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)

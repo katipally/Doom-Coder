@@ -139,11 +139,9 @@ struct AgentRow: View {
             }
 
             Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+            // No manual chevron: the enclosing NavigationLink (in AgentListView
+            // / DashboardView) inside a List already renders the system
+            // disclosure indicator. Adding one here produced a double arrow.
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)

@@ -36,13 +36,13 @@ final class AppRouter {
     var openSettingsRequestCount: Int = 0
 
     enum ConfigTab: Hashable, CaseIterable, Identifiable {
-        case agents, channels, logs, settings
+        case agents, channels, activity, settings
         var id: Self { self }
         var displayName: String {
             switch self {
             case .agents:   "Agents"
             case .channels: "Connections"
-            case .logs:     "Logs"
+            case .activity: "Activity"
             case .settings: "Settings"
             }
         }

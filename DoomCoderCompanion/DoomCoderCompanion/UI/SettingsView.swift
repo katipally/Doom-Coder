@@ -23,7 +23,6 @@ struct SettingsView: View {
     @State private var keyTestState: KeyTestState = .idle
     @State private var appleStatus: AIFailure? = nil
     @State private var appleProbed = false
-    @State private var showClearDataConfirm = false
     @State private var deviceNameInput = ""
     @FocusState private var deviceNameFocused: Bool
 
@@ -62,20 +61,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This clears the paired Mac and the cached agent data on this device. Your iCloud data and the DoomCoder Mac app are not affected. You can reconnect any time.")
-        }
-        .confirmationDialog(
-            "Clear all tool data?",
-            isPresented: $showClearDataConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete prompts & notes", role: .destructive) {
-                ConversationStore.shared.deleteAll()
-                NotesStore.shared.deleteAll()
-                Haptics.success()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This permanently deletes your saved prompt drafts and notes on this device. This can’t be undone.")
         }
         .task {
             deviceNameInput = AppGroupCache.customDeviceName
@@ -317,16 +302,15 @@ struct SettingsView: View {
 
     private var manageDataSection: some View {
         Section {
-            Button(role: .destructive) {
-                Haptics.tap()
-                showClearDataConfirm = true
+            NavigationLink {
+                DataAndPrivacyView()
             } label: {
-                Label("Clear prompts & notes", systemImage: "trash")
+                Label("Data & Privacy", systemImage: "lock.shield")
             }
         } header: {
             Text("Manage Data")
         } footer: {
-            Text("Your tools data is stored only on this device. Nothing is uploaded.")
+            Text("Clear individual data, or fully reset the app to a fresh-install state. Everything is stored on this device.")
         }
     }
 

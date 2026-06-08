@@ -63,4 +63,15 @@ public enum Keychain {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    /// Deletes EVERY generic-password item stored under `service` (all accounts).
+    /// Used by the apps' "Erase All Data" reset so leftover keys can't survive a
+    /// reinstall. No-op if nothing is stored.
+    public static func deleteAll(service: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 }
