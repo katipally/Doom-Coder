@@ -67,7 +67,8 @@ enum MigrationManager {
                     AgentInstallerV2.backup(hooksFile)
                     try? FileManager.default.removeItem(atPath: hooksFile)
                 }
-            case .windsurf, .codexCLI:
+            case .windsurf, .codexCLI, .opencode:
+                // No legacy install layout to strip (opencode is a new agent).
                 break
             }
 

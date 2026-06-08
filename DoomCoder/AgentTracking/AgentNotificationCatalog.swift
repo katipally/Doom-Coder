@@ -139,6 +139,13 @@ enum AgentNotificationCatalog {
             // Codex has no distinct error or agentResponse phase, no subagents.
             return [.completed, .waitingApproval, .sessionStart, .toolCalls,
                     .contextCompaction, .userPromptSent]
+        case .opencode:
+            // opencode forwards: session.idle (completed), session.error (failed),
+            // permission.v2.asked (approval), session.created (start),
+            // tool.execute.before/after (tools), file.edited, session.compacted.
+            // No subagent / user-prompt / agent-response events in the forwarded set.
+            return [.completed, .failed, .waitingApproval, .sessionStart, .toolCalls,
+                    .fileEdits, .contextCompaction]
         }
     }
 
@@ -206,6 +213,10 @@ enum AgentNotificationCatalog {
             return [shell, edit, read, search, mcp, other]
         case .windsurf:
             return [shell, edit, read, mcp, other]
+        case .opencode:
+            // opencode's built-in tools: bash, edit/write, read, grep/glob,
+            // webfetch — no first-class MCP tool naming in the forwarded payload.
+            return [shell, edit, read, search, web, other]
         }
     }
 
@@ -259,6 +270,9 @@ enum AgentNotificationCatalog {
         case .windsurf:
             return [ApprovalKind(id: "mcp", title: "MCP tools",
                                  tooltip: "When Windsurf needs approval to run an MCP tool. Auto-approved calls are filtered out automatically.", noisy: false)]
+        case .opencode:
+            return [ApprovalKind(id: "prompt", title: "Permission prompts",
+                                 tooltip: "When opencode asks you to approve a tool or command.", noisy: false)]
         }
     }
 
@@ -274,7 +288,7 @@ enum AgentNotificationCatalog {
             return "prompt"
         case .windsurf:
             return "mcp"
-        case .claude, .vscode, .codexCLI:
+        case .claude, .vscode, .codexCLI, .opencode:
             return "prompt"
         }
     }

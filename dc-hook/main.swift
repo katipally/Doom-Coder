@@ -433,6 +433,16 @@ func replayDemo(agent: String) -> Int32 {
             ("PermissionRequest", 14),
             ("Stop", 25)
         ]
+    case "opencode":
+        demoEvents = [
+            ("session.created", 0),
+            ("tool.execute.before", 4),
+            ("tool.execute.after", 6),
+            ("file.edited", 8),
+            ("permission.asked", 11),
+            ("question.asked", 16),
+            ("session.idle", 25)
+        ]
     default:
         demoEvents = [("sessionStart", 0), ("sessionEnd", 10)]
     }

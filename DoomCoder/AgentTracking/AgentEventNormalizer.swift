@@ -568,6 +568,71 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
     }
 }
 
+// MARK: - opencode normalizer
+//
+// opencode has no shell-command config hooks. The DoomCoder plugin we install
+// (~/.config/opencode/plugin/doomcoder.js) forwards a curated set of opencode's
+// in-process events to dc-hook with the agent token "opencode". Event names are
+// opencode's dotted bus/hook identifiers; payload fields are camelCase
+// (`sessionID`, `tool`, `callID`). Works identically for the CLI/TUI and app.
+
+struct OpenCodeEventNormalizer: AgentEventNormalizer {
+    let agent = TrackedAgent.opencode
+
+    private static let phaseMap: [String: NormalizedEventPhase] = [
+        "session.created":       .sessionStart,
+        "session.idle":          .sessionEnd,     // agent finished its turn → "done"
+        "session.error":         .error,
+        "session.compacted":     .compaction,
+        "session.deleted":       .housekeeping,
+        "tool.execute.before":   .toolStart,
+        "tool.execute.after":    .toolEnd,
+        // The two "agent is blocked, waiting on you" signals. opencode gates
+        // command/tool execution behind `permission.asked`, and asks the user
+        // questions / multiple-choice elicitations via `question.asked`. Both
+        // map to permissionNeeded → the "Waiting for approval" notification.
+        "permission.asked":      .permissionNeeded,
+        "question.asked":        .permissionNeeded,
+        "permission.replied":    .housekeeping,    // resolved → clears the wait
+        "question.replied":      .housekeeping,
+        "question.rejected":     .housekeeping,
+        // Forward-compat: core's v2 event names (not emitted by current runtime).
+        "permission.v2.asked":   .permissionNeeded,
+        "question.v2.asked":     .permissionNeeded,
+        "file.edited":           .fileEdit,
+    ]
+
+    func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {
+        let payload = envelope.payloadDict ?? [:]
+        let phase = Self.phaseMap[envelope.event] ?? .other
+
+        // opencode emits camelCase `sessionID`; tolerate snake_case for safety.
+        let sessionId = (payload["sessionID"] as? String)
+            ?? (payload["session_id"] as? String)
+            ?? (payload["sessionId"] as? String)
+            ?? "pid-\(envelope.pid)"
+        let tool = (payload["tool"] as? String)
+            ?? (payload["tool_name"] as? String)
+        // file.edited carries the path under `file`; fall back to common keys.
+        let filePath = (payload["file"] as? String)
+            ?? (payload["path"] as? String)
+            ?? extractFilePath(from: payload)
+
+        return NormalizedHookEvent(
+            agent: agent,
+            phase: phase,
+            rawEvent: envelope.event,
+            sessionId: sessionId,
+            toolName: tool,
+            filePath: filePath,
+            cwd: (payload["directory"] as? String) ?? (payload["cwd"] as? String) ?? envelope.cwd,
+            timestamp: Date(timeIntervalSince1970: envelope.ts),
+            isFatal: phase == .error,
+            payloadRaw: envelope.payloadRaw
+        )
+    }
+}
+
 // MARK: - Normalizer registry
 
 enum EventNormalizerRegistry {
@@ -578,6 +643,7 @@ enum EventNormalizerRegistry {
         .copilotCLI: CopilotCLIEventNormalizer(),
         .windsurf:   WindsurfEventNormalizer(),
         .codexCLI:   CodexCLIEventNormalizer(),
+        .opencode:   OpenCodeEventNormalizer(),
     ]
 
     static func normalize(envelope: HookEnvelope) -> NormalizedHookEvent? {

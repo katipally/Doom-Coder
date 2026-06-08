@@ -99,8 +99,15 @@ struct AgentInstallerV2 {
             case .copilotCLI: try installCopilotCLI()
             case .windsurf:   try installWindsurf()
             case .codexCLI:   try installCodexCLI()
+            case .opencode:   try installOpenCode()
             }
-            try verifyInstalled(agent: agent, at: path)
+            // opencode owns a JS plugin file (not a hooks JSON), so it uses a
+            // file-content verification instead of the JSON-walk contract.
+            if agent == .opencode {
+                try verifyOpenCodeInstalled()
+            } else {
+                try verifyInstalled(agent: agent, at: path)
+            }
             let postHash = sha256(of: path) ?? "?"
             let n = expectedEvents(for: agent).count
             logger.notice("installer op=install agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) events_asserted=\(n)/\(n) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
@@ -141,6 +148,13 @@ struct AgentInstallerV2 {
         if agent == .copilotCLI {
             try? FileManager.default.removeItem(atPath: path)
             logger.notice("installer op=uninstall agent=copilot_cli outcome=ok")
+            NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": false])
+            return .success(())
+        }
+        // opencode owns ~/.config/opencode/plugin/doomcoder.js outright — delete it.
+        if agent == .opencode {
+            try? FileManager.default.removeItem(atPath: path)
+            logger.notice("installer op=uninstall agent=opencode outcome=ok")
             NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": false])
             return .success(())
         }
@@ -241,6 +255,10 @@ struct AgentInstallerV2 {
             return fileContainsDcHookFor(agent: "windsurf", at: windsurfHooksPath())
         case .codexCLI:
             return fileContainsDcHookFor(agent: "codex_cli", at: codexHooksPath())
+        case .opencode:
+            // Plain-JS plugin file we own; detect by our managed-file markers.
+            guard let text = try? String(contentsOfFile: opencodePluginPath(), encoding: .utf8) else { return false }
+            return text.contains("dc-hook") && text.contains("opencode")
         }
     }
 
@@ -254,6 +272,7 @@ struct AgentInstallerV2 {
         case .windsurf:   return windsurfHooksPath()
         case .codexCLI:   return codexHooksPath()
         case .copilotCLI: return copilotCLIHooksPath()
+        case .opencode:   return opencodePluginPath()
         }
     }
 
@@ -279,6 +298,20 @@ struct AgentInstallerV2 {
     /// default-discovery double-fire (VS Code reads `~/.copilot/hooks` by
     /// default; if we let it, every CLI hook would fire twice).
     static func copilotCLIHooksDirLiteral() -> String { "~/.copilot/hooks" }
+
+    /// opencode's global config directory. Honors `OPENCODE_CONFIG_DIR`, then
+    /// `XDG_CONFIG_HOME`, else the XDG default (`~/.config/opencode`). This is
+    /// the same resolution opencode itself uses, so our plugin lands where both
+    /// the CLI/TUI and the desktop app will auto-load it.
+    static func opencodeConfigDir() -> String {
+        let env = ProcessInfo.processInfo.environment
+        if let override = env["OPENCODE_CONFIG_DIR"], !override.isEmpty { return override }
+        if let xdg = env["XDG_CONFIG_HOME"], !xdg.isEmpty { return xdg + "/opencode" }
+        return NSHomeDirectory() + "/.config/opencode"
+    }
+    /// Absolute path to the DoomCoder opencode plugin file. opencode auto-loads
+    /// any `*.js` under the `plugin/` subdirectory of its config dir.
+    static func opencodePluginPath() -> String { opencodeConfigDir() + "/plugin/doomcoder.js" }
 
     // MARK: - Public verification
 
@@ -509,6 +542,32 @@ struct AgentInstallerV2 {
         try writeJSON(root, to: path, needsVersion: true)
     }
 
+    /// opencode integration: write a plain-JS plugin into the opencode config
+    /// dir. The plugin (see `OpenCodePluginTemplate`) forwards a curated set of
+    /// lifecycle events to dc-hook. No `opencode.json` edit is needed — opencode
+    /// auto-loads every `*.js` under `plugin/`. Applies to the CLI/TUI and the
+    /// desktop app alike.
+    private static func installOpenCode() throws {
+        let path = opencodePluginPath()
+        try ensureParentDir(path)
+        let js = OpenCodePluginTemplate.render(dcHookPath: helperBinaryPath())
+        try js.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// File-content verification for the opencode plugin (replaces the JSON-walk
+    /// contract the other agents use, since opencode owns a `.js` file).
+    private static func verifyOpenCodeInstalled() throws {
+        let path = opencodePluginPath()
+        guard FileManager.default.fileExists(atPath: path) else { throw VerifyError.fileMissing }
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { throw VerifyError.parseError }
+        guard text.contains("dc-hook"), text.contains("opencode") else { throw VerifyError.unexpectedStructure }
+        // The plugin spawns this exact binary — assert it exists and is runnable.
+        let bin = helperBinaryPath()
+        if bin.hasPrefix("/") && !FileManager.default.isExecutableFile(atPath: bin) {
+            throw VerifyError.badHelperPath(bin)
+        }
+    }
+
     // MARK: - Hook command builder
 
     /// Complete event lists per agent — single source of truth.
@@ -579,6 +638,18 @@ struct AgentInstallerV2 {
         "SessionStart", "PreToolUse", "PermissionRequest",
         "PostToolUse", "UserPromptSubmit", "Stop",
         "PreCompact", "PostCompact"
+    ]
+
+    // opencode event tokens forwarded by our plugin (dotted bus/hook names).
+    // Not written into a config file (opencode has no shell-command hooks) —
+    // this list mirrors the plugin's allow-list and the normalizer phaseMap,
+    // and is surfaced in logs / the agent detail pane.
+    static let opencodeEvents = [
+        "session.created", "session.idle", "session.error", "session.compacted",
+        "session.deleted", "tool.execute.before", "tool.execute.after",
+        "permission.asked", "permission.replied",
+        "question.asked", "question.replied", "question.rejected",
+        "file.edited"
     ]
 
     private static func cmdFor(_ agent: String, _ event: String) -> String {
@@ -693,6 +764,7 @@ struct AgentInstallerV2 {
         case .copilotCLI: return copilotCLIEvents
         case .windsurf:   return windsurfEvents
         case .codexCLI:   return codexEvents
+        case .opencode:   return opencodeEvents
         }
     }
 
@@ -777,6 +849,12 @@ struct AgentInstallerV2 {
     /// a single `integrityDrift` error so the UI can show the user a
     /// precise diff instead of a vague external-modification banner.
     private static func verifyDetailed(agent: TrackedAgent, at path: String, folder: URL?) -> Result<Void, Error> {
+        // opencode owns a JS plugin file, not a hooks JSON — use the file-content
+        // contract instead of the JSON walk (which would fail to parse `.js`).
+        if agent == .opencode {
+            do { try verifyOpenCodeInstalled(); return .success(()) }
+            catch { return .failure(error) }
+        }
         guard FileManager.default.fileExists(atPath: path) else {
             return .failure(VerifyError.fileMissing)
         }
@@ -874,6 +952,7 @@ struct AgentInstallerV2 {
         case .copilotCLI: return "copilot_cli"
         case .windsurf:   return "windsurf"
         case .codexCLI:   return "codex_cli"
+        case .opencode:   return "opencode"
         }
     }
 

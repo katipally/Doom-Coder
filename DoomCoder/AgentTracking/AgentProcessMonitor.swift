@@ -30,6 +30,7 @@ final class AgentProcessMonitor {
         .claude:     "claude",
         .codexCLI:   "codex",
         .copilotCLI: "copilot",
+        .opencode:   "opencode",
     ]
 
     private var cliScanTimer: Timer?

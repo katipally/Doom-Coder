@@ -1173,6 +1173,10 @@ struct ConfigureAgentsViewV2: View {
             let dir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex")
             list.append(Prereq(label: "~/.codex/ exists", met: FileManager.default.fileExists(atPath: dir.path), fix: "Run `codex` once to initialize"))
             list.append(Prereq(label: "Codex CLI installed", met: detections[.codexCLI]?.installed == true, fix: "Install via npm: `npm i -g @openai/codex`"))
+        case .opencode:
+            let dir = AgentInstallerV2.opencodeConfigDir()
+            list.append(Prereq(label: "opencode installed", met: detections[.opencode]?.installed == true, fix: "Install from opencode.ai (CLI or app)"))
+            list.append(Prereq(label: "~/.config/opencode/ writable", met: FileManager.default.isWritableFile(atPath: dir) || !FileManager.default.fileExists(atPath: dir), fix: "Check permissions on the opencode config directory"))
         }
         return list
     }
@@ -1265,6 +1269,12 @@ struct ConfigureAgentsViewV2: View {
                 "Run `codex` once so ~/.codex/ is created.",
                 "Hooks written to ~/.codex/hooks.json; feature flag `codex_hooks = true` added to ~/.codex/config.toml."
             ]
+        case .opencode:
+            return [
+                "opencode installed (CLI/TUI or the desktop app) — from opencode.ai.",
+                "We install a plugin at ~/.config/opencode/plugin/doomcoder.js (honors OPENCODE_CONFIG_DIR). It auto-loads for every project, in both the CLI and the app.",
+                "No tokens used: the plugin forwards lifecycle events to the dc-hook helper."
+            ]
         }
     }
 
@@ -1276,6 +1286,7 @@ struct ConfigureAgentsViewV2: View {
         case .copilotCLI: return "Hooks in ~/.copilot/hooks/doomcoder.json (global, all 13 events)"
         case .windsurf:   return "Hooks in ~/.codeium/windsurf/hooks.json (command only)"
         case .codexCLI:   return "Hooks in ~/.codex/hooks.json + codex_hooks feature flag"
+        case .opencode:   return "Plugin in ~/.config/opencode/plugin/doomcoder.js (CLI + app)"
         }
     }
 
@@ -1287,6 +1298,7 @@ struct ConfigureAgentsViewV2: View {
         case .copilotCLI: return "~/.copilot/hooks/doomcoder.json"
         case .windsurf:   return "~/.codeium/windsurf/hooks.json"
         case .codexCLI:   return "~/.codex/hooks.json"
+        case .opencode:   return "~/.config/opencode/plugin/doomcoder.js"
         }
     }
 

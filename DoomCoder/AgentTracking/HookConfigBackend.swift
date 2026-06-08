@@ -118,6 +118,7 @@ actor HookConfigBackend {
         case .copilotCLI: return "copilot_cli"
         case .windsurf:   return "windsurf"
         case .codexCLI:   return "codex_cli"
+        case .opencode:   return "opencode"
         }
     }
 

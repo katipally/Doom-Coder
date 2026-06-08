@@ -61,6 +61,14 @@ enum AgentIconProvider {
             if let cdn = IconDownloader.cachedIcon(for: .codexCLI, size: size) { return cdn }
             return bundledOrSymbol(name: "agent-codex",
                                    symbol: "sparkles.rectangle.stack", size: size)
+        case .opencode:
+            // Bundled first — available without network on first launch.
+            if let bundled = NSImage(named: "agent-opencode") {
+                bundled.size = NSSize(width: size, height: size)
+                return bundled
+            }
+            if let cdn = IconDownloader.cachedIcon(for: .opencode, size: size) { return cdn }
+            return bundledOrSymbol(name: "agent-opencode", symbol: "curlybraces", size: size)
         }
     }
 
@@ -73,6 +81,7 @@ enum AgentIconProvider {
         case .copilotCLI: return "terminal.fill"
         case .windsurf:   return "wind"
         case .codexCLI:   return "sparkles.rectangle.stack"
+        case .opencode:   return "curlybraces"
         }
     }
 
