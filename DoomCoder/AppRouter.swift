@@ -56,4 +56,12 @@ final class AppRouter {
         configureTab = .settings
         openSettingsRequestCount &+= 1
     }
+
+    /// Programmatically selects the Connections tab. The caller is then
+    /// responsible for ensuring the Configure window is open. The window reads
+    /// `configureTab` on appear and via onChange, so setting it is sufficient
+    /// whether or not the window is already open.
+    func requestOpenConnections() {
+        configureTab = .channels
+    }
 }

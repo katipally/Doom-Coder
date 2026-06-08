@@ -193,6 +193,14 @@ enum WindowOpener {
         AppRouter.shared.requestOpenSettings()
         open(.configureAgents)
     }
+
+    /// Connections (companion devices) lives in the Configure window's
+    /// Connections tab. Open Configure and focus that tab — works whether or
+    /// not the window is already open. Mirrors `openSettings()`.
+    static func openConnections() {
+        AppRouter.shared.requestOpenConnections()
+        open(.configureAgents)
+    }
 }
 
 extension Notification.Name {
