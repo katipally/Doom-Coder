@@ -23,6 +23,7 @@ struct ConfigureSettingsPane: View {
         let raw = UserDefaults.standard.object(forKey: "doomcoder.approval.deferSeconds") as? Double ?? 0.8
         return Int((min(max(raw, 0.5), 3.0) * 10).rounded())
     }()
+    @State private var showDataPrivacy = false
 
     var body: some View {
         Form {
@@ -102,12 +103,26 @@ struct ConfigureSettingsPane: View {
 
             AISettingsSection()
 
+            Section("Data & Privacy") {
+                Button {
+                    showDataPrivacy = true
+                } label: {
+                    Label("Manage Data…", systemImage: "lock.shield")
+                }
+                Text("Clear individual data, or fully reset DoomCoder to a fresh-install state. Everything is stored on this Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Diagnostics") {
                 Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
             }
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .sheet(isPresented: $showDataPrivacy) {
+            MacDataPrivacyView()
+        }
     }
 }
 
@@ -253,6 +268,204 @@ struct AISettingsSection: View {
         switch result {
         case .success(let ids): keyTestState = .ok(ids.count)
         case .failure(let f):   keyTestState = .failed(f.message)
+        }
+    }
+}
+
+// MARK: - Data & Privacy (local data clearing + full reset)
+
+/// Central, user-controlled data clearing for the Mac app. Granular methods wipe
+/// one slice of on-device storage; `eraseEverything()` performs a full LOCAL
+/// reset so the app behaves like a fresh install. Local-only — iCloud records
+/// are never touched. The caller relaunches the app after a full erase.
+@MainActor
+enum MacDataManager {
+
+    private static let aiKeyService = "com.doomcoder.app.companion.aikey"
+
+    /// Local agent activity, notification and session history (events.sqlite).
+    static func clearActivityHistory() {
+        EventStore.shared.clearAll()
+    }
+
+    /// AI refine chats (local-only).
+    static func clearPromptsAndChats() {
+        MacConversationStore.shared.deleteAll()
+    }
+
+    /// Freeform notes (local-only).
+    static func clearNotes() {
+        MacNotesStore.shared.deleteAll()
+    }
+
+    /// API keys (Keychain) + AI provider/model/mode preferences.
+    static func clearAIKeysAndSettings() {
+        let ai = AIEngineCoordinator.shared
+        for provider in AIProvider.allCases { ai.clearKey(for: provider) }
+        Keychain.deleteAll(service: aiKeyService)
+        let d = UserDefaults.standard
+        d.removeObject(forKey: "tools.ai.selection")
+        d.removeObject(forKey: "tools.ai.provider")
+        for provider in AIProvider.allCases {
+            d.removeObject(forKey: "tools.ai.model.\(provider.rawValue)")
+        }
+        ai.selection = .appleOnDevice
+        ai.provider = .openai
+    }
+
+    /// Erases EVERYTHING — on-device data AND this Mac's CloudKit data — so the
+    /// app behaves like a fresh install, then the UI relaunches. This Mac owns its
+    /// iCloud zone, so the teardown deletes ALL published records + the share,
+    /// which also empties every paired iPhone on its next sync.
+    static func eraseEverything() async {
+        // iCloud teardown FIRST, while the engine + account are still alive.
+        await CloudKitPusher.shared.eraseCloudKitData()
+
+        clearActivityHistory()
+        clearPromptsAndChats()
+        clearNotes()
+        Keychain.deleteAll(service: aiKeyService)
+
+        // All preferences: sleep config, CloudKit engine state + macId, AI prefs,
+        // notification prefs, channels, migration flags — everything under the
+        // app's UserDefaults domain (this is what survives a reinstall).
+        if let bundleId = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleId)
+        }
+
+        // Application Support: events.sqlite, cached icons, and the local-only
+        // tool data (conversations/notes JSON).
+        let fm = FileManager.default
+        if let appSup = try? fm.url(for: .applicationSupportDirectory,
+                                    in: .userDomainMask, appropriateFor: nil, create: false) {
+            for folder in ["DoomCoder", "DoomCoderTools"] {
+                try? fm.removeItem(at: appSup.appendingPathComponent(folder, isDirectory: true))
+            }
+        }
+    }
+
+    /// Relaunches the app from scratch after a full erase.
+    static func relaunch() {
+        let url = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+}
+
+/// Sheet listing each clearable data category plus a full "Erase All Data"
+/// reset. Mirrors the iOS Data & Privacy screen.
+struct MacDataPrivacyView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private struct Category: Identifiable {
+        let id = UUID()
+        let title: String
+        let subtitle: String
+        let systemImage: String
+        let run: () -> Void
+    }
+
+    @State private var pending: Category?
+    @State private var showEraseConfirm = false
+
+    private var categories: [Category] {
+        [
+            Category(title: "Activity & notification history",
+                     subtitle: "Local agent event, notification and session log.",
+                     systemImage: "clock.arrow.circlepath",
+                     run: { MacDataManager.clearActivityHistory() }),
+            Category(title: "Prompts & AI chats",
+                     subtitle: "Your saved refine conversations.",
+                     systemImage: "text.bubble",
+                     run: { MacDataManager.clearPromptsAndChats() }),
+            Category(title: "Notes",
+                     subtitle: "Every note and checklist on this Mac.",
+                     systemImage: "note.text",
+                     run: { MacDataManager.clearNotes() }),
+            Category(title: "AI keys & settings",
+                     subtitle: "Removes saved API keys from the Keychain and resets the AI mode.",
+                     systemImage: "key",
+                     run: { MacDataManager.clearAIKeysAndSettings() })
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Data & Privacy").font(.title2.bold())
+                Spacer()
+                Button("Done") { dismiss() }
+            }
+            .padding()
+
+            Form {
+                Section {
+                    ForEach(categories) { category in
+                        Button {
+                            pending = category
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: category.systemImage)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(category.title).foregroundStyle(.primary)
+                                    Text(category.subtitle)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Clear specific data")
+                } footer: {
+                    Text("Clear only what you choose. Everything here is stored on this Mac; your iCloud data and your iPhone are not affected.")
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        showEraseConfirm = true
+                    } label: {
+                        Label("Erase All Data", systemImage: "trash")
+                    }
+                } header: {
+                    Text("Reset")
+                } footer: {
+                    Text("Erases everything on this Mac — history, prompts, notes, AI keys, preferences and sync state — so DoomCoder relaunches like a fresh install. This can’t be undone.")
+                }
+            }
+            .formStyle(.grouped)
+        }
+        .frame(width: 460, height: 520)
+        .confirmationDialog(
+            pending.map { "Clear “\($0.title)”?" } ?? "",
+            isPresented: Binding(get: { pending != nil },
+                                 set: { if !$0 { pending = nil } }),
+            presenting: pending
+        ) { category in
+            Button("Clear", role: .destructive) {
+                category.run()
+                pending = nil
+            }
+            Button("Cancel", role: .cancel) { pending = nil }
+        } message: { _ in
+            Text("This can’t be undone.")
+        }
+        .alert("Erase all data?", isPresented: $showEraseConfirm) {
+            Button("Erase & Relaunch", role: .destructive) {
+                Task {
+                    await MacDataManager.eraseEverything()
+                    MacDataManager.relaunch()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This permanently deletes all DoomCoder data from this Mac AND from iCloud — including the agents, notifications and status shown on every connected iPhone. The app will reset to a fresh-install state and relaunch. This can’t be undone.")
         }
     }
 }

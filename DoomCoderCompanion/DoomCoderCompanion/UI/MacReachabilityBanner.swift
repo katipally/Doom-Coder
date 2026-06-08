@@ -56,6 +56,14 @@ struct MacReachabilityBanner: View {
         return nil
     }
 
+    /// Whether the banner would render anything for `mac` — i.e. the heartbeat is
+    /// stale (≥5 min) or offline. Callers use this to decide whether to add the
+    /// banner as a list row at all, so a healthy Mac leaves no empty row behind
+    /// (which otherwise reserves height inside the card and looks "cut in half").
+    static func hasContent(for mac: MacStatusRecord, now: Date = Date()) -> Bool {
+        now.timeIntervalSince(mac.lastSeen) >= 300
+    }
+
     // MARK: - Banner
 
     @ViewBuilder

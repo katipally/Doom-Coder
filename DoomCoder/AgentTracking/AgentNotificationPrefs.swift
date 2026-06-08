@@ -105,6 +105,34 @@ struct AgentNotificationPrefs: Codable, Equatable, Sendable {
         return p
     }
 
+    // MARK: - Enabled-category query
+
+    /// Whether the top-level switch for `id` is ON. Mirrors `binding(for:)` in
+    /// NotifyAboutCard — the single source of truth for "is this category on".
+    func isEnabled(_ id: NotifCategoryID) -> Bool {
+        switch id {
+        case .completed:         return completed
+        case .failed:            return failed
+        case .waitingApproval:   return waitingApproval
+        case .waitingInput:      return waitingInput
+        case .sessionStart:      return sessionStart
+        case .toolCalls:         return toolCalls
+        case .subagentActivity:  return subagentActivity
+        case .fileEdits:         return fileEdits
+        case .contextCompaction: return contextCompaction
+        case .agentThinking:     return agentThinking
+        case .housekeeping:      return housekeeping
+        case .userPromptSent:    return userPromptSent
+        }
+    }
+
+    /// The agent's supported categories that are currently switched ON, in
+    /// catalog display order. Drives the read-only iOS "what you'll be notified
+    /// about" list.
+    func enabledCategories(for agent: TrackedAgent) -> [NotifCategoryID] {
+        AgentNotificationCatalog.categories(for: agent).filter { isEnabled($0) }
+    }
+
     // MARK: - The gate
 
     /// Decides whether a normalized event should fire a notification for `agent`.

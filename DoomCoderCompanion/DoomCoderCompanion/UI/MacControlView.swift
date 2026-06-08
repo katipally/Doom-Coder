@@ -413,12 +413,16 @@ struct MacControlView: View {
     @ViewBuilder
     private func masterSection(_ mac: MacStatusRecord) -> some View {
         Section {
-            // Reachability warning rides above the master row so it never leaves
-            // an empty section when the Mac is fresh.
-            MacReachabilityBanner()
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+            // Reachability warning rides above the master row — but only when it
+            // actually has something to say. Including it unconditionally left an
+            // empty list row above the toggle on a healthy Mac, which reserved its
+            // insets/height inside the card and made it look "cut in half".
+            if MacReachabilityBanner.hasContent(for: mac) {
+                MacReachabilityBanner()
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
 
             HStack(spacing: 12) {
                 Image("logo-square")

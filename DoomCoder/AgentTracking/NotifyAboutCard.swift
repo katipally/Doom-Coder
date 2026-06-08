@@ -37,7 +37,12 @@ struct NotifyAboutCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button(editing ? "Done" : "Edit") {
-                        if editing { AgentNotificationStore.setPrefs(prefs, for: agent) }
+                        if editing {
+                            AgentNotificationStore.setPrefs(prefs, for: agent)
+                            // Re-publish AgentConfig so iOS's read-only
+                            // "what you'll be notified about" list re-syncs.
+                            NotificationCenter.default.post(name: .trackingStoreChanged, object: nil)
+                        }
                         withAnimation(.easeInOut(duration: 0.18)) { editing.toggle() }
                     }
                     .buttonStyle(.bordered)

@@ -360,6 +360,65 @@ final class EventStore {
         return entries
     }
 
+    // MARK: - Reconstructed sessions (derived from raw events — never lossy)
+
+    /// One row per distinct `session_key` in the `events` table, aggregated on
+    /// the fly. Unlike `session_history` (which is only written when a session
+    /// reaches a terminal event), this surfaces EVERY session that produced at
+    /// least one event — including ones that never ended cleanly (IDE quit
+    /// directly, app restarted mid-session, crash/sleep). The Activity view uses
+    /// this as its primary source so abandoned sessions are never silently
+    /// dropped; `session_history` and live in-memory state only enrich it.
+    struct ReconstructedSession: Identifiable, Sendable {
+        let sessionKey: String
+        let agent: String
+        let startedAt: Date
+        let endedAt: Date
+        let eventCount: Int
+        let toolCount: Int
+        let permissionCount: Int
+        let hasEnd: Bool       // a sessionEnd event was recorded
+        let hasError: Bool     // a toolError/error event was recorded
+        var id: String { sessionKey }
+    }
+
+    func reconstructedSessions(agent agentFilter: String? = nil, limit: Int = 200) -> [ReconstructedSession] {
+        guard let db else { return [] }
+        let base = """
+            SELECT session_key, agent, MIN(ts) AS started, MAX(ts) AS ended, COUNT(*) AS cnt,
+                   MAX(CASE WHEN state = 'sessionEnd' THEN 1 ELSE 0 END) AS has_end,
+                   MAX(CASE WHEN state IN ('toolError','error') THEN 1 ELSE 0 END) AS has_error,
+                   SUM(CASE WHEN state = 'toolStart' THEN 1 ELSE 0 END) AS tool_count,
+                   SUM(CASE WHEN state = 'permissionNeeded' THEN 1 ELSE 0 END) AS perm_count
+            FROM events
+            """
+        let sql = agentFilter != nil
+            ? base + " WHERE agent=? GROUP BY session_key ORDER BY ended DESC LIMIT \(limit);"
+            : base + " GROUP BY session_key ORDER BY ended DESC LIMIT \(limit);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        if let af = agentFilter {
+            let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, af, -1, T)
+        }
+        var out: [ReconstructedSession] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out.append(ReconstructedSession(
+                sessionKey: str(stmt, 0) ?? "",
+                agent: str(stmt, 1) ?? "",
+                startedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
+                endedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3)),
+                eventCount: Int(sqlite3_column_int(stmt, 4)),
+                toolCount: Int(sqlite3_column_int(stmt, 7)),
+                permissionCount: Int(sqlite3_column_int(stmt, 8)),
+                hasEnd: sqlite3_column_int(stmt, 5) != 0,
+                hasError: sqlite3_column_int(stmt, 6) != 0
+            ))
+        }
+        return out
+    }
+
     // MARK: - Notification Reads
 
     struct NotificationRow: Identifiable, Sendable {
@@ -381,6 +440,24 @@ final class EventStore {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int(stmt, 1, Int32(limit))
+        return readNotificationRows(stmt)
+    }
+
+    /// Agent-filtered notification history. Mirrors `recentNotifications(limit:)`
+    /// but scoped to a single agent key (e.g. `TrackedAgent.claude.rawValue`).
+    func recentNotifications(agent agentFilter: String, limit: Int = 200) -> [NotificationRow] {
+        guard let db else { return [] }
+        let sql = "SELECT id,session_key,agent,event,title,body,channel,success,ts FROM notifications WHERE agent=? ORDER BY id DESC LIMIT ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        let T = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, agentFilter, -1, T)
+        sqlite3_bind_int(stmt, 2, Int32(limit))
+        return readNotificationRows(stmt)
+    }
+
+    private func readNotificationRows(_ stmt: OpaquePointer?) -> [NotificationRow] {
         var rows: [NotificationRow] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             rows.append(NotificationRow(

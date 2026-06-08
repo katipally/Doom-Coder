@@ -131,6 +131,8 @@ final class MacNotesStore {
         return note
     }
 
+    func deleteAll() { notes.removeAll(); save() }
+
     /// Persists only the editable content fields, preserving store-owned fields
     /// (reminder, notificationID) so an editor's stale snapshot can never wipe a
     /// reminder set via `setReminder`/`togglePin`. No-ops when nothing changed to

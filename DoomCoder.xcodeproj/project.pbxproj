@@ -55,7 +55,9 @@
 		DC0000000000002000000038 /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000038 /* MigrationManager.swift */; };
 		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
-		DC0000000000002000000042 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* LogsView.swift */; };
+		DC0000000000002000000042 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* ActivityView.swift */; };
+		DC0000000000002000000F31 /* ActivitySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F31 /* ActivitySession.swift */; };
+		DC0000000000002000000F32 /* TrackedAgent+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F32 /* TrackedAgent+UI.swift */; };
 		DC0000000000002000000043 /* HookConfigBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000043 /* HookConfigBackend.swift */; };
 		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
@@ -128,7 +130,9 @@
 		DC0000000000001000000038 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
-		DC0000000000001000000042 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000042 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F31 /* ActivitySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySession.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F32 /* TrackedAgent+UI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TrackedAgent+UI.swift"; sourceTree = "<group>"; };
 		DC0000000000001000000043 /* HookConfigBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookConfigBackend.swift; sourceTree = "<group>"; };
 		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
@@ -242,7 +246,9 @@
 				DC0000000000001000000036 /* ChannelTester.swift */,
 				DC0000000000001000000038 /* MigrationManager.swift */,
 				DC0000000000001000000041 /* TrackingStore.swift */,
-				DC0000000000001000000042 /* LogsView.swift */,
+				DC0000000000001000000042 /* ActivityView.swift */,
+				DC0000000000001000000F31 /* ActivitySession.swift */,
+				DC0000000000001000000F32 /* TrackedAgent+UI.swift */,
 				DC0000000000001000000043 /* HookConfigBackend.swift */,
 				DC0000000000001000000044 /* AgentEventNormalizer.swift */,
 				DC0000000000001000000045 /* LiveEventsStore.swift */,
@@ -407,7 +413,9 @@
 				DC0000000000002000000036 /* ChannelTester.swift in Sources */,
 				DC0000000000002000000038 /* MigrationManager.swift in Sources */,
 				DC0000000000002000000041 /* TrackingStore.swift in Sources */,
-				DC0000000000002000000042 /* LogsView.swift in Sources */,
+				DC0000000000002000000042 /* ActivityView.swift in Sources */,
+				DC0000000000002000000F31 /* ActivitySession.swift in Sources */,
+				DC0000000000002000000F32 /* TrackedAgent+UI.swift in Sources */,
 				DC0000000000002000000043 /* HookConfigBackend.swift in Sources */,
 				DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */,
 				DC0000000000002000000045 /* LiveEventsStore.swift in Sources */,

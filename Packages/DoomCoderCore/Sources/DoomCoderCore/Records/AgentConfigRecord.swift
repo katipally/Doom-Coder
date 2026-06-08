@@ -18,6 +18,10 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
     /// status (e.g. "running", "waiting for approval", "closed"). Empty when
     /// status tracking is unavailable.
     public var statuses: String
+    /// JSON-encoded `[String: [AgentDeliverable]]` mapping agent rawValue → the
+    /// "what you'll be notified about" rows the user has enabled on this Mac.
+    /// iOS renders these read-only. Empty when not yet published (older Macs).
+    public var deliverables: String
     public var updatedAt: Date
     public var schemaVersion: Int
 
@@ -25,12 +29,14 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
                 agents: [String],
                 installedAgents: [String] = [],
                 statuses: String = "",
+                deliverables: String = "",
                 updatedAt: Date = Date(),
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         self.macId = macId
         self.agents = agents
         self.installedAgents = installedAgents
         self.statuses = statuses
+        self.deliverables = deliverables
         self.updatedAt = updatedAt
         self.schemaVersion = schemaVersion
     }
@@ -50,6 +56,26 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
         return decoded
     }
 
+    /// Decodes the `deliverables` JSON blob into a typed map of agent rawValue →
+    /// enabled notification rows. Returns an empty dictionary when missing or
+    /// malformed. Use `agentDeliverablesJSON(from:)` to encode one for writing.
+    public var agentDeliverables: [String: [AgentDeliverable]] {
+        guard !deliverables.isEmpty,
+              let data = deliverables.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String: [AgentDeliverable]].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    /// JSON-encodes a typed deliverables map for storage in `deliverables`.
+    public static func agentDeliverablesJSON(from map: [String: [AgentDeliverable]]) -> String {
+        guard !map.isEmpty,
+              let data = try? JSONEncoder().encode(map),
+              let str = String(data: data, encoding: .utf8)
+        else { return "" }
+        return str
+    }
+
     /// Convenience initializer that takes a typed `[String: String]` and
     /// JSON-encodes it for storage. Use this instead of constructing the
     /// record with a literal `statuses: ""` when you have actual status
@@ -58,6 +84,7 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
                 agents: [String],
                 installedAgents: [String] = [],
                 agentStatuses: [String: String] = [:],
+                agentDeliverables: [String: [AgentDeliverable]] = [:],
                 updatedAt: Date = Date(),
                 schemaVersion: Int = CloudKitConstants.schemaVersion) {
         let json = (try? JSONSerialization.data(withJSONObject: agentStatuses, options: []))
@@ -67,6 +94,7 @@ public struct AgentConfigRecord: Sendable, Codable, Equatable {
             agents: agents,
             installedAgents: installedAgents,
             statuses: json,
+            deliverables: Self.agentDeliverablesJSON(from: agentDeliverables),
             updatedAt: updatedAt,
             schemaVersion: schemaVersion
         )
@@ -90,6 +118,7 @@ extension AgentConfigRecord {
         r["agents"]          = agents as CKRecordValue
         r["installedAgents"] = installedAgents as CKRecordValue
         r["statuses"]        = statuses as CKRecordValue
+        r["deliverables"]    = deliverables as CKRecordValue
         r["updatedAt"]       = updatedAt as CKRecordValue
         r["schemaVersion"]   = schemaVersion as CKRecordValue
         return r
@@ -105,6 +134,7 @@ extension AgentConfigRecord {
             macId: macId, agents: agents,
             installedAgents: (r["installedAgents"] as? [String]) ?? [],
             statuses: (r["statuses"] as? String) ?? "",
+            deliverables: (r["deliverables"] as? String) ?? "",
             updatedAt: updatedAt,
             schemaVersion: (r["schemaVersion"] as? Int) ?? CloudKitConstants.schemaVersion
         )

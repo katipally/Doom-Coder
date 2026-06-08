@@ -218,6 +218,37 @@ final class CloudKitPusher {
         for t in inFlight { t.cancel() }
     }
 
+    /// COMPLETE iCloud teardown for "Erase All Data". This Mac OWNS its private
+    /// database, so deleting its custom zone(s) cascades away every record
+    /// (MacStatus, AgentConfig, NotificationLog, AgentIcon, ControlCommand, every
+    /// phone's CompanionStatus) AND the zone-wide CKShare. After this, iCloud
+    /// holds no DoomCoder data for this account and every paired iPhone goes empty
+    /// on its next sync. Best-effort: if offline, the local wipe still proceeds
+    /// and the caller relaunches.
+    func eraseCloudKitData() async {
+        stop()
+        engine = nil
+
+        // Only the app's own container is touched, so deleting EVERY custom zone
+        // in the private DB is safe (covers stale zones from old macIds too).
+        guard let status = try? await container.accountStatus(), status == .available else {
+            logger.notice("ckpusher: eraseCloudKitData skipped server ops (account not available)")
+            return
+        }
+
+        _ = try? await database.deleteSubscription(withID: "mac-zone-push-v1")
+
+        if let zones = try? await database.allRecordZones() {
+            let ids = zones.map(\.zoneID)
+                .filter { $0.zoneName != CKRecordZone.ID.defaultZoneName }
+            if !ids.isEmpty {
+                _ = try? await database.modifyRecordZones(saving: [], deleting: ids)
+                logger.notice("ckpusher: eraseCloudKitData deleted \(ids.count, privacy: .public) zone(s) from iCloud")
+            }
+        }
+        serverRecords.clear()
+    }
+
     private var lastTouchAt: Date = .distantPast
 
     /// Re-stamps `MacStatus.lastSeen` whenever we have proof the Mac is actively
@@ -494,11 +525,23 @@ final class CloudKitPusher {
                   let str  = String(data: data, encoding: .utf8) else { return "" }
             return str
         }()
+        // Per-agent "what you'll be notified about" rows the user has enabled,
+        // rendered here (Mac owns the copy) and synced read-only to iOS.
+        var deliverables: [String: [AgentDeliverable]] = [:]
+        for agent in agents {
+            let prefs = AgentNotificationStore.prefs(for: agent)
+            let rows = prefs.enabledCategories(for: agent).map { id -> AgentDeliverable in
+                let meta = AgentNotificationCatalog.meta(id)
+                return AgentDeliverable(title: meta.title, symbol: meta.symbol, detail: meta.detail)
+            }
+            if !rows.isEmpty { deliverables[agent.rawValue] = rows }
+        }
         let rec = AgentConfigRecord(
             macId: macId,
             agents: agents.map(\.rawValue),
             installedAgents: installed.map(\.rawValue),
             statuses: statusesJSON,
+            deliverables: AgentConfigRecord.agentDeliverablesJSON(from: deliverables),
             updatedAt: Date()
         )
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(rec.recordID(in: zoneID))])

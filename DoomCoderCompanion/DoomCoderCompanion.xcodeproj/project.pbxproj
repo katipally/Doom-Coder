@@ -35,6 +35,7 @@
 		8D9A0BCD628E3B2A3E641290 /* AgentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5438EF22279E9DB76674AE2 /* AgentListView.swift */; };
 		92DC98D7E394C60ED12FBDBA /* LocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0025197E0D983F81144F468 /* LocalStore.swift */; };
 		9A60B782EEA5AE1A90A470CC /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB9C264096018D7F1530EB0 /* NotificationService.swift */; };
+		A10ECB02B18A3F62F745C22E /* CompanionDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFFE28F57668A40F442C291F /* CompanionDataManager.swift */; };
 		A5E8EF7CEBC0B76750929D63 /* AppGroupCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662F77F68847FCD3D1555C97 /* AppGroupCache.swift */; };
 		AE7144B76C392F294F28C282 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27DA3B07FBBD1CDD34870E3 /* SettingsView.swift */; };
 		B054781A5CE5190EA5C50A29 /* agent-codex.png in Resources */ = {isa = PBXBuildFile; fileRef = 7B3DA47E07E508898039DB89 /* agent-codex.png */; };
@@ -42,6 +43,7 @@
 		BEAD612E3C4A8403349E54D1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */; };
 		BFC889543E4CBE92A36E2B75 /* MacControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B9DE90A2213084C9D99462 /* MacControlView.swift */; };
 		BFFC28F060F2A7CCC2B4A6AC /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53232581AADB8C337671BB09 /* EmptyStateView.swift */; };
+		C241197EFC5FF5F3C2F641AD /* DataAndPrivacyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61B9C809974C04EBB8E115E8 /* DataAndPrivacyView.swift */; };
 		C454F8A9D858B87680B15C02 /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = C8C6B66E763641B3CB2A309A /* DoomCoderCore */; };
 		C82290D0589BA1DAF39B2912 /* SyncDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */; };
 		D0BB7E1FE80FDC66B216818A /* SharedToolUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E5EA84FEC8E064AC203824 /* SharedToolUI.swift */; };
@@ -97,6 +99,7 @@
 		577E6F8848446B47EA914860 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
 		5ED5A3BFB2B112F342D7F244 /* JSONFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONFileStore.swift; sourceTree = "<group>"; };
 		5F39E1FCBF696C55142140DC /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
+		61B9C809974C04EBB8E115E8 /* DataAndPrivacyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataAndPrivacyView.swift; sourceTree = "<group>"; };
 		662F77F68847FCD3D1555C97 /* AppGroupCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupCache.swift; sourceTree = "<group>"; };
 		6778F62A3224B31F7E6AD001 /* agent-copilot-cli.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "agent-copilot-cli.png"; sourceTree = "<group>"; };
 		75D9CEB3C8428B662C6D8FDA /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
@@ -124,6 +127,7 @@
 		E3DBB7B59C4C0990457EDC2B /* SyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDiagnosticsView.swift; sourceTree = "<group>"; };
 		E5AFCB5FF453AA69903FC666 /* CompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionApp.swift; sourceTree = "<group>"; };
 		ED52275E7367F2AB4E383199 /* NotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFFE28F57668A40F442C291F /* CompanionDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDataManager.swift; sourceTree = "<group>"; };
 		F2A6A15B1B99782A1B051D4F /* agent-cursor.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "agent-cursor.png"; sourceTree = "<group>"; };
 		F5E5EA84FEC8E064AC203824 /* SharedToolUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedToolUI.swift; sourceTree = "<group>"; };
 		F70D6E9B6728EEC747E125F4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -215,7 +219,9 @@
 			children = (
 				D5438EF22279E9DB76674AE2 /* AgentListView.swift */,
 				AD9392DB3081F0376202563D /* AgentLogsView.swift */,
+				EFFE28F57668A40F442C291F /* CompanionDataManager.swift */,
 				DF9D0E89B814FD558C0A03CB /* ConnectFlowView.swift */,
+				61B9C809974C04EBB8E115E8 /* DataAndPrivacyView.swift */,
 				989306766B1ED48EB7EF7A00 /* DemoView.swift */,
 				53232581AADB8C337671BB09 /* EmptyStateView.swift */,
 				D8DEE8563E810CC992559FA8 /* Haptics.swift */,
@@ -464,10 +470,12 @@
 				530E653C39D0A0103CDD6D9E /* AppGroupCache.swift in Sources */,
 				55ED3C044EED519BD2F5E236 /* AppRouter.swift in Sources */,
 				55AD1363C0F52426D54D032D /* CompanionApp.swift in Sources */,
+				A10ECB02B18A3F62F745C22E /* CompanionDataManager.swift in Sources */,
 				EC9C04C07674F3D17024BCD2 /* CompanionSyncEngine.swift in Sources */,
 				2CFB101619C31E228A00B21E /* ConnectFlowView.swift in Sources */,
 				4AEDC090C422B825D22DAB9A /* ConversationStore.swift in Sources */,
 				8791789AFFA7ADEA3856FD3F /* DashboardView.swift in Sources */,
+				C241197EFC5FF5F3C2F641AD /* DataAndPrivacyView.swift in Sources */,
 				5FE8C9785C697026D15BCDE8 /* DemoView.swift in Sources */,
 				BFFC28F060F2A7CCC2B4A6AC /* EmptyStateView.swift in Sources */,
 				2203CEAF31C04E97C2F12EA6 /* Haptics.swift in Sources */,

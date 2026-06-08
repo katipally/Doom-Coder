@@ -91,6 +91,9 @@ final class AgentListStore {
     private var agentsByMac: [String: [TrackedAgent]] = [:]
     private var installedByMac: [String: Set<TrackedAgent>] = [:]
     private var statusesByMac: [String: [TrackedAgent: String]] = [:]
+    /// macId → (agent rawValue → read-only "what you'll be notified about" rows),
+    /// synced from the Mac. Drives the iOS capability card.
+    private var deliverablesByMac: [String: [String: [AgentDeliverable]]] = [:]
 
     private var activeMacId: String? { MacStatusStore.shared.primary?.macId }
 
@@ -106,13 +109,24 @@ final class AgentListStore {
     func installedAgents(forMac macId: String) -> Set<TrackedAgent> { installedByMac[macId] ?? [] }
     func statuses(forMac macId: String) -> [TrackedAgent: String] { statusesByMac[macId] ?? [:] }
 
+    /// Read-only "what you'll be notified about" rows the user enabled on the
+    /// Mac for `agent`. Empty when the owning Mac hasn't synced them yet (the
+    /// caller falls back to the static capability catalog). `macId` defaults to
+    /// the active Mac.
+    func deliverables(forAgent agent: TrackedAgent, macId: String? = nil) -> [AgentDeliverable] {
+        let mac = macId ?? activeMacId
+        return mac.flatMap { deliverablesByMac[$0]?[agent.rawValue] } ?? []
+    }
+
     func updateState(agents newAgents: [TrackedAgent],
                      installed: [TrackedAgent],
                      statuses newStatuses: [TrackedAgent: String],
+                     deliverables newDeliverables: [String: [AgentDeliverable]] = [:],
                      macId: String) {
         agentsByMac[macId] = newAgents.sorted { $0.displayName < $1.displayName }
         installedByMac[macId] = Set(installed)
         statusesByMac[macId] = newStatuses
+        deliverablesByMac[macId] = newDeliverables
         LocalStore.shared.upsertAgentConfig(macId: macId, agents: newAgents)
     }
 
@@ -121,12 +135,14 @@ final class AgentListStore {
         agentsByMac[macId] = nil
         installedByMac[macId] = nil
         statusesByMac[macId] = nil
+        deliverablesByMac[macId] = nil
     }
 
     func clear() {
         agentsByMac.removeAll()
         installedByMac.removeAll()
         statusesByMac.removeAll()
+        deliverablesByMac.removeAll()
     }
 }
 
