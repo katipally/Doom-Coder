@@ -3,32 +3,18 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		086A75645B1059FF8E2AF2CA /* CloudKitPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87477377B262B2B2BA39729A /* CloudKitPusher.swift */; };
-		DC0000000000001000000060 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC0000000000005000000060 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		1C76E5FECBDED303B300FB6A /* CloudKitPusherDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */; };
 		581BCAD520D6B5F4E8AE92B9 /* CloudKitPusherLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */; };
 		75DA2F57E2420F9EC7D0C65C /* DoomCoderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */; };
-		DC0000000000002000000123 /* HelpTip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000123 /* HelpTip.swift */; };
+		DC0000000000001000000060 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC0000000000005000000060 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		DC0000000000002000000002 /* DoomCoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000002 /* DoomCoderApp.swift */; };
 		DC0000000000002000000003 /* SleepManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000003 /* SleepManager.swift */; };
-		DC0000000000002000000052 /* ToolsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000052 /* ToolsWindow.swift */; };
 		DC0000000000002000000005 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000005 /* AboutView.swift */; };
-		DC0000000000002000000F10 /* LiveEventRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F10 /* LiveEventRow.swift */; };
-		DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F11 /* ConnectionsCard.swift */; };
-		DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F12 /* AddDeviceSheet.swift */; };
-		DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F13 /* ConnectionDoctorSection.swift */; };
-		DC0000000000002000000F20 /* MacNoteEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F20 /* MacNoteEditor.swift */; };
-		DC0000000000002000000F21 /* MacMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F21 /* MacMessageView.swift */; };
-		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
-		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
-		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
-		DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F04 /* SymbolCatalog.swift */; };
-		DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F05 /* WhatsNewHost.swift */; };
-		DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F06 /* RainbowIdleGlow.swift */; };
 		DC0000000000002000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000007 /* Assets.xcassets */; };
 		DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000009 /* CheckForUpdatesViewModel.swift */; };
 		DC0000000000002000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = DC0000000000009000000002 /* Sparkle */; };
@@ -39,26 +25,18 @@
 		DC0000000000002000000023 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000023 /* EventStore.swift */; };
 		DC0000000000002000000025 /* HookSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000025 /* HookSocketListener.swift */; };
 		DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000027 /* NotificationDispatcher.swift */; };
-		DC0000000000002000000800 /* SleepStateNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000800 /* SleepStateNotifier.swift */; };
 		DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000028 /* AgentTrackingManager.swift */; };
 		DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000030 /* TrackAgentsPopover.swift */; };
 		DC0000000000002000000031 /* WhatsNewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000031 /* WhatsNewSheet.swift */; };
 		DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000032 /* AgentInstallerV2.swift */; };
 		DC0000000000002000000033 /* ChannelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000033 /* ChannelStore.swift */; };
-		DC0000000000002000000201 /* AgentNotificationPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* AgentNotificationPrefs.swift */; };
-		DC0000000000002000000202 /* AgentNotificationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* AgentNotificationCatalog.swift */; };
-		DC0000000000002000000203 /* NotifyAboutCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000203 /* NotifyAboutCard.swift */; };
 		DC0000000000002000000034 /* AgentIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000034 /* AgentIconProvider.swift */; };
-		DC0000000000002000000122 /* AgentIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000122 /* AgentIconView.swift */; };
 		DC0000000000002000000035 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000035 /* DeepLink.swift */; };
 		DC0000000000002000000036 /* ChannelTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000036 /* ChannelTester.swift */; };
 		DC0000000000002000000038 /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000038 /* MigrationManager.swift */; };
 		DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */; };
 		DC0000000000002000000041 /* TrackingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000041 /* TrackingStore.swift */; };
 		DC0000000000002000000042 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000042 /* ActivityView.swift */; };
-		DC0000000000002000000F31 /* ActivitySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F31 /* ActivitySession.swift */; };
-		DC0000000000002000000F32 /* TrackedAgent+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F32 /* TrackedAgent+UI.swift */; };
-		DC0000000000002000000F40 /* OpenCodePluginTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F40 /* OpenCodePluginTemplate.swift */; };
 		DC0000000000002000000043 /* HookConfigBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000043 /* HookConfigBackend.swift */; };
 		DC0000000000002000000044 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000044 /* AgentEventNormalizer.swift */; };
 		DC0000000000002000000045 /* LiveEventsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000045 /* LiveEventsStore.swift */; };
@@ -68,6 +46,7 @@
 		DC0000000000002000000049 /* GlobalHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000049 /* GlobalHotkey.swift */; };
 		DC0000000000002000000050 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000050 /* AccessibilityPermission.swift */; };
 		DC0000000000002000000051 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000051 /* PanelRootView.swift */; };
+		DC0000000000002000000052 /* ToolsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000052 /* ToolsWindow.swift */; };
 		DC0000000000002000000100 /* PIDLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000100 /* PIDLiveness.swift */; };
 		DC0000000000002000000101 /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000101 /* RateLimiter.swift */; };
 		DC0000000000002000000102 /* IconDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000102 /* IconDownloader.swift */; };
@@ -77,33 +56,39 @@
 		DC0000000000002000000111 /* PIDWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000111 /* PIDWatcher.swift */; };
 		DC0000000000002000000120 /* AgentCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000120 /* AgentCapabilities.swift */; };
 		DC0000000000002000000121 /* CopilotPermissionsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000121 /* CopilotPermissionsReader.swift */; };
+		DC0000000000002000000122 /* AgentIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000122 /* AgentIconView.swift */; };
+		DC0000000000002000000123 /* HelpTip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000123 /* HelpTip.swift */; };
+		DC0000000000002000000201 /* AgentNotificationPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000201 /* AgentNotificationPrefs.swift */; };
+		DC0000000000002000000202 /* AgentNotificationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* AgentNotificationCatalog.swift */; };
+		DC0000000000002000000203 /* NotifyAboutCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000203 /* NotifyAboutCard.swift */; };
 		DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000701 /* ApprovalArbiter.swift */; };
+		DC0000000000002000000800 /* SleepStateNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000800 /* SleepStateNotifier.swift */; };
+		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
+		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
+		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
+		DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F04 /* SymbolCatalog.swift */; };
+		DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F05 /* WhatsNewHost.swift */; };
+		DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F06 /* RainbowIdleGlow.swift */; };
+		DC0000000000002000000F10 /* LiveEventRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F10 /* LiveEventRow.swift */; };
+		DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F11 /* ConnectionsCard.swift */; };
+		DC0000000000002000000F12 /* AddDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F12 /* AddDeviceSheet.swift */; };
+		DC0000000000002000000F13 /* ConnectionDoctorSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F13 /* ConnectionDoctorSection.swift */; };
+		DC0000000000002000000F20 /* MacNoteEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F20 /* MacNoteEditor.swift */; };
+		DC0000000000002000000F21 /* MacMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F21 /* MacMessageView.swift */; };
+		DC0000000000002000000F31 /* ActivitySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F31 /* ActivitySession.swift */; };
+		DC0000000000002000000F32 /* TrackedAgent+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F32 /* TrackedAgent+UI.swift */; };
+		DC0000000000002000000F40 /* OpenCodePluginTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F40 /* OpenCodePluginTemplate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		10BE8A907052E381A9766A37 /* DoomCoder.Release.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DoomCoder.Release.entitlements; sourceTree = "<group>"; };
-		DC0000000000005000000060 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 		87477377B262B2B2BA39729A /* CloudKitPusher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusher.swift; sourceTree = "<group>"; };
 		AA3A8884C2E1245780700D4E /* CloudKitPusherLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherLifecycle.swift; sourceTree = "<group>"; };
 		CF9FDE1DC4D56B4433A07055 /* CloudKitPusherDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudKitPusherDelegate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000001 /* DoomCoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoomCoder.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DC0000000000001000000123 /* HelpTip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTip.swift; sourceTree = "<group>"; };
 		DC0000000000001000000002 /* DoomCoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoomCoderApp.swift; sourceTree = "<group>"; };
 		DC0000000000001000000003 /* SleepManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepManager.swift; sourceTree = "<group>"; };
-		DC0000000000001000000052 /* ToolsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsWindow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000005 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F10 /* LiveEventRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventRow.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F11 /* ConnectionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsCard.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F12 /* AddDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceSheet.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F13 /* ConnectionDoctorSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDoctorSection.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F20 /* MacNoteEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNoteEditor.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F21 /* MacMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMessageView.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F04 /* SymbolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolCatalog.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F05 /* WhatsNewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHost.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F06 /* RainbowIdleGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainbowIdleGlow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC0000000000001000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC0000000000001000000008 /* DoomCoder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DoomCoder.entitlements; sourceTree = "<group>"; };
@@ -115,26 +100,18 @@
 		DC0000000000001000000023 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000025 /* HookSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketListener.swift; sourceTree = "<group>"; };
 		DC0000000000001000000027 /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
-		DC0000000000001000000800 /* SleepStateNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepStateNotifier.swift; sourceTree = "<group>"; };
 		DC0000000000001000000028 /* AgentTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTrackingManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000030 /* TrackAgentsPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAgentsPopover.swift; sourceTree = "<group>"; };
 		DC0000000000001000000031 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
 		DC0000000000001000000032 /* AgentInstallerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentInstallerV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000033 /* ChannelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelStore.swift; sourceTree = "<group>"; };
-		DC0000000000001000000201 /* AgentNotificationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationPrefs.swift; sourceTree = "<group>"; };
-		DC0000000000001000000202 /* AgentNotificationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationCatalog.swift; sourceTree = "<group>"; };
-		DC0000000000001000000203 /* NotifyAboutCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifyAboutCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000034 /* AgentIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconProvider.swift; sourceTree = "<group>"; };
-		DC0000000000001000000122 /* AgentIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000035 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
 		DC0000000000001000000036 /* ChannelTester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTester.swift; sourceTree = "<group>"; };
 		DC0000000000001000000038 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
 		DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigureAgentsWindowV2.swift; sourceTree = "<group>"; };
 		DC0000000000001000000041 /* TrackingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingStore.swift; sourceTree = "<group>"; };
 		DC0000000000001000000042 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F31 /* ActivitySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySession.swift; sourceTree = "<group>"; };
-		DC0000000000001000000F32 /* TrackedAgent+UI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TrackedAgent+UI.swift"; sourceTree = "<group>"; };
-		DC0000000000001000000F40 /* OpenCodePluginTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodePluginTemplate.swift; sourceTree = "<group>"; };
 		DC0000000000001000000043 /* HookConfigBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookConfigBackend.swift; sourceTree = "<group>"; };
 		DC0000000000001000000044 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 		DC0000000000001000000045 /* LiveEventsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsStore.swift; sourceTree = "<group>"; };
@@ -144,6 +121,7 @@
 		DC0000000000001000000049 /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
 		DC0000000000001000000050 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		DC0000000000001000000051 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000052 /* ToolsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsWindow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000100 /* PIDLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDLiveness.swift; sourceTree = "<group>"; };
 		DC0000000000001000000101 /* RateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateLimiter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000102 /* IconDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDownloader.swift; sourceTree = "<group>"; };
@@ -153,7 +131,29 @@
 		DC0000000000001000000111 /* PIDWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIDWatcher.swift; sourceTree = "<group>"; };
 		DC0000000000001000000120 /* AgentCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCapabilities.swift; sourceTree = "<group>"; };
 		DC0000000000001000000121 /* CopilotPermissionsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotPermissionsReader.swift; sourceTree = "<group>"; };
+		DC0000000000001000000122 /* AgentIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIconView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000123 /* HelpTip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTip.swift; sourceTree = "<group>"; };
+		DC0000000000001000000201 /* AgentNotificationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationPrefs.swift; sourceTree = "<group>"; };
+		DC0000000000001000000202 /* AgentNotificationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationCatalog.swift; sourceTree = "<group>"; };
+		DC0000000000001000000203 /* NotifyAboutCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifyAboutCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000701 /* ApprovalArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalArbiter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000800 /* SleepStateNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepStateNotifier.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F04 /* SymbolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolCatalog.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F05 /* WhatsNewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHost.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F06 /* RainbowIdleGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainbowIdleGlow.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F10 /* LiveEventRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventRow.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F11 /* ConnectionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsCard.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F12 /* AddDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceSheet.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F13 /* ConnectionDoctorSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDoctorSection.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F20 /* MacNoteEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNoteEditor.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F21 /* MacMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMessageView.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F31 /* ActivitySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySession.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F32 /* TrackedAgent+UI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TrackedAgent+UI.swift"; sourceTree = "<group>"; };
+		DC0000000000001000000F40 /* OpenCodePluginTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodePluginTemplate.swift; sourceTree = "<group>"; };
+		DC0000000000005000000060 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -175,6 +175,7 @@
 			children = (
 				DC0000000000003000000002 /* DoomCoder */,
 				DC0000000000003000000003 /* Products */,
+				DD09E2E22FD75C4A001CEED7 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -272,6 +273,14 @@
 			path = AgentTracking;
 			sourceTree = "<group>";
 		};
+		DD09E2E22FD75C4A001CEED7 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				DC0000000000005000000060 /* FoundationModels.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -323,7 +332,7 @@
 			mainGroup = DC0000000000003000000001;
 			packageReferences = (
 				DC0000000000009000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
-				696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "DoomCoderCore" */,
+				696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */,
 			);
 			productRefGroup = DC0000000000003000000003 /* Products */;
 			projectDirPath = "";
@@ -570,13 +579,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -585,6 +595,7 @@
 				MARKETING_VERSION = 2.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
@@ -596,13 +607,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = DoomCoder/DoomCoder.Release.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DoomCoder/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -611,6 +623,7 @@
 				MARKETING_VERSION = 2.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.2;
@@ -641,7 +654,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "DoomCoderCore" */ = {
+		696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DoomCoderCore;
 		};
@@ -661,7 +674,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		1E5CD75DFC788EE9A2743B1C /* DoomCoderCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "DoomCoderCore" */;
+			package = 696C60BA0AF966AA4466243F /* XCLocalSwiftPackageReference "Packages/DoomCoderCore" */;
 			productName = DoomCoderCore;
 		};
 		DC0000000000009000000002 /* Sparkle */ = {
