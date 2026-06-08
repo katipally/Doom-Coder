@@ -1,4 +1,4 @@
-# Doom Code — Full Feature Reference
+# Doom Code: Full Feature Reference
 
 This document covers every feature, setting, and behavior in DoomCode. Each section maps to a place in the UI. Hover the **ⓘ** icons in the app for inline summaries.
 
@@ -27,7 +27,7 @@ Turning the master back on resumes exactly where it left off.
 |---|---|
 | **Off** | macOS manages sleep normally. Doom Code holds no IOPMAssertion. |
 | **On** | Always holds the sleep assertion. Choose a screen mode and optional session timer below. |
-| **Auto** | Holds the assertion while any tracked agent is actively working (running, waiting for input, or waiting for approval). Releases after a 5-minute grace once all agents are idle. Respects per-agent tracking toggles — agents toggled off are excluded. |
+| **Auto** | Holds the assertion while any tracked agent is actively working (running, waiting for input, or waiting for approval). Releases after a 10-minute grace once all agents and your keyboard go quiet. Respects per-agent tracking toggles, so agents toggled off are excluded. |
 
 #### Screen mode (when Keep-Awake is On)
 
@@ -62,9 +62,9 @@ Open from the panel → Configure, or from the footer Settings button.
 
 Each agent has:
 - **Name and detected version** (or "not found" if the app isn't installed).
-- **Health dot** — green if at least one hook event was received in the last hour; grey otherwise.
-- **⚠ warning badge** — appears if Doom Code detects that the installed hook config has drifted from what it wrote (e.g. another tool edited it). Select the agent and click **Repair**.
-- **✓ checkmark** — confirms hooks are installed.
+- **Health dot.** Green if at least one hook event was received in the last hour; grey otherwise.
+- **⚠ warning badge.** Appears if Doom Code detects that the installed hook config has drifted from what it wrote (e.g. another tool edited it). Select the agent and click **Repair**.
+- **✓ checkmark.** Confirms hooks are installed.
 
 ### Agent detail pane
 
@@ -106,6 +106,7 @@ Per-agent checklist of requirements. Each item shows whether it's met and a fix 
 | Copilot CLI | CLI installed (`npm i -g @github/copilot`). `~/.copilot/` exists. |
 | Windsurf | Windsurf installed and opened once so `~/.codeium/windsurf/` is created. |
 | Codex CLI | CLI installed (`npm i -g @openai/codex`). Run `codex` once to create `~/.codex/`. |
+| opencode | CLI installed and run once so `~/.config/opencode/` exists. Doom Code installs a plugin into `~/.config/opencode/plugin/`. |
 
 #### Hooks (install/uninstall)
 
@@ -117,7 +118,7 @@ Per-agent checklist of requirements. Each item shows whether it's met and a fix 
 | **Reveal file** | Opens the config file in Finder. |
 | **Open in IDE** | Opens the config file in the agent's own editor. |
 
-**VS Code variants** — when VS Code is selected, a checkbox group lets you choose which VS Code-family `settings.json` files to patch: VS Code Stable, VS Code Insiders, VSCodium, Cursor, Windsurf.
+**VS Code variants.** When VS Code is selected, a checkbox group lets you choose which VS Code-family `settings.json` files to patch: VS Code Stable, VS Code Insiders, VSCodium, Cursor, Windsurf.
 
 #### Connection Doctor
 
@@ -135,7 +136,7 @@ Where notifications get delivered, and the devices connected to this Mac. One gl
 
 #### Connected Devices
 
-Real, symmetric presence for your companion devices — mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the Doom Code Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
+Real, symmetric presence for your companion devices, mirroring how the iOS app shows your Mac's status. Each iPhone or iPad running the Doom Code Companion publishes a periodic heartbeat to your private iCloud container; this Mac reads it and shows each device as **Connected** (green) when seen within the last 10 minutes, or **Last seen X ago** otherwise. When no device has checked in, a **Set up iPhone or iPad** call-to-action links to the App Store.
 
 #### Permission Status
 
@@ -149,36 +150,32 @@ Toggle on to receive banner notifications on your Mac. Click **Test** to send a 
 
 Toggle on to mirror notifications to the Doom Code Companion iOS app via your private iCloud container.
 
-**iCloud status indicator** — must show green ("Connected to iCloud as…") for iPhone mirroring to work. If it stays grey, check that you're signed into iCloud in System Settings and that iCloud Drive is enabled.
+**iCloud status indicator.** Must show green ("Connected to iCloud as…") for iPhone mirroring to work. If it stays grey, check that you're signed into iCloud in System Settings and that iCloud Drive is enabled.
 
 Click **Test** to send a test push to your iPhone.
 
 [Get Doom Code Companion on the App Store](https://apps.apple.com/app/doomcoder-companion/id6772514212)
 
-#### Notify me when…
+#### Which events notify you
 
-Fine-grained control over which events trigger a notification. Settings apply to all agents (unless overridden).
-
-| Toggle | Default | What it covers |
-|---|---|---|
-| Session completed | ✅ On | Agent finishes its task successfully. |
-| Errors | ✅ On | Tool errors, permission errors, aborted runs. |
-| Permission requests | ✅ On | Agent waiting for you to approve a tool call. |
-| Agent responses | Off | Each reply the agent sends (verbose). |
-| Session started | Off | Beginning of a new agent session (verbose). |
-| Sub-agent activity | Off | Agent spawns sub-agents or parallel tasks. |
-| Tool usage | Off | Every file read/write/run tool call (very verbose). |
+There is no global event toggle list. You pick which events alert you **per agent**, in the "What you'll be notified about" card on each agent's detail pane (see [Agent detail pane](#what-youll-be-notified-about) above). Events are grouped into Important (on by default), Activity, and Housekeeping (both off by default). The mac + iPhone channel setting here just decides *where* those alerts land; the categories card decides *which* ones fire.
 
 ---
 
-### Logs tab
+### Activity tab
 
-Browsable history of all hook events and notifications. Retained for **7 days**.
+Browsable history of all hook events and notifications. The tab has three views:
 
-- **Filter bar** — filter by agent or switch to the 🔔 Notifications view.
-- **Expand rows** — click any event row to expand the full JSON payload with a clean rendered view and a Raw JSON toggle.
-- **Export** — export the current view to JSON or CSV from the footer.
-- **Retention** — configurable from the footer (default 7 days).
+- **Sessions.** Events grouped by agent and date, so you can read a run top to bottom.
+- **Raw.** A flat firehose of every event as it lands.
+- **Notifications.** Just the events that actually fired a notification.
+
+Plus:
+
+- **Filter and search.** Filter by agent, search the stream, and sort newest or oldest.
+- **Expand rows.** Click any event row to expand the full JSON payload with a clean rendered view and a Raw JSON toggle.
+- **Export.** Export the current view to JSON or CSV from the overflow menu.
+- **Retention.** Configurable: 1, 7, or 30 days. Default is 7.
 
 ---
 
@@ -195,7 +192,7 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Re-sleep display after** | 5 min | After moving the mouse wakes the display in Screen Off mode, Doom Code re-sleeps it after this many idle minutes. Range: 1–60 minutes. |
+| **Re-sleep display after** | 10 min | After moving the mouse wakes the display in Screen Off mode, Doom Code re-sleeps it after this many idle minutes. Range: 1–60 minutes. |
 
 #### Session Lifecycle
 
@@ -207,11 +204,11 @@ Browsable history of all hook events and notifications. Retained for **7 days**.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Redact prompt text in local history** | On | Hides agent prompt and response content in the Logs view and event history. Event type, timing, and status are still recorded. |
+| **Redact prompt text in local history** | On | Hides agent prompt and response content in the Activity tab and event history. Event type, timing, and status are still recorded. |
 
 #### Diagnostics
 
-**Reveal Logs** — opens `~/Library/Logs/DoomCode/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
+**Reveal Logs.** Opens `~/Library/Logs/DoomCode/` in Finder. Log files are named `doomcoder-YYYY-MM-DD.log` and kept for 7 days.
 
 #### AI
 
@@ -222,7 +219,7 @@ The engine that powers prompt **Enhance**, now a section within Settings (no sep
 | **Engine** | **On-device** (Apple Intelligence, fully local) or **My API key** (BYOK provider). |
 | **Provider / API key / Model** | When using your own key, pick a provider, paste the key (**Save & test key** validates it and fetches available models), and choose a model. |
 
-On-device requires a supported Mac with Apple Intelligence enabled; otherwise the section explains why it's unavailable. Prompts and notes are stored only on this Mac — nothing is synced. On-device stays fully local; with a provider key, prompt text is sent to the chosen provider over HTTPS only when you tap Enhance.
+On-device requires a supported Mac with Apple Intelligence enabled; otherwise the section explains why it's unavailable. Prompts and notes are stored only on this Mac, nothing is synced. On-device stays fully local; with a provider key, prompt text is sent to the chosen provider over HTTPS only when you tap Enhance.
 
 ---
 
@@ -234,9 +231,9 @@ A lightweight toolbox window. Both panes focus the editor on open so a first-tim
 
 The Prompts pane is a chat-style workspace. Type or paste a prompt in the input bar and press send. The AI rewrites it into a clear, structured version and streams the result directly into the conversation view. Each session is saved automatically.
 
-- **Library button** -- opens a curated collection of ready-made prompts grouped by category. Open any entry into the composer or copy it to the clipboard.
-- **History button** -- shows saved conversations. Open a previous session to continue it or start fresh with the New Chat button.
-- **Enhance with AI** -- uses the engine configured in Settings ▸ AI (on-device Apple Intelligence or your own API key). Writing, copying, and browsing the library never require AI.
+- **Library button.** Opens a curated collection of ready-made prompts grouped by category. Open any entry into the composer or copy it to the clipboard.
+- **History button.** Shows saved conversations. Open a previous session to continue it or start fresh with the New Chat button.
+- **Enhance with AI.** Uses the engine configured in Settings ▸ AI (on-device Apple Intelligence or your own API key). Writing, copying, and browsing the library never require AI.
 
 ### Mac Notes
 
@@ -246,7 +243,7 @@ On-device notes with title, body, tasks, reminders, and pinning, all local to th
 |---|---|
 | **Title** | An explicit title field at the top of the editor. |
 | **Body** | Freeform note text. |
-| **Tasks** | An inline checklist -- add, check off, and remove to-dos right inside the note. |
+| **Tasks** | An inline checklist. Add, check off, and remove to-dos right inside the note. |
 | **Reminder** | A Remind me toggle with a date/time picker schedules a local notification. Permission is requested only when you first set one. |
 | **Pin / Copy / To Prompt / Delete** | Actions in the editor bottom bar. Pinned notes sort to the top. |
 
@@ -258,9 +255,9 @@ Search matches titles, body, and task text.
 
 Accessible from the Agent Tracking card in the main panel.
 
-- **Per-agent toggle** — disable notifications for a specific agent without uninstalling its hooks. Events still land in the event store.
-- **Paused** — pauses all agent notifications immediately. This is an **in-memory flag** — it resets every time Doom Code is relaunched. The sleep blocker keeps running while paused.
-- **Reveal logs** — opens the log directory in Finder.
+- **Per-agent toggle.** Disable notifications for a specific agent without uninstalling its hooks. Events still land in the event store.
+- **Paused.** Pauses all agent notifications immediately. This is an **in-memory flag** that resets every time Doom Code is relaunched. The sleep blocker keeps running while paused.
+- **Reveal logs.** Opens the log directory in Finder.
 
 ---
 
@@ -274,29 +271,31 @@ If the shortcut conflicts with another app, a banner appears in the panel with a
 
 ## iPhone and iPad companion
 
-**Doom Code Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup** -- no Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
+**Doom Code Companion** (iOS 26+) is a **standalone app that is fully usable on first launch with no setup.** No Mac, no iCloud pairing, and no API key required. Connecting a Mac is an optional enhancement, not a requirement.
+
+The app has four tabs: **Dashboard**, **Prompts**, **Notes**, and **Settings**.
 
 ### Works with zero setup (no Mac, no key)
 
-**Prompts tab** -- a chat-style prompt workspace. Type a prompt and send it; the AI rewrites it into a clear, structured version and streams the reply into the conversation view. Each conversation is saved automatically.
+**Prompts tab.** A prompt refiner. You type a rough request and the AI rewrites it into a clean, structured prompt, streamed back into an iMessage-style thread. You can keep refining over follow-up turns, copy the result, edit earlier turns, or stop a stream mid-flight. Each conversation is saved automatically.
 
-- **History button** (toolbar) -- opens the list of saved conversations. Tap any entry to resume it, or use the New Chat button to start fresh.
-- **Library button** (toolbar) -- opens the curated prompt library: write tests, refactor, explain an error, code review, debug, docstrings, commit messages, regex, SQL, API design, performance, security review, and more. Tap any entry to copy it or open it in the chat. The library works with no AI and no Mac.
-- **Browse prompt library button** -- shown on the empty state when no conversation is open. Opens the library directly so new users can explore without needing to configure anything.
+- **History button** (toolbar) opens the list of saved refine sessions. Tap any entry to resume it, rename it, or delete it.
+- **Library button** (toolbar) opens the curated prompt library, grouped by category (Refactor, Tests, Debug, Review, Explain, Git, Docs, Scaffold). Each entry is a template you can search, copy, or drop into the composer to customize. The library works with no AI and no Mac.
+- **Empty-state quick start.** When no conversation is open, the first few library prompts surface as quick-start hints so new users can explore without configuring anything.
 
-**Notes tab** -- on-device notes with pinning, inline checklists, search, reminders (local notifications), and a "Turn into prompt" action.
+**Notes tab.** On-device notes with a title, body, inline checklists, reminders (local notifications), pinning, and search. The "Turn into prompt" action seeds a fresh refine session in the Prompts tab from a note's body.
 
-**Settings tab** -- choose the AI engine (on-device Apple Intelligence or your own API key), manage notifications, and pair or unpair a Mac.
+**Settings tab.** Choose the AI engine (on-device Apple Intelligence or your own API key), name this device, manage notifications, pair or unpair a Mac, and clear local data. Includes a diagnostics section with Force Sync and a sync-diagnostics view.
 
 ### Optional AI (Enhance)
 
-Prompt Enhance is a bonus that uses either Apple on-device model or your own provider key (BYOK). If on-device AI is not available (unsupported device, Apple Intelligence disabled), the app shows clear guidance with a link to Settings, and everything else keeps working.
+The rewrite engine runs on Apple's on-device model (free, private, nothing leaves the device) or, if you prefer, your own API key from **OpenAI or Anthropic** (bring your own key, stored in the device Keychain). On-device availability is probed on launch and whenever you switch engines; if it's unavailable (unsupported device, simulator, Apple Intelligence off), the app shows clear guidance and everything else keeps working.
 
 ### Optional Mac connection (mirroring)
 
-Sign into the same iCloud account on your Mac and iPhone, then enable iPhone / iPad in Configure > Connections. The companion then mirrors every Mac notification in 1-5 seconds via your private iCloud container (CloudKit) -- no third-party server, no API keys, no QR codes.
+Pairing happens in two ways. If your iPhone and Mac are on the **same Apple ID**, no pairing step is needed: the Mac appears automatically under the Dashboard tab. If they're on **different Apple IDs**, use the Mac's **Add Device** sheet to share this Mac through a private CloudKit share, then scan the QR code or open the invite link on the phone. Either way, the companion mirrors every Mac notification in 1-5 seconds via your private iCloud container, with no third-party server and no API keys.
 
-With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, a 7-day session log, and remote keep-awake and master on/off controls.
+With a Mac paired you also get the **Dashboard tab**: the live agent list with status dots, per-agent notification history, and remote controls for master on/off and the full keep-awake set (Off / On / Auto, screen mode, the auto-off timer, and Snooze). Commands you send are confirmed back by the Mac, and the app warns you when the Mac stops checking in so you never act on stale state.
 
 ---
 
@@ -310,12 +309,13 @@ A small helper binary (`dc-hook`) is installed into `~/Library/Application Suppo
 
 | Agent | Format |
 |---|---|
-| Claude Code | `settings.json` — nested `hooks.PostToolUse` / `hooks.Stop` matchers |
-| Cursor | `hooks.json` — `version: 1`, command-only |
+| Claude Code | `settings.json`, nested `hooks.PostToolUse` / `hooks.Stop` matchers |
+| Cursor | `hooks.json`, `version: 1`, command-only |
 | VS Code Copilot | `doomcoder.json` in `~/.copilot/vscode-hooks/`, registered via `chat.hookFilesLocations` in each variant's `settings.json` |
-| Copilot CLI | `doomcoder.json` in `~/.copilot/hooks/` — global, all 13 events |
-| Windsurf | `hooks.json` — command-only |
+| Copilot CLI | `doomcoder.json` in `~/.copilot/hooks/`, global, all 13 events |
+| Windsurf | `hooks.json`, command-only |
 | Codex CLI | `hooks.json` + `codex_hooks = true` feature flag in `config.toml` |
+| opencode | `doomcoder.js` plugin in `~/.config/opencode/plugin/`, auto-loaded by opencode. The plugin calls the same `dc-hook` binary, so it feeds the same socket. |
 
 ### Hook pipeline
 
