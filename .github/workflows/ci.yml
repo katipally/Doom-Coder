@@ -29,14 +29,14 @@ jobs:
       - name: Resolve Swift Packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project DoomCode.xcodeproj \
-            -scheme DoomCode
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder
 
       - name: Build
         run: |
           xcodebuild \
-            -project DoomCode.xcodeproj \
-            -scheme DoomCode \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="-" \
@@ -59,15 +59,15 @@ jobs:
         run: brew install xcodegen
 
       - name: Regenerate Xcode project from project.yml
-        working-directory: DoomCodeCompanion
+        working-directory: DoomCoderCompanion
         run: xcodegen generate
 
       - name: Build for Simulator (unsigned)
-        working-directory: DoomCodeCompanion
+        working-directory: DoomCoderCompanion
         run: |
           xcodebuild \
-            -project DoomCodeCompanion.xcodeproj \
-            -scheme DoomCodeCompanion \
+            -project DoomCoderCompanion.xcodeproj \
+            -scheme DoomCoderCompanion \
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGN_IDENTITY="" \

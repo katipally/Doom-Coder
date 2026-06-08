@@ -8,7 +8,7 @@ Usage:
         --build 2 \
         --signature <sparkle-edsignature> \
         --size <bytes> \
-        --download-url https://github.com/katipally/Doom-Coder/releases/download/v0.2.0/DoomCode-0.2.0.zip
+        --download-url https://github.com/katipally/Doom-Coder/releases/download/v0.2.0/DoomCoder-0.2.0.zip
 """
 import argparse
 import xml.etree.ElementTree as ET

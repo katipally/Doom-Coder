@@ -251,14 +251,14 @@ All of this lives in the **Activity** tab of the Configure window.
 
 - **Live events.** A real-time stream of hook events per agent, with a Sessions view (grouped by agent and date), a Raw firehose, and a Notifications view.
 - **Browse and export.** Filter by agent, expand any row to see the full JSON payload, and export the current view to JSON or CSV. Retention is adjustable (1, 7, or 30 days, default 7).
-- **Raw log files.** Stored in `~/Library/Logs/DoomCode/`, kept for 7 days. Hit **Reveal Logs** in Configure > Settings > Diagnostics.
+- **Raw log files.** Stored in `~/Library/Logs/DoomCoder/`, kept for 7 days. Hit **Reveal Logs** in Configure > Settings > Diagnostics.
 - **Connection Doctor.** Fires a fake test event through the whole pipeline end to end to prove your hooks actually work.
 
 ---
 
 ## Install
 
-Grab the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip it, drag `DoomCode.app` into `/Applications`, and double-click to open.
+Grab the latest `.zip` from [Releases](https://github.com/katipally/Doom-Coder/releases/latest), unzip it, drag `DoomCoder.app` into `/Applications`, and double-click to open.
 
 Doom Coder is signed with an Apple Developer ID and notarized by Apple, so there are no Gatekeeper prompts and no Terminal workarounds.
 
@@ -271,12 +271,12 @@ On first launch, macOS might ask for Accessibility permission. That's only for t
 ```bash
 git clone https://github.com/katipally/Doom-Coder.git
 cd Doom-Coder
-open DoomCode.xcworkspace
+open DoomCoder.xcworkspace
 ```
 
 Needs Xcode 26, macOS 26, Swift 6. Sparkle is pulled in over SPM.
 
-The iOS companion lives in `DoomCodeCompanion/` and is generated from a spec file. Run `cd DoomCodeCompanion && xcodegen generate` (install it with `brew install xcodegen`) before opening it.
+The iOS companion lives in `DoomCoderCompanion/` and is generated from a spec file. Run `cd DoomCoderCompanion && xcodegen generate` (install it with `brew install xcodegen`) before opening it.
 
 ---
 

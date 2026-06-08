@@ -31,9 +31,9 @@ Please give me a reasonable window to ship a fix before you disclose anything pu
 
 Things that are in scope:
 
-- The Mac app (`DoomCode/`) and the `dc-hook` helper binary
-- The iOS companion (`DoomCodeCompanion/`) and its notification service extension
-- The shared `DoomCodeCore` package
+- The Mac app (`DoomCoder/`) and the `dc-hook` helper binary
+- The iOS companion (`DoomCoderCompanion/`) and its notification service extension
+- The shared `DoomCoderCore` package
 - The hook install and config-editing logic
 - The CloudKit sync path and how notification content is handled
 

@@ -32,24 +32,24 @@ If you're unsure whether something is worth doing, open an issue and ask before 
 ```bash
 git clone https://github.com/katipally/Doom-Coder.git
 cd Doom-Coder
-open DoomCode.xcworkspace
+open DoomCoder.xcworkspace
 ```
 
-Pick the **DoomCode** scheme and hit Run. That's it. Swift packages (Sparkle, the shared `DoomCodeCore` package) resolve automatically on first build.
+Pick the **DoomCoder** scheme and hit Run. That's it. Swift packages (Sparkle, the shared `DoomCoderCore` package) resolve automatically on first build.
 
 You can build and run the Mac app without any signing certificate. It runs unsigned locally just fine.
 
 ### The iOS companion
 
-The iOS project is generated from a spec file (`DoomCodeCompanion/project.yml`) so the `.xcodeproj` stays clean in git. Regenerate it before you open it:
+The iOS project is generated from a spec file (`DoomCoderCompanion/project.yml`) so the `.xcodeproj` stays clean in git. Regenerate it before you open it:
 
 ```bash
-cd DoomCodeCompanion
+cd DoomCoderCompanion
 xcodegen generate
-open DoomCodeCompanion.xcodeproj
+open DoomCoderCompanion.xcodeproj
 ```
 
-Build the **DoomCodeCompanion** scheme against any iOS 26 simulator. No signing or Apple Developer account needed for simulator builds.
+Build the **DoomCoderCompanion** scheme against any iOS 26 simulator. No signing or Apple Developer account needed for simulator builds.
 
 > If you edit anything about the iOS targets (files added or removed, build settings, entitlements), change it in `project.yml`, not in the generated `.xcodeproj`. The generated project gets overwritten.
 
@@ -61,15 +61,15 @@ A quick map so you know where to look:
 
 | Path | What lives here |
 |---|---|
-| `DoomCode/` | The macOS app. Menu bar panel, sleep engine, all the UI. |
-| `DoomCode/SleepManager.swift` | The keep-awake core. Holds the IOPMAssertion and owns the Off / On / Auto state. |
-| `DoomCode/AgentTracking/` | Everything about watching agents: hook install, the socket listener, event normalizing, CloudKit push. |
+| `DoomCoder/` | The macOS app. Menu bar panel, sleep engine, all the UI. |
+| `DoomCoder/SleepManager.swift` | The keep-awake core. Holds the IOPMAssertion and owns the Off / On / Auto state. |
+| `DoomCoder/AgentTracking/` | Everything about watching agents: hook install, the socket listener, event normalizing, CloudKit push. |
 | `dc-hook/` | The tiny helper binary that agents call. Forwards hook events to the app over a Unix socket. |
-| `Packages/DoomCodeCore/` | Shared models used by both the Mac app and the iOS companion. |
-| `DoomCodeCompanion/` | The iOS companion app and its notification service extension. |
+| `Packages/DoomCoderCore/` | Shared models used by both the Mac app and the iOS companion. |
+| `DoomCoderCompanion/` | The iOS companion app and its notification service extension. |
 | `docs/` | Public docs: full feature reference, privacy policy, changelog. |
 
-If you're adding agent support or changing notification behavior, you'll mostly live in `DoomCode/AgentTracking/` and `Packages/DoomCodeCore/`.
+If you're adding agent support or changing notification behavior, you'll mostly live in `DoomCoder/AgentTracking/` and `Packages/DoomCoderCore/`.
 
 ---
 
