@@ -1,6 +1,6 @@
 // SleepManager.swift
 //
-// The keep-awake engine. This is the core of Doom Code: it holds an
+// The keep-awake engine. This is the core of Doom Coder: it holds an
 // IOPMAssertion (the same kernel flag caffeinate and Amphetamine use) so
 // the Mac never falls asleep mid-task and kills a long agent run.
 //
@@ -382,7 +382,7 @@ final class SleepManager {
         assertionID = id
         activityToken = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled],
-            reason: "DoomCode session active"
+            reason: "Doom Coder session active"
         )
         isActive = true
         activeSince = .now
@@ -624,7 +624,7 @@ final class SleepManager {
         let type: CFString = (mode == .screenOff)
             ? (kIOPMAssertionTypePreventSystemSleep as CFString)
             : (kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString)
-        let reason = "DoomCode: keeping Mac awake for AI coding session" as CFString
+        let reason = "Doom Coder: keeping Mac awake for AI coding session" as CFString
         let result = IOPMAssertionCreateWithName(type, IOPMAssertionLevel(kIOPMAssertionLevelOn), reason, &id)
         return result == kIOReturnSuccess ? id : nil
     }

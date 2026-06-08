@@ -1,7 +1,7 @@
 import SwiftUI
 import DoomCodeCore
 
-// MARK: - DoomCode Liquid Glass card
+// MARK: - Doom Coder Liquid Glass card
 //
 // A single source of truth for the macOS 26 / iOS 26 "Liquid Glass" surface
 // used across both apps. Wraps `RoundedRectangle` with a `glassEffect(.regular)`
@@ -61,7 +61,7 @@ private extension View {
 }
 
 public extension View {
-    /// Applies the canonical DoomCode Liquid Glass card chrome.
+    /// Applies the canonical Doom Coder Liquid Glass card chrome.
     func doomGlassCard(cornerRadius: CGFloat = 14) -> some View {
         modifier(GlassCardBackground(cornerRadius: cornerRadius, tint: .clear))
     }

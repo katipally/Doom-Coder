@@ -74,7 +74,7 @@ struct AccessibilityPermissionSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Enable Global Shortcut")
                         .font(.title2.weight(.semibold))
-                    Text("DoomCode can open instantly from anywhere.")
+                    Text("Doom Coder can open instantly from anywhere.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -101,7 +101,7 @@ struct AccessibilityPermissionSheet: View {
                     Text("Optionally grant Accessibility:")
                         .font(.callout.weight(.semibold))
                     Text("1. Click “Open System Settings” below.")
-                    Text("2. Enable DoomCode in the Accessibility list.")
+                    Text("2. Enable Doom Coder in the Accessibility list.")
                     Text("3. Return here — the status will refresh automatically.")
                 }
                 .font(.callout)

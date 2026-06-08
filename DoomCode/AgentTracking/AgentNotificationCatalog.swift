@@ -1,4 +1,4 @@
-// AgentNotificationCatalog.swift — DoomCode (Mac)
+// AgentNotificationCatalog.swift — Doom Coder (Mac)
 //
 // Single source of truth for the *editable* notification surface shown in
 // Configure → Agents. Supersedes the old read-only `AgentCapabilityCatalog`.
@@ -250,7 +250,7 @@ enum AgentNotificationCatalog {
         case .cursor:
             return [
                 ApprovalKind(id: "shell", title: "Shell commands",
-                             tooltip: "When Cursor needs approval to run a command. DoomCode waits briefly and stays silent if Cursor auto-approves it.", noisy: false),
+                             tooltip: "When Cursor needs approval to run a command. Doom Coder waits briefly and stays silent if Cursor auto-approves it.", noisy: false),
                 ApprovalKind(id: "mcp", title: "MCP tools",
                              tooltip: "When Cursor needs approval to run an MCP tool. Auto-approved calls are filtered out automatically.", noisy: false),
             ]

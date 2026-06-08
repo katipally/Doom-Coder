@@ -1,4 +1,4 @@
-// AgentListView.swift — DoomCode Companion
+// AgentListView.swift — Doom Coder Companion
 // Main view showing configured agents (read-only, matches Mac TrackAgentsPopover)
 
 import SwiftUI

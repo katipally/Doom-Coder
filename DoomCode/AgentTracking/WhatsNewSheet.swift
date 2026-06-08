@@ -27,7 +27,7 @@ struct WhatsNewSheetV2: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("What's new in DoomCode 2.0", systemImage: "sparkles")
+            Label("What's new in Doom Coder 2.0", systemImage: "sparkles")
                 .font(.title2.bold())
 
             featureRow(icon: "wind", title: "Windsurf support",
@@ -70,15 +70,15 @@ struct WhatsNewSheet220: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("What's new in DoomCode 2.2", systemImage: "sparkles")
+            Label("What's new in Doom Coder 2.2", systemImage: "sparkles")
                 .font(.title2.bold())
 
             featureRow(icon: "checkmark.seal.fill", title: "Official signed & notarized app",
-                       body: "DoomCode is now signed with a Developer ID and notarized by Apple. No more Gatekeeper prompts — just double-click to install.")
+                       body: "Doom Coder is now signed with a Developer ID and notarized by Apple. No more Gatekeeper prompts — just double-click to install.")
             featureRow(icon: "photo.on.rectangle.angled", title: "Bundled agent icons",
                        body: "Claude, Codex, and Copilot CLI icons are built right into the app. They appear instantly in notifications and the menu, even without an internet connection.")
             featureRow(icon: "hand.raised.fill", title: "Privacy manifest",
-                       body: "DoomCode now ships a PrivacyInfo.xcprivacy declaring exactly which system APIs it uses. No data is collected or shared.")
+                       body: "Doom Coder now ships a PrivacyInfo.xcprivacy declaring exactly which system APIs it uses. No data is collected or shared.")
 
             Divider()
 
@@ -110,7 +110,7 @@ struct WhatsNewSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("What's new in DoomCode 1.9.0", systemImage: "sparkles")
+            Label("What's new in Doom Coder 1.9.0", systemImage: "sparkles")
                 .font(.title2.bold())
 
             featureRow(icon: "wrench.and.screwdriver", title: "Hooks done right",
@@ -161,7 +161,7 @@ struct WhatsNewSheet230: View {
             featureRow(
                 icon: "globe",
                 title: "Global Copilot CLI hooks",
-                body: "Install once and DoomCode tracks every `copilot` session in every directory. No more per-project folder list — hooks live at ~/.copilot/hooks/doomcoder.json."
+                body: "Install once and Doom Coder tracks every `copilot` session in every directory. No more per-project folder list — hooks live at ~/.copilot/hooks/doomcoder.json."
             )
             featureRow(
                 icon: "bell.badge",

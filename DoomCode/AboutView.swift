@@ -33,7 +33,7 @@ struct AboutView: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 4) {
-                Text("Doom Code")
+                Text("Doom Coder")
                     .font(.largeTitle.bold())
                 Text("Keep your Mac awake. Track your AI agents.")
                     .font(.subheadline)
@@ -43,25 +43,25 @@ struct AboutView: View {
             Form {
                 LabeledContent("Version", value: version)
                 LabeledContent("Build", value: build)
-                LabeledContent("Website", value: "github.com/katipally/Doom-Code")
+                LabeledContent("Website", value: "github.com/katipally/Doom-Coder")
             }
             .formStyle(.grouped)
             .frame(width: 360)
 
             HStack(spacing: 16) {
-                Link(destination: URL(string: "https://github.com/katipally/Doom-Code")!) {
+                Link(destination: URL(string: "https://github.com/katipally/Doom-Coder")!) {
                     Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
                 Link(destination: URL(string: "https://apps.apple.com/app/doomcoder-companion/id6772514212")!) {
                     Label("Companion", systemImage: "iphone.gen3")
                 }
-                Link(destination: URL(string: "https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md")!) {
+                Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md")!) {
                     Label("Privacy", systemImage: "hand.raised")
                 }
             }
             .font(.subheadline)
 
-            Text("© 2026 Doom Code. All rights reserved.")
+            Text("© 2026 Doom Coder. All rights reserved.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

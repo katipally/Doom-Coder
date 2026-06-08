@@ -1,4 +1,4 @@
-// AgentCapabilities.swift — DoomCode (Mac)
+// AgentCapabilities.swift — Doom Coder (Mac)
 //
 // Mirror of `Packages/DoomCodeCore/.../AgentCapabilities.swift`. The
 // Mac app uses its own `TrackedAgent` (defined in `HookEnvelope.swift`)

@@ -1603,9 +1603,9 @@ existing agent hook configs. No user action required.
 - Launch at login support (requires app to be in `/Applications`)
 - Targets macOS 14+ (Sonoma and later)
 
-[1.8.4]: https://github.com/katipally/Doom-Code/compare/v1.8.3...v1.8.4
-[0.2.1]: https://github.com/katipally/Doom-Code/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/katipally/Doom-Code/compare/v0.1.2...v0.2.0
-[0.1.2]: https://github.com/katipally/Doom-Code/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/katipally/Doom-Code/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/katipally/Doom-Code/releases/tag/v0.1.0
+[1.8.4]: https://github.com/katipally/Doom-Coder/compare/v1.8.3...v1.8.4
+[0.2.1]: https://github.com/katipally/Doom-Coder/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/katipally/Doom-Coder/compare/v0.1.2...v0.2.0
+[0.1.2]: https://github.com/katipally/Doom-Coder/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/katipally/Doom-Coder/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/katipally/Doom-Coder/releases/tag/v0.1.0

@@ -1,4 +1,4 @@
-// CompanionDataManager.swift — DoomCode Companion
+// CompanionDataManager.swift — Doom Coder Companion
 // Central, user-controlled data clearing for the Data & Privacy screen. Each
 // granular method wipes one slice of on-device storage; `eraseEverything()`
 // performs a full LOCAL reset so the app behaves like a brand-new install.

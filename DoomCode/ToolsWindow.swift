@@ -1,4 +1,4 @@
-// ToolsWindow.swift — DoomCode (macOS)
+// ToolsWindow.swift — Doom Coder (macOS)
 // A dedicated sidebar window that brings the standalone toolkit (Prompts /
 // Notes / Settings) to the Mac, reusing the shared DoomCodeCore AI engine.
 // Tools data is LOCAL-ONLY on this device — no sync.
@@ -1033,7 +1033,7 @@ private struct MacPromptLibraryView: View {
 // MARK: - Rainbow idle glow (legacy — moved to RainbowIdleGlow.swift)
 //
 // The shared `RainbowIdleGlow` struct now lives in `RainbowIdleGlow.swift`
-// (top-level of the DoomCode target) so the iOS Prompts view can reuse
+// (top-level of the Doom Coder target) so the iOS Prompts view can reuse
 // it without duplicating the implementation. The local declaration here
 // was removed; call sites still use `RainbowIdleGlow(cornerRadius: …)`
 // unchanged.

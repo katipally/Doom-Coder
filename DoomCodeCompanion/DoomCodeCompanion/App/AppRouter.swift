@@ -1,4 +1,4 @@
-// AppRouter.swift — DoomCode Companion
+// AppRouter.swift — Doom Coder Companion
 // Lightweight global navigation router so external entry points (deep links and
 // notification taps) can drive the UI: select the Dashboard tab and push a
 // specific agent's logs. Kept tiny and @MainActor — no business logic.

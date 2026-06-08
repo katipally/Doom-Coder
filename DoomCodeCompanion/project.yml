@@ -49,11 +49,11 @@ targets:
     info:
       path: DoomCodeCompanion/Resources/Info.plist
       properties:
-        CFBundleName: Doom Code Companion
-        CFBundleDisplayName: Doom Code Companion
+        CFBundleName: Doom Coder Companion
+        CFBundleDisplayName: Doom Coder Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSCameraUsageDescription: Doom Code uses the camera to scan the QR code shown on your Mac so you can connect your devices.
+        NSCameraUsageDescription: Doom Coder uses the camera to scan the QR code shown on your Mac so you can connect your devices.
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIBackgroundModes:

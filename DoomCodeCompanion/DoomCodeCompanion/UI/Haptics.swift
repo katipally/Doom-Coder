@@ -1,4 +1,4 @@
-// Haptics.swift — DoomCode Companion
+// Haptics.swift — Doom Coder Companion
 // Thin wrapper around UIFeedbackGenerator so call sites read as intent, not
 // boilerplate. All calls are main-actor and no-ops if haptics are unavailable.
 

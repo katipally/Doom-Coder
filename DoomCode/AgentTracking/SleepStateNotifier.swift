@@ -33,13 +33,13 @@ final class SleepStateNotifier {
         var body: String {
             switch self {
             case .agents(let names):
-                if names.isEmpty { return "DoomCode is holding sleep for your agents." }
+                if names.isEmpty { return "Doom Coder is holding sleep for your agents." }
                 if names.count == 1 { return "\(names[0]) is working." }
                 return "\(names.prefix(2).joined(separator: " & ")) are working."
             case .userActive:
-                return "You're active — DoomCode is holding sleep."
+                return "You're active — Doom Coder is holding sleep."
             case .snoozed:
-                return "Snooze active — DoomCode is holding sleep."
+                return "Snooze active — Doom Coder is holding sleep."
             }
         }
     }

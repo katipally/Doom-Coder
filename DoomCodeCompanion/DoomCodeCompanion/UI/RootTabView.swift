@@ -1,4 +1,4 @@
-// RootTabView.swift — DoomCode Companion
+// RootTabView.swift — Doom Coder Companion
 // Four-tab structure (Dashboard / Prompts / Notes / Settings), launching on
 // Dashboard — the app's headline feature (live Mac monitoring + remote control).
 // Prompts and Notes are 100% standalone — they work with no Mac, no account, and

@@ -4,7 +4,7 @@ import AppKit
 import OSLog
 import DoomCodeCore
 
-// Fan-out for DoomCode agent notifications. Honors the TrackingStore
+// Fan-out for Doom Coder agent notifications. Honors the TrackingStore
 // per-agent opt-out and the global ChannelStore (macOS local + ntfy).
 // Minimal content only — no prompt text, no file paths over ntfy. 5-second
 // dedupe window per (session, event).
@@ -93,7 +93,7 @@ final class NotificationDispatcher {
         case .dropped(let emitWarning):
             if emitWarning {
                 postLocal(
-                    title: "DoomCode · rate-limited",
+                    title: "Doom Coder · rate-limited",
                     body: "Throttling \(ev.agent.displayName) notifications — too many in a short time.",
                     threadID: "ratelimit::\(ev.agent.rawValue)",
                     agent: ev.agent
@@ -149,10 +149,10 @@ final class NotificationDispatcher {
                 requestPermission { granted in cont.resume(returning: granted) }
             }
             guard ok else { return false }
-            postLocal(title: "Doom Code", body: "macOS notifications are working ✨", threadID: "test")
+            postLocal(title: "Doom Coder", body: "macOS notifications are working ✨", threadID: "test")
             return true
         case .cloudKit:
-            postCloudKit(ev: nil, title: "Doom Code", body: "iPhone push channel is working ✨")
+            postCloudKit(ev: nil, title: "Doom Coder", body: "iPhone push channel is working ✨")
             return true
         }
     }
@@ -335,7 +335,7 @@ final class NotificationDispatcher {
     /// iPhone can reach this Mac end-to-end. Grouped under its own thread so it
     /// never mingles with agent-event notifications.
     func postCheckNotification() {
-        postLocal(title: "Doom Code",
+        postLocal(title: "Doom Coder",
                   body: "Connection check from your iPhone ✨",
                   threadID: "check")
     }

@@ -1,4 +1,4 @@
-// SharedToolUI.swift — DoomCode Companion (Tools)
+// SharedToolUI.swift — Doom Coder Companion (Tools)
 // Small reusable UI pieces shared across the Tools views.
 
 import SwiftUI

@@ -1,4 +1,4 @@
-# Doom Code Audit Fixes (2026-06)
+# Doom Coder Audit Fixes (2026-06)
 
 This document indexes every issue found in the 2026-06 audit and the
 commit that fixed it. Use `git log --grep="<id>"` to retrieve the

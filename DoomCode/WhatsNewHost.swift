@@ -36,7 +36,7 @@ public struct WhatsNewHost: View {
                         .accessibilityHidden(true)
                     Text("You're all caught up.")
                         .font(.title3.weight(.semibold))
-                    Text("DoomCode has no new features to announce right now.")
+                    Text("Doom Coder has no new features to announce right now.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

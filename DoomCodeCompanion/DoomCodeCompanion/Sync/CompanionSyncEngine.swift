@@ -1,4 +1,4 @@
-// CompanionSyncEngine.swift — DoomCode Companion
+// CompanionSyncEngine.swift — Doom Coder Companion
 // Full bidirectional CloudKit sync engine for the iOS companion, running two
 // CKSyncEngines (private DB = same-Apple-ID Macs, shared DB = cross-account
 // Macs after CKShare accept).

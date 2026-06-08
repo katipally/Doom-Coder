@@ -302,7 +302,7 @@ struct ConnectionDoctorSection: View {
             return StepOutcome(status: .fail, detail: "macOS notifications are not authorized for DoomCode.")
         }
         let content = UNMutableNotificationContent()
-        content.title = "DoomCode · Doctor"
+        content.title = "Doom Coder · Doctor"
         content.body = "Connection Doctor test — this is not a real agent event."
         content.categoryIdentifier = "doomcoder.doctor"
         content.sound = .default

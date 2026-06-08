@@ -1,4 +1,4 @@
-# SwiftLint config for Doom Code.
+# SwiftLint config for Doom Coder.
 #
 # Goal: catch real mistakes and keep the style consistent without nuking the
 # build over cosmetics. The CI lint job runs `swiftlint lint` (not --strict),
