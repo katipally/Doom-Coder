@@ -19,6 +19,7 @@ extension TrackedAgent {
         case .copilotCLI: return .green
         case .windsurf:   return Color(red: 0, green: 0.67, blue: 1)
         case .codexCLI:   return Color(red: 0.4, green: 0.2, blue: 1.0)
+        case .opencode:   return Color(red: 0.13, green: 0.7, blue: 0.6)
         }
     }
 

@@ -71,6 +71,7 @@ enum AgentCapabilityCatalog {
         case .copilotCLI: return [completed, failed, waitingApproval, sessionStart, toolCalls]
         case .windsurf:   return [completed, failed, waitingInput, sessionStart]
         case .codexCLI:   return [completed, failed, sessionStart, toolCalls]
+        case .opencode:   return [completed, failed, waitingApproval, sessionStart, toolCalls]
         }
     }
 }
