@@ -1,6 +1,6 @@
-# Contributing to Doom Code
+# Contributing to Doom Coder
 
-First off, thanks for being here. Doom Code started as a fix for one person's annoying problem (Mac falling asleep mid agent run, agents getting stuck on a permission prompt the second I walked away). If you've felt the same pain and want to make this better, you're exactly the right person to contribute.
+First off, thanks for being here. Doom Coder started as a fix for one person's annoying problem (Mac falling asleep mid agent run, agents getting stuck on a permission prompt the second I walked away). If you've felt the same pain and want to make this better, you're exactly the right person to contribute.
 
 This guide covers how to set things up, how to send a change, and how to suggest ideas. It's not long. Read it once and you're good.
 
@@ -10,8 +10,8 @@ This guide covers how to set things up, how to send a change, and how to suggest
 
 You don't have to write Swift to help.
 
-- **Found a bug?** Open a [bug report](https://github.com/katipally/Doom-Code/issues/new?template=bug_report.yml).
-- **Have an idea?** Open a [feature request](https://github.com/katipally/Doom-Code/issues/new?template=feature_request.yml). Even a rough one is welcome.
+- **Found a bug?** Open a [bug report](https://github.com/katipally/Doom-Coder/issues/new?template=bug_report.yml).
+- **Have an idea?** Open a [feature request](https://github.com/katipally/Doom-Coder/issues/new?template=feature_request.yml). Even a rough one is welcome.
 - **Want to write code?** Grab an open issue (look for ones labeled `good first issue` or `help wanted`) or propose your own. Read the [development setup](#development-setup) below.
 - **Found a security hole?** Do NOT open a public issue. See [SECURITY.md](SECURITY.md) and email it privately.
 
@@ -30,8 +30,8 @@ If you're unsure whether something is worth doing, open an issue and ask before 
 ### The Mac app
 
 ```bash
-git clone https://github.com/katipally/Doom-Code.git
-cd Doom-Code
+git clone https://github.com/katipally/Doom-Coder.git
+cd Doom-Coder
 open DoomCode.xcworkspace
 ```
 
@@ -112,7 +112,7 @@ If you're adding agent support or changing notification behavior, you'll mostly 
 
 ## Suggesting a feature
 
-Open a [feature request issue](https://github.com/katipally/Doom-Code/issues/new?template=feature_request.yml). Good ones explain:
+Open a [feature request issue](https://github.com/katipally/Doom-Coder/issues/new?template=feature_request.yml). Good ones explain:
 
 - The problem you're hitting (not just the solution you imagined)
 - How you'd want it to work
@@ -135,4 +135,4 @@ If something here is unclear, open an issue or reach out:
 - Email: yashwanthreddykatipally@gmail.com
 - LinkedIn: [linkedin.com/in/yashwanth-katipally](https://linkedin.com/in/yashwanth-katipally)
 
-Thanks for helping make Doom Code better.
+Thanks for helping make Doom Coder better.

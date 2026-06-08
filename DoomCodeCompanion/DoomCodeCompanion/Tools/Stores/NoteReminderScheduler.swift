@@ -1,4 +1,4 @@
-// NoteReminderScheduler.swift — DoomCode Companion (Tools)
+// NoteReminderScheduler.swift — Doom Coder Companion (Tools)
 // Schedules/cancels a single local notification per note reminder. Notification
 // permission is requested LAZILY — only the first time a user actually sets a
 // reminder — so the app never prompts at launch (App Store 4.2.3 / HIG safe).

@@ -451,7 +451,7 @@ jobs:
             --build "${{ env.BUILD }}" \
             --signature "${{ env.SPARKLE_SIG }}" \
             --size "${{ env.ZIP_SIZE }}" \
-            --download-url "https://github.com/katipally/Doom-Code/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
+            --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
 
       - name: Commit version bump and appcast.xml
         run: |
@@ -497,7 +497,7 @@ jobs:
                 --build "${{ env.BUILD }}" \
                 --signature "${{ env.SPARKLE_SIG }}" \
                 --size "${{ env.ZIP_SIZE }}" \
-                --download-url "https://github.com/katipally/Doom-Code/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
+                --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
               continue
             fi
 
@@ -517,7 +517,7 @@ jobs:
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
-          name: "Doom Code ${{ env.TAG }}"
+          name: "Doom Coder ${{ env.TAG }}"
           files: |
             DoomCode-${{ env.VERSION }}.dmg
             DoomCode-${{ env.VERSION }}.zip
@@ -538,7 +538,7 @@ jobs:
             Existing users receive automatic updates via the built-in Sparkle updater.
 
             ---
-            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Code/blob/main/docs/CHANGELOG.md)
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/docs/CHANGELOG.md)
 
       - name: Clean up keychain
         if: always()

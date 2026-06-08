@@ -1,4 +1,4 @@
-// WelcomeView.swift — DoomCode Companion
+// WelcomeView.swift — Doom Coder Companion
 // First-run informational sheet. Purely explanatory and dismissible — it never
 // blocks the app. Sets expectations: the app works on its own, and connecting a
 // Mac unlocks live agent monitoring + remote keep-awake control.
@@ -22,7 +22,7 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
 
                 VStack(spacing: 6) {
-                    Text("Welcome to DoomCode")
+                    Text("Welcome to Doom Coder")
                         .font(.largeTitle.bold())
                         .multilineTextAlignment(.center)
                     Text("Companion")
@@ -39,7 +39,7 @@ struct WelcomeView: View {
                                detail: "Turn a rough idea into a well-structured prompt to paste into Claude Code, Codex, Copilot and more.")
                     FeatureRow(symbol: "macbook.and.iphone",
                                title: "Connect your Mac (optional)",
-                               detail: "Add the free DoomCode Mac app to monitor live agents and keep your Mac awake from the Dashboard tab.")
+                               detail: "Add the free Doom Coder Mac app to monitor live agents and keep your Mac awake from the Dashboard tab.")
                 }
                 .padding(.horizontal, 4)
 

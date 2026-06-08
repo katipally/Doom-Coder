@@ -22,7 +22,7 @@ struct DoomCodeApp: App {
         // modifier; replaces the legacy `FloatingWindowConfigurator`
         // NSViewRepresentable + per-window level = .floating dance.
 
-        Window("About Doom Code", id: "about") {
+        Window("About Doom Coder", id: "about") {
             AboutView()
                 .background(WindowOpenerBridge())
         }
@@ -176,7 +176,7 @@ final class DoomCodeAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Show notification banners even when DoomCode is in the foreground.
+    /// Show notification banners even when Doom Coder is in the foreground.
     /// Menu-bar-only apps (LSUIElement) are always "foreground", so without
     /// this delegate method macOS silently drops every local notification.
     func userNotificationCenter(
@@ -202,11 +202,11 @@ final class DoomCodeAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     /// Called when Mac successfully registers with APNs.
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        print("[DoomCode] APNs device token registered (\(String(hex.prefix(8)))…)")
+        print("[Doom Coder] APNs device token registered (\(String(hex.prefix(8)))…)")
     }
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[DoomCode] APNs registration failed: \(error.localizedDescription)")
+        print("[Doom Coder] APNs registration failed: \(error.localizedDescription)")
     }
 
     /// CloudKit sends a silent content-available push when zone changes land.

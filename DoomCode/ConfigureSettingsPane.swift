@@ -36,7 +36,7 @@ struct ConfigureSettingsPane: View {
                     get: { sleepManager.isLaunchAtLoginEnabled },
                     set: { _ in sleepManager.toggleLaunchAtLogin() }
                 ))
-                LabeledContent("Open Doom Code") {
+                LabeledContent("Open Doom Coder") {
                     Text(GlobalHotkey.shared.current.descriptionForUI)
                         .font(.body.monospaced())
                 }
@@ -55,7 +55,7 @@ struct ConfigureSettingsPane: View {
                 Stepper(value: $sleepManager.screenOffRearmMinutes, in: 1...60) {
                     HStack {
                         Text("Re-sleep display after")
-                        HelpTip("After you move the mouse to wake the display in Screen Off mode, DoomCode will put it back to sleep again after this many minutes of idle time.")
+                        HelpTip("After you move the mouse to wake the display in Screen Off mode, Doom Coder will put it back to sleep again after this many minutes of idle time.")
                         Spacer()
                         Text("\(sleepManager.screenOffRearmMinutes) min idle")
                             .foregroundStyle(.secondary)
@@ -80,7 +80,7 @@ struct ConfigureSettingsPane: View {
                 Stepper(value: $deferTenths, in: 5...30, step: 1) {
                     HStack {
                         Text("Approval debounce window")
-                        HelpTip("Some agents (Copilot CLI, Cursor, Windsurf) emit a permission hook before their own allowlist decides to auto-approve. DoomCode waits this long for proof the tool actually ran before alerting you, eliminating auto-accept spam. Genuine blocks still notify after the window. Live status in the menu/Island is unaffected and always instant.")
+                        HelpTip("Some agents (Copilot CLI, Cursor, Windsurf) emit a permission hook before their own allowlist decides to auto-approve. Doom Coder waits this long for proof the tool actually ran before alerting you, eliminating auto-accept spam. Genuine blocks still notify after the window. Live status in the menu/Island is unaffected and always instant.")
                         Spacer()
                         Text(String(format: "%.1fs", Double(deferTenths) / 10))
                             .foregroundStyle(.secondary)
@@ -109,14 +109,14 @@ struct ConfigureSettingsPane: View {
                 } label: {
                     Label("Manage Data…", systemImage: "lock.shield")
                 }
-                Text("Clear individual data, or fully reset DoomCode to a fresh-install state. Everything is stored on this Mac.")
+                Text("Clear individual data, or fully reset Doom Coder to a fresh-install state. Everything is stored on this Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section("Diagnostics") {
                 Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
-                Text("Opens DoomCode's local log folder in Finder. Handy if something isn't working and you want to inspect or share the logs.")
+                Text("Opens Doom Coder's local log folder in Finder. Handy if something isn't working and you want to inspect or share the logs.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -439,7 +439,7 @@ struct MacDataPrivacyView: View {
                 } header: {
                     Text("Reset")
                 } footer: {
-                    Text("Erases everything on this Mac — history, prompts, notes, AI keys, preferences and sync state — so DoomCode relaunches like a fresh install. This can’t be undone.")
+                    Text("Erases everything on this Mac — history, prompts, notes, AI keys, preferences and sync state — so Doom Coder relaunches like a fresh install. This can’t be undone.")
                 }
             }
             .formStyle(.grouped)
@@ -468,7 +468,7 @@ struct MacDataPrivacyView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This permanently deletes all DoomCode data from this Mac AND from iCloud — including the agents, notifications and status shown on every connected iPhone. The app will reset to a fresh-install state and relaunch. This can’t be undone.")
+            Text("This permanently deletes all Doom Coder data from this Mac AND from iCloud — including the agents, notifications and status shown on every connected iPhone. The app will reset to a fresh-install state and relaunch. This can’t be undone.")
         }
     }
 }

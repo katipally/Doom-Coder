@@ -1,6 +1,6 @@
-// dc-hook — DoomCode helper binary invoked by AI-agent hooks.
-// Forwards the stdin JSON to the DoomCode app via a unix-domain socket.
-// Exits 0 silently if DoomCode isn't running, so it never wedges an agent.
+// dc-hook — Doom Coder helper binary invoked by AI-agent hooks.
+// Forwards the stdin JSON to the Doom Coder app via a unix-domain socket.
+// Exits 0 silently if Doom Coder isn't running, so it never wedges an agent.
 // Usage:
 //   dc-hook <agent> <event>            (positional args — v2 format)
 //   dc-hook --agent claude --event Stop  (flag args — v1 compat)
@@ -64,7 +64,7 @@ func sendFrame(_ data: Data) -> Bool {
         }
     }
 
-    // Tight timeouts: total budget ≤ 150ms so a dead DoomCode can never
+    // Tight timeouts: total budget ≤ 150ms so a dead Doom Coder can never
     // wedge an agent. 75ms each for send/recv, 50ms for non-blocking connect.
     var tv = timeval(tv_sec: 0, tv_usec: 75_000)
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
@@ -463,8 +463,8 @@ func replayDemo(agent: String) -> Int32 {
             "demo": true
         ]
         if !sendEnvelope(agent: agent, event: event, payload: payload, synthetic: true) {
-            // Socket not available — DoomCode might not be running
-            fputs("warning: could not reach DoomCode socket for event \(event)\n", stderr)
+            // Socket not available — Doom Coder might not be running
+            fputs("warning: could not reach Doom Coder socket for event \(event)\n", stderr)
         }
     }
     return 0

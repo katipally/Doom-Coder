@@ -177,7 +177,7 @@ struct PanelRootView: View {
                     .opacity(masterEnabled ? 1.0 : 0.5)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Doom Code")
+                    Text("Doom Coder")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
                     Text(masterSubtitle)
@@ -203,7 +203,7 @@ struct PanelRootView: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
-                .accessibilityLabel("Doom Code")
+                .accessibilityLabel("Doom Coder")
                 .accessibilityValue(masterEnabled ? "On" : "Off")
             }
             .padding(14)

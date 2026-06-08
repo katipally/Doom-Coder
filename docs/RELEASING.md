@@ -1,6 +1,6 @@
-# Releasing Doom Code
+# Releasing Doom Coder
 
-Doom Code ships through **two independent pipelines** because the Mac app
+Doom Coder ships through **two independent pipelines** because the Mac app
 and the iPhone companion live in different Apple distribution channels.
 This document explains both, including the one-time setup each requires.
 
@@ -64,7 +64,7 @@ builds with the same marketing version are typically auto-approved).
 
 1. **App Store Connect → My Apps → +** → New App.
    - Platform: iOS
-   - Name: `Doom Code Companion`
+   - Name: `Doom Coder Companion`
    - Bundle ID: `com.doomcoder.app.companion`
    - SKU: `doomcoder-companion`
 2. **Users and Access → Integrations → App Store Connect API → Generate API Key**.
@@ -189,7 +189,7 @@ TestFlight upload. Allow ~60 minutes the first time.
    → **My Apps** → **+** → **New App**.
 2. Fill in:
    - **Platform**: iOS
-   - **Name**: `Doom Code Companion`
+   - **Name**: `Doom Coder Companion`
    - **Primary Language**: English (U.S.)
    - **Bundle ID**: `com.doomcoder.app.companion` (must already exist
      in the Developer Portal under Identifiers)
@@ -207,15 +207,15 @@ In the app record → **App Store** tab:
 - **Category**: Developer Tools / Productivity
 - **Content rights**: No third-party content
 - **Age rating**: questionnaire (defaults yield 4+)
-- **Privacy policy URL**: link to `docs/privacy.md` on GitHub (`https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md`)
-- **Support URL**: `https://github.com/katipally/Doom-Code`
+- **Privacy policy URL**: link to `docs/privacy.md` on GitHub (`https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`)
+- **Support URL**: `https://github.com/katipally/Doom-Coder`
 - **Marketing URL**: optional
 
 ### 3. Privacy nutrition label
 
 App Store Connect → **App Privacy** → **Get Started**.
 
-Doom Code Companion collects **nothing**. The correct answers:
+Doom Coder Companion collects **nothing**. The correct answers:
 
 - Data collected: **No**
 - Tracking: **No**
@@ -266,7 +266,7 @@ In **Developer Portal → Certificates, Identifiers & Profiles**:
 Used by `xcodebuild -exportArchive` to authenticate uploads non-interactively.
 
 1. App Store Connect → **Users and Access** → **Integrations** → **App Store Connect API**.
-2. **+** → name `Doom Code CI`, access `App Manager`.
+2. **+** → name `Doom Coder CI`, access `App Manager`.
 3. Download the `.p8` (you can only download it **once**).
 4. Note the **Issuer ID** (top of the page) and **Key ID** (next to the key).
 5. Add as GitHub repo secrets:
@@ -303,8 +303,8 @@ Connect. The build appears under **TestFlight** in ~10-20 min.
 
 Review usually takes 24-48 hours. Common rejections to pre-empt:
 
-- Missing privacy policy URL. Ours is at `https://github.com/katipally/Doom-Code/blob/main/docs/privacy.md`.
-- Demo account credentials required if the app has a login. Doom Code
+- Missing privacy policy URL. Ours is at `https://github.com/katipally/Doom-Coder/blob/main/docs/privacy.md`.
+- Demo account credentials required if the app has a login. Doom Coder
   Companion does not. In the **Notes for Reviewer** field state: "The
   Prompts and Notes tabs work fully without any Mac connection or API
   key. The Dashboard tab is optional and clearly labeled as requiring

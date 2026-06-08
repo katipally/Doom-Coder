@@ -1,4 +1,4 @@
-// AgentNotificationPrefs.swift — DoomCode (Mac)
+// AgentNotificationPrefs.swift — Doom Coder (Mac)
 //
 // Per-agent notification preferences. Replaces the single global
 // `ChannelStore.NotificationPrefs`: every tracked agent now has its own

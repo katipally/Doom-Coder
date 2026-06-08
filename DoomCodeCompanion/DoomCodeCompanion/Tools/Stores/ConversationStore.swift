@@ -1,4 +1,4 @@
-// ConversationStore.swift — DoomCode Companion (Tools)
+// ConversationStore.swift — Doom Coder Companion (Tools)
 // On-device store for the user's prompt-refine transcripts. Each Conversation is
 // a full chat (rough request → refined prompt → follow-up refinements). Auto-
 // saved after every exchange and reopenable to continue. Local-only — never

@@ -194,7 +194,7 @@ struct AgentInstallerV2 {
     }
 
     /// Re-resolve the helper binary path in every installed agent config on launch.
-    /// Also removes any stale sibling backup files from previous DoomCode versions.
+    /// Also removes any stale sibling backup files from previous Doom Coder versions.
     static func healAllPaths() {
         cleanAllSiblingBackups()
         var healed = 0
@@ -309,7 +309,7 @@ struct AgentInstallerV2 {
         if let xdg = env["XDG_CONFIG_HOME"], !xdg.isEmpty { return xdg + "/opencode" }
         return NSHomeDirectory() + "/.config/opencode"
     }
-    /// Absolute path to the DoomCode opencode plugin file. opencode auto-loads
+    /// Absolute path to the Doom Coder opencode plugin file. opencode auto-loads
     /// any `*.js` under the `plugin/` subdirectory of its config dir.
     static func opencodePluginPath() -> String { opencodeConfigDir() + "/plugin/doomcoder.js" }
 
@@ -662,7 +662,7 @@ struct AgentInstallerV2 {
     // MARK: - Recursive dc-hook entry stripping (D2: path-based identification)
     //
     // Walk entire JSON tree. Any object whose `command` or `bash` value contains
-    // our helper path (dc-hook) is a DoomCode entry. Drop it. Prune up-tree.
+    // our helper path (dc-hook) is a Doom Coder entry. Drop it. Prune up-tree.
 
     /// Strip dc-hook entries for a specific agent only. When `agentToken` is nil,
     /// strips ALL dc-hook entries (legacy behavior for full cleanup).
@@ -794,7 +794,7 @@ struct AgentInstallerV2 {
             case .missingEvent(let e):
                 return "Hook event '\(e)' is missing from the config. Try uninstalling and reinstalling."
             case .badHelperPath(let p):
-                return "dc-hook binary not found at '\(p)'. Try reinstalling DoomCode from the DMG."
+                return "dc-hook binary not found at '\(p)'. Try reinstalling Doom Coder from the DMG."
             case .residualDcHook:
                 return "Some hook entries could not be removed. Open the config file manually to clean up."
             case .unexpectedStructure:
@@ -829,7 +829,7 @@ struct AgentInstallerV2 {
             case .missingEvent:
                 return "Reinstall hooks to restore missing events."
             case .badHelperPath, .helperBinaryMissing:
-                return "Reinstall DoomCode from the latest release."
+                return "Reinstall Doom Coder from the latest release."
             case .residualDcHook:
                 return "Use 'Show Config' to manually inspect the file."
             case .configPermissionDenied:

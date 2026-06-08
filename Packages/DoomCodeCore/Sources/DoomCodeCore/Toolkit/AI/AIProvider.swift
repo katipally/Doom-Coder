@@ -1,7 +1,7 @@
 // AIProvider.swift — DoomCodeCore
 // BYO-key provider selection for Tier 2. The user supplies their OWN API key
 // (stored in the Keychain); requests go device → provider directly over HTTPS.
-// DoomCode operates no server and never sees the key.
+// Doom Coder operates no server and never sees the key.
 
 import Foundation
 

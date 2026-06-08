@@ -1,4 +1,4 @@
-// NotificationService.swift — DoomCode Companion NSE
+// NotificationService.swift — Doom Coder Companion NSE
 // Notification Service Extension. Intercepts mutable CloudKit push payloads
 // before they are displayed and enriches them with the rich title/body
 // pre-computed by the Mac (stored as CKRecord fields) plus agent icon.
@@ -66,7 +66,7 @@ class NotificationService: UNNotificationServiceExtension {
         //      substitution fails on older iOS or quirky payloads.
         //   3. NotificationCopy re-render from (agent, phase) — last-ditch
         //      reconstruction if the Mac fields somehow weren't delivered.
-        // We deliberately do NOT fall through to literal "DoomCode · Update"
+        // We deliberately do NOT fall through to literal "Doom Coder · Update"
         // anymore. If steps 1–3 all fail we let the OS show whatever it
         // already has, which is at minimum a non-blank space from APNs.
         let preTitle = mutable.title

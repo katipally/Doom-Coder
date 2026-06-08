@@ -6,7 +6,7 @@
 // the user knows what to expect before enabling tracking.
 //
 // The matrix below is **descriptive** — it documents what the underlying
-// hook surface area of each agent allows DoomCode to detect, not what the
+// hook surface area of each agent allows Doom Coder to detect, not what the
 // user's settings are. Toggle-level filtering is independent.
 
 import Foundation
