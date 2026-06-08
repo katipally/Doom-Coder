@@ -54,10 +54,15 @@ struct PanelRootView: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 2)
 
-            // Bento grid row — Prevent Sleep | Agent Tracking side by side.
+            // Bento grid row — left column stacks Connected Devices over Keep
+            // Awake; right column is Agent Tracking, top-aligned beside both.
             HStack(alignment: .top, spacing: 8) {
-                keepAwakeCard
-                    .frame(maxWidth: .infinity, alignment: .top)
+                VStack(spacing: 8) {
+                    connectedDevicesCard
+                    keepAwakeCard
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+
                 agentsCard
                     .frame(maxWidth: .infinity, alignment: .top)
             }
@@ -541,6 +546,122 @@ struct PanelRootView: View {
     private var snoozeAccessibilityValue: String {
         guard let s = sleepManager.snoozeDuration else { return "Off" }
         return "Snoozed — \(snoozeActiveLabel(s)) remaining"
+    }
+
+    // MARK: - Connected Devices card (companion presence, mini list)
+    //
+    // Standalone bento cell in the left column, above Keep Awake. A compact,
+    // read-only mirror of Configure ▸ Connections backed by the same
+    // `CompanionStatusStore.shared`. The TimelineView re-renders every 30s so
+    // "Connected" ages to "5m ago" live while the panel stays open. "Manage"
+    // and the empty-state CTA deep-link to the Connections tab.
+    private var connectedDevicesCard: some View {
+        InnerCard {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let now = context.date
+                let devices = CompanionStatusStore.shared.devices
+                let connectedCount = devices.filter {
+                    $0.isConnected(now: now, threshold: CompanionStatusStore.connectedThreshold)
+                }.count
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        iconChip(system: "iphone.gen3", active: connectedCount > 0, activeTint: .green)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Devices")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(devicesSubtitle(total: devices.count, connected: connectedCount))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 4)
+                        if !devices.isEmpty {
+                            Button { WindowOpener.openConnections() } label: {
+                                Text("Manage")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.tint)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open the Connections tab to add or remove devices")
+                            .accessibilityLabel("Manage devices")
+                        }
+                    }
+
+                    if devices.isEmpty {
+                        emptyDevicesPanelState
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(devices.prefix(3), id: \.deviceId) { device in
+                                deviceMiniRow(device, now: now)
+                            }
+                            if devices.count > 3 {
+                                Button { WindowOpener.openConnections() } label: {
+                                    Text("+\(devices.count - 3) more device\(devices.count - 3 == 1 ? "" : "s")")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Show all \(devices.count) devices")
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .animation(DCAnim.smooth, value: devices.count)
+            }
+        }
+    }
+
+    /// Header subtitle covering every count state: empty, all-offline, partial,
+    /// and all-connected.
+    private func devicesSubtitle(total: Int, connected: Int) -> String {
+        if total == 0 { return "No devices connected" }
+        if connected == 0 { return "All offline" }
+        if connected == total { return "\(connected) connected" }
+        return "\(connected) of \(total) connected"
+    }
+
+    @ViewBuilder
+    private func deviceMiniRow(_ device: CompanionStatusRecord, now: Date) -> some View {
+        let connected = device.isConnected(now: now, threshold: CompanionStatusStore.connectedThreshold)
+        HStack(spacing: 8) {
+            Circle()
+                .fill(connected ? Color.green : Color.secondary.opacity(0.4))
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(device.displayName.isEmpty ? "iPhone or iPad" : device.displayName)
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 6)
+            // Trailing status never truncates; the name yields first.
+            Text(connected ? "Connected" : device.lastSeenRelative(now: now))
+                .font(.caption2)
+                .foregroundStyle(connected ? Color.green : .secondary)
+                .fixedSize()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(device.displayName.isEmpty ? "Device" : device.displayName), "
+            + (connected ? "connected" : "last seen \(device.lastSeenRelative(now: now))")
+        )
+    }
+
+    @ViewBuilder
+    private var emptyDevicesPanelState: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No devices connected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button { WindowOpener.openConnections() } label: {
+                Text("Connect a device →")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Connect a device")
+        }
     }
 
     // MARK: - Agents card
