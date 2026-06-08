@@ -3,12 +3,12 @@ import AppKit
 import UserNotifications
 
 @main
-struct DoomCoderApp: App {
-    @NSApplicationDelegateAdaptor(DoomCoderAppDelegate.self) private var appDelegate
+struct DoomCodeApp: App {
+    @NSApplicationDelegateAdaptor(DoomCodeAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         // No MenuBarExtra — replaced by NSStatusItem + NSPanel wired
-        // by DoomCoderAppDelegate. We still register Window scenes so
+        // by DoomCodeAppDelegate. We still register Window scenes so
         // openWindow(id:) keeps working for Configure / About.
         //
         // Settings is no longer a standalone Window — it lives as the
@@ -22,7 +22,7 @@ struct DoomCoderApp: App {
         // modifier; replaces the legacy `FloatingWindowConfigurator`
         // NSViewRepresentable + per-window level = .floating dance.
 
-        Window("About DoomCoder", id: "about") {
+        Window("About Doom Code", id: "about") {
             AboutView()
                 .background(WindowOpenerBridge())
         }
@@ -78,7 +78,7 @@ struct DoomCoderApp: App {
 }
 
 // MARK: - AppDelegate
-final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class DoomCodeAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prepare support dirs + SQLite store on main (cheap).
@@ -176,7 +176,7 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Show notification banners even when DoomCoder is in the foreground.
+    /// Show notification banners even when DoomCode is in the foreground.
     /// Menu-bar-only apps (LSUIElement) are always "foreground", so without
     /// this delegate method macOS silently drops every local notification.
     func userNotificationCenter(
@@ -202,11 +202,11 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
     /// Called when Mac successfully registers with APNs.
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        print("[DoomCoder] APNs device token registered (\(String(hex.prefix(8)))…)")
+        print("[DoomCode] APNs device token registered (\(String(hex.prefix(8)))…)")
     }
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[DoomCoder] APNs registration failed: \(error.localizedDescription)")
+        print("[DoomCode] APNs registration failed: \(error.localizedDescription)")
     }
 
     /// CloudKit sends a silent content-available push when zone changes land.

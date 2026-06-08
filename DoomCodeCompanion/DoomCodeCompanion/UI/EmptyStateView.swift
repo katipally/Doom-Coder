@@ -1,4 +1,4 @@
-// EmptyStateView.swift — DoomCoder Companion
+// EmptyStateView.swift — DoomCode Companion
 // Shown on the Agents tab when no Mac is connected (or none has published
 // agents yet). Never a dead end: offers Connect, the interactive demo, and the
 // Mac download.
@@ -44,7 +44,7 @@ struct EmptyStateView: View {
                     Label("Try the interactive demo", systemImage: "play.circle")
                 }
 
-                Link(destination: URL(string: "https://github.com/katipally/Doom-Coder/releases")!) {
+                Link(destination: URL(string: "https://github.com/katipally/Doom-Code/releases")!) {
                     Label("Download for Mac", systemImage: "arrow.down.circle")
                 }
                 .font(.subheadline)

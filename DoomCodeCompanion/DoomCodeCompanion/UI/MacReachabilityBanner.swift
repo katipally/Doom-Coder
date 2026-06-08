@@ -1,4 +1,4 @@
-// MacReachabilityBanner.swift — DoomCoder Companion
+// MacReachabilityBanner.swift — DoomCode Companion
 // Shown when a Mac is connected (primary != nil) but its heartbeat is older
 // than the staleness threshold. Tells the user the data they are seeing may
 // not be current and offers a manual refresh. The Mac side heartbeats every
@@ -10,7 +10,7 @@
 // Mac the user pairs with. No hardcoded names or IDs.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 @MainActor
 struct MacReachabilityBanner: View {
@@ -72,7 +72,7 @@ struct MacReachabilityBanner: View {
         let symbol = (level == .offline) ? "wifi.exclamationmark" : "exclamationmark.triangle.fill"
         let title = (level == .offline) ? "\(mac.name) not reachable" : "\(mac.name) may be out of date"
         let detail = (level == .offline)
-            ? "We haven't heard from your Mac in over 15 minutes. Open DoomCoder on your Mac, or check your network and iCloud sign-in. New data and notifications won't arrive until it reconnects."
+            ? "We haven't heard from your Mac in over 15 minutes. Open Doom Code on your Mac, or check your network and iCloud sign-in. New data and notifications won't arrive until it reconnects."
             : "Last sync was \(relativeAge(mac.lastSeen, now: now)). The status below may not reflect what's happening on your Mac right now."
 
         HStack(alignment: .top, spacing: 12) {

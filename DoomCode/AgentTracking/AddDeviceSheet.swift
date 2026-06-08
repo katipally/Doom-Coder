@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import CoreImage
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - AddDeviceSheet
 //
@@ -82,7 +82,7 @@ struct AddDeviceSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             pairingHint(
                 symbol: "person.crop.rectangle.stack.fill",
-                text: "**Same Apple ID?** No need to scan. Just open DoomCoder on your iPhone or iPad (signed in to the same iCloud) — this Mac appears automatically under Dashboard."
+                text: "**Same Apple ID?** No need to scan. Just open DoomCode on your iPhone or iPad (signed in to the same iCloud) — this Mac appears automatically under Dashboard."
             )
             Divider().opacity(0.4)
             pairingHint(

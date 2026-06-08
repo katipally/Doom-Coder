@@ -30,7 +30,7 @@ public enum KeepAwakeMode: String, Sendable, Codable, CaseIterable {
 }
 
 /// Screen behaviour while keep-awake is active. Raw values match the legacy
-/// `DoomCoderMode` strings already persisted in UserDefaults and published in
+/// `DoomCodeMode` strings already persisted in UserDefaults and published in
 /// `MacStatusRecord.mode`.
 public enum ScreenMode: String, Sendable, Codable, CaseIterable {
     /// Keep the display on (prevent display idle sleep).

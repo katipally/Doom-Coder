@@ -65,7 +65,7 @@ enum AgentSupportDir {
 enum AgentLogDir {
     static var url: URL {
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        let u = home.appendingPathComponent("Library/Logs/DoomCoder", isDirectory: true)
+        let u = home.appendingPathComponent("Library/Logs/DoomCode", isDirectory: true)
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }

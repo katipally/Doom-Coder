@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import Observation
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - MacControlViewModel
 //

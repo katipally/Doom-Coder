@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - Connection Doctor
 //
@@ -299,10 +299,10 @@ struct ConnectionDoctorSection: View {
             disp.requestPermission { ok in cont.resume(returning: ok) }
         }
         if !granted {
-            return StepOutcome(status: .fail, detail: "macOS notifications are not authorized for DoomCoder.")
+            return StepOutcome(status: .fail, detail: "macOS notifications are not authorized for DoomCode.")
         }
         let content = UNMutableNotificationContent()
-        content.title = "DoomCoder · Doctor"
+        content.title = "DoomCode · Doctor"
         content.body = "Connection Doctor test — this is not a real agent event."
         content.categoryIdentifier = "doomcoder.doctor"
         content.sound = .default

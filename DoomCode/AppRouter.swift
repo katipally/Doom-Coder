@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import Observation
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - AppRouter
 //

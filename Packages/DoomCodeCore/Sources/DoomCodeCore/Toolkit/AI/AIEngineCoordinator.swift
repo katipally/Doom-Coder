@@ -1,4 +1,4 @@
-// AIEngineCoordinator.swift — DoomCoderCore
+// AIEngineCoordinator.swift — DoomCodeCore
 // The single façade the UI talks to. Owns the user's engine preference +
 // provider/model selection and runs the selected backend.
 //

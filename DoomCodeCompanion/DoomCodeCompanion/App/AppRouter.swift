@@ -1,10 +1,10 @@
-// AppRouter.swift — DoomCoder Companion
+// AppRouter.swift — DoomCode Companion
 // Lightweight global navigation router so external entry points (deep links and
 // notification taps) can drive the UI: select the Dashboard tab and push a
 // specific agent's logs. Kept tiny and @MainActor — no business logic.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 enum RootTab: Hashable {
     case prompts, notes, dashboard, settings

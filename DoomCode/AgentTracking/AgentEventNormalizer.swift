@@ -18,7 +18,7 @@ enum NormalizedEventPhase: String, Codable, Sendable {
     case error
     case other
     // Opt-in coverage phases (default OFF in the gate). MUST stay byte-identical
-    // to the Core enum (Packages/DoomCoderCore/.../NormalizedEventPhase.swift)
+    // to the Core enum (Packages/DoomCodeCore/.../NormalizedEventPhase.swift)
     // because CloudKit serializes the rawValue String.
     case fileEdit
     case compaction
@@ -425,7 +425,7 @@ struct CopilotCLIEventNormalizer: AgentEventNormalizer {
         // permissionRequest allowlist filter: Copilot fires the hook for ALL
         // permission checks, including those the user has pre-approved via
         // ~/.copilot/permissions-config.json. For pre-approved requests Copilot
-        // shows no UI, so DoomCoder must not notify either. Suppress by
+        // shows no UI, so DoomCode must not notify either. Suppress by
         // downgrading to .other.
         if envelope.event == "permissionRequest", phase == .permissionNeeded {
             let cwd = payload["cwd"] as? String ?? envelope.cwd
@@ -570,7 +570,7 @@ struct CodexCLIEventNormalizer: AgentEventNormalizer {
 
 // MARK: - opencode normalizer
 //
-// opencode has no shell-command config hooks. The DoomCoder plugin we install
+// opencode has no shell-command config hooks. The DoomCode plugin we install
 // (~/.config/opencode/plugin/doomcoder.js) forwards a curated set of opencode's
 // in-process events to dc-hook with the agent token "opencode". Event names are
 // opencode's dotted bus/hook identifiers; payload fields are camelCase

@@ -1,5 +1,5 @@
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - LiveEventRow
 //

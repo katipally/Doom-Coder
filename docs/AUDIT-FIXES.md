@@ -1,12 +1,12 @@
-# DoomCoder Audit Fixes (2026-06)
+# Doom Code Audit Fixes (2026-06)
 
 This document indexes every issue found in the 2026-06 audit and the
 commit that fixed it. Use `git log --grep="<id>"` to retrieve the
 exact diff for any item.
 
-The audit covered all three targets: the Mac app (`DoomCoder/`), the
-iOS companion (`DoomCoderCompanion/`), the shared SwiftPM package
-(`Packages/DoomCoderCore/`), and the standalone `dc-hook` helper.
+The audit covered all three targets: the Mac app (`DoomCode/`), the
+iOS companion (`DoomCodeCompanion/`), the shared SwiftPM package
+(`Packages/DoomCodeCore/`), and the standalone `dc-hook` helper.
 
 ## Severity legend
 
@@ -23,24 +23,24 @@ iOS companion (`DoomCoderCompanion/`), the shared SwiftPM package
 
 | ID  | Severity | Where | Fix |
 |-----|----------|-------|-----|
-| C-1 | C        | `Packages/DoomCoderCore/.../ServerRecordCache.swift` | Added `NSLock` + `@unchecked Sendable`; concurrent `store` / `clear` can no longer interleave between memory and disk writes. (Phase 1 PR) |
-| C-2 | C        | `DoomCoderCompanion/.../LocalStore.swift` | `deinit` no longer calls `queue.sync` (deadlock); added `DatabaseHandle` `@unchecked Sendable` wrapper for the `OpaquePointer` hand-off. |
+| C-1 | C        | `Packages/DoomCodeCore/.../ServerRecordCache.swift` | Added `NSLock` + `@unchecked Sendable`; concurrent `store` / `clear` can no longer interleave between memory and disk writes. (Phase 1 PR) |
+| C-2 | C        | `DoomCodeCompanion/.../LocalStore.swift` | `deinit` no longer calls `queue.sync` (deadlock); added `DatabaseHandle` `@unchecked Sendable` wrapper for the `OpaquePointer` hand-off. |
 | C-3 | C        | `LocalStore.swift` | `upsertAgentConfig` wrapped in `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`. |
 | C-4 | C        | `LocalStore.swift` | `upsertMacStatus` now uses `record.status ?? "unknown"` (was hard-coded `"online"`). |
-| C-5 | C        | `DoomCoderCompanion/.../AppDelegate.swift` | `task as! BGAppRefreshTask` → conditional cast + early return. |
+| C-5 | C        | `DoomCodeCompanion/.../AppDelegate.swift` | `task as! BGAppRefreshTask` → conditional cast + early return. |
 | C-6 | C        | `AppDelegate.swift` | Observer tokens stored in `observerTokens`; removed in new `deinit` via a static `nonisolated(unsafe)` mirror. |
-| C-7 | R        | `DoomCoderCompanion/.../Sync/CompanionSyncEngine.swift` | `postedNotifIds` migrated from `[String]` to `Set<String>` with O(1) lookups; persisted as JSON-encoded `Data` under v2 key with v1→v2 migration. |
-| C-8 | R        | `DoomCoder/SleepManager.swift` | Documented the threading model so future maintainers know which `nonisolated(unsafe)` properties are real C-handle hazards vs. Swift-6 checker false positives. |
+| C-7 | R        | `DoomCodeCompanion/.../Sync/CompanionSyncEngine.swift` | `postedNotifIds` migrated from `[String]` to `Set<String>` with O(1) lookups; persisted as JSON-encoded `Data` under v2 key with v1→v2 migration. |
+| C-8 | R        | `DoomCode/SleepManager.swift` | Documented the threading model so future maintainers know which `nonisolated(unsafe)` properties are real C-handle hazards vs. Swift-6 checker false positives. |
 | C-9 | C        | `dc-hook/main.swift` | `procShortInfo` rejects oversized kernel returns so a future macOS struct growth does not silently misalign every offset. |
-| C-10 | X       | `DoomCoder/AgentTracking/CloudKitPusher.swift` | Tracked `Set<Task<Void, Never>>` of in-flight engine kicks; public `stop()` called from `willTerminateNotification`. |
-| C-11 | R       | `DoomCoder/AgentTracking/HookSocketListener.swift` | Concurrent queue with barrier writes; barrier-guarded snapshot read in `handleClient`. |
+| C-10 | X       | `DoomCode/AgentTracking/CloudKitPusher.swift` | Tracked `Set<Task<Void, Never>>` of in-flight engine kicks; public `stop()` called from `willTerminateNotification`. |
+| C-11 | R       | `DoomCode/AgentTracking/HookSocketListener.swift` | Concurrent queue with barrier writes; barrier-guarded snapshot read in `handleClient`. |
 | C-12 | C       | `dc-hook/main.swift` | Signal handler is a `@convention(c)` top-level function, not a Swift closure. |
 | C-13 | X       | `dc-hook/main.swift` | `sendFrame` always restores the original socket flags before returning, on every code path. Refactored `connectNonBlocking` helper. |
-| C-14 | C       | `DoomCoderCompanion/.../UI/ConnectFlowView.swift` | `coordinator` is now a `let` set in `init` (was assigned in `makeUIViewController` after `viewDidLoad`, dropping the first scan). |
+| C-14 | C       | `DoomCodeCompanion/.../UI/ConnectFlowView.swift` | `coordinator` is now a `let` set in `init` (was assigned in `makeUIViewController` after `viewDidLoad`, dropping the first scan). |
 | C-15 | H       | `ConnectFlowView.swift` | QR scanner explicitly requests camera permission and renders a Settings deep-link when access is denied. |
-| C-16 | R       | `DoomCoder/AgentTracking/CloudKitPusherDelegate.swift` | Named `engineRecoveryKickDelay` constant for the 300ms recovery delay (was magic literal at two call sites). |
-| C-17 | X       | `DoomCoder/AgentTracking/NotificationDispatcher.swift` | Replaced `DispatchQueue` + `Thread.sleep` with a serial `actor NotifySerializer` so the 20ms notification stagger is cooperative. |
-| C-18 | H       | `Packages/DoomCoderCore/.../AgentConfigRecord.swift` | Typed `agentStatuses` accessor + convenience initializer for the JSON-encoded `[String: String]` payload. |
+| C-16 | R       | `DoomCode/AgentTracking/CloudKitPusherDelegate.swift` | Named `engineRecoveryKickDelay` constant for the 300ms recovery delay (was magic literal at two call sites). |
+| C-17 | X       | `DoomCode/AgentTracking/NotificationDispatcher.swift` | Replaced `DispatchQueue` + `Thread.sleep` with a serial `actor NotifySerializer` so the 20ms notification stagger is cooperative. |
+| C-18 | H       | `Packages/DoomCodeCore/.../AgentConfigRecord.swift` | Typed `agentStatuses` accessor + convenience initializer for the JSON-encoded `[String: String]` payload. |
 
 ## Phase 2 — Runtime safety & lifecycle
 
@@ -75,19 +75,19 @@ iOS companion (`DoomCoderCompanion/`), the shared SwiftPM package
 
 | ID  | Severity | Where | Fix |
 |-----|----------|-------|-----|
-| P-1 | P        | `Packages/DoomCoderCore/Package.swift` | Raised `macOS(.v14)` → `macOS(.v26)`. |
-| P-2 | P        | `DoomCoderCompanion/project.yml` | `ENABLE_USER_SCRIPT_SANDBOXING` → `YES` (no shell phases in the iOS project). |
-| P-3 | P        | `DoomCoderCompanion/.../Info.plist` | Dropped unused `UIBackgroundModes: fetch`. |
-| P-4 | P        | `DoomCoderCompanion/.../PrivacyInfo.xcprivacy` | Removed unused `C617.1` and `35F9.1` reasons. |
+| P-1 | P        | `Packages/DoomCodeCore/Package.swift` | Raised `macOS(.v14)` → `macOS(.v26)`. |
+| P-2 | P        | `DoomCodeCompanion/project.yml` | `ENABLE_USER_SCRIPT_SANDBOXING` → `YES` (no shell phases in the iOS project). |
+| P-3 | P        | `DoomCodeCompanion/.../Info.plist` | Dropped unused `UIBackgroundModes: fetch`. |
+| P-4 | P        | `DoomCodeCompanion/.../PrivacyInfo.xcprivacy` | Removed unused `C617.1` and `35F9.1` reasons. |
 | P-5 | P        | `docs/privacy.md` | New section 11 explaining why the Mac app is not sandboxed. |
-| P-6 | P        | `DoomCoder.xcodeproj/project.pbxproj` | `SWIFT_VERSION` 6.0 → 6.2; `codesign ... || true` removed. |
-| P-7 | P        | `DoomCoderCompanion/project.yml` | `SWIFT_VERSION` 6.0 → 6.2; `LSApplicationCategoryType` added. |
+| P-6 | P        | `DoomCode.xcodeproj/project.pbxproj` | `SWIFT_VERSION` 6.0 → 6.2; `codesign ... || true` removed. |
+| P-7 | P        | `DoomCodeCompanion/project.yml` | `SWIFT_VERSION` 6.0 → 6.2; `LSApplicationCategoryType` added. |
 
 ## Phase 5 — Tests
 
 | ID  | Severity | Where | Fix |
 |-----|----------|-------|-----|
-| T-1 | T        | `Packages/DoomCoderCore/Tests/.../ServerRecordCacheTests.swift` | 6 new tests including 3 concurrent stress tests. |
+| T-1 | T        | `Packages/DoomCodeCore/Tests/.../ServerRecordCacheTests.swift` | 6 new tests including 3 concurrent stress tests. |
 | T-2 | T        | `AgentConfigRecordTests.swift` | 4 new tests for the typed accessor. |
 | T-3 | T        | `KeychainTests.swift` | 6 new tests covering set/get/delete/overwrite/isolation. |
 | T-4 | T        | `SyncTelemetryTests.swift` | 6 new tests for the ring buffer. |

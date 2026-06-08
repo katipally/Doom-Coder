@@ -42,12 +42,12 @@ jobs:
 
       - name: Update version in project
         run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ env.VERSION }}" DoomCoder/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ env.BUILD }}" DoomCoder/Info.plist
-          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoder.xcodeproj/project.pbxproj
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCoder.xcodeproj/project.pbxproj
-          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj
-          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCoderCompanion/project.yml
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ env.VERSION }}" DoomCode/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ env.BUILD }}" DoomCode/Info.plist
+          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCode.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCode.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCodeCompanion/DoomCodeCompanion.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCodeCompanion/project.yml
 
       - name: Import Developer ID certificate
         env:
@@ -91,7 +91,7 @@ jobs:
             exit 1
           fi
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/DoomCoder_Mac_DevID.provisionprofile"
+          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/DoomCode_Mac_DevID.provisionprofile"
           printf '%s' "$MAC_PROFILE" | base64 -D > "$PROFILE_PATH"
           # Save the path so later steps can embed it
           echo "MAC_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
@@ -104,8 +104,8 @@ jobs:
       - name: Resolve Swift Packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project DoomCoder.xcodeproj \
-            -scheme DoomCoder
+            -project DoomCode.xcodeproj \
+            -scheme DoomCode
 
       - name: Write App Store Connect API key
         id: write-asc-key
@@ -147,10 +147,10 @@ jobs:
           # v2.4.0–v2.4.2: codesign --entitlements embedded a verbatim plist
           # whose format/values did not match the embedded profile).
           xcodebuild \
-            -project DoomCoder.xcodeproj \
-            -scheme DoomCoder \
+            -project DoomCode.xcodeproj \
+            -scheme DoomCode \
             -configuration Release \
-            -archivePath build/DoomCoder.xcarchive \
+            -archivePath build/DoomCode.xcarchive \
             archive \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
@@ -163,15 +163,15 @@ jobs:
       - name: Extract signed app from archive
         run: |
           mkdir -p build/export
-          APP_IN_ARCHIVE="build/DoomCoder.xcarchive/Products/Applications/DoomCoder.app"
+          APP_IN_ARCHIVE="build/DoomCode.xcarchive/Products/Applications/DoomCode.app"
           if [ ! -d "$APP_IN_ARCHIVE" ]; then
             echo "::error::App not found in archive at $APP_IN_ARCHIVE"
-            ls -laR build/DoomCoder.xcarchive/Products/ || true
+            ls -laR build/DoomCode.xcarchive/Products/ || true
             exit 1
           fi
-          cp -R "$APP_IN_ARCHIVE" build/export/DoomCoder.app
-          APP="build/export/DoomCoder.app"
-          echo "✅ Extracted DoomCoder.app from archive"
+          cp -R "$APP_IN_ARCHIVE" build/export/DoomCode.app
+          APP="build/export/DoomCode.app"
+          echo "✅ Extracted DoomCode.app from archive"
           echo "   Size: $(du -sh "$APP" | cut -f1)"
           echo ""
           echo "=== Embedded provisioning profile ==="
@@ -202,7 +202,7 @@ jobs:
           # --timestamp + --options=runtime. We do NOT touch the outer .app,
           # its embedded.provisionprofile, or its entitlements — so AMFI's
           # strict profile↔entitlement match for the main app is preserved.
-          APP="build/export/DoomCoder.app"
+          APP="build/export/DoomCode.app"
           SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
           IDENTITY="Developer ID Application: Yashwanth Reddy Katipally (A9P2388PHM)"
 
@@ -276,7 +276,7 @@ jobs:
 
       - name: Audit all binary signatures
         run: |
-          APP="build/export/DoomCoder.app"
+          APP="build/export/DoomCode.app"
           echo "=== Signing identity for every Mach-O in the bundle ==="
           find "$APP" -type f | while IFS= read -r f; do
             if file "$f" 2>/dev/null | grep -qE "Mach-O|shared library"; then
@@ -301,12 +301,12 @@ jobs:
 
           # Create the ZIP Apple requires for submission
           ditto -c -k --sequesterRsrc --keepParent \
-            "build/export/DoomCoder.app" \
-            "build/DoomCoder-notarize.zip"
+            "build/export/DoomCode.app" \
+            "build/DoomCode-notarize.zip"
 
           # ── Submit (no-wait — just upload and get an ID) ───────────────────
           echo "Submitting to Apple notarization..."
-          SUBMIT_JSON=$(xcrun notarytool submit "build/DoomCoder-notarize.zip" \
+          SUBMIT_JSON=$(xcrun notarytool submit "build/DoomCode-notarize.zip" \
             --key /tmp/AuthKey.p8 \
             --key-id  "${NOTARIZE_KEY_ID}" \
             --issuer  "${NOTARIZE_ISSUER_ID}" \
@@ -393,8 +393,8 @@ jobs:
 
       - name: Staple notarization ticket
         run: |
-          xcrun stapler staple "build/export/DoomCoder.app"
-          xcrun stapler validate "build/export/DoomCoder.app"
+          xcrun stapler staple "build/export/DoomCode.app"
+          xcrun stapler validate "build/export/DoomCode.app"
           echo "✅ Notarization ticket stapled"
 
       - name: Create DMG
@@ -402,26 +402,26 @@ jobs:
           brew install create-dmg --quiet 2>/dev/null || true
 
           create-dmg \
-            --volname "DoomCoder" \
+            --volname "DoomCode" \
             --window-pos 200 120 \
             --window-size 600 400 \
             --icon-size 128 \
-            --icon "DoomCoder.app" 175 190 \
-            --hide-extension "DoomCoder.app" \
+            --icon "DoomCode.app" 175 190 \
+            --hide-extension "DoomCode.app" \
             --app-drop-link 425 185 \
-            "DoomCoder-${{ env.VERSION }}.dmg" \
+            "DoomCode-${{ env.VERSION }}.dmg" \
             "build/export/"
 
           codesign --sign "Developer ID Application" --timestamp \
-            "DoomCoder-${{ env.VERSION }}.dmg"
+            "DoomCode-${{ env.VERSION }}.dmg"
           echo "✅ DMG created and signed"
 
       - name: Create distribution ZIP
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
-            "build/export/DoomCoder.app" \
-            "DoomCoder-${{ env.VERSION }}.zip"
-          ZIP_SIZE=$(stat -f%z "DoomCoder-${{ env.VERSION }}.zip")
+            "build/export/DoomCode.app" \
+            "DoomCode-${{ env.VERSION }}.zip"
+          ZIP_SIZE=$(stat -f%z "DoomCode-${{ env.VERSION }}.zip")
           echo "ZIP_SIZE=${ZIP_SIZE}" >> $GITHUB_ENV
           echo "ZIP: ${ZIP_SIZE} bytes"
 
@@ -440,7 +440,7 @@ jobs:
         run: |
           SPARKLE_SIG=$(echo "${SPARKLE_PRIVATE_KEY}" | \
             sparkle-tools/bin/sign_update --ed-key-file - -p \
-            "DoomCoder-${{ env.VERSION }}.zip")
+            "DoomCode-${{ env.VERSION }}.zip")
           echo "Signature: ${SPARKLE_SIG}"
           echo "SPARKLE_SIG=${SPARKLE_SIG}" >> $GITHUB_ENV
 
@@ -451,7 +451,7 @@ jobs:
             --build "${{ env.BUILD }}" \
             --signature "${{ env.SPARKLE_SIG }}" \
             --size "${{ env.ZIP_SIZE }}" \
-            --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
+            --download-url "https://github.com/katipally/Doom-Code/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
 
       - name: Commit version bump and appcast.xml
         run: |
@@ -463,10 +463,10 @@ jobs:
           # loop — a reset reverts these files to origin/main so they must be
           # re-patched before staging.
           bump_versions() {
-            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoder.xcodeproj/project.pbxproj
-            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCoder.xcodeproj/project.pbxproj
-            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj
-            sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCoderCompanion/project.yml
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCode.xcodeproj/project.pbxproj
+            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${{ env.BUILD }}/g" DoomCode.xcodeproj/project.pbxproj
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${{ env.VERSION }}/g" DoomCodeCompanion/DoomCodeCompanion.xcodeproj/project.pbxproj
+            sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ env.VERSION }}\"/" DoomCodeCompanion/project.yml
           }
 
           # The "Update version in project" step already ran sed, but calling
@@ -479,9 +479,9 @@ jobs:
           for attempt in 1 2 3 4 5; do
             echo "--- Commit attempt ${attempt} ---"
             git add appcast.xml \
-              DoomCoder.xcodeproj/project.pbxproj \
-              DoomCoderCompanion/DoomCoderCompanion.xcodeproj/project.pbxproj \
-              DoomCoderCompanion/project.yml
+              DoomCode.xcodeproj/project.pbxproj \
+              DoomCodeCompanion/DoomCodeCompanion.xcodeproj/project.pbxproj \
+              DoomCodeCompanion/project.yml
             if ! git diff --cached --quiet; then
               git commit -m "chore: bump version to ${{ env.TAG }}"
             fi
@@ -497,7 +497,7 @@ jobs:
                 --build "${{ env.BUILD }}" \
                 --signature "${{ env.SPARKLE_SIG }}" \
                 --size "${{ env.ZIP_SIZE }}" \
-                --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
+                --download-url "https://github.com/katipally/Doom-Code/releases/download/${{ env.TAG }}/DoomCode-${{ env.VERSION }}.zip"
               continue
             fi
 
@@ -517,28 +517,28 @@ jobs:
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
-          name: "Doom Coder ${{ env.TAG }}"
+          name: "Doom Code ${{ env.TAG }}"
           files: |
-            DoomCoder-${{ env.VERSION }}.dmg
-            DoomCoder-${{ env.VERSION }}.zip
+            DoomCode-${{ env.VERSION }}.dmg
+            DoomCode-${{ env.VERSION }}.zip
           generate_release_notes: true
           body: |
             ## 📦 Installation
 
             **DMG (recommended):**
-            1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
-            2. Open it and drag **DoomCoder** into your Applications folder
+            1. Download **`DoomCode-${{ env.VERSION }}.dmg`** below
+            2. Open it and drag **DoomCode** into your Applications folder
             3. Launch — no Gatekeeper warnings, no "unidentified developer" prompts
 
             **ZIP:**
-            1. Download **`DoomCoder-${{ env.VERSION }}.zip`**
-            2. Unzip and move `DoomCoder.app` to `/Applications`
+            1. Download **`DoomCode-${{ env.VERSION }}.zip`**
+            2. Unzip and move `DoomCode.app` to `/Applications`
 
-            DoomCoder is **signed with a Developer ID and notarized by Apple**.
+            DoomCode is **signed with a Developer ID and notarized by Apple**.
             Existing users receive automatic updates via the built-in Sparkle updater.
 
             ---
-            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/docs/CHANGELOG.md)
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Code/blob/main/docs/CHANGELOG.md)
 
       - name: Clean up keychain
         if: always()

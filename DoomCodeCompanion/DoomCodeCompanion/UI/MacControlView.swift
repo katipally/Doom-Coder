@@ -1,4 +1,4 @@
-// MacControlView.swift — DoomCoder Companion
+// MacControlView.swift — DoomCode Companion
 // The "Your Mac" remote-control card. Lets the user drive the Mac's master
 // suspend gate (on/off) and keep-awake state (Off / On / Auto), screen
 // behaviour, and auto-off timer from iOS.
@@ -18,7 +18,7 @@
 // future PR.
 
 import SwiftUI
-import DoomCoderCore
+import DoomCodeCore
 
 /// Auto-off timer choices (hours; 0 = never).
 private let timerChoices: [Int] = [0, 1, 2, 4, 8]
@@ -219,7 +219,7 @@ struct MacControlCard: View {
     private var masterRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("DoomCoder")
+                Text("Doom Code")
                     .font(.subheadline.weight(.semibold))
                 Text(masterEnabled ? "Active on your Mac" : "Suspended — nothing is running")
                     .font(.caption)
@@ -231,7 +231,7 @@ struct MacControlCard: View {
                 set: { onChangeMaster($0) }
             ))
             .labelsHidden()
-            .accessibilityLabel("DoomCoder on your Mac")
+            .accessibilityLabel("DoomCode on your Mac")
             .accessibilityValue(masterEnabled ? "On" : "Off")
         }
     }
@@ -303,7 +303,7 @@ struct MacControlCard: View {
                 Image(systemName: "moon.zzz.fill")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                Text("Suspended — turn DoomCoder on to control your Mac")
+                Text("Suspended — turn DoomCode on to control your Mac")
             } else {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(awakeActive ? .green : .secondary)
@@ -383,7 +383,7 @@ struct MacControlView: View {
 
     @State private var agentDetailExpanded: Bool = false
 
-    // Renders directly as List sections (DoomCoder master + Keep Awake), mirroring
+    // Renders directly as List sections (DoomCode master + Keep Awake), mirroring
     // the macOS floating panel layout. The Mac device-info header lives in
     // Settings ▸ Connection — the dashboard stays focused on controls + status.
     var body: some View {
@@ -408,7 +408,7 @@ struct MacControlView: View {
         }
     }
 
-    // MARK: - Master section (DoomCoder on/off)
+    // MARK: - Master section (DoomCode on/off)
 
     @ViewBuilder
     private func masterSection(_ mac: MacStatusRecord) -> some View {
@@ -433,7 +433,7 @@ struct MacControlView: View {
                     .opacity(masterEnabled ? 1.0 : 0.5)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("DoomCoder").font(.body.weight(.semibold))
+                    Text("Doom Code").font(.body.weight(.semibold))
                     Text(masterSubtitle(mac))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -453,7 +453,7 @@ struct MacControlView: View {
                     }
                 ))
                 .labelsHidden()
-                .accessibilityLabel("DoomCoder on your Mac")
+                .accessibilityLabel("DoomCode on your Mac")
                 .accessibilityValue(masterEnabled ? "On" : "Off")
             }
             .padding(.vertical, 2)

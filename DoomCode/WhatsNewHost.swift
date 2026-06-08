@@ -14,7 +14,7 @@ import AppKit
 // version has been marked as seen).
 //
 // This view is hosted by a SwiftUI `Window(id: "whatsNew")` scene in
-// `DoomCoderApp.swift`. The window is `.floating` (so it appears above
+// `DoomCodeApp.swift`. The window is `.floating` (so it appears above
 // other apps) and uses default title-bar close behaviour (so the user
 // can dismiss with the traffic-light X).
 
@@ -36,7 +36,7 @@ public struct WhatsNewHost: View {
                         .accessibilityHidden(true)
                     Text("You're all caught up.")
                         .font(.title3.weight(.semibold))
-                    Text("DoomCoder has no new features to announce right now.")
+                    Text("DoomCode has no new features to announce right now.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -2,9 +2,9 @@ import Foundation
 import UserNotifications
 import AppKit
 import OSLog
-import DoomCoderCore
+import DoomCodeCore
 
-// Fan-out for DoomCoder agent notifications. Honors the TrackingStore
+// Fan-out for DoomCode agent notifications. Honors the TrackingStore
 // per-agent opt-out and the global ChannelStore (macOS local + ntfy).
 // Minimal content only — no prompt text, no file paths over ntfy. 5-second
 // dedupe window per (session, event).
@@ -58,7 +58,7 @@ final class NotificationDispatcher {
         }
     }
 
-    /// Opens System Settings → Notifications → DoomCoder. Used when status
+    /// Opens System Settings → Notifications → DoomCode. Used when status
     /// is `.denied` and the user wants to re-enable.
     func openSystemSettings() {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.doomcoder.app"
@@ -78,7 +78,7 @@ final class NotificationDispatcher {
     func dispatch(_ ev: Event) {
         // Master switch off → fully suppress all notifications. Hook socket
         // keeps running, live events still update the UI; only outbound
-        // alerts are muted until the user re-enables DoomCoder.
+        // alerts are muted until the user re-enables DoomCode.
         let masterEnabled = UserDefaults.standard.object(forKey: "doomcoder.masterEnabled") as? Bool ?? true
         guard masterEnabled else { return }
 
@@ -93,7 +93,7 @@ final class NotificationDispatcher {
         case .dropped(let emitWarning):
             if emitWarning {
                 postLocal(
-                    title: "DoomCoder · rate-limited",
+                    title: "DoomCode · rate-limited",
                     body: "Throttling \(ev.agent.displayName) notifications — too many in a short time.",
                     threadID: "ratelimit::\(ev.agent.rawValue)",
                     agent: ev.agent
@@ -149,10 +149,10 @@ final class NotificationDispatcher {
                 requestPermission { granted in cont.resume(returning: granted) }
             }
             guard ok else { return false }
-            postLocal(title: "DoomCoder", body: "macOS notifications are working ✨", threadID: "test")
+            postLocal(title: "Doom Code", body: "macOS notifications are working ✨", threadID: "test")
             return true
         case .cloudKit:
-            postCloudKit(ev: nil, title: "DoomCoder", body: "iPhone push channel is working ✨")
+            postCloudKit(ev: nil, title: "Doom Code", body: "iPhone push channel is working ✨")
             return true
         }
     }
@@ -335,7 +335,7 @@ final class NotificationDispatcher {
     /// iPhone can reach this Mac end-to-end. Grouped under its own thread so it
     /// never mingles with agent-event notifications.
     func postCheckNotification() {
-        postLocal(title: "DoomCoder",
+        postLocal(title: "Doom Code",
                   body: "Connection check from your iPhone ✨",
                   threadID: "check")
     }

@@ -8,8 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SRC="assets/Agent-logos"
-MAC="DoomCoder/Assets.xcassets"
-IOS="DoomCoderCompanion/DoomCoderCompanion/Resources/Assets.xcassets"
+MAC="DoomCode/Assets.xcassets"
+IOS="DoomCodeCompanion/DoomCodeCompanion/Resources/Assets.xcassets"
 
 # source_basename:imageset_name
 mappings=(

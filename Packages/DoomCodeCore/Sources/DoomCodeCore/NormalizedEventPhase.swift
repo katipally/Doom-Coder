@@ -18,7 +18,7 @@ public enum NormalizedEventPhase: String, Codable, Sendable, CaseIterable {
     // Opt-in coverage phases (default OFF in the gate). Added so events that
     // were previously dropped to `.other` can become notifiable. New cases
     // MUST be mirrored byte-identically in the Mac-side enum
-    // (DoomCoder/AgentTracking/AgentEventNormalizer.swift).
+    // (DoomCode/AgentTracking/AgentEventNormalizer.swift).
     case fileEdit
     case compaction
     case thinking

@@ -1,4 +1,4 @@
-// ConnectFlowView.swift — DoomCoder Companion
+// ConnectFlowView.swift — DoomCode Companion
 // "Add Device" sheet for the iOS companion.
 //
 // iOS 26 design:
@@ -22,7 +22,7 @@ import SwiftUI
 import CloudKit
 import AVFoundation
 import UIKit
-import DoomCoderCore
+import DoomCodeCore
 
 // MARK: - Root sheet
 
@@ -97,7 +97,7 @@ struct ConnectFlowView: View {
             PhaseHero(
                 symbol: "icloud",
                 title: "Checking iCloud…",
-                detail: "DoomCoder uses iCloud to sync with your Mac.",
+                detail: "DoomCode uses iCloud to sync with your Mac.",
                 showSpinner: true
             )
 
@@ -218,7 +218,7 @@ struct ConnectFlowView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(isLooking ? "Looking for Macs on your iCloud…" : "No Macs found on your iCloud yet.")
                                 .font(.callout)
-                            Text("Open DoomCoder on your Mac and make sure it's signed in to the same iCloud account.")
+                            Text("Open Doom Code on your Mac and make sure it's signed in to the same iCloud account.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -237,8 +237,8 @@ struct ConnectFlowView: View {
                 }
 
                 ConnectionGuide(title: "How do I connect?", steps: [
-                    "On your Mac, open **DoomCoder** and sign in to the **same iCloud account** (the same Apple ID as this iPhone).",
-                    "Click the **DoomCoder icon** in the Mac menu bar ▸ **Configure Agents…** ▸ **Connections**.",
+                    "On your Mac, open **DoomCode** and sign in to the **same iCloud account** (the same Apple ID as this iPhone).",
+                    "Click the **DoomCode icon** in the Mac menu bar ▸ **Configure Agents…** ▸ **Connections**.",
                     "Wait until it shows **“Ready as [your Mac]”**.",
                     "Your Mac appears above — tap **Connect**."
                 ])
@@ -306,7 +306,7 @@ struct ConnectFlowView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 ConnectionGuide(title: "How do I get the QR code?", steps: [
-                    "On your Mac, click the **DoomCoder icon** in the menu bar ▸ **Configure Agents…**",
+                    "On your Mac, click the **DoomCode icon** in the menu bar ▸ **Configure Agents…**",
                     "Open the **Connections** tab, then click **Add Device…**",
                     "A **QR code** and **invite link** appear on your Mac.",
                     "**Scan** the QR below, or **paste** the link."
@@ -396,7 +396,7 @@ struct ConnectFlowView: View {
         guard let url = URL(string: trimmed),
               (url.scheme == "https" || url.scheme == "http"),
               (url.host?.contains("icloud.com") == true) else {
-            pairingError = "That doesn't look like a DoomCoder invite link. Copy the link (or scan the QR) shown on your Mac under Configure Agents ▸ Connections ▸ Add Device."
+            pairingError = "That doesn't look like a DoomCode invite link. Copy the link (or scan the QR) shown on your Mac under Configure Agents ▸ Connections ▸ Add Device."
             step = .chooser
             return
         }
@@ -412,7 +412,7 @@ struct ConnectFlowView: View {
             select(newest.macId)
         } else {
             pairingError = ok
-                ? "Connected, but your Mac hasn't synced yet. Make sure DoomCoder is open on your Mac, then try again."
+                ? "Connected, but your Mac hasn't synced yet. Make sure DoomCode is open on your Mac, then try again."
                 : "Couldn't connect with that invite. Make sure the QR/link on your Mac is current, then try again."
             step = .chooser
         }
@@ -772,12 +772,12 @@ struct QRScannerSheet: UIViewControllerRepresentable {
             permissionDenied = true
             let label = UILabel()
             label.translatesAutoresizingMaskIntoConstraints = false
-            label.text = "Camera access is required to scan the QR code.\nEnable it in Settings → DoomCoder."
+            label.text = "Camera access is required to scan the QR code.\nEnable it in Settings → DoomCode."
             label.numberOfLines = 0
             label.textAlignment = .center
             label.textColor = .white
             label.font = .preferredFont(forTextStyle: .callout)
-            label.accessibilityLabel = "Camera access is required to scan the QR code. Enable it in Settings, DoomCoder."
+            label.accessibilityLabel = "Camera access is required to scan the QR code. Enable it in Settings, DoomCode."
             view.addSubview(label)
             NSLayoutConstraint.activate([
                 label.centerXAnchor.constraint(equalTo: view.centerXAnchor),

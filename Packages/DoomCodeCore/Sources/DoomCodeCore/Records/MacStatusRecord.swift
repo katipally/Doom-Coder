@@ -13,7 +13,7 @@ public struct MacStatusRecord: Sendable, Codable, Equatable {
     public var name: String
     public var version: String
     public var sleepActive: Bool
-    public var mode: String          // DoomCoderMode rawValue: "screenOn" | "screenOff"
+    public var mode: String          // DoomCodeMode rawValue: "screenOn" | "screenOff"
     public var sessionEndsAt: Date?
     public var lastSeen: Date
     public var thermalState: String

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import CloudKit
-@testable import DoomCoderCore
+@testable import DoomCodeCore
 
 @Suite("Shared-zone sync contract (v3)")
 struct SharedZoneSyncTests {

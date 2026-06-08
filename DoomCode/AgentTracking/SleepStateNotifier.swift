@@ -1,6 +1,6 @@
 import Foundation
 import UserNotifications
-import DoomCoderCore
+import DoomCodeCore
 
 /// Posts system-level sleep control notifications through both the local
 /// macOS notification center and the CloudKit pipeline so iOS also receives
@@ -33,13 +33,13 @@ final class SleepStateNotifier {
         var body: String {
             switch self {
             case .agents(let names):
-                if names.isEmpty { return "DoomCoder is holding sleep for your agents." }
+                if names.isEmpty { return "DoomCode is holding sleep for your agents." }
                 if names.count == 1 { return "\(names[0]) is working." }
                 return "\(names.prefix(2).joined(separator: " & ")) are working."
             case .userActive:
-                return "You're active — DoomCoder is holding sleep."
+                return "You're active — DoomCode is holding sleep."
             case .snoozed:
-                return "Snooze active — DoomCoder is holding sleep."
+                return "Snooze active — DoomCode is holding sleep."
             }
         }
     }

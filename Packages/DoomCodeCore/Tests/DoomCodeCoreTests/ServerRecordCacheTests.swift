@@ -1,14 +1,14 @@
 import Foundation
 import Testing
 import CloudKit
-@testable import DoomCoderCore
+@testable import DoomCodeCore
 
 @Suite("ServerRecordCache concurrency")
 struct ServerRecordCacheTests {
 
     /// Per-test isolated `UserDefaults` instance so concurrent tests cannot
     /// trample each other on the standard suite.
-    private func makeCache(suiteName: String = "DoomCoderCoreTests-\(UUID().uuidString)") -> (ServerRecordCache, UserDefaults) {
+    private func makeCache(suiteName: String = "DoomCodeCoreTests-\(UUID().uuidString)") -> (ServerRecordCache, UserDefaults) {
         let defaults = UserDefaults(suiteName: suiteName)!
         let cache = ServerRecordCache(defaults: defaults, key: "test-cache")
         return (cache, defaults)
