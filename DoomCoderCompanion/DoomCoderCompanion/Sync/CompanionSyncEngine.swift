@@ -926,13 +926,22 @@ final class CompanionSyncEngine: NSObject {
     // MARK: - Subscriptions
 
     private func ensureSubscriptions() async {
-        // Silent content-available subscriptions on BOTH databases: the private DB
-        // catches same-Apple-ID Macs; the shared DB catches different-account Macs.
+        // Silent content-available subscriptions on BOTH databases: they wake the
+        // app to fetch background DATA (MacStatus, AgentConfig, Activity log) and
+        // are the ONLY option the shared database allows.
         await setupDatabaseSubscription(on: privateDB, id: "companion-private-db-sub-v1")
         await setupDatabaseSubscription(on: sharedDB, id: "companion-shared-db-sub-v1")
-        // Clean up legacy private-DB query subscriptions: CKQuerySubscription is
-        // NOT supported on the shared database, so visible notifications are now
-        // delivered as LOCAL notifications after a silent-push fetch.
+
+        // VISIBLE alert push for NotificationLog on the PRIVATE database. Silent
+        // pushes are best-effort (dropped when the app is force-quit, throttled to
+        // a few per hour), which is why same-Apple-ID Macs stopped delivering timely
+        // background notifications. A CKQuerySubscription carries the Mac-rendered
+        // title/body directly in `aps.alert`, so iOS shows the banner even when the
+        // app is not running. CKQuerySubscription is private-DB only — cross-account
+        // (shared DB) Macs fall back to the silent-push → local-notification path.
+        await setupNotificationLogQuerySubscription(on: privateDB)
+
+        // Clean up truly legacy private-DB query subscriptions (pre-v10 IDs).
         for legacyID in ["notif-log-v6", "notif-log-v7", "notif-log-v8", "notif-log-v9"] {
             _ = try? await privateDB.deleteSubscription(withID: legacyID)
             _ = try? await sharedDB.deleteSubscription(withID: legacyID)
@@ -955,6 +964,48 @@ final class CompanionSyncEngine: NSObject {
         }
     }
 
+    /// Visible alert push for NotificationLog on the PRIVATE database (same-Apple-ID
+    /// Macs). `CKQuerySubscription` is private-DB only; it carries the Mac-rendered
+    /// title/body directly in `aps.alert` via localization-arg substitution, so iOS
+    /// shows the banner even if the app is force-quit and the NSE never runs. The NSE
+    /// (NotificationService.swift) enriches it with the agent icon, thread identifier,
+    /// and interruption level. The silent DB subscription still handles background
+    /// DATA sync; this one guarantees the user-visible notification.
+    private func setupNotificationLogQuerySubscription(on database: CKDatabase) async {
+        let sub = CKQuerySubscription(
+            recordType: CloudKitConstants.RecordType.notificationLog,
+            predicate: NSPredicate(value: true),   // value:true → no queryable-field requirement
+            subscriptionID: "companion-notiflog-private-v10",
+            options: .firesOnRecordCreation
+        )
+        // Do NOT set sub.zoneID: per-Mac zone names vary and aren't known until a
+        // MacStatus is fetched. A database-wide query subscription fires for the
+        // record type across ALL custom zones in the private database.
+        let info = CKSubscription.NotificationInfo()
+        // "%@" + a single CKRecord field name substitutes that field's value verbatim
+        // into aps.alert.title / aps.alert.body, so the OS shows the right text even
+        // if the NSE never runs.
+        info.titleLocalizationKey  = "%@"
+        info.titleLocalizationArgs = ["title"]
+        info.alertLocalizationKey  = "%@"
+        info.alertLocalizationArgs = ["body"]
+        info.shouldSendMutableContent = true       // invoke the NSE on each push
+        info.soundName = "default"
+        // CloudKit hard limit: 5 desiredKeys.
+        //   title/body → aps.alert + NSE fallback; agent → icon + interruption level;
+        //   phase → interruption level; sessionKey → UNNotification threadIdentifier.
+        info.desiredKeys = ["title", "body", "agent", "phase", "sessionKey"]
+        sub.notificationInfo = info
+        do {
+            try await database.save(sub)
+            print("[CompanionSyncEngine] notiflog query sub v10 registered")
+        } catch let e as CKError where e.code == .serverRejectedRequest || e.code == .unknownItem {
+            print("[CompanionSyncEngine] notiflog query sub v10 already exists")
+        } catch {
+            print("[CompanionSyncEngine] notiflog query sub error: \(error)")
+        }
+    }
+
     // MARK: - Record fan-out
 
     @MainActor
@@ -972,10 +1023,15 @@ final class CompanionSyncEngine: NSObject {
 
             case CloudKitConstants.RecordType.notificationLog:
                 if let r = NotificationLogRecord(record) {
-                    NotificationLogStore.shared.append(r)
-                    // Shared DB can't use a query subscription, so the silent push
-                    // brought us here — post a local notification for fresh events.
-                    self.postLocalNotification(for: r)
+                    NotificationLogStore.shared.append(r)        // Activity log — both scopes
+                    // Only the SHARED database lacks a visible query subscription, so
+                    // the silent push brought us here and we must render the banner
+                    // ourselves. PRIVATE-DB records already get a visible alert push
+                    // (setupNotificationLogQuerySubscription) — posting again here
+                    // would double-deliver, so skip them.
+                    if scope == .sharedDB {
+                        self.postLocalNotification(for: r)
+                    }
                 }
 
             case CompanionStatusRecord.recordType:
@@ -1071,9 +1127,13 @@ final class CompanionSyncEngine: NSObject {
             return
         }
 
-        // Only surface recent events (avoid a banner storm on incremental
-        // re-fetches that replay slightly-stale records).
-        guard Date().timeIntervalSince(r.ts) < 120 else { return }
+        // Only surface reasonably-recent events (avoid a banner storm on incremental
+        // re-fetches that replay stale records). This path is the SHARED-DB best-
+        // effort delivery: silent pushes are routinely throttled/delayed past two
+        // minutes, so a tight window silently dropped legitimate notifications. Use a
+        // generous window and rely on `postedNotifIds` dedup + the first-fetch backlog
+        // suppression above to prevent duplicates/storms.
+        guard Date().timeIntervalSince(r.ts) < 15 * 60 else { return }
 
         // O(1) dedup via in-memory Set; persisted to UserDefaults for next launch.
         guard !postedNotifIds.contains(r.notifId) else { return }
