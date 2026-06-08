@@ -245,7 +245,7 @@ struct DashboardView: View {
                 .background(Color(.secondarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-                noMacReminder
+                tryStandalone
 
                 Link(destination: downloadURL) {
                     Label("Download DoomCoder for Mac", systemImage: "arrow.down.circle.fill")
@@ -261,23 +261,58 @@ struct DashboardView: View {
         .background(Color(.systemGroupedBackground))
     }
 
-    private var noMacReminder: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "wrench.and.screwdriver")
-                .foregroundStyle(.tint)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("No Mac? No problem.")
-                    .font(.subheadline.weight(.semibold))
-                Text("The Tools tab — the AI prompt composer and smart notes — works fully on this device without connecting anything.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+    /// Actionable "works without a Mac" card. Each row jumps to a fully standalone
+    /// feature so the app has clear minimum functionality even before any Mac is
+    /// paired (App Store 4.2.3). Reminders live inside a note, so that row also
+    /// routes to the Notes tab.
+    private var tryStandalone: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("No Mac? Try these now")
+                .font(.subheadline.weight(.semibold))
+            Text("Prompts and Notes work fully on this device — no Mac, account, or internet needed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+            standaloneRow("Refine a prompt", "sparkles") {
+                Haptics.tap(); router.selectedTab = .prompts
+            }
+            Divider()
+            standaloneRow("Add a note", "note.text") {
+                Haptics.tap(); router.selectedTab = .notes
+            }
+            Divider()
+            standaloneRow("Set a reminder", "bell") {
+                Haptics.tap(); router.selectedTab = .notes
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func standaloneRow(_ title: String, _ symbol: String,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .foregroundStyle(.tint)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
