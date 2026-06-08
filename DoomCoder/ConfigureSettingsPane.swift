@@ -116,6 +116,9 @@ struct ConfigureSettingsPane: View {
 
             Section("Diagnostics") {
                 Button("Reveal Logs") { NSWorkspace.shared.open(AgentLogDir.url) }
+                Text("Opens DoomCoder's local log folder in Finder. Handy if something isn't working and you want to inspect or share the logs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

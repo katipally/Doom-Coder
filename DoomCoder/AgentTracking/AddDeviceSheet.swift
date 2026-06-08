@@ -56,7 +56,7 @@ struct AddDeviceSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add Device")
                         .font(.title2.bold())
-                    Text("Scan with iPhone or iPad")
+                    Text("Pair an iPhone or iPad")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -65,12 +65,51 @@ struct AddDeviceSheet: View {
 
             qrBlock
 
+            pairingPaths
+
             if !coordinator.participants.isEmpty {
                 participantsDisclosure
             }
 
             Spacer(minLength: 0)
         }
+    }
+
+    /// Clarifies the two ways to pair so a new user knows the QR is only needed
+    /// for a *different* Apple ID — same-iCloud devices appear on their own.
+    @ViewBuilder
+    private var pairingPaths: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            pairingHint(
+                symbol: "person.crop.rectangle.stack.fill",
+                text: "**Same Apple ID?** No need to scan. Just open DoomCoder on your iPhone or iPad (signed in to the same iCloud) — this Mac appears automatically under Dashboard."
+            )
+            Divider().opacity(0.4)
+            pairingHint(
+                symbol: "qrcode",
+                text: "**Different Apple ID?** Scan the code above with the device’s Camera, or send the invite link. Open it, then tap **Add Device ▸ Different iCloud**."
+            )
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func pairingHint(symbol: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.callout)
+                .foregroundStyle(.tint)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            Text(.init(text))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

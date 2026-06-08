@@ -169,25 +169,39 @@ struct ActivityView: View {
     // MARK: - Filter row
 
     private var filterRow: some View {
-        HStack(spacing: 12) {
-            Picker("View", selection: $filter) {
-                ForEach(Filter.allCases) { f in Text(f.rawValue).tag(f) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Picker("View", selection: $filter) {
+                    ForEach(Filter.allCases) { f in Text(f.rawValue).tag(f) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
 
-            Spacer()
+                Spacer()
 
-            Picker("Sort", selection: $sortOrder) {
-                ForEach(SortOrder.allCases) { o in Text(o.rawValue).tag(o) }
+                Picker("Sort", selection: $sortOrder) {
+                    ForEach(SortOrder.allCases) { o in Text(o.rawValue).tag(o) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize()
+            Text(filterHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// One-line explanation of the currently selected Activity view.
+    private var filterHint: String {
+        switch filter {
+        case .sessions:      return "Each agent run, grouped from start to finish."
+        case .notifications: return "Only the events that triggered an alert you received."
+        case .raw:           return "Every raw hook event, newest first — the full firehose."
+        }
     }
 
     // MARK: - Content (switches on the filter)
