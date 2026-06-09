@@ -1,7 +1,5 @@
 # Code of Conduct
 
-## The short version
-
 Be decent to people. Treat everyone with respect, whether you agree with them or not. This project is a welcoming place for anyone who wants to help, regardless of who they are or where they come from.
 
 ## What we expect
