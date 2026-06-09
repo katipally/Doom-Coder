@@ -17,7 +17,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Persist this token for the later `git push` of the version bump +
+          # appcast.xml back to main. When `main` is protected by a branch
+          # ruleset, the default GITHUB_TOKEN (github-actions[bot]) cannot push
+          # to it, so set a RELEASE_PAT secret — a fine-grained PAT owned by a
+          # repo admin with Contents: write — and the push bypasses as that
+          # admin. Falls back to GITHUB_TOKEN when no PAT is set (e.g. an
+          # unprotected fork), so nothing breaks without it.
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Set version from tag
@@ -488,7 +495,14 @@ jobs:
 
             git fetch origin main
 
-            if ! git pull --rebase -X theirs origin main; then
+            # --autostash: the archive/notarize/dmg steps that ran earlier can
+            # leave stray unstaged changes in tracked files (e.g. Xcode rewriting
+            # a pbxproj). Without it, `git pull --rebase` aborts with "you have
+            # unstaged changes" and we waste an attempt falling back to the hard
+            # reset below. Autostash shelves those build-time changes for the
+            # rebase and restores them after; we never commit them, so a noisy
+            # pop is harmless — the push below only sends committed history.
+            if ! git pull --rebase --autostash -X theirs origin main; then
               git rebase --abort || true
               git reset --hard "origin/main"
               bump_versions
