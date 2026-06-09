@@ -116,7 +116,8 @@ struct DataAndPrivacyView: View {
             } header: {
                 Text("Reset")
             } footer: {
-                Text("Erases everything on this device — prompts, notes, AI keys, cached data and paired Macs — AND removes this device's data from iCloud, so old agents and notifications don't sync back. This can’t be undone. The app will close when it’s done.")
+                Text("Erases everything on this device — prompts, notes, AI keys, cached data and paired Macs — AND removes this device's data from iCloud, so old agents and notifications don't sync back. "
+                     + "This can’t be undone. The app will close when it’s done.")
             }
         }
         .navigationTitle("Data & Privacy")
@@ -141,7 +142,8 @@ struct DataAndPrivacyView: View {
             Button("Erase Everything", role: .destructive) { runErase() }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This wipes all data on this device and deletes this device's zones from iCloud, then closes the app.\n\nIf a Mac on the same iCloud account is still running, it owns its data and may re-publish it — run Erase All Data on the Mac too for a permanent clean slate.")
+            Text("This wipes all data on this device and deletes this device's zones from iCloud, then closes the app.\n\n"
+                 + "If a Mac on the same iCloud account is still running, it owns its data and may re-publish it — run Erase All Data on the Mac too for a permanent clean slate.")
         }
         .alert("Data erased", isPresented: $showEraseDone) {
             Button("Close Doom Coder") { exit(0) }

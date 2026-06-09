@@ -159,6 +159,7 @@ private struct DCProcBSDShortInfo {
     var pbsi_ppid: UInt32 = 0     // offset  4
     var pbsi_pgid: UInt32 = 0     // offset  8
     var pbsi_status: UInt32 = 0   // offset 12
+    // swiftlint:disable:next large_tuple — fixed 16-member C-ABI mirror of MAXCOMLEN; arity cannot change.
     var pbsi_comm: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar,
                     CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) =
         (0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0) // offset 16, 16 bytes (MAXCOMLEN)

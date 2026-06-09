@@ -110,6 +110,7 @@ struct AgentInstallerV2 {
             }
             let postHash = sha256(of: path) ?? "?"
             let n = expectedEvents(for: agent).count
+            // swiftlint:disable:next line_length — single structured OSLog line; keep one line for grep-able diagnostics.
             logger.notice("installer op=install agent=\(agent.rawValue, privacy: .public) pre_hash=\(preHash, privacy: .public) post_hash=\(postHash, privacy: .public) events_asserted=\(n)/\(n) backup=\(backupPath ?? "-", privacy: .public) outcome=ok")
             NotificationCenter.default.post(name: .agentInstalledStateChanged, object: nil, userInfo: ["agent": agent.rawValue, "installed": true])
             return .success(())
