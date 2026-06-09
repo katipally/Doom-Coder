@@ -460,6 +460,39 @@ jobs:
             --size "${{ env.ZIP_SIZE }}" \
             --download-url "https://github.com/katipally/Doom-Coder/releases/download/${{ env.TAG }}/DoomCoder-${{ env.VERSION }}.zip"
 
+      # Publish the GitHub Release (with the notarized DMG + ZIP) BEFORE the
+      # appcast push to main. The deliverable users actually download must not
+      # depend on the bookkeeping commit succeeding — if the protected-branch
+      # push ever fails, the release is already live and recoverable. It also
+      # guarantees the appcast's download URL resolves the moment it lands.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3.0.0
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        with:
+          name: "Doom Coder ${{ env.TAG }}"
+          files: |
+            DoomCoder-${{ env.VERSION }}.dmg
+            DoomCoder-${{ env.VERSION }}.zip
+          generate_release_notes: true
+          body: |
+            ## 📦 Installation
+
+            **DMG (recommended):**
+            1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
+            2. Open it and drag **DoomCoder** into your Applications folder
+            3. Launch — no Gatekeeper warnings, no "unidentified developer" prompts
+
+            **ZIP:**
+            1. Download **`DoomCoder-${{ env.VERSION }}.zip`**
+            2. Unzip and move `DoomCoder.app` to `/Applications`
+
+            DoomCoder is **signed with a Developer ID and notarized by Apple**.
+            Existing users receive automatic updates via the built-in Sparkle updater.
+
+            ---
+            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/docs/CHANGELOG.md)
+
       - name: Commit version bump and appcast.xml
         run: |
           git config user.name "github-actions[bot]"
@@ -523,36 +556,10 @@ jobs:
             sleep $((attempt * 2))
           done
 
-          echo "::error::Failed to push version bump after 5 attempts"
+          echo "::error::appcast.xml/version-bump push to main failed after 5 attempts."
+          echo "::error::The GitHub Release IS already published — only the Sparkle"
+          echo "::error::auto-update feed (appcast.xml on main) is stale. See README/RELEASING."
           exit 1
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.0
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          name: "Doom Coder ${{ env.TAG }}"
-          files: |
-            DoomCoder-${{ env.VERSION }}.dmg
-            DoomCoder-${{ env.VERSION }}.zip
-          generate_release_notes: true
-          body: |
-            ## 📦 Installation
-
-            **DMG (recommended):**
-            1. Download **`DoomCoder-${{ env.VERSION }}.dmg`** below
-            2. Open it and drag **DoomCoder** into your Applications folder
-            3. Launch — no Gatekeeper warnings, no "unidentified developer" prompts
-
-            **ZIP:**
-            1. Download **`DoomCoder-${{ env.VERSION }}.zip`**
-            2. Unzip and move `DoomCoder.app` to `/Applications`
-
-            DoomCoder is **signed with a Developer ID and notarized by Apple**.
-            Existing users receive automatic updates via the built-in Sparkle updater.
-
-            ---
-            Full changelog: [CHANGELOG.md](https://github.com/katipally/Doom-Coder/blob/main/docs/CHANGELOG.md)
 
       - name: Clean up keychain
         if: always()
