@@ -29,6 +29,19 @@ git tag ios-v2.7.0
 git push origin ios-v2.7.0
 ```
 
+> **The tag name has to be exact.** The macOS workflow only fires on tags
+> matching `v[0-9]*` and the iOS workflow only on `ios-v[0-9]*`. A tag like
+> `v.2.7.1` (note the stray dot after `v`) matches **neither**, so nothing
+> runs and no release is cut — with no error shown anywhere. Always tag
+> `v2.7.1`, never `v.2.7.1`. If you mistag, delete it and push the right one:
+>
+> ```
+> git tag -d v.2.7.1
+> git push origin :refs/tags/v.2.7.1   # delete the bad tag on GitHub
+> git tag v2.7.1
+> git push origin v2.7.1
+> ```
+
 ---
 
 ## macOS release (existing, unchanged)
@@ -46,9 +59,28 @@ git push origin ios-v2.7.0
    - Updates `appcast.xml`. Running Mac clients pick up the update the
      next time Sparkle polls.
 
-Required secrets/vars (already configured):
-`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`,
-`APPLE_TEAM_ID`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `SPARKLE_ED_PRIVATE_KEY`.
+Required GitHub **secrets** (Settings → Secrets and variables → Actions),
+all already configured:
+
+| Secret | What it is |
+| ------ | ---------- |
+| `APPLE_CERTIFICATE` | base64 of the Developer ID Application certificate (`.p12`) |
+| `APPLE_CERTIFICATE_PASSWORD` | password for that `.p12` |
+| `KEYCHAIN_PASSWORD` | any random string — a throwaway keychain on the runner |
+| `MAC_PROVISIONING_PROFILE` | base64 of the `DoomCoder Mac DevID` profile (`.provisionprofile`) |
+| `APPLE_TEAM_ID` | Apple Developer Team ID (e.g. `A9P2388PHM`) |
+| `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_PRIVATE_KEY` | App Store Connect API key used by `xcodebuild` during archive/export |
+| `NOTARIZE_KEY_P8`, `NOTARIZE_KEY_ID`, `NOTARIZE_ISSUER_ID` | App Store Connect API key used by `notarytool` to notarize the `.app` |
+| `SPARKLE_PRIVATE_KEY` | EdDSA private key that signs the Sparkle update |
+
+`GITHUB_TOKEN` is provided automatically — the workflow uses it to publish the
+Release and to push the version bump + `appcast.xml` back to `main`.
+
+> **Added a new entitlement?** You must also enable that capability on the App
+> ID in the Apple Developer portal, regenerate the `DoomCoder Mac DevID`
+> profile, and refresh the `MAC_PROVISIONING_PROFILE` secret. Otherwise the
+> archive fails at sign time. See [Troubleshooting](#troubleshooting) at the
+> bottom.
 
 ---
 
@@ -83,12 +115,17 @@ builds with the same marketing version are typically auto-approved).
    | `IOS_DISTRIBUTION_CERTIFICATE`      | `base64 -i Distribution.p12` of step 3 file       |
    | `IOS_DISTRIBUTION_CERT_PASSWORD`    | Password you used when exporting the .p12         |
    | `IOS_KEYCHAIN_PASSWORD`             | Any random string — used only on the CI runner    |
+   | `IOS_PROVISIONING_PROFILE_APP`      | `base64` of the companion app's App Store profile (`.mobileprovision`) |
+   | `IOS_PROVISIONING_PROFILE_NS`       | `base64` of the NotificationService App Store profile (`.mobileprovision`) |
 
-5. **GitHub repo → Settings → Secrets and variables → Actions → Variables**, add:
+5. **GitHub repo → Settings → Secrets and variables → Actions → Secrets**, add:
 
    | Name              | Value                                             |
    | ----------------- | ------------------------------------------------- |
    | `APPLE_TEAM_ID`   | Your team ID (e.g. `A9P2388PHM`)                  |
+
+   (Both workflows read this as `secrets.APPLE_TEAM_ID`, so add it as a
+   **secret**, not a repository variable.)
 
 ### Cutting an iOS release
 
@@ -102,8 +139,12 @@ builds with the same marketing version are typically auto-approved).
    - Stamps `CFBundleShortVersionString` from the tag and a timestamp-
      based `CFBundleVersion` so every build is monotonically newer.
    - Imports the Apple Distribution cert into a throwaway keychain.
-   - Archives with `-allowProvisioningUpdates` + the App Store Connect
-     API key so Xcode auto-creates the App Store distribution profile.
+   - Installs the two **manual** App Store profiles from the
+     `IOS_PROVISIONING_PROFILE_APP` and `IOS_PROVISIONING_PROFILE_NS`
+     secrets and archives with manual signing (no `-allowProvisioningUpdates`,
+     no cloud signing). Because the profiles are fixed, an entitlement you add
+     to the app or the NotificationService must also be enabled on the matching
+     App ID and the profile regenerated — see [Troubleshooting](#troubleshooting).
    - Exports with `destination=upload` so `xcodebuild` itself uploads to
      App Store Connect (no `altool`, no `Transporter.app`).
 5. **App Store Connect → TestFlight** — the build appears in 5-20 min,
@@ -258,8 +299,14 @@ In **Developer Portal → Certificates, Identifiers & Profiles**:
    into Keychain, then export from Keychain Access as a **.p12** with a
    password. Base64-encode it (`base64 -i AppleDistribution.p12 -o cert.b64`)
    and store as the `IOS_DISTRIBUTION_CERTIFICATE` GitHub secret.
-4. **Profiles** — leave to Xcode automatic signing. The CI workflow
-   uses `-allowProvisioningUpdates` so profiles are minted on demand.
+4. **Profiles** — the CI uses **manual** App Store profiles (not Xcode
+   automatic signing). Create an `App Store` distribution profile for each of
+   `com.doomcoder.app.companion` and
+   `com.doomcoder.app.companion.NotificationService`, download each
+   `.mobileprovision`, and store them base64-encoded as the
+   `IOS_PROVISIONING_PROFILE_APP` and `IOS_PROVISIONING_PROFILE_NS` secrets.
+   Regenerate and re-upload a profile whenever you add a capability to that
+   target (e.g. Push Notifications on the extension).
 
 ### 6. App Store Connect API key (one-time)
 
@@ -329,6 +376,58 @@ changelog and a link to the App Store — no binary attachment.
 
 If you want the GitHub Release to be created automatically on tag
 push, extend `ios-testflight.yml` with a final
-`softprops/action-gh-release@v2` step that publishes notes from
+`softprops/action-gh-release` step that publishes notes from
 `CHANGELOG.md`. We're keeping that manual for now so the Release
 goes live only after Apple actually approves the build.
+
+---
+
+## Troubleshooting
+
+Real problems that have bitten a release, and the fix for each.
+
+### I pushed a tag but no workflow ran
+
+The tag name didn't match the trigger. macOS fires on `v[0-9]*`, iOS on
+`ios-v[0-9]*`. A stray dot (`v.2.7.1`) or a typo matches nothing and runs
+nothing — silently. Delete the bad tag and push the correct one:
+
+```
+git tag -d v.2.7.1
+git push origin :refs/tags/v.2.7.1
+git tag v2.7.1
+git push origin v2.7.1
+```
+
+### Archive fails: "provisioning profile doesn't include the X capability / entitlement"
+
+You added an entitlement to the app (or the NotificationService) but the
+provisioning profile stored in the GitHub secret predates it. The profile and
+the app's entitlements have to match exactly. Fix:
+
+1. Apple Developer portal → **Identifiers** → the matching App ID → enable the
+   capability (e.g. Time Sensitive Notifications, Push Notifications) → Save.
+2. **Profiles** → the affected profile → Edit → regenerate → download it.
+3. Re-encode and update the secret:
+   - Mac: `base64 -i DoomCoder_Mac_DevID.provisionprofile | gh secret set MAC_PROVISIONING_PROFILE`
+   - iOS app: `base64 -i companion_app.mobileprovision | gh secret set IOS_PROVISIONING_PROFILE_APP`
+   - iOS NS: `base64 -i companion_ns.mobileprovision | gh secret set IOS_PROVISIONING_PROFILE_NS`
+4. Re-run the release (`gh run rerun <run-id>`), or delete and re-push the tag.
+
+App IDs for reference: `com.doomcoder.app` (Mac),
+`com.doomcoder.app.companion` (iOS app),
+`com.doomcoder.app.companion.NotificationService` (iOS extension).
+
+### The release succeeded but Mac users don't see the update
+
+The Mac app's Sparkle feed is `appcast.xml` on `main`
+(`https://raw.githubusercontent.com/katipally/Doom-Coder/main/appcast.xml`).
+The release workflow updates and pushes it automatically in the "Commit version
+bump and appcast.xml" step. If the new version isn't showing:
+
+- Confirm the live feed actually serves it:
+  `curl -s https://raw.githubusercontent.com/katipally/Doom-Coder/main/appcast.xml | grep shortVersionString | head -1`.
+  `raw.githubusercontent.com` has a ~5-minute CDN cache, so allow a few minutes.
+- Confirm the push step succeeded (it has a 5-attempt retry; check its log).
+- Sparkle only checks periodically — use "Check for Updates" in the app menu to
+  force it.
