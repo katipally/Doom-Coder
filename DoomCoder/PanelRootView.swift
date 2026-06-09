@@ -177,9 +177,19 @@ struct PanelRootView: View {
                     .opacity(masterEnabled ? 1.0 : 0.5)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Doom Coder")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text("Doom Coder")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text(GlobalHotkey.shared.current.descriptionForUI)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(.quaternary))
+                            .help("Press \(GlobalHotkey.shared.current.descriptionForUI) to open or close Doom Coder from anywhere.")
+                            .accessibilityLabel("Open or close shortcut: \(GlobalHotkey.shared.current.descriptionForUI)")
+                    }
                     Text(masterSubtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

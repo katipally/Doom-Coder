@@ -6,10 +6,10 @@
 
 **Keep your Mac awake. Watch your AI agents. Get pinged on your iPhone the second they need you.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release)](https://github.com/katipally/Doom-Coder/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
-[![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads)](https://github.com/katipally/Doom-Coder/releases)
-[![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github)](https://github.com/katipally/Doom-Coder/stargazers)
+[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases)
+[![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
 [![iOS 26+](https://img.shields.io/badge/iOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
@@ -17,13 +17,28 @@
 
 <br/>
 
-<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="52" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/Download_for_macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
-&nbsp;&nbsp;
-<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="52" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
+<table>
+<tr>
+<td align="center" valign="middle">
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="58" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/⬇%20%20Download%20for%20macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+<br/>
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img alt="Latest macOS version" src="https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=apple&logoColor=white&label=latest&color=111111&cacheSeconds=3600" /></a>
+<br/>
+<sub><b>Doom Coder — the Mac app.</b> Signed & notarized <code>.dmg</code> from GitHub Releases (auto-updates via Sparkle).</sub>
+</td>
+<td align="center" valign="middle">
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="58" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
+<br/>
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img alt="Latest App Store version" src="https://img.shields.io/itunes/v/6772514212?style=flat-square&logo=apple&logoColor=white&label=App%20Store&color=0D96F6&cacheSeconds=3600" /></a>
+<br/>
+<sub><b>The iPhone & iPad companion.</b> Free on the App Store — pairs with the Mac app.</sub>
+</td>
+</tr>
+</table>
 
-<br/><br/>
+<br/>
 
-<sub>macOS app is a signed, notarized <code>.zip</code> from GitHub Releases (auto-updates via Sparkle). The iPhone and iPad companion is free on the App Store.</sub>
+<sub>Once installed, press <kbd>⌥</kbd> <kbd>Space</kbd> (Option + Space) to open Doom Coder from anywhere. It also lives in your menu bar.</sub>
 
 </div>
 
@@ -35,7 +50,7 @@ I kept running into the same dumb problem.
 
 I would kick off a long agent run, Claude Code or Codex chewing through a real task, and then go make coffee or look at my phone. Two things kept happening:
 
-1. My Mac would fall asleep halfway through and the whole run would just die. Come back, screen's black, agent's gone, progress lost.
+1. My Mac would fall asleep halfway through. The moment it sleeps, the network drops and the agent gets suspended, so the run just stalls. I'd come back to a black screen and an agent that had quietly stopped where it left off.
 2. Or the agent would hit a permission prompt thirty seconds after I walked away and then just sit there. Frozen. Waiting on a single yes/no that I had no idea it was asking for. I'd come back ten minutes later to find it had done nothing the entire time.
 
 So I was basically stuck babysitting the screen. I couldn't go do other work, couldn't leave the room, couldn't trust the run to survive without me staring at it. Which kind of defeats the point of having an agent do the work in the first place.

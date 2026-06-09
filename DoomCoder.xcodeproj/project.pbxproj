@@ -68,6 +68,7 @@
 		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
 		DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F04 /* SymbolCatalog.swift */; };
 		DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F05 /* WhatsNewHost.swift */; };
+		DC0000000000002000000F50 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F50 /* WelcomeView.swift */; };
 		DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F06 /* RainbowIdleGlow.swift */; };
 		DC0000000000002000000F10 /* LiveEventRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F10 /* LiveEventRow.swift */; };
 		DC0000000000002000000F11 /* ConnectionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F11 /* ConnectionsCard.swift */; };
@@ -143,6 +144,7 @@
 		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F04 /* SymbolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolCatalog.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F05 /* WhatsNewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHost.swift; sourceTree = "<group>"; };
+		DC0000000000001000000F50 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F06 /* RainbowIdleGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainbowIdleGlow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F10 /* LiveEventRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventRow.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F11 /* ConnectionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsCard.swift; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				DC0000000000001000000F03 /* AppRouter.swift */,
 				DC0000000000001000000F04 /* SymbolCatalog.swift */,
 				DC0000000000001000000F05 /* WhatsNewHost.swift */,
+				DC0000000000001000000F50 /* WelcomeView.swift */,
 				DC0000000000001000000F06 /* RainbowIdleGlow.swift */,
 				DC0000000000001000000003 /* SleepManager.swift */,
 				DC0000000000001000000052 /* ToolsWindow.swift */,
@@ -400,6 +403,7 @@
 				DC0000000000002000000F03 /* AppRouter.swift in Sources */,
 				DC0000000000002000000F04 /* SymbolCatalog.swift in Sources */,
 				DC0000000000002000000F05 /* WhatsNewHost.swift in Sources */,
+				DC0000000000002000000F50 /* WelcomeView.swift in Sources */,
 				DC0000000000002000000F06 /* RainbowIdleGlow.swift in Sources */,
 				DC0000000000002000000009 /* CheckForUpdatesViewModel.swift in Sources */,
 				DC0000000000002000000014 /* ConfigureSettingsPane.swift in Sources */,
@@ -582,7 +586,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2701;
+				CURRENT_PROJECT_VERSION = 2702;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -592,7 +596,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.7.1;
+				MARKETING_VERSION = 2.7.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -610,7 +614,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2701;
+				CURRENT_PROJECT_VERSION = 2702;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -620,7 +624,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.7.1;
+				MARKETING_VERSION = 2.7.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

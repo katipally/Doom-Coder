@@ -82,7 +82,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } else {
             countLabel = master ? "idle" : "suspended"
         }
-        button.toolTip = "Doom Coder — \(countLabel)"
+        let shortcut = GlobalHotkey.shared.current.descriptionForUI
+        button.toolTip = "Doom Coder — \(countLabel)\n\(shortcut) to open or close"
         button.setAccessibilityLabel("Doom Coder — \(countLabel)")
         // macOS 26 menu-bar pattern: dim the icon via contentTintColor
         // (not alphaValue, which would dim the badge title too).
@@ -106,7 +107,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        let open = NSMenuItem(title: "Open Doom Coder", action: #selector(openPanel), keyEquivalent: "")
+        let open = NSMenuItem(title: "Open Doom Coder  (\(GlobalHotkey.shared.current.descriptionForUI))",
+                              action: #selector(openPanel), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
 

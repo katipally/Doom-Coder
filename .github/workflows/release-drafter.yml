@@ -1,0 +1,29 @@
+name: Release Drafter
+
+# Keeps a draft GitHub Release up to date with the changelog for the next
+# version as PRs merge into main. Drafts only, never publishes. Config lives in
+# .github/release-drafter.yml. The actual release is published by release.yml
+# on a v* tag push.
+
+# Runs only on push to main: release-drafter reads its config from the
+# default branch, so a PR introducing or changing the config can't be
+# evaluated until it lands on main. This config is drafting-only (no
+# autolabeler), so there's nothing for it to do on a pull_request anyway.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  update_release_draft:
+    permissions:
+      contents: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
