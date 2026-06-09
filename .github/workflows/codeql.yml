@@ -1,0 +1,82 @@
+name: CodeQL
+
+# Static security analysis. Two independent analyses run in parallel:
+#   • swift   — the macOS app + DoomCoderCore (compiled, then queried for
+#               security issues: injection, unsafe APIs, data flow, etc.)
+#   • actions — the workflow files themselves (script injection, untrusted
+#               ${{ }} interpolation, over-broad permissions). This is what
+#               would have flagged the old release-drafter pull_request_target.
+#
+# Findings appear in the repo's Security tab and as annotations on PRs.
+# Uses the default (high-confidence) query suite — no "extended" pack — so
+# results stay actionable rather than noisy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly re-scan catches newly-published CodeQL queries against code that
+    # hasn't changed. Fixed time (not randomized) so runs are predictable.
+    - cron: "23 5 * * 1"
+
+# Least privilege at the workflow level; the job widens only what it needs.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      security-events: write   # upload SARIF results
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            runner: macos-26
+            build-mode: manual
+          - language: actions
+            runner: ubuntu-latest
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Swift is a compiled language: CodeQL can only see what the compiler
+      # sees, so we build under its tracer. Mirrors the Build Mac (Debug) job
+      # in ci.yml exactly — same scheme, same no-signing flags — so if CI
+      # builds, this builds.
+      - name: Build Swift
+        if: matrix.language == 'swift'
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -resolvePackageDependencies \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder
+          xcodebuild \
+            -project DoomCoder.xcodeproj \
+            -scheme DoomCoder \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
