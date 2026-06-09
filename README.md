@@ -6,10 +6,10 @@
 
 **Keep your Mac awake. Watch your AI agents. Get pinged on your iPhone the second they need you.**
 
-[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release)](https://github.com/katipally/Doom-Coder/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
 [![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases)
-[![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github)](https://github.com/katipally/Doom-Coder/stargazers)
+[![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
 [![iOS 26+](https://img.shields.io/badge/iOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
