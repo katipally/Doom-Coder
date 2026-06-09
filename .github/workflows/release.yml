@@ -17,7 +17,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Persist this token for the later `git push` of the version bump +
+          # appcast.xml back to main. When `main` is protected by a branch
+          # ruleset, the default GITHUB_TOKEN (github-actions[bot]) cannot push
+          # to it, so set a RELEASE_PAT secret — a fine-grained PAT owned by a
+          # repo admin with Contents: write — and the push bypasses as that
+          # admin. Falls back to GITHUB_TOKEN when no PAT is set (e.g. an
+          # unprotected fork), so nothing breaks without it.
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Set version from tag
