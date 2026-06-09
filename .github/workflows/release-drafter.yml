@@ -5,12 +5,14 @@ name: Release Drafter
 # .github/release-drafter.yml. The actual release is published by release.yml
 # on a v* tag push.
 
+# Runs only on push to main: release-drafter reads its config from the
+# default branch, so a PR introducing or changing the config can't be
+# evaluated until it lands on main. This config is drafting-only (no
+# autolabeler), so there's nothing for it to do on a pull_request anyway.
 on:
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
