@@ -488,7 +488,14 @@ jobs:
 
             git fetch origin main
 
-            if ! git pull --rebase -X theirs origin main; then
+            # --autostash: the archive/notarize/dmg steps that ran earlier can
+            # leave stray unstaged changes in tracked files (e.g. Xcode rewriting
+            # a pbxproj). Without it, `git pull --rebase` aborts with "you have
+            # unstaged changes" and we waste an attempt falling back to the hard
+            # reset below. Autostash shelves those build-time changes for the
+            # rebase and restores them after; we never commit them, so a noisy
+            # pop is harmless — the push below only sends committed history.
+            if ! git pull --rebase --autostash -X theirs origin main; then
               git rebase --abort || true
               git reset --hard "origin/main"
               bump_versions
