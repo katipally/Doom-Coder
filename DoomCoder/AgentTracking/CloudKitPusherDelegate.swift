@@ -221,6 +221,7 @@ final class CloudKitPusherDelegate: NSObject, CKSyncEngineDelegate, @unchecked S
                 let mismatch = cmd.targetMacId != pusher.macId
                 let expired  = cmd.isExpired
                 let dup      = appliedSet.contains(cmd.commandId)
+                // swiftlint:disable:next line_length — single structured OSLog line; keep one line for grep-able diagnostics.
                 logger.notice("ckpusher.delegate: DROPPED \(cmd.command, privacy: .public) — targetMismatch=\(mismatch, privacy: .public)(cmd=\(cmd.targetMacId, privacy: .public) mac=\(pusher.macId, privacy: .public)) expired=\(expired, privacy: .public) alreadyApplied=\(dup, privacy: .public)")
             }
             return doneIds   // expired / already-applied records get cleaned up
