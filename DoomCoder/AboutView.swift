@@ -43,6 +43,7 @@ struct AboutView: View {
             Form {
                 LabeledContent("Version", value: version)
                 LabeledContent("Build", value: build)
+                LabeledContent("Open / close shortcut", value: GlobalHotkey.shared.current.descriptionForUI)
                 LabeledContent("Website", value: "github.com/katipally/Doom-Coder")
             }
             .formStyle(.grouped)
