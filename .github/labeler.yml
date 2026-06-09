@@ -1,0 +1,30 @@
+# Auto-labels pull requests based on which files they touch.
+# Used by .github/workflows/labeler.yml (actions/labeler v5 syntax).
+# The labels below must exist in the repo (Settings > Labels).
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+mac:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "DoomCoder/**"
+          - "dc-hook/**"
+
+ios:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "DoomCoderCompanion/**"
+
+core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Packages/**"

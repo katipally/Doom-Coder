@@ -1,0 +1,42 @@
+name: Stale
+
+# Nudges issues and pull requests that have gone quiet, then closes them if
+# nothing happens. Keeps the tracker honest without anyone policing it by hand.
+# Anything labeled pinned, security, help wanted, or good first issue is left
+# alone. Runs once a day.
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: "pinned,security,help wanted,good first issue"
+          exempt-pr-labels: "pinned,security"
+          stale-issue-message: |
+            This issue has been quiet for 60 days, so it is marked stale. If it
+            still matters, drop a comment and we will keep it open. Otherwise it
+            will close in 14 days.
+          stale-pr-message: |
+            This pull request has been quiet for 60 days, so it is marked stale.
+            Comment or push an update to keep it open. Otherwise it will close in
+            14 days. No hard feelings, you can always reopen it.
+          close-issue-message: |
+            Closing this out after no activity. Comment to reopen if it is still
+            relevant.
+          close-pr-message: |
+            Closing this out after no activity. Reopen any time if you want to
+            pick it back up.

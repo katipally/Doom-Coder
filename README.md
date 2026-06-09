@@ -35,7 +35,7 @@ I kept running into the same dumb problem.
 
 I would kick off a long agent run, Claude Code or Codex chewing through a real task, and then go make coffee or look at my phone. Two things kept happening:
 
-1. My Mac would fall asleep halfway through and the whole run would just die. Come back, screen's black, agent's gone, progress lost.
+1. My Mac would fall asleep halfway through. The moment it sleeps, the network drops and the agent gets suspended, so the run just stalls. I'd come back to a black screen and an agent that had quietly stopped where it left off.
 2. Or the agent would hit a permission prompt thirty seconds after I walked away and then just sit there. Frozen. Waiting on a single yes/no that I had no idea it was asking for. I'd come back ten minutes later to find it had done nothing the entire time.
 
 So I was basically stuck babysitting the screen. I couldn't go do other work, couldn't leave the room, couldn't trust the run to survive without me staring at it. Which kind of defeats the point of having an agent do the work in the first place.
