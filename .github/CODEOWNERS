@@ -1,0 +1,9 @@
+# Code owners for Doom Coder.
+#
+# GitHub auto-requests a review from the owner(s) listed here whenever a pull
+# request touches matching files. Right now one person maintains the whole
+# project, so the default owner covers everything. As the project grows, add
+# more specific lines below (more specific paths win over the catch-all).
+
+# Default owner for everything in the repo.
+* @katipally

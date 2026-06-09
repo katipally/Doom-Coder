@@ -163,12 +163,31 @@ final class DoomCoderAppDelegate: NSObject, NSApplicationDelegate, UNUserNotific
             _ = SleepManager.shared
         }
 
-        // Show the highest-version unseen What's New sheet (if any).
-        // `WhatsNewHost` picks the right one and advances on dismiss.
-        // The Window scene is `.defaultLaunchBehavior(.suppressed)` so it
-        // never auto-opens — we open it explicitly here.
-        if WhatsNewVersion.highestUnseen() != nil {
-            Task { @MainActor in
+        // First-launch onboarding vs. What's New. A fresh install gets the
+        // welcome window (its own NSWindow, see WelcomeWindowController);
+        // everyone else falls through to the usual suppressed What's New scene.
+        Task { @MainActor in
+            if !OnboardingState.welcomeSeen {
+                if OnboardingState.looksLikeExistingUser {
+                    // Upgrader on a machine that predates onboarding — they
+                    // already know the ropes. Mark it seen, fall through to
+                    // the usual What's New flow below.
+                    OnboardingState.markWelcomeSeen()
+                } else {
+                    // Genuinely fresh install: show the welcome window and
+                    // suppress the legacy What's New sheets a new user has no
+                    // context for. `WelcomeView` marks the flag on appear.
+                    for v in WhatsNewVersion.allCases {
+                        UserDefaults.standard.set(true, forKey: v.defaultsKey)
+                    }
+                    WelcomeWindowController.shared.show()
+                    return
+                }
+            }
+
+            // Show the highest-version unseen What's New sheet (if any).
+            // `WhatsNewHost` picks the right one and advances on dismiss.
+            if WhatsNewVersion.highestUnseen() != nil {
                 WindowOpener.open(.whatsNew)
             }
         }
