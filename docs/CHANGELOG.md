@@ -90,6 +90,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.7.2] - 2026-06-09
+
+### Added
+
+- **First-launch welcome.** A fresh install now opens a short, plain-language
+  onboarding window: how to open Doom Coder (⌥ Space), a one-tap button to
+  turn on notifications, and a note that Accessibility is optional. Shown
+  once; upgraders never see it.
+
+### Changed
+
+- **README.** Restyled the macOS download as a clickable tile, clarified that
+  macOS is the Doom Coder app and iOS is the companion, surfaced the ⌥ Space
+  shortcut up top, and added per-platform "latest version" badges under each
+  download so users can tell if they're current.
+
+macOS-only release — the iPhone/iPad companion is unchanged.
+
+---
+
 ## [2.7.0] - 2026-06-06
 
 ### Added -- Hooks & notifications overhaul

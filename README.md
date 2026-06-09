@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=github&label=release)](https://github.com/katipally/Doom-Coder/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/katipally/Doom-Coder/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/katipally/Doom-Coder/actions/workflows/ci.yml)
-[![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads)](https://github.com/katipally/Doom-Coder/releases)
+[![Downloads](https://img.shields.io/github/downloads/katipally/Doom-Coder/total?style=flat-square&logo=github&label=downloads&cacheSeconds=3600)](https://github.com/katipally/Doom-Coder/releases)
 [![Stars](https://img.shields.io/github/stars/katipally/Doom-Coder?style=flat-square&logo=github)](https://github.com/katipally/Doom-Coder/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple&logoColor=white)](#)
@@ -17,13 +17,28 @@
 
 <br/>
 
-<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="52" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/Download_for_macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
-&nbsp;&nbsp;
-<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="52" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
+<table>
+<tr>
+<td align="center" valign="middle">
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img height="58" alt="Download Doom Coder for macOS" src="https://img.shields.io/badge/⬇%20%20Download%20for%20macOS-111111?style=for-the-badge&logo=apple&logoColor=white" /></a>
+<br/>
+<a href="https://github.com/katipally/Doom-Coder/releases/latest"><img alt="Latest macOS version" src="https://img.shields.io/github/v/release/katipally/Doom-Coder?style=flat-square&logo=apple&logoColor=white&label=latest&color=111111&cacheSeconds=3600" /></a>
+<br/>
+<sub><b>Doom Coder — the Mac app.</b> Signed & notarized <code>.dmg</code> from GitHub Releases (auto-updates via Sparkle).</sub>
+</td>
+<td align="center" valign="middle">
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="58" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
+<br/>
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img alt="Latest App Store version" src="https://img.shields.io/itunes/v/6772514212?style=flat-square&logo=apple&logoColor=white&label=App%20Store&color=0D96F6&cacheSeconds=3600" /></a>
+<br/>
+<sub><b>The iPhone & iPad companion.</b> Free on the App Store — pairs with the Mac app.</sub>
+</td>
+</tr>
+</table>
 
-<br/><br/>
+<br/>
 
-<sub>macOS app is a signed, notarized <code>.zip</code> from GitHub Releases (auto-updates via Sparkle). The iPhone and iPad companion is free on the App Store.</sub>
+<sub>Once installed, press <kbd>⌥</kbd> <kbd>Space</kbd> (Option + Space) to open Doom Coder from anywhere. It also lives in your menu bar.</sub>
 
 </div>
 
