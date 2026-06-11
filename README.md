@@ -29,7 +29,7 @@
 <td align="center" valign="middle">
 <a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img height="58" alt="Download Doom Coder Companion on the App Store" src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" /></a>
 <br/>
-<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img alt="Latest App Store version" src="https://img.shields.io/itunes/v/6772514212?style=flat-square&logo=apple&logoColor=white&label=App%20Store&color=0D96F6&cacheSeconds=3600" /></a>
+<a href="https://apps.apple.com/app/doomcoder-companion/id6772514212"><img alt="Latest App Store version" src="https://img.shields.io/badge/App%20Store-v2.7.1-0D96F6?style=flat-square&logo=apple&logoColor=white" /></a>
 <br/>
 <sub><b>The iPhone & iPad companion.</b> Free on the App Store — pairs with the Mac app.</sub>
 </td>
