@@ -67,6 +67,8 @@ No accounts. No servers. No telemetry. Notifications travel through your own pri
 
 ## What it actually does
 
+<video src="assets/Videos/Working_Demo.mp4" controls width="100%"></video>
+
 Two jobs, done well.
 
 **1. Keeps your Mac awake** while long-running stuff (builds, downloads, agent runs) finishes, without touching a single system setting. Nothing to clean up after.
@@ -76,6 +78,8 @@ Two jobs, done well.
 ---
 
 ## Keeping the Mac awake
+
+<video src="assets/Videos/sleep.mov" controls width="100%"></video>
 
 ### Three modes
 
@@ -129,6 +133,8 @@ Doom Coder holds an `IOPMAssertion`, the exact same kernel flag that Amphetamine
 ---
 
 ## Watching your agents
+
+<video src="assets/Videos/multiple_agents.mov" controls width="100%"></video>
 
 ### Supported agents
 
@@ -196,6 +202,8 @@ Pairing is dead simple and works two ways:
 - **Different Apple ID?** (your phone is on a work or personal account that's separate from the Mac) Open **Add Device** on the Mac, then scan the QR code with your phone's camera or send yourself the invite link. This shares just this Mac's notifications to that device through a private CloudKit share.
 
 ### Picking which events alert you
+
+<video src="assets/Videos/notification customization.mov" controls width="100%"></video>
 
 Each agent's detail pane has a **"What you'll be notified about"** card. Tap **Edit** to choose exactly which events ping you, grouped so it stays readable:
 
