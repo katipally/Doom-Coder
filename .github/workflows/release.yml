@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Persist this token for the later `git push` of the version bump +
           # appcast.xml back to main. When `main` is protected by a branch
