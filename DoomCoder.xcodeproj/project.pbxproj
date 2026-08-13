@@ -62,7 +62,6 @@
 		DC0000000000002000000202 /* AgentNotificationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000202 /* AgentNotificationCatalog.swift */; };
 		DC0000000000002000000203 /* NotifyAboutCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000203 /* NotifyAboutCard.swift */; };
 		DC0000000000002000000701 /* ApprovalArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000701 /* ApprovalArbiter.swift */; };
-		DC0000000000002000000800 /* SleepStateNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000800 /* SleepStateNotifier.swift */; };
 		DC0000000000002000000F01 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F01 /* GlassCard.swift */; };
 		DC0000000000002000000F02 /* GlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F02 /* GlassButtonStyle.swift */; };
 		DC0000000000002000000F03 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0000000000001000000F03 /* AppRouter.swift */; };
@@ -138,7 +137,6 @@
 		DC0000000000001000000202 /* AgentNotificationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotificationCatalog.swift; sourceTree = "<group>"; };
 		DC0000000000001000000203 /* NotifyAboutCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifyAboutCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000701 /* ApprovalArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalArbiter.swift; sourceTree = "<group>"; };
-		DC0000000000001000000800 /* SleepStateNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepStateNotifier.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F01 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F02 /* GlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassButtonStyle.swift; sourceTree = "<group>"; };
 		DC0000000000001000000F03 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
@@ -233,7 +231,6 @@
 				DC0000000000001000000025 /* HookSocketListener.swift */,
 				DC0000000000001000000032 /* AgentInstallerV2.swift */,
 				DC0000000000001000000027 /* NotificationDispatcher.swift */,
-				DC0000000000001000000800 /* SleepStateNotifier.swift */,
 				DC0000000000001000000028 /* AgentTrackingManager.swift */,
 				DC0000000000001000000039 /* ConfigureAgentsWindowV2.swift */,
 				DC0000000000001000000030 /* TrackAgentsPopover.swift */,
@@ -414,7 +411,6 @@
 				DC0000000000002000000025 /* HookSocketListener.swift in Sources */,
 				DC0000000000002000000032 /* AgentInstallerV2.swift in Sources */,
 				DC0000000000002000000027 /* NotificationDispatcher.swift in Sources */,
-				DC0000000000002000000800 /* SleepStateNotifier.swift in Sources */,
 				DC0000000000002000000028 /* AgentTrackingManager.swift in Sources */,
 				DC0000000000002000000039 /* ConfigureAgentsWindowV2.swift in Sources */,
 				DC0000000000002000000030 /* TrackAgentsPopover.swift in Sources */,
@@ -586,7 +582,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2702;
+				CURRENT_PROJECT_VERSION = 2703;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -596,7 +592,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.7.2;
+				MARKETING_VERSION = 2.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -614,7 +610,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2702;
+				CURRENT_PROJECT_VERSION = 2703;
 				DEVELOPMENT_TEAM = A9P2388PHM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -624,7 +620,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.7.2;
+				MARKETING_VERSION = 2.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.doomcoder.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

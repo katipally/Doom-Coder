@@ -125,12 +125,15 @@ enum AgentNotificationCatalog {
         case .cursor:
             return [.completed, .failed, .waitingApproval, .waitingInput, .sessionStart, .toolCalls, .subagentActivity,
                     .fileEdits, .contextCompaction, .agentThinking, .housekeeping, .userPromptSent]
+        // `.housekeeping` is listed for every agent with a session-close event
+        // (see `isSessionClose`) so the toggle that re-enables close alerts is
+        // reachable in the editor.
         case .vscode:
             return [.completed, .failed, .waitingApproval, .sessionStart, .toolCalls, .subagentActivity,
-                    .contextCompaction, .userPromptSent]
+                    .contextCompaction, .housekeeping, .userPromptSent]
         case .copilotCLI:
             return [.completed, .failed, .waitingApproval, .sessionStart, .toolCalls, .subagentActivity,
-                    .contextCompaction, .userPromptSent]
+                    .contextCompaction, .housekeeping, .userPromptSent]
         case .windsurf:
             // Windsurf emits no SessionStart, no error phase, no subagent events.
             return [.completed, .waitingApproval, .waitingInput, .toolCalls,
@@ -273,6 +276,22 @@ enum AgentNotificationCatalog {
         case .opencode:
             return [ApprovalKind(id: "prompt", title: "Permission prompts",
                                  tooltip: "When opencode asks you to approve a tool or command.", noisy: false)]
+        }
+    }
+
+    /// True when a `.sessionEnd` event means "the user closed the session"
+    /// rather than "the agent finished its turn". Both normalize to
+    /// `.sessionEnd` on purpose so the session state machine still finalizes
+    /// (`hasEnded`, auto-revert, session history), but only the turn-end
+    /// variant is a "Task completed" alert. Closing an agent almost always
+    /// follows a real turn-end event, so notifying on both double-fires.
+    /// Routed to the default-off `housekeeping` switch by
+    /// `AgentNotificationPrefs.shouldNotify`.
+    static func isSessionClose(for agent: TrackedAgent, rawEvent: String) -> Bool {
+        switch agent {
+        case .claude, .vscode:                return rawEvent == "SessionEnd"
+        case .cursor, .copilotCLI:            return rawEvent == "sessionEnd"
+        case .windsurf, .codexCLI, .opencode: return false
         }
     }
 
