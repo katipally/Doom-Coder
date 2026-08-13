@@ -15,7 +15,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: A9P2388PHM
     SWIFT_VERSION: "6.2"
-    MARKETING_VERSION: "2.7.2"
+    MARKETING_VERSION: "2.7.3"
     CURRENT_PROJECT_VERSION: "12"
     # Audit 2026-06: the iOS project has no shell-script build phases
     # (the dc-hook swiftc phase lives in the Mac project), so
