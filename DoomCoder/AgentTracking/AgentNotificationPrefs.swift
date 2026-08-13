@@ -139,6 +139,13 @@ struct AgentNotificationPrefs: Codable, Equatable, Sendable {
     func shouldNotify(_ ev: NormalizedHookEvent) -> Bool {
         switch ev.phase {
         case .sessionEnd:
+            // Closing an agent is not "task completed" — it fires right after a
+            // real turn-end event and double-notifies. Gate it on the
+            // default-off housekeeping switch instead. The phase stays
+            // `.sessionEnd` so session finalization is unaffected.
+            if AgentNotificationCatalog.isSessionClose(for: ev.agent, rawEvent: ev.rawEvent) {
+                return housekeeping
+            }
             return completed
         case .error, .toolError:
             return failed

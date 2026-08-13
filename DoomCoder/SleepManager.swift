@@ -390,19 +390,6 @@ final class SleepManager {
         resetSessionTimer()
         if mode == .screenOff { startScreenOff() }
         notifyStateChanged()
-        // Notify user when Auto mode takes sleep control. The copy reflects
-        // WHY the Mac is held (agents / user activity / snooze) so the user
-        // can tell at a glance.
-        if keepAwakeMode == .auto {
-            let reason: SleepStateNotifier.TakeReason
-            if isSnoozed {
-                reason = .snoozed
-            } else {
-                let names = autoStatusLines.map(\.agentDisplayName)
-                reason = names.isEmpty ? .userActive : .agents(names)
-            }
-            SleepStateNotifier.shared.notifyTookControl(reason: reason)
-        }
     }
 
     private func releaseAssertion() {
@@ -600,10 +587,7 @@ final class SleepManager {
         if shouldHoldAuto {
             if !isActive { acquireAssertion() }
         } else {
-            if isActive {
-                releaseAssertion()
-                SleepStateNotifier.shared.notifyReleasedControl()
-            }
+            if isActive { releaseAssertion() }
         }
     }
 

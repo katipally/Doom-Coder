@@ -90,6 +90,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.7.3] - 2026-08-12
+
+macOS only. The iOS companion is unchanged and stays on its current
+App Store version.
+
+### Fixed — notification spam
+
+- **No more "Keeping Mac Awake" / "Sleep Control Returned" banners.**
+  Both fired on every `isActive` transition in Auto mode, and the hold
+  condition is an OR of three volatile signals with no hysteresis and no
+  debounce. Every walk-away-and-come-back cycle cost two notifications,
+  and toggling Auto off and back on re-fired the first one. They were
+  also the only notifications in the app that bypassed the preference
+  gate entirely, so there was no way to switch them off. Sleep state is
+  already live in the menu bar icon, the panel, and the iOS Dashboard via
+  `MacStatus.sleepActive`, so the banners were repeating what the UI
+  already showed. `SleepStateNotifier` is removed.
+- **Closing an agent no longer fires "Task completed".** A session-close
+  event (`SessionEnd` / `sessionEnd`) normalizes to the same
+  `.sessionEnd` phase as a turn-end event (`Stop` / `agentStop`), so
+  quitting Claude Code, Cursor, VS Code Copilot, or Copilot CLI produced
+  a duplicate "done" alert seconds after the real one. Close events are
+  now gated on the default-off **Housekeeping** switch instead. The phase
+  is unchanged, so session finalization, auto-revert, and session history
+  all behave exactly as before, and the event is still recorded and
+  visible in Activity. Turn-end alerts are untouched. Flip Housekeeping
+  on in Configure > Agents to get close alerts back.
+- **Housekeeping toggle now shown for VS Code Copilot and Copilot CLI**,
+  so the switch that re-enables close alerts is reachable for those two.
+
+---
+
 ## [2.7.2] - 2026-06-09
 
 ### Added
