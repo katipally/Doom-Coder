@@ -466,7 +466,7 @@ jobs:
       # push ever fails, the release is already live and recoverable. It also
       # guarantees the appcast's download URL resolves the moment it lands.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.0
+        uses: softprops/action-gh-release@v3.0.3
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
